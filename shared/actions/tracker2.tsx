@@ -154,6 +154,36 @@ function* load(state: Container.TypedState, action: Tracker2Gen.LoadPayload) {
   }
 }
 
+const loadFollow = async (action: Tracker2Gen.LoadPayload) => {
+  const {assertion} = action.payload
+  const convert = (fs: Saga.RPCPromiseType<typeof RPCTypes.userListTrackers2RpcPromise>) =>
+    (fs.users || []).map(f => ({
+      following: f.isFollowee,
+      followsYou: f.isFollower,
+      fullname: f.fullName,
+      username: f.username,
+    }))
+
+  if (action.payload.inTracker) {
+    return false
+  }
+
+  try {
+    const [followers, following] = await Promise.all([
+      RPCTypes.userListTrackersUnverifiedRpcPromise({assertion}, Constants.profileLoadWaitingKey).then(
+        convert
+      ),
+      RPCTypes.userListTrackingRpcPromise({assertion}, Constants.profileLoadWaitingKey).then(
+        convert
+      ),
+    ])
+    return Tracker2Gen.createUpdateFollowers({followers, following, username: action.payload.assertion})
+  } catch (err) {
+    logger.error(`Error loading follow info: ${err.message}`)
+    return false
+  }
+}
+
 const getProofSuggestions = async () => {
   try {
     const {suggestions} = await RPCTypes.userProofSuggestionsRpcPromise(
@@ -249,6 +279,7 @@ function* tracker2Saga() {
   yield* Saga.chainAction(Tracker2Gen.changeFollow, changeFollow)
   yield* Saga.chainAction(Tracker2Gen.ignore, ignore)
   yield* Saga.chainGenerator<Tracker2Gen.LoadPayload>(Tracker2Gen.load, load)
+  yield* Saga.chainAction(Tracker2Gen.load, loadFollow)
 
   yield* Saga.chainAction2(Tracker2Gen.getProofSuggestions, getProofSuggestions)
 
