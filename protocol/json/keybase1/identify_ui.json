@@ -359,14 +359,6 @@
       "name": "UserCard",
       "fields": [
         {
-          "type": "int",
-          "name": "following"
-        },
-        {
-          "type": "int",
-          "name": "followers"
-        },
-        {
           "type": "UID",
           "name": "uid"
         },
@@ -393,14 +385,6 @@
         {
           "type": "string",
           "name": "twitter"
-        },
-        {
-          "type": "boolean",
-          "name": "youFollowThem"
-        },
-        {
-          "type": "boolean",
-          "name": "theyFollowYou"
         },
         {
           "type": {

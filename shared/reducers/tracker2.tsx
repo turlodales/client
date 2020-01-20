@@ -4,7 +4,7 @@ import * as ConfigGen from '../actions/config-gen'
 import * as Tracker2Gen from '../actions/tracker2-gen'
 import * as Container from '../util/container'
 import * as EngineGen from '../actions/engine-gen-gen'
-import * as RpcTypes from '../constants/types/rpc-gen'
+/* import * as RpcTypes from '../constants/types/rpc-gen' */
 import {mapGetEnsureValue} from '../util/map'
 import logger from '../logger'
 
@@ -107,20 +107,19 @@ export default Container.makeReducer<Actions, Types.State>(initialState, {
       ...rest,
     })
   },
-  [EngineGen.keybase1NotifyTrackingNotifyUserBlocked]: (draftState, action) => {
-    const {blocker, blocks} = action.payload.params.b
-    const d = getDetails(draftState, blocker)
-    const toProcess = Object.entries(blocks ?? {}).map(
-      ([username, userBlocks]) => [username, getDetails(draftState, username), userBlocks || []] as const
-    )
-    toProcess.forEach(([username, det, userBlocks]) => {
-      userBlocks.forEach(blockState => {
-        if (blockState.blockType === RpcTypes.UserBlockType.chat) {
-          det.blocked = blockState.blocked
-        } else if (blockState.blockType === RpcTypes.UserBlockType.follow) {
-          det.hidFromFollowers = blockState.blocked
-        }
-      })
-    })
-  },
+  //[EngineGen.keybase1NotifyTrackingNotifyUserBlocked]: (draftState, action) => {
+  //  const {blocker, blocks} = action.payload.params.b
+  //  const toProcess = Object.entries(blocks ?? {}).map(
+  //    ([username, userBlocks]) => [username, getDetails(draftState, username), userBlocks || []] as const
+  //  )
+  //  toProcess.forEach(([det, userBlocks]) => {
+  //    userBlocks.forEach(blockState => {
+  //      if (blockState.blockType === RpcTypes.UserBlockType.chat) {
+  //        det.blocked = blockState.blocked
+  //      } else if (blockState.blockType === RpcTypes.UserBlockType.follow) {
+  //        det.hidFromFollowers = blockState.blocked
+  //      }
+  //    })
+  //  })
+  //},
 })

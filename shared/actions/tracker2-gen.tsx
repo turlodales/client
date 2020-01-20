@@ -53,8 +53,8 @@ type _ShowUserPayload = {readonly asTracker: boolean; readonly username: string;
 type _UpdateAssertionPayload = {readonly assertion: Types.Assertion; readonly guiID: string}
 type _UpdateFollowsPayload = {
   readonly username: string
-  readonly following: Array<{following: boolean; followsYou: boolean; fullname: string; username: string}>
-  readonly followers: Array<{following: boolean; followsYou: boolean; fullname: string; username: string}>
+  readonly following: Array<{fullname: string; username: string}>
+  readonly followers: Array<{fullname: string; username: string}>
 }
 type _UpdateResultPayload = {
   readonly guiID: string
@@ -64,10 +64,6 @@ type _UpdateResultPayload = {
 type _UpdatedDetailsPayload = {
   readonly guiID: string
   readonly bio: string
-  readonly followThem: boolean
-  readonly followersCount: number
-  readonly followingCount: number
-  readonly followsYou: boolean
   readonly fullname: string
   readonly location: string
   readonly stellarHidden: boolean

@@ -68,10 +68,6 @@ const updateUserCard = (
   return Tracker2Gen.createUpdatedDetails({
     bio: card.bio,
     blocked: card.blocked,
-    followThem: card.youFollowThem,
-    followersCount: card.followers,
-    followingCount: card.following,
-    followsYou: card.theyFollowYou,
     fullname: card.fullName,
     guiID,
     hidFromFollowers: card.hidFromFollowers,
@@ -156,7 +152,12 @@ function* load(state: Container.TypedState, action: Tracker2Gen.LoadPayload) {
 
 const loadFollow = async (action: Tracker2Gen.LoadPayload) => {
   const {assertion} = action.payload
-  const convert = (fs: Saga.RPCPromiseType<typeof RPCTypes.userListTrackers2RpcPromise>) =>
+  const convertTrackers = (fs: Saga.RPCPromiseType<typeof RPCTypes.userListTrackersUnverifiedRpcPromise>) =>
+    (fs.users || []).map(f => ({
+      fullname: f.fullName,
+      username: f.username,
+    }))
+  const convertTracking = (fs: Saga.RPCPromiseType<typeof RPCTypes.userListTrackingRpcPromise>) =>
     (fs.users || []).map(f => ({
       fullname: f.fullName,
       username: f.username,
@@ -168,10 +169,10 @@ const loadFollow = async (action: Tracker2Gen.LoadPayload) => {
 
   try {
     const [followers, following] = await Promise.all([
-      RPCTypes.userListTrackersUnverifiedRpcPromise({assertion}, Constants.profileLoadWaitingKey).then(
-        convert
+      RPCTypes.userListTrackersUnverifiedRpcPromise({assertion, filter: ''}, Constants.profileLoadWaitingKey).then(
+        convertTrackers
       ),
-      RPCTypes.userListTrackingRpcPromise({assertion}, Constants.profileLoadWaitingKey).then(convert),
+      RPCTypes.userListTrackingRpcPromise({assertion, filter: ''}, Constants.profileLoadWaitingKey).then(convertTracking),
     ])
     return Tracker2Gen.createUpdateFollows({followers, following, username: action.payload.assertion})
   } catch (err) {

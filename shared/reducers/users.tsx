@@ -10,6 +10,7 @@ const initialState: Types.State = Constants.makeState()
 
 type Actions =
   | UsersGen.Actions
+  | Tracker2Gen.UpdateFollowsPayload
   | Tracker2Gen.UpdatedDetailsPayload
   | ConfigGen.SetAccountsPayload
   | TeamBuildingGen.SearchResultsLoadedPayload
