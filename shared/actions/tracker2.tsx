@@ -158,8 +158,6 @@ const loadFollow = async (action: Tracker2Gen.LoadPayload) => {
   const {assertion} = action.payload
   const convert = (fs: Saga.RPCPromiseType<typeof RPCTypes.userListTrackers2RpcPromise>) =>
     (fs.users || []).map(f => ({
-      following: f.isFollowee,
-      followsYou: f.isFollower,
       fullname: f.fullName,
       username: f.username,
     }))
@@ -173,11 +171,9 @@ const loadFollow = async (action: Tracker2Gen.LoadPayload) => {
       RPCTypes.userListTrackersUnverifiedRpcPromise({assertion}, Constants.profileLoadWaitingKey).then(
         convert
       ),
-      RPCTypes.userListTrackingRpcPromise({assertion}, Constants.profileLoadWaitingKey).then(
-        convert
-      ),
+      RPCTypes.userListTrackingRpcPromise({assertion}, Constants.profileLoadWaitingKey).then(convert),
     ])
-    return Tracker2Gen.createUpdateFollowers({followers, following, username: action.payload.assertion})
+    return Tracker2Gen.createUpdateFollows({followers, following, username: action.payload.assertion})
   } catch (err) {
     logger.error(`Error loading follow info: ${err.message}`)
     return false

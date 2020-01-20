@@ -15,7 +15,7 @@ export const loadedNonUserProfile = 'tracker2:loadedNonUserProfile'
 export const proofSuggestionsUpdated = 'tracker2:proofSuggestionsUpdated'
 export const showUser = 'tracker2:showUser'
 export const updateAssertion = 'tracker2:updateAssertion'
-export const updateFollowers = 'tracker2:updateFollowers'
+export const updateFollows = 'tracker2:updateFollows'
 export const updateResult = 'tracker2:updateResult'
 export const updatedDetails = 'tracker2:updatedDetails'
 
@@ -51,7 +51,7 @@ type _LoadedNonUserProfilePayload = {
 type _ProofSuggestionsUpdatedPayload = {readonly suggestions: ReadonlyArray<Types.Assertion>}
 type _ShowUserPayload = {readonly asTracker: boolean; readonly username: string; readonly skipNav?: boolean}
 type _UpdateAssertionPayload = {readonly assertion: Types.Assertion; readonly guiID: string}
-type _UpdateFollowersPayload = {
+type _UpdateFollowsPayload = {
   readonly username: string
   readonly following: Array<{following: boolean; followsYou: boolean; fullname: string; username: string}>
   readonly followers: Array<{following: boolean; followsYou: boolean; fullname: string; username: string}>
@@ -109,9 +109,9 @@ export const createUpdateAssertion = (payload: _UpdateAssertionPayload): UpdateA
   payload,
   type: updateAssertion,
 })
-export const createUpdateFollowers = (payload: _UpdateFollowersPayload): UpdateFollowersPayload => ({
+export const createUpdateFollows = (payload: _UpdateFollowsPayload): UpdateFollowsPayload => ({
   payload,
-  type: updateFollowers,
+  type: updateFollows,
 })
 export const createUpdateResult = (payload: _UpdateResultPayload): UpdateResultPayload => ({
   payload,
@@ -148,9 +148,9 @@ export type UpdateAssertionPayload = {
   readonly payload: _UpdateAssertionPayload
   readonly type: typeof updateAssertion
 }
-export type UpdateFollowersPayload = {
-  readonly payload: _UpdateFollowersPayload
-  readonly type: typeof updateFollowers
+export type UpdateFollowsPayload = {
+  readonly payload: _UpdateFollowsPayload
+  readonly type: typeof updateFollows
 }
 export type UpdateResultPayload = {readonly payload: _UpdateResultPayload; readonly type: typeof updateResult}
 export type UpdatedDetailsPayload = {
@@ -171,7 +171,7 @@ export type Actions =
   | ProofSuggestionsUpdatedPayload
   | ShowUserPayload
   | UpdateAssertionPayload
-  | UpdateFollowersPayload
+  | UpdateFollowsPayload
   | UpdateResultPayload
   | UpdatedDetailsPayload
   | {type: 'common:resetStore', payload: {}}

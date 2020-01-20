@@ -58,6 +58,13 @@ export default Container.makeReducer<Actions, Types.State>(initialState, {
     const {infoMap} = draftState
     updateInfo(infoMap, username, {fullname})
   },
+  [Tracker2Gen.updateFollows]: (draftState, action) => {
+    // Use new follower information to update full names
+    const {followers, following} = action.payload
+    const all = [...followers, ...following]
+    const {infoMap} = draftState
+    all.forEach(({username, fullname}) => updateInfo(infoMap, username, {fullname}))
+  },
   [ConfigGen.setAccounts]: (draftState, action) => {
     const {configuredAccounts} = action.payload
     const {infoMap} = draftState
