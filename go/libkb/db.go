@@ -72,8 +72,8 @@ const (
 	DBMerkleRoot                     = 0xf0
 	DBTrackers                       = 0xf1
 	DBGregor                         = 0xf2
-	DBTrackers2                      = 0xf3
-	DBTrackers2Reverse               = 0xf4
+	DBTrackers2Followers             = 0xf3
+	DBTrackers2Following             = 0xf4
 	DBNotificationDismiss            = 0xf5
 	DBChatBlockIndex                 = 0xf6
 	DBChatBlocks                     = 0xf7

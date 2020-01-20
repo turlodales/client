@@ -78,22 +78,22 @@ func (l *TrackerLoader) Queue(ctx context.Context, uid keybase1.UID) (err error)
 	return nil
 }
 
-func (l *TrackerLoader) argsFromSyncer(syncer *Tracker2Syncer) (followers []string, followees []string) {
-	res := syncer.Result()
-	for _, u := range res.Users {
-		if u.IsFollower {
-			followers = append(followers, u.Username)
-		}
-		if u.IsFollowee {
-			followees = append(followees, u.Username)
-		}
-	}
-	return followers, followees
-}
+// func (l *TrackerLoader) argsFromSyncer(syncer *ServertrustTracker2Syncer) (followers []string, followees []string) {
+// 	res := syncer.Result()
+// 	for _, u := range res.Users {
+// 		if u.IsFollower {
+// 			followers = append(followers, u.Username)
+// 		}
+// 		if u.IsFollowee {
+// 			followees = append(followees, u.Username)
+// 		}
+// 	}
+// 	return followers, followees
+// }
 
 func (l *TrackerLoader) load(ctx context.Context, uid keybase1.UID) error {
 	defer l.G().CTraceTimed(ctx, "TrackerLoader.load", func() error { return nil })()
-	syncer := NewTracker2Syncer(l.G(), uid, true)
+	syncer := NewServertrustTracker2Syncer(l.G(), uid, FollowDirectionFollowing)
 	mctx := NewMetaContext(ctx, l.G())
 
 	// send up local copy first quickly
@@ -101,8 +101,8 @@ func (l *TrackerLoader) load(ctx context.Context, uid keybase1.UID) error {
 		l.debug(ctx, "load: failed to load from local storage: %s", err)
 	} else {
 		// Notify with results
-		followers, followees := l.argsFromSyncer(syncer)
-		l.G().NotifyRouter.HandleTrackingInfo(uid, followers, followees)
+		// followers, followees := nil, nil //l.argsFromSyncer(syncer)
+		l.G().NotifyRouter.HandleTrackingInfo(uid, nil, nil)
 	}
 
 	// go get remote copy
@@ -113,8 +113,8 @@ func (l *TrackerLoader) load(ctx context.Context, uid keybase1.UID) error {
 	if err := syncer.store(mctx, uid); err != nil {
 		l.debug(ctx, "load: failed to store result: %s", err)
 	}
-	followers, followees := l.argsFromSyncer(syncer)
-	l.G().NotifyRouter.HandleTrackingInfo(uid, followers, followees)
+	// followers, followees := nil, nil //l.argsFromSyncer(syncer)
+	l.G().NotifyRouter.HandleTrackingInfo(uid, nil, nil)
 	return nil
 }
 

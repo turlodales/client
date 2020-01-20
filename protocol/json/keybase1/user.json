@@ -71,27 +71,11 @@
     },
     {
       "type": "record",
-      "name": "UserSummary",
+      "name": "UserSummaryExtra",
       "fields": [
-        {
-          "type": "UID",
-          "name": "uid"
-        },
-        {
-          "type": "string",
-          "name": "username"
-        },
-        {
-          "type": "string",
-          "name": "thumbnail"
-        },
         {
           "type": "int",
           "name": "idVersion"
-        },
-        {
-          "type": "string",
-          "name": "fullName"
         },
         {
           "type": "string",
@@ -108,6 +92,56 @@
         {
           "type": "Time",
           "name": "trackTime"
+        }
+      ]
+    },
+    {
+      "type": "record",
+      "name": "UserSummary",
+      "fields": [
+        {
+          "type": "UID",
+          "name": "uid"
+        },
+        {
+          "type": "string",
+          "name": "username"
+        },
+        {
+          "type": "string",
+          "name": "thumbnail"
+        },
+        {
+          "type": "string",
+          "name": "fullName"
+        },
+        {
+          "type": [
+            null,
+            "UserSummaryExtra"
+          ],
+          "name": "extra"
+        }
+      ]
+    },
+    {
+      "type": "record",
+      "name": "UserSummarySet",
+      "fields": [
+        {
+          "type": {
+            "type": "array",
+            "items": "UserSummary"
+          },
+          "name": "users"
+        },
+        {
+          "type": "Time",
+          "name": "time"
+        },
+        {
+          "type": "int",
+          "name": "version"
         }
       ]
     },
@@ -160,57 +194,6 @@
             "items": "UserPhoneNumber"
           },
           "name": "phoneNumbers"
-        }
-      ]
-    },
-    {
-      "type": "record",
-      "name": "UserSummary2",
-      "fields": [
-        {
-          "type": "UID",
-          "name": "uid"
-        },
-        {
-          "type": "string",
-          "name": "username"
-        },
-        {
-          "type": "string",
-          "name": "thumbnail"
-        },
-        {
-          "type": "string",
-          "name": "fullName"
-        },
-        {
-          "type": "boolean",
-          "name": "isFollower"
-        },
-        {
-          "type": "boolean",
-          "name": "isFollowee"
-        }
-      ]
-    },
-    {
-      "type": "record",
-      "name": "UserSummary2Set",
-      "fields": [
-        {
-          "type": {
-            "type": "array",
-            "items": "UserSummary2"
-          },
-          "name": "users"
-        },
-        {
-          "type": "Time",
-          "name": "time"
-        },
-        {
-          "type": "int",
-          "name": "version"
         }
       ]
     },
@@ -536,6 +519,63 @@
     }
   ],
   "messages": {
+    "listTracking": {
+      "request": [
+        {
+          "name": "sessionID",
+          "type": "int"
+        },
+        {
+          "name": "filter",
+          "type": "string"
+        },
+        {
+          "name": "assertion",
+          "type": "string"
+        }
+      ],
+      "response": "UserSummarySet",
+      "doc": "listTracking gets verified data from the tracking statements in the user's\n    sigchain. However, it does not check to make sure the tracked users have\n    not reset since the track statement.\n\n    If assertion is empty, it will use the current logged in user."
+    },
+    "listTrackingJSON": {
+      "request": [
+        {
+          "name": "sessionID",
+          "type": "int"
+        },
+        {
+          "name": "filter",
+          "type": "string"
+        },
+        {
+          "name": "verbose",
+          "type": "boolean"
+        },
+        {
+          "name": "assertion",
+          "type": "string"
+        }
+      ],
+      "response": "string"
+    },
+    "listTrackersUnverified": {
+      "request": [
+        {
+          "name": "sessionID",
+          "type": "int"
+        },
+        {
+          "name": "filter",
+          "type": "string"
+        },
+        {
+          "name": "assertion",
+          "type": "string"
+        }
+      ],
+      "response": "UserSummarySet",
+      "doc": "listTrackersUnverified returns the users following the given user, and is unverified\n    and server-trust."
+    },
     "loadUncheckedUserSummaries": {
       "request": [
         {
@@ -662,48 +702,6 @@
       "response": "UserSettings",
       "doc": "Load user settings (for logged in user)."
     },
-    "listTracking": {
-      "request": [
-        {
-          "name": "sessionID",
-          "type": "int"
-        },
-        {
-          "name": "filter",
-          "type": "string"
-        },
-        {
-          "name": "assertion",
-          "type": "string"
-        }
-      ],
-      "response": {
-        "type": "array",
-        "items": "UserSummary"
-      },
-      "doc": "The list-tracking functions get verified data from the tracking statements\n    in the user's sigchain.\n\n    If assertion is empty, it will use the current logged in user."
-    },
-    "listTrackingJSON": {
-      "request": [
-        {
-          "name": "sessionID",
-          "type": "int"
-        },
-        {
-          "name": "filter",
-          "type": "string"
-        },
-        {
-          "name": "verbose",
-          "type": "boolean"
-        },
-        {
-          "name": "assertion",
-          "type": "string"
-        }
-      ],
-      "response": "string"
-    },
     "loadAllPublicKeysUnverified": {
       "request": [
         {
@@ -720,23 +718,6 @@
         "items": "PublicKey"
       },
       "doc": "Load all the user's public keys (even those in reset key families)\n    from the server with no verification"
-    },
-    "listTrackers2": {
-      "request": [
-        {
-          "name": "sessionID",
-          "type": "int"
-        },
-        {
-          "name": "assertion",
-          "type": "string"
-        },
-        {
-          "name": "reverse",
-          "type": "boolean"
-        }
-      ],
-      "response": "UserSummary2Set"
     },
     "profileEdit": {
       "request": [

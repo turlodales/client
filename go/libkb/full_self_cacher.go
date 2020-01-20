@@ -184,7 +184,7 @@ func (m *CachedFullSelf) WithUser(arg LoadUserArg, f func(u *User) error) (err e
 		if err != nil {
 			return err
 		}
-		// WARNING! You can't call m.G().GetMyUID() if this function is called from
+		// Q! You can't call m.G().GetMyUID() if this function is called from
 		// within the Account/LoginState inner loop. Because m.G().GetMyUID() calls
 		// back into Account, it will deadlock.
 		if arg.self || u.GetUID().Equal(m.G().GetMyUID()) {

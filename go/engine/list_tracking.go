@@ -59,7 +59,7 @@ func (e *ListTrackingEngine) RequiredUIs() []libkb.UIKind { return []libkb.UIKin
 func (e *ListTrackingEngine) SubConsumers() []libkb.UIConsumer { return nil }
 
 func (e *ListTrackingEngine) Run(m libkb.MetaContext) (err error) {
-
+	// See if we can use upak remotetracks or listfolloweduids
 	arg := libkb.NewLoadUserArgWithMetaContext(m).WithStubMode(libkb.StubModeUnstubbed)
 
 	if len(e.arg.ForAssertion) > 0 {
@@ -181,14 +181,16 @@ func (e *ListTrackingEngine) runTable(m libkb.MetaContext, trackList TrackList) 
 			return err
 		}
 		entry := keybase1.UserSummary{
-			Username:     link.ToDisplayString(),
-			SigIDDisplay: link.GetSigID().ToDisplayString(true),
-			TrackTime:    keybase1.ToTime(link.GetCTime()),
-			Uid:          uid,
+			Uid:      uid,
+			Username: link.ToDisplayString(),
+			Extra: &keybase1.UserSummaryExtra{
+				SigIDDisplay: link.GetSigID().ToDisplayString(true),
+				TrackTime:    keybase1.ToTime(link.GetCTime()),
+			},
 		}
-		entry.Proofs.PublicKeys = e.linkPGPKeys(m, link)
-		entry.Proofs.Social = e.linkSocialProofs(link)
-		entry.Proofs.Web = e.linkWebProofs(link)
+		entry.Extra.Proofs.PublicKeys = e.linkPGPKeys(m, link)
+		entry.Extra.Proofs.Social = e.linkSocialProofs(link)
+		entry.Extra.Proofs.Web = e.linkWebProofs(link)
 		e.tableResult = append(e.tableResult, entry)
 	}
 	return nil

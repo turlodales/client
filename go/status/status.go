@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/davecgh/go-spew/spew"
 	"github.com/keybase/client/go/install"
 	"github.com/keybase/client/go/libkb"
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
@@ -40,6 +41,7 @@ func GetExtendedStatus(mctx libkb.MetaContext) (res keybase1.ExtendedStatus, err
 	res.Clients = libkb.GetClientStatus(mctx)
 
 	if err = g.GetFullSelfer().WithSelf(mctx.Ctx(), func(me *libkb.User) error {
+		spew.Dump("@@@", me)
 		ckf := me.GetComputedKeyFamily()
 		if ckf == nil {
 			return errors.New("Couldn't load key family")

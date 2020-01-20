@@ -920,8 +920,9 @@ func (u *CachedUPAKLoader) LookupUsernameAndDevice(ctx context.Context, uid keyb
 	return u.lookupUsernameAndDeviceWithInfo(ctx, uid, did, nil)
 }
 
+// CHECK STUB NECESSITY
 func (u *CachedUPAKLoader) ListFollowedUIDs(ctx context.Context, uid keybase1.UID) ([]keybase1.UID, error) {
-	arg := NewLoadUserByUIDArg(ctx, u.G(), uid)
+	arg := NewLoadUserByUIDArg(ctx, u.G(), uid).WithStubMode(StubModeUnstubbed)
 	upak, _, err := u.Load(arg)
 	if err != nil {
 		return nil, err

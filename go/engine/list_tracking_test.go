@@ -28,18 +28,18 @@ func _verifyListTrackingEntries(entries []keybase1.UserSummary) error {
 	if alice.Username != "t_alice" {
 		return fmt.Errorf("Username: %q, Expected t_alice.", alice.Username)
 	}
-	if len(alice.Proofs.Social) != 2 {
-		return fmt.Errorf("Num social proofs: %d, expected 2", len(alice.Proofs.Social))
+	if len(alice.Extra.Proofs.Social) != 2 {
+		return fmt.Errorf("Num social proofs: %d, expected 2", len(alice.Extra.Proofs.Social))
 	}
-	if len(alice.Proofs.Web) != 0 {
-		return fmt.Errorf("Num web proofs: %d, expected 0", len(alice.Proofs.Web))
+	if len(alice.Extra.Proofs.Web) != 0 {
+		return fmt.Errorf("Num web proofs: %d, expected 0", len(alice.Extra.Proofs.Web))
 	}
-	if len(alice.Proofs.PublicKeys) != 1 {
-		return fmt.Errorf("Num pub keys: %d, expected 1", len(alice.Proofs.PublicKeys))
+	if len(alice.Extra.Proofs.PublicKeys) != 1 {
+		return fmt.Errorf("Num pub keys: %d, expected 1", len(alice.Extra.Proofs.PublicKeys))
 	}
 
 	expectedFp := "2373fd089f28f328916b88f99c7927c0bdfdadf9"
-	foundFp := alice.Proofs.PublicKeys[0].PGPFingerprint
+	foundFp := alice.Extra.Proofs.PublicKeys[0].PGPFingerprint
 	if foundFp != expectedFp {
 		return fmt.Errorf("fp: %q, expected %q", foundFp, expectedFp)
 	}
@@ -48,14 +48,14 @@ func _verifyListTrackingEntries(entries []keybase1.UserSummary) error {
 	if bob.Username != "t_bob" {
 		return fmt.Errorf("Username: %q, Expected t_bob.", bob.Username)
 	}
-	if len(bob.Proofs.Social) != 2 {
-		return fmt.Errorf("Num social proofs: %d, expected 2", len(bob.Proofs.Social))
+	if len(bob.Extra.Proofs.Social) != 2 {
+		return fmt.Errorf("Num social proofs: %d, expected 2", len(bob.Extra.Proofs.Social))
 	}
-	if len(bob.Proofs.Web) != 0 {
-		return fmt.Errorf("Num web proofs: %d, expected 0", len(bob.Proofs.Web))
+	if len(bob.Extra.Proofs.Web) != 0 {
+		return fmt.Errorf("Num web proofs: %d, expected 0", len(bob.Extra.Proofs.Web))
 	}
-	if len(bob.Proofs.PublicKeys) != 1 {
-		return fmt.Errorf("Num pub keys: %d, expected 1", len(bob.Proofs.PublicKeys))
+	if len(bob.Extra.Proofs.PublicKeys) != 1 {
+		return fmt.Errorf("Num pub keys: %d, expected 1", len(bob.Extra.Proofs.PublicKeys))
 	}
 
 	return nil
@@ -166,18 +166,18 @@ func TestListTrackingLocal(t *testing.T) {
 	// they are sorted so can use indices.
 	for _, entry := range entries {
 		if entry.Username == "t_alice" {
-			if len(entry.Proofs.Social) != 2 {
-				t.Errorf("Num social proofs: %d, expected 2", len(entry.Proofs.Social))
+			if len(entry.Extra.Proofs.Social) != 2 {
+				t.Errorf("Num social proofs: %d, expected 2", len(entry.Extra.Proofs.Social))
 			}
-			if len(entry.Proofs.Web) != 0 {
-				t.Errorf("Num web proofs: %d, expected 0", len(entry.Proofs.Web))
+			if len(entry.Extra.Proofs.Web) != 0 {
+				t.Errorf("Num web proofs: %d, expected 0", len(entry.Extra.Proofs.Web))
 			}
-			if len(entry.Proofs.PublicKeys) != 1 {
-				t.Fatalf("Num pub keys: %d, expected 1", len(entry.Proofs.PublicKeys))
+			if len(entry.Extra.Proofs.PublicKeys) != 1 {
+				t.Fatalf("Num pub keys: %d, expected 1", len(entry.Extra.Proofs.PublicKeys))
 			}
 
 			expectedFp := "2373fd089f28f328916b88f99c7927c0bdfdadf9"
-			foundFp := entry.Proofs.PublicKeys[0].PGPFingerprint
+			foundFp := entry.Extra.Proofs.PublicKeys[0].PGPFingerprint
 			if foundFp != expectedFp {
 				t.Errorf("fp: %q, expected %q", foundFp, expectedFp)
 			}

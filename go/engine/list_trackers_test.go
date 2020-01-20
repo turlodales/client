@@ -28,7 +28,7 @@ func _testListTrackers2(t *testing.T, sigVersion libkb.SigVersion) {
 	trackAlice(tc, fu, sigVersion)
 	defer untrackAlice(tc, fu, sigVersion)
 
-	e := NewListTrackers2(tc.G, keybase1.ListTrackers2Arg{Assertion: "t_alice"})
+	e := NewListTrackersUnverified(tc.G, keybase1.ListTrackersUnverifiedArg{Assertion: "t_alice"})
 	m := NewMetaContextForTestWithLogUI(tc)
 	if err := RunEngine2(m, e); err != nil {
 		t.Fatal(err)

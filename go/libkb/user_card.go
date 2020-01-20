@@ -71,8 +71,6 @@ func UserCard(m MetaContext, uid keybase1.UID, useSession bool) (ret *keybase1.U
 		Bio:                  card.Profile.Bio,
 		Website:              card.Profile.Website,
 		Twitter:              card.Profile.Twitter,
-		YouFollowThem:        card.YouFollowThem,
-		TheyFollowYou:        card.TheyFollowYou,
 		TeamShowcase:         card.TeamShowcase,
 		RegisteredForAirdrop: card.RegisteredForAirdrop,
 		StellarHidden:        card.StellarHidden,

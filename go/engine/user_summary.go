@@ -147,10 +147,12 @@ func (s Summary) Export() keybase1.UserSummary {
 		Uid:       s.UID,
 		Username:  s.Username,
 		Thumbnail: s.Thumbnail,
-		IdVersion: s.IDVersion,
 		FullName:  s.FullName,
-		Bio:       s.Bio,
-		Proofs:    s.Proofs.Export(),
+		Extra: &keybase1.UserSummaryExtra{
+			IdVersion: s.IDVersion,
+			Bio:       s.Bio,
+			Proofs:    s.Proofs.Export(),
+		},
 	}
 }
 

@@ -77,8 +77,8 @@ func displayTable(g *libkb.GlobalContext, entries []keybase1.UserSummary, verbos
 			return []string{entry.Username}
 		}
 
-		fps := make([]string, len(entry.Proofs.PublicKeys))
-		for i, k := range entry.Proofs.PublicKeys {
+		fps := make([]string, len(entry.Extra.Proofs.PublicKeys))
+		for i, k := range entry.Extra.Proofs.PublicKeys {
 			if k.PGPFingerprint != "" {
 				fps[i] = k.PGPFingerprint
 			}
@@ -86,11 +86,11 @@ func displayTable(g *libkb.GlobalContext, entries []keybase1.UserSummary, verbos
 
 		row := []string{
 			entry.Username,
-			entry.SigIDDisplay,
+			entry.Extra.SigIDDisplay,
 			strings.Join(fps, ", "),
-			keybase1.FormatTime(entry.TrackTime),
+			keybase1.FormatTime(entry.Extra.TrackTime),
 		}
-		for _, proof := range entry.Proofs.Social {
+		for _, proof := range entry.Extra.Proofs.Social {
 			row = append(row, proof.IdString)
 		}
 		return row
@@ -124,11 +124,11 @@ func (s *CmdListTracking) Run() error {
 		return displayJSON(s.G(), jsonStr)
 	}
 
-	table, err := cli.ListTracking(context.TODO(), keybase1.ListTrackingArg{Filter: s.filter, Assertion: s.assertion})
+	ret, err := cli.ListTracking(context.TODO(), keybase1.ListTrackingArg{Filter: s.filter, Assertion: s.assertion})
 	if err != nil {
 		return err
 	}
-	return displayTable(s.G(), table, s.verbose, s.headers)
+	return displayTable(s.G(), ret.Users, s.verbose, s.headers)
 }
 
 func NewCmdListTracking(cl *libcmdline.CommandLine, g *libkb.GlobalContext) cli.Command {

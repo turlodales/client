@@ -55,7 +55,7 @@ func (h *UserHandler) LoadUncheckedUserSummaries(ctx context.Context, arg keybas
 	return res, nil
 }
 
-func (h *UserHandler) ListTracking(ctx context.Context, arg keybase1.ListTrackingArg) (res []keybase1.UserSummary, err error) {
+func (h *UserHandler) ListTracking(ctx context.Context, arg keybase1.ListTrackingArg) (ret keybase1.UserSummarySet, err error) {
 	eng := engine.NewListTrackingEngine(h.G(), &engine.ListTrackingEngineArg{
 		Filter:       arg.Filter,
 		ForAssertion: arg.Assertion,
@@ -64,8 +64,10 @@ func (h *UserHandler) ListTracking(ctx context.Context, arg keybase1.ListTrackin
 	})
 	m := libkb.NewMetaContext(ctx, h.G())
 	err = engine.RunEngine2(m, eng)
-	res = eng.TableResult()
-	return
+	if err != nil {
+		return ret, err
+	}
+	return keybase1.UserSummarySet{Users: eng.TableResult()}, nil
 }
 
 func (h *UserHandler) ListTrackingJSON(ctx context.Context, arg keybase1.ListTrackingJSONArg) (res string, err error) {
@@ -77,8 +79,27 @@ func (h *UserHandler) ListTrackingJSON(ctx context.Context, arg keybase1.ListTra
 	})
 	m := libkb.NewMetaContext(ctx, h.G())
 	err = engine.RunEngine2(m, eng)
-	res = eng.JSONResult()
-	return
+	if err != nil {
+		return res, err
+	}
+	return eng.JSONResult(), nil
+}
+
+func (h *UserHandler) ListTrackersUnverified(ctx context.Context, arg keybase1.ListTrackersUnverifiedArg) (res keybase1.UserSummarySet, err error) {
+	m := libkb.NewMetaContext(ctx, h.G())
+	defer m.Trace(fmt.Sprintf("ListTrackersUnverified(assertion=%s)", arg.Assertion),
+		func() error { return err })()
+	eng := engine.NewListTrackersUnverified(h.G(), arg)
+	uis := libkb.UIs{
+		LogUI:     h.getLogUI(arg.SessionID),
+		SessionID: arg.SessionID,
+	}
+	m = m.WithUIs(uis)
+	err = engine.RunEngine2(m, eng)
+	if err == nil {
+		res = eng.GetResults()
+	}
+	return res, err
 }
 
 func (h *UserHandler) LoadUser(ctx context.Context, arg keybase1.LoadUserArg) (user keybase1.User, err error) {
@@ -207,23 +228,6 @@ func (h *UserHandler) LoadAllPublicKeysUnverified(ctx context.Context,
 	return publicKeys, nil
 }
 
-func (h *UserHandler) ListTrackers2(ctx context.Context, arg keybase1.ListTrackers2Arg) (res keybase1.UserSummary2Set, err error) {
-	m := libkb.NewMetaContext(ctx, h.G())
-	defer m.Trace(fmt.Sprintf("ListTrackers2(assertion=%s,reverse=%v)", arg.Assertion, arg.Reverse),
-		func() error { return err })()
-	eng := engine.NewListTrackers2(h.G(), arg)
-	uis := libkb.UIs{
-		LogUI:     h.getLogUI(arg.SessionID),
-		SessionID: arg.SessionID,
-	}
-	m = m.WithUIs(uis)
-	err = engine.RunEngine2(m, eng)
-	if err == nil {
-		res = eng.GetResults()
-	}
-	return res, err
-}
-
 func (h *UserHandler) ProfileEdit(nctx context.Context, arg keybase1.ProfileEditArg) error {
 	eng := engine.NewProfileEdit(h.G(), arg)
 	m := libkb.NewMetaContext(nctx, h.G())
@@ -248,11 +252,11 @@ func (h *UserHandler) InterestingPeople(ctx context.Context, args keybase1.Inter
 		return kuids, nil
 	}
 
-	// Follower source
-	followerFn := func(uid keybase1.UID) (res []keybase1.UID, err error) {
+	// Following source
+	followingFn := func(uid keybase1.UID) (res []keybase1.UID, err error) {
 		var found bool
-		var tmp keybase1.UserSummary2Set
-		found, err = h.G().LocalDb.GetInto(&tmp, libkb.DbKeyUID(libkb.DBTrackers2Reverse, uid))
+		var tmp keybase1.UserSummarySet
+		found, err = h.G().LocalDb.GetInto(&tmp, libkb.DbKeyUID(libkb.DBTrackers2Following, uid))
 		if err != nil {
 			return nil, err
 		}
@@ -276,7 +280,7 @@ func (h *UserHandler) InterestingPeople(ctx context.Context, args keybase1.Inter
 
 	// Add sources of interesting people
 	ip.AddSource(chatFn, 0.7)
-	ip.AddSource(followerFn, 0.2)
+	ip.AddSource(followingFn, 0.2)
 
 	// We filter out the fallback recommendations when actually building a team
 	if args.Namespace != "teams" {
@@ -351,7 +355,19 @@ func (h *UserHandler) MeUserVersion(ctx context.Context, arg keybase1.MeUserVers
 }
 
 func (h *UserHandler) GetUPAK(ctx context.Context, uid keybase1.UID) (ret keybase1.UPAKVersioned, err error) {
-	arg := libkb.NewLoadUserArg(h.G()).WithNetContext(ctx).WithUID(uid).WithPublicKeyOptional()
+	arg := libkb.NewLoadUserArg(h.G()).WithNetContext(ctx).WithStubMode(libkb.StubModeUnstubbed).WithUID(uid).WithPublicKeyOptional()
+	// err = h.G().GetFullSelfer().WithUser(arg, func(user *libkb.User) error {
+	// 	if user == nil {
+	// 		return libkb.UserNotFoundError{}
+	// 	}
+	// 	upkv2, err := user.ExportToUPKV2AllIncarnations()
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// 	ret = keybase1.NewUPAKVersionedWithV2(*upkv2)
+	// 	return nil
+	// })
+
 	upak, _, err := h.G().GetUPAKLoader().LoadV2(arg)
 	if err != nil {
 		return ret, err

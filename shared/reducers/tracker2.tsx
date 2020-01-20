@@ -49,8 +49,6 @@ export default Container.makeReducer<Actions, Types.State>(initialState, {
     const d = getDetails(draftState, username)
     d.bio = action.payload.bio
     d.blocked = action.payload.blocked
-    d.followersCount = action.payload.followersCount
-    d.followingCount = action.payload.followingCount
     d.fullname = action.payload.fullname
     d.location = action.payload.location
     d.stellarHidden = action.payload.stellarHidden
@@ -88,14 +86,6 @@ export default Container.makeReducer<Actions, Types.State>(initialState, {
     d.assertions = assertions
     assertions.set(assertion.assertionKey, assertion)
   },
-  [Tracker2Gen.updateFollowers]: (draftState, action) => {
-    const {username, followers, following} = action.payload
-    const d = getDetails(draftState, username)
-    d.followers = new Set(followers.map(f => f.username))
-    d.following = new Set(following.map(f => f.username))
-    d.followersCount = d.followers.size
-    d.followingCount = d.following.size
-  },
   [Tracker2Gen.proofSuggestionsUpdated]: (draftState, action) => {
     type ReadonlyProofSuggestions = Readonly<Types.State['proofSuggestions']>
     ;(draftState.proofSuggestions as ReadonlyProofSuggestions) = action.payload.suggestions
@@ -121,10 +111,8 @@ export default Container.makeReducer<Actions, Types.State>(initialState, {
           det.blocked = blockState.blocked
         } else if (blockState.blockType === RpcTypes.UserBlockType.follow) {
           det.hidFromFollowers = blockState.blocked
-          blockState.blocked && d.followers && d.followers.delete(username)
         }
       })
     })
-    d.followersCount = d.followers?.size
   },
 })

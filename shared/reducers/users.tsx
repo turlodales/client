@@ -10,7 +10,6 @@ const initialState: Types.State = Constants.makeState()
 
 type Actions =
   | UsersGen.Actions
-  | Tracker2Gen.UpdateFollowersPayload
   | Tracker2Gen.UpdatedDetailsPayload
   | ConfigGen.SetAccountsPayload
   | TeamBuildingGen.SearchResultsLoadedPayload
@@ -58,12 +57,6 @@ export default Container.makeReducer<Actions, Types.State>(initialState, {
     const {username, fullname} = action.payload
     const {infoMap} = draftState
     updateInfo(infoMap, username, {fullname})
-  },
-  [Tracker2Gen.updateFollowers]: (draftState, action) => {
-    const {followers, following} = action.payload
-    const all = [...followers, ...following]
-    const {infoMap} = draftState
-    all.forEach(({username, fullname}) => updateInfo(infoMap, username, {fullname}))
   },
   [ConfigGen.setAccounts]: (draftState, action) => {
     const {configuredAccounts} = action.payload

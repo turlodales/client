@@ -1,4 +1,4 @@
-// Copyright 2015 Keybase, Inc. All rights reserved. Use of
+// Copyright 015 Keybase, Inc. All rights reserved. Use of
 // this source code is governed by the included BSD license.
 
 package engine
@@ -8,27 +8,27 @@ import (
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 )
 
-type ListTrackers2Engine struct {
+type ListTrackersUnverifiedEngine struct {
 	libkb.Contextified
-	arg keybase1.ListTrackers2Arg
-	res keybase1.UserSummary2Set
+	arg keybase1.ListTrackersUnverifiedArg
+	res keybase1.UserSummarySet
 	uid keybase1.UID
 }
 
-func NewListTrackers2(g *libkb.GlobalContext, arg keybase1.ListTrackers2Arg) *ListTrackers2Engine {
-	return &ListTrackers2Engine{
+func NewListTrackersUnverified(g *libkb.GlobalContext, arg keybase1.ListTrackersUnverifiedArg) *ListTrackersUnverifiedEngine {
+	return &ListTrackersUnverifiedEngine{
 		Contextified: libkb.NewContextified(g),
 		arg:          arg,
 	}
 }
 
 // Name is the unique engine name.
-func (e *ListTrackers2Engine) Name() string {
-	return "ListTrackersEngine"
+func (e *ListTrackersUnverifiedEngine) Name() string {
+	return "ListTrackersUnverifiedEngine"
 }
 
 // GetPrereqs returns the engine prereqs (none).
-func (e *ListTrackers2Engine) Prereqs() Prereqs {
+func (e *ListTrackersUnverifiedEngine) Prereqs() Prereqs {
 	session := false
 	if len(e.arg.Assertion) == 0 {
 		session = true
@@ -36,15 +36,15 @@ func (e *ListTrackers2Engine) Prereqs() Prereqs {
 	return Prereqs{Device: session}
 }
 
-func (e *ListTrackers2Engine) RequiredUIs() []libkb.UIKind {
+func (e *ListTrackersUnverifiedEngine) RequiredUIs() []libkb.UIKind {
 	return []libkb.UIKind{libkb.LogUIKind}
 }
 
-func (e *ListTrackers2Engine) SubConsumers() []libkb.UIConsumer {
+func (e *ListTrackersUnverifiedEngine) SubConsumers() []libkb.UIConsumer {
 	return nil
 }
 
-func (e *ListTrackers2Engine) lookupUID(m libkb.MetaContext) error {
+func (e *ListTrackersUnverifiedEngine) lookupUID(m libkb.MetaContext) error {
 	if len(e.arg.Assertion) == 0 {
 		e.uid = m.G().GetMyUID()
 		if !e.uid.Exists() {
@@ -62,12 +62,12 @@ func (e *ListTrackers2Engine) lookupUID(m libkb.MetaContext) error {
 	return nil
 }
 
-func (e *ListTrackers2Engine) Run(m libkb.MetaContext) error {
+func (e *ListTrackersUnverifiedEngine) Run(m libkb.MetaContext) error {
 	if err := e.lookupUID(m); err != nil {
 		return err
 	}
 	callerUID := m.G().Env.GetUID()
-	ts := libkb.NewTracker2Syncer(m.G(), callerUID, e.arg.Reverse)
+	ts := libkb.NewServertrustTracker2Syncer(m.G(), callerUID, libkb.FollowDirectionFollowers)
 	if err := libkb.RunSyncer(m, ts, e.uid, false /* loggedIn */, false /* forceReload */); err != nil {
 		return err
 	}
@@ -75,6 +75,6 @@ func (e *ListTrackers2Engine) Run(m libkb.MetaContext) error {
 	return nil
 }
 
-func (e *ListTrackers2Engine) GetResults() keybase1.UserSummary2Set {
+func (e *ListTrackersUnverifiedEngine) GetResults() keybase1.UserSummarySet {
 	return e.res
 }
