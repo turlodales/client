@@ -67,7 +67,7 @@ func (h *UserHandler) ListTracking(ctx context.Context, arg keybase1.ListTrackin
 	if err != nil {
 		return ret, err
 	}
-	return keybase1.UserSummarySet{Users: eng.TableResult()}, nil
+	return eng.TableResult(), nil
 }
 
 func (h *UserHandler) ListTrackingJSON(ctx context.Context, arg keybase1.ListTrackingJSONArg) (res string, err error) {
@@ -85,11 +85,11 @@ func (h *UserHandler) ListTrackingJSON(ctx context.Context, arg keybase1.ListTra
 	return eng.JSONResult(), nil
 }
 
+// TODO IMPLEMENT FILTER??
 func (h *UserHandler) ListTrackersUnverified(ctx context.Context, arg keybase1.ListTrackersUnverifiedArg) (res keybase1.UserSummarySet, err error) {
 	m := libkb.NewMetaContext(ctx, h.G())
-	defer m.Trace(fmt.Sprintf("ListTrackersUnverified(assertion=%s)", arg.Assertion),
-		func() error { return err })()
-	eng := engine.NewListTrackersUnverified(h.G(), arg)
+	defer m.Trace(fmt.Sprintf("ListTrackersUnverified(assertion=%s)", arg.Assertion), func() error { return err })()
+	eng := engine.NewListTrackersUnverifiedEngine(h.G(), engine.ListTrackersUnverifiedEngineArg{Filter: arg.Filter, Assertion: arg.Assertion})
 	uis := libkb.UIs{
 		LogUI:     h.getLogUI(arg.SessionID),
 		SessionID: arg.SessionID,

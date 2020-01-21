@@ -32,11 +32,12 @@ type ListTrackingEngineArg struct {
 	Verbose      bool
 	Filter       string
 	ForAssertion string
+	LoadUserArg  *libkb.LoadUserArg
 }
 
 type ListTrackingEngine struct {
 	arg         *ListTrackingEngineArg
-	tableResult []keybase1.UserSummary
+	tableResult keybase1.UserSummarySet
 	jsonResult  string
 	libkb.Contextified
 }
@@ -59,14 +60,19 @@ func (e *ListTrackingEngine) RequiredUIs() []libkb.UIKind { return []libkb.UIKin
 func (e *ListTrackingEngine) SubConsumers() []libkb.UIConsumer { return nil }
 
 func (e *ListTrackingEngine) Run(m libkb.MetaContext) (err error) {
-	// See if we can use upak remotetracks or listfolloweduids
-	arg := libkb.NewLoadUserArgWithMetaContext(m).WithStubMode(libkb.StubModeUnstubbed)
-
-	if len(e.arg.ForAssertion) > 0 {
-		arg = arg.WithName(e.arg.ForAssertion)
+	// See if we can use upak remotetracks or listfolloweduids? Apparently full selfer throws away some caching? Maybve its ok
+	var arg libkb.LoadUserArg
+	if e.arg.LoadUserArg != nil {
+		arg = *e.arg.LoadUserArg
 	} else {
-		arg = arg.WithSelf(true)
+		arg = libkb.NewLoadUserArgWithMetaContext(m)
+		if len(e.arg.ForAssertion) > 0 {
+			arg = arg.WithName(e.arg.ForAssertion)
+		} else {
+			arg = arg.WithSelf(true)
+		}
 	}
+	arg.WithStubMode(libkb.StubModeUnstubbed)
 
 	err = m.G().GetFullSelfer().WithUser(arg, func(user *libkb.User) error {
 		if user == nil {
@@ -175,6 +181,7 @@ func (e *ListTrackingEngine) linkWebProofs(link *libkb.TrackChainLink) (res []ke
 }
 
 func (e *ListTrackingEngine) runTable(m libkb.MetaContext, trackList TrackList) error {
+	e.tableResult = keybase1.UserSummarySet{}
 	for _, link := range trackList {
 		uid, err := link.GetTrackedUID()
 		if err != nil {
@@ -191,7 +198,7 @@ func (e *ListTrackingEngine) runTable(m libkb.MetaContext, trackList TrackList) 
 		entry.Extra.Proofs.PublicKeys = e.linkPGPKeys(m, link)
 		entry.Extra.Proofs.Social = e.linkSocialProofs(link)
 		entry.Extra.Proofs.Web = e.linkWebProofs(link)
-		e.tableResult = append(e.tableResult, entry)
+		e.tableResult.Users = append(e.tableResult.Users, entry)
 	}
 	return nil
 }
@@ -269,7 +276,7 @@ func condenseRecord(l *libkb.TrackChainLink) (*jsonw.Wrapper, error) {
 	return out, nil
 }
 
-func (e *ListTrackingEngine) TableResult() []keybase1.UserSummary {
+func (e *ListTrackingEngine) TableResult() keybase1.UserSummarySet {
 	return e.tableResult
 }
 

@@ -1022,11 +1022,11 @@
       ],
       "response": "BootstrapStatus"
     },
-    "requestFollowerInfo": {
+    "requestFollowingAndUnverifiedFollowers": {
       "request": [
         {
-          "name": "uid",
-          "type": "UID"
+          "name": "sessionID",
+          "type": "int"
         }
       ],
       "response": null

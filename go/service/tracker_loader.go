@@ -1,17 +1,19 @@
-package libkb
+package service
 
 import (
 	"errors"
 	"fmt"
 	"sync"
 
+	"github.com/keybase/client/go/engine"
+	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/protocol/keybase1"
 	context "golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 )
 
 type TrackerLoader struct {
-	Contextified
+	libkb.Contextified
 	sync.Mutex
 
 	eg         errgroup.Group
@@ -20,14 +22,14 @@ type TrackerLoader struct {
 	queueCh    chan keybase1.UID
 }
 
-func NewTrackerLoader(g *GlobalContext) *TrackerLoader {
+func NewTrackerLoader(g *libkb.GlobalContext) *TrackerLoader {
 	l := &TrackerLoader{
-		Contextified: NewContextified(g),
+		Contextified: libkb.NewContextified(g),
 		shutdownCh:   make(chan struct{}),
 		queueCh:      make(chan keybase1.UID, 100),
 	}
 
-	g.PushShutdownHook(func(mctx MetaContext) error {
+	g.PushShutdownHook(func(mctx libkb.MetaContext) error {
 		<-l.Shutdown(mctx.Ctx())
 		return nil
 	})
@@ -91,31 +93,52 @@ func (l *TrackerLoader) Queue(ctx context.Context, uid keybase1.UID) (err error)
 // 	return followers, followees
 // }
 
-func (l *TrackerLoader) load(ctx context.Context, uid keybase1.UID) error {
-	defer l.G().CTraceTimed(ctx, "TrackerLoader.load", func() error { return nil })()
-	syncer := NewServertrustTracker2Syncer(l.G(), uid, FollowDirectionFollowing)
-	mctx := NewMetaContext(ctx, l.G())
+func (l *TrackerLoader) trackingArg(mctx libkb.MetaContext, uid keybase1.UID, withNetwork bool) *engine.ListTrackingEngineArg {
+	loadUserArg := libkb.NewLoadUserArgWithMetaContext(mctx).WithUID(uid).WithCachedOnly(!withNetwork)
+	return &engine.ListTrackingEngineArg{LoadUserArg: &loadUserArg}
+}
 
-	// send up local copy first quickly
-	if err := syncer.loadFromStorage(mctx, uid, false); err != nil {
-		l.debug(ctx, "load: failed to load from local storage: %s", err)
-	} else {
-		// Notify with results
-		// followers, followees := nil, nil //l.argsFromSyncer(syncer)
-		l.G().NotifyRouter.HandleTrackingInfo(uid, nil, nil)
-	}
+func (l *TrackerLoader) trackersArg(uid keybase1.UID, withNetwork bool) engine.ListTrackersUnverifiedEngineArg {
+	return engine.ListTrackersUnverifiedEngineArg{UID: uid, CachedOnly: !withNetwork}
+}
 
-	// go get remote copy
-	if err := syncer.syncFromServer(mctx, uid, false); err != nil {
-		l.debug(ctx, "load: failed to load from server: %s", err)
+// loadCached should not make any network calls
+func (l *TrackerLoader) loadInner(mctx libkb.MetaContext, uid keybase1.UID, withNetwork bool) error {
+	eng := engine.NewListTrackingEngine(mctx.G(), l.trackingArg(mctx, uid, withNetwork))
+	err := engine.RunEngine2(mctx, eng)
+	if err != nil {
 		return err
 	}
-	if err := syncer.store(mctx, uid); err != nil {
-		l.debug(ctx, "load: failed to store result: %s", err)
+	following := eng.TableResult()
+
+	eng2 := engine.NewListTrackersUnverifiedEngine(mctx.G(), l.trackersArg(uid, withNetwork))
+	err = engine.RunEngine2(mctx, eng2)
+	if err != nil {
+		return err
 	}
-	// followers, followees := nil, nil //l.argsFromSyncer(syncer)
-	l.G().NotifyRouter.HandleTrackingInfo(uid, nil, nil)
+	followers := eng2.GetResults()
+
+	l.G().NotifyRouter.HandleTrackingInfo(keybase1.TrackingInfoArg{
+		Uid:       uid,
+		Followees: following.Usernames(),
+		Followers: followers.Usernames(),
+	})
+
 	return nil
+}
+
+func (l *TrackerLoader) load(ctx context.Context, uid keybase1.UID) error {
+	defer l.G().CTraceTimed(ctx, "TrackerLoader.load", func() error { return nil })()
+
+	mctx := libkb.NewMetaContext(ctx, l.G())
+
+	withNetwork := false
+	if err := l.loadInner(mctx, uid, withNetwork); err != nil {
+		l.debug(ctx, "load: failed to load from local storage: %s", err)
+	}
+
+	withNetwork = true
+	return l.loadInner(mctx, uid, withNetwork)
 }
 
 func (l *TrackerLoader) loadLoop(stopCh chan struct{}) error {

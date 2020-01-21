@@ -4,18 +4,28 @@
 package engine
 
 import (
+	"errors"
+
 	"github.com/keybase/client/go/libkb"
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 )
 
 type ListTrackersUnverifiedEngine struct {
 	libkb.Contextified
-	arg keybase1.ListTrackersUnverifiedArg
+	arg ListTrackersUnverifiedEngineArg
 	res keybase1.UserSummarySet
 	uid keybase1.UID
 }
 
-func NewListTrackersUnverified(g *libkb.GlobalContext, arg keybase1.ListTrackersUnverifiedArg) *ListTrackersUnverifiedEngine {
+type ListTrackersUnverifiedEngineArg struct {
+	Filter      string
+	Assertion   string
+	UID         keybase1.UID
+	CachedOnly  bool
+	LoadUserArg *libkb.LoadUserArg
+}
+
+func NewListTrackersUnverifiedEngine(g *libkb.GlobalContext, arg ListTrackersUnverifiedEngineArg) *ListTrackersUnverifiedEngine {
 	return &ListTrackersUnverifiedEngine{
 		Contextified: libkb.NewContextified(g),
 		arg:          arg,
@@ -30,7 +40,7 @@ func (e *ListTrackersUnverifiedEngine) Name() string {
 // GetPrereqs returns the engine prereqs (none).
 func (e *ListTrackersUnverifiedEngine) Prereqs() Prereqs {
 	session := false
-	if len(e.arg.Assertion) == 0 {
+	if len(e.arg.Assertion) == 0 && e.arg.UID.IsNil() {
 		session = true
 	}
 	return Prereqs{Device: session}
@@ -45,12 +55,20 @@ func (e *ListTrackersUnverifiedEngine) SubConsumers() []libkb.UIConsumer {
 }
 
 func (e *ListTrackersUnverifiedEngine) lookupUID(m libkb.MetaContext) error {
+	if e.arg.UID.Exists() {
+		e.uid = e.arg.UID
+		return nil
+	}
 	if len(e.arg.Assertion) == 0 {
 		e.uid = m.G().GetMyUID()
 		if !e.uid.Exists() {
 			return libkb.NoUIDError{}
 		}
 		return nil
+	}
+
+	if e.arg.CachedOnly {
+		return errors.New("no uid passed and not logged in; cannot lookup assertion in CachedOnly mode")
 	}
 
 	larg := libkb.NewLoadUserArgWithMetaContext(m).WithPublicKeyOptional().WithName(e.arg.Assertion)
@@ -66,8 +84,18 @@ func (e *ListTrackersUnverifiedEngine) Run(m libkb.MetaContext) error {
 	if err := e.lookupUID(m); err != nil {
 		return err
 	}
+
 	callerUID := m.G().Env.GetUID()
 	ts := libkb.NewServertrustTracker2Syncer(m.G(), callerUID, libkb.FollowDirectionFollowers)
+
+	if e.arg.CachedOnly {
+		if err := libkb.RunSyncerCached(m, ts, e.uid); err != nil {
+			return err
+		}
+		e.res = ts.Result()
+		return nil
+	}
+
 	if err := libkb.RunSyncer(m, ts, e.uid, false /* loggedIn */, false /* forceReload */); err != nil {
 		return err
 	}

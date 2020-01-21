@@ -8,8 +8,6 @@ export type FriendshipUserInfo = {
   username: string
   uid: string
   fullname: string
-  followsYou: boolean
-  following: boolean
 }
 
 export type ProveGenericParams = Readonly<{

@@ -3673,3 +3673,10 @@ func (d *ClientDetails) Redact() {
 		}
 	}
 }
+
+func (s UserSummarySet) Usernames() (ret []string) {
+	for _, x := range s.Users {
+		ret = append(ret, x.Username)
+	}
+	return ret
+}
