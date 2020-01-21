@@ -85,11 +85,10 @@ func (h *UserHandler) ListTrackingJSON(ctx context.Context, arg keybase1.ListTra
 	return eng.JSONResult(), nil
 }
 
-// TODO IMPLEMENT FILTER??
 func (h *UserHandler) ListTrackersUnverified(ctx context.Context, arg keybase1.ListTrackersUnverifiedArg) (res keybase1.UserSummarySet, err error) {
 	m := libkb.NewMetaContext(ctx, h.G())
 	defer m.Trace(fmt.Sprintf("ListTrackersUnverified(assertion=%s)", arg.Assertion), func() error { return err })()
-	eng := engine.NewListTrackersUnverifiedEngine(h.G(), engine.ListTrackersUnverifiedEngineArg{Filter: arg.Filter, Assertion: arg.Assertion})
+	eng := engine.NewListTrackersUnverifiedEngine(h.G(), engine.ListTrackersUnverifiedEngineArg{Assertion: arg.Assertion})
 	uis := libkb.UIs{
 		LogUI:     h.getLogUI(arg.SessionID),
 		SessionID: arg.SessionID,
@@ -256,7 +255,8 @@ func (h *UserHandler) InterestingPeople(ctx context.Context, args keybase1.Inter
 	followingFn := func(uid keybase1.UID) (res []keybase1.UID, err error) {
 		var found bool
 		var tmp keybase1.UserSummarySet
-		found, err = h.G().LocalDb.GetInto(&tmp, libkb.DbKeyUID(libkb.DBTrackers2Following, uid))
+		// This is only informative, so unverified data is fine.
+		found, err = h.G().LocalDb.GetInto(&tmp, libkb.DbKeyUID(libkb.DBUnverifiedTrackersFollowing, uid))
 		if err != nil {
 			return nil, err
 		}
@@ -355,19 +355,7 @@ func (h *UserHandler) MeUserVersion(ctx context.Context, arg keybase1.MeUserVers
 }
 
 func (h *UserHandler) GetUPAK(ctx context.Context, uid keybase1.UID) (ret keybase1.UPAKVersioned, err error) {
-	arg := libkb.NewLoadUserArg(h.G()).WithNetContext(ctx).WithStubMode(libkb.StubModeUnstubbed).WithUID(uid).WithPublicKeyOptional()
-	// err = h.G().GetFullSelfer().WithUser(arg, func(user *libkb.User) error {
-	// 	if user == nil {
-	// 		return libkb.UserNotFoundError{}
-	// 	}
-	// 	upkv2, err := user.ExportToUPKV2AllIncarnations()
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	// 	ret = keybase1.NewUPAKVersionedWithV2(*upkv2)
-	// 	return nil
-	// })
-
+	arg := libkb.NewLoadUserArg(h.G()).WithNetContext(ctx).WithUID(uid).WithPublicKeyOptional()
 	upak, _, err := h.G().GetUPAKLoader().LoadV2(arg)
 	if err != nil {
 		return ret, err

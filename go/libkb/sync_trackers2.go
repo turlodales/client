@@ -42,9 +42,9 @@ const cacheTimeout = 10 * time.Minute
 
 func (t *ServertrustTracker2Syncer) dbKey(u keybase1.UID) DbKey {
 	if t.direction == FollowDirectionFollowing {
-		return DbKeyUID(DBTrackers2Following, u)
+		return DbKeyUID(DBUnverifiedTrackersFollowing, u)
 	}
-	return DbKeyUID(DBTrackers2Followers, u)
+	return DbKeyUID(DBUnverifiedTrackersFollowers, u)
 }
 
 func (t *ServertrustTracker2Syncer) loadFromStorage(m MetaContext, uid keybase1.UID, useExpiration bool) error {

@@ -600,7 +600,6 @@ type ListTrackingJSONArg struct {
 
 type ListTrackersUnverifiedArg struct {
 	SessionID int    `codec:"sessionID" json:"sessionID"`
-	Filter    string `codec:"filter" json:"filter"`
 	Assertion string `codec:"assertion" json:"assertion"`
 }
 

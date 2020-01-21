@@ -25,7 +25,6 @@ type ListTrackersUnverifiedEngine struct {
 type ListTrackersUnverifiedEngineArg struct {
 	UID        keybase1.UID
 	Assertion  string
-	Filter     string
 	CachedOnly bool
 }
 

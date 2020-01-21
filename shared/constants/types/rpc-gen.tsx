@@ -1460,7 +1460,7 @@ export type MessageTypes = {
     outParam: Array<InterestingPerson> | null
   }
   'keybase.1.user.listTrackersUnverified': {
-    inParam: {readonly filter: String; readonly assertion: String}
+    inParam: {readonly assertion: String}
     outParam: UserSummarySet
   }
   'keybase.1.user.listTracking': {

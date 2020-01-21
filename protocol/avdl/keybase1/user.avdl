@@ -55,7 +55,7 @@ protocol user {
     listTrackersUnverified returns the users following the given user, and is unverified
     and server-trust.
   */
-  UserSummarySet listTrackersUnverified(int sessionID, string filter, string assertion);
+  UserSummarySet listTrackersUnverified(int sessionID, string assertion);
 
   @typedef("string")
   record EmailAddress {}

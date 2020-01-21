@@ -565,10 +565,6 @@
           "type": "int"
         },
         {
-          "name": "filter",
-          "type": "string"
-        },
-        {
           "name": "assertion",
           "type": "string"
         }
