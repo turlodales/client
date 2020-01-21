@@ -89,7 +89,7 @@ func (e *ListTrackersUnverifiedEngine) Run(m libkb.MetaContext) error {
 	}
 
 	callerUID := m.G().Env.GetUID()
-	ts := libkb.NewServertrustTracker2Syncer(m.G(), callerUID, libkb.FollowDirectionFollowers)
+	ts := libkb.NewServertrustTrackerSyncer(m.G(), callerUID, libkb.FollowDirectionFollowers)
 
 	if e.arg.CachedOnly {
 		if err := libkb.RunSyncerCached(m, ts, e.uid); err != nil {

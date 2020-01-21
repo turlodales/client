@@ -22,14 +22,7 @@ func directionToReverse(direction FollowDirection) (reverse bool) {
 	return direction == FollowDirectionFollowing
 }
 
-func reverseToDirection(reverse bool) FollowDirection {
-	if reverse {
-		return FollowDirectionFollowing
-	}
-	return FollowDirectionFollowers
-}
-
-type ServertrustTracker2Syncer struct {
+type ServertrustTrackerSyncer struct {
 	sync.Mutex
 	Contextified
 	res       *keybase1.UserSummarySet
@@ -40,14 +33,14 @@ type ServertrustTracker2Syncer struct {
 
 const cacheTimeout = 10 * time.Minute
 
-func (t *ServertrustTracker2Syncer) dbKey(u keybase1.UID) DbKey {
+func (t *ServertrustTrackerSyncer) dbKey(u keybase1.UID) DbKey {
 	if t.direction == FollowDirectionFollowing {
 		return DbKeyUID(DBUnverifiedTrackersFollowing, u)
 	}
 	return DbKeyUID(DBUnverifiedTrackersFollowers, u)
 }
 
-func (t *ServertrustTracker2Syncer) loadFromStorage(m MetaContext, uid keybase1.UID, useExpiration bool) error {
+func (t *ServertrustTrackerSyncer) loadFromStorage(m MetaContext, uid keybase1.UID, useExpiration bool) error {
 	var err error
 	var found bool
 	var tmp keybase1.UserSummarySet
@@ -70,7 +63,7 @@ func (t *ServertrustTracker2Syncer) loadFromStorage(m MetaContext, uid keybase1.
 	return nil
 }
 
-func (t *ServertrustTracker2Syncer) getLoadedVersion() int {
+func (t *ServertrustTrackerSyncer) getLoadedVersion() int {
 	ret := -1
 	if t.res != nil {
 		ret = t.res.Version
@@ -78,7 +71,7 @@ func (t *ServertrustTracker2Syncer) getLoadedVersion() int {
 	return ret
 }
 
-func (t *ServertrustTracker2Syncer) syncFromServer(m MetaContext, uid keybase1.UID, forceReload bool) (err error) {
+func (t *ServertrustTrackerSyncer) syncFromServer(m MetaContext, uid keybase1.UID, forceReload bool) (err error) {
 
 	defer m.Trace(fmt.Sprintf("syncFromServer(%s)", uid), func() error { return err })()
 
@@ -117,7 +110,7 @@ func (t *ServertrustTracker2Syncer) syncFromServer(m MetaContext, uid keybase1.U
 	return nil
 }
 
-func (t *ServertrustTracker2Syncer) store(m MetaContext, uid keybase1.UID) error {
+func (t *ServertrustTrackerSyncer) store(m MetaContext, uid keybase1.UID) error {
 	var err error
 	if !t.dirty {
 		return err
@@ -131,12 +124,12 @@ func (t *ServertrustTracker2Syncer) store(m MetaContext, uid keybase1.UID) error
 	return nil
 }
 
-func (t *ServertrustTracker2Syncer) needsLogin(m MetaContext) bool {
+func (t *ServertrustTrackerSyncer) needsLogin(m MetaContext) bool {
 	return false
 }
 
-func (t *ServertrustTracker2Syncer) Block(m MetaContext, badUIDs map[keybase1.UID]bool) (err error) {
-	defer m.Trace(fmt.Sprintf("ServertrustTracker2Syncer#Block(%+v)", badUIDs), func() error { return err })()
+func (t *ServertrustTrackerSyncer) Block(m MetaContext, badUIDs map[keybase1.UID]bool) (err error) {
+	defer m.Trace(fmt.Sprintf("ServertrustTrackerSyncer#Block(%+v)", badUIDs), func() error { return err })()
 	t.Lock()
 	defer t.Unlock()
 	if t.res == nil {
@@ -163,7 +156,7 @@ func (t *ServertrustTracker2Syncer) Block(m MetaContext, badUIDs map[keybase1.UI
 	return err
 }
 
-func (t *ServertrustTracker2Syncer) Result() keybase1.UserSummarySet {
+func (t *ServertrustTrackerSyncer) Result() keybase1.UserSummarySet {
 	if t.res == nil {
 		return keybase1.UserSummarySet{}
 	}
@@ -180,8 +173,8 @@ func (t *ServertrustTracker2Syncer) Result() keybase1.UserSummarySet {
 	return *t.res
 }
 
-func NewServertrustTracker2Syncer(g *GlobalContext, callerUID keybase1.UID, direction FollowDirection) *ServertrustTracker2Syncer {
-	return &ServertrustTracker2Syncer{
+func NewServertrustTrackerSyncer(g *GlobalContext, callerUID keybase1.UID, direction FollowDirection) *ServertrustTrackerSyncer {
+	return &ServertrustTrackerSyncer{
 		Contextified: NewContextified(g),
 		direction:    direction,
 		callerUID:    callerUID,
