@@ -100,6 +100,11 @@ safe_restart_systemd_services() {
             continue
         fi
 
+        if [ "$user" != "md" ]; then
+            echo "Continuing for $user"
+            continue
+        fi
+
         restart_instructions="Restart Keybase manually by running 'run_keybase' as $user."
         abort_instructions="Aborting Keybase autorestart for $user. $restart_instructions"
 

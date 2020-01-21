@@ -539,6 +539,10 @@ export type MessageTypes = {
     inParam: {readonly statusJSON: String; readonly feedback: String; readonly sendLogs: Boolean; readonly sendMaxBytes: Boolean}
     outParam: LogSendID
   }
+  'keybase.1.config.requestFollowingAndUnverifiedFollowers': {
+    inParam: void
+    outParam: void
+  }
   'keybase.1.config.setProxyData': {
     inParam: {readonly proxyData: ProxyData}
     outParam: void
@@ -3487,6 +3491,7 @@ export const configGuiGetValueRpcPromise = (params: MessageTypes['keybase.1.conf
 export const configGuiSetValueRpcPromise = (params: MessageTypes['keybase.1.config.guiSetValue']['inParam'], waitingKey?: WaitingKey) => new Promise<MessageTypes['keybase.1.config.guiSetValue']['outParam']>((resolve, reject) => engine()._rpcOutgoing({method: 'keybase.1.config.guiSetValue', params, callback: (error, result) => (error ? reject(error) : resolve(result)), waitingKey}))
 export const configHelloIAmRpcPromise = (params: MessageTypes['keybase.1.config.helloIAm']['inParam'], waitingKey?: WaitingKey) => new Promise<MessageTypes['keybase.1.config.helloIAm']['outParam']>((resolve, reject) => engine()._rpcOutgoing({method: 'keybase.1.config.helloIAm', params, callback: (error, result) => (error ? reject(error) : resolve(result)), waitingKey}))
 export const configLogSendRpcPromise = (params: MessageTypes['keybase.1.config.logSend']['inParam'], waitingKey?: WaitingKey) => new Promise<MessageTypes['keybase.1.config.logSend']['outParam']>((resolve, reject) => engine()._rpcOutgoing({method: 'keybase.1.config.logSend', params, callback: (error, result) => (error ? reject(error) : resolve(result)), waitingKey}))
+export const configRequestFollowingAndUnverifiedFollowersRpcPromise = (params: MessageTypes['keybase.1.config.requestFollowingAndUnverifiedFollowers']['inParam'], waitingKey?: WaitingKey) => new Promise<MessageTypes['keybase.1.config.requestFollowingAndUnverifiedFollowers']['outParam']>((resolve, reject) => engine()._rpcOutgoing({method: 'keybase.1.config.requestFollowingAndUnverifiedFollowers', params, callback: (error, result) => (error ? reject(error) : resolve(result)), waitingKey}))
 export const configSetProxyDataRpcPromise = (params: MessageTypes['keybase.1.config.setProxyData']['inParam'], waitingKey?: WaitingKey) => new Promise<MessageTypes['keybase.1.config.setProxyData']['outParam']>((resolve, reject) => engine()._rpcOutgoing({method: 'keybase.1.config.setProxyData', params, callback: (error, result) => (error ? reject(error) : resolve(result)), waitingKey}))
 export const configSetRememberPassphraseRpcPromise = (params: MessageTypes['keybase.1.config.setRememberPassphrase']['inParam'], waitingKey?: WaitingKey) => new Promise<MessageTypes['keybase.1.config.setRememberPassphrase']['outParam']>((resolve, reject) => engine()._rpcOutgoing({method: 'keybase.1.config.setRememberPassphrase', params, callback: (error, result) => (error ? reject(error) : resolve(result)), waitingKey}))
 export const configStartUpdateIfNeededRpcPromise = (params: MessageTypes['keybase.1.config.startUpdateIfNeeded']['inParam'], waitingKey?: WaitingKey) => new Promise<MessageTypes['keybase.1.config.startUpdateIfNeeded']['outParam']>((resolve, reject) => engine()._rpcOutgoing({method: 'keybase.1.config.startUpdateIfNeeded', params, callback: (error, result) => (error ? reject(error) : resolve(result)), waitingKey}))
@@ -3684,7 +3689,6 @@ export const userUserCardRpcPromise = (params: MessageTypes['keybase.1.user.user
 // 'keybase.1.config.getValue'
 // 'keybase.1.config.guiClearValue'
 // 'keybase.1.config.checkAPIServerOutOfDateWarning'
-// 'keybase.1.config.requestFollowingAndUnverifiedFollowers'
 // 'keybase.1.contacts.lookupContactList'
 // 'keybase.1.crypto.signED25519'
 // 'keybase.1.crypto.signED25519ForKBFS'
