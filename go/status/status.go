@@ -41,7 +41,6 @@ func GetExtendedStatus(mctx libkb.MetaContext) (res keybase1.ExtendedStatus, err
 	res.Clients = libkb.GetClientStatus(mctx)
 
 	if err = g.GetFullSelfer().WithSelf(mctx.Ctx(), func(me *libkb.User) error {
-		spew.Dump("@@@", me)
 		ckf := me.GetComputedKeyFamily()
 		if ckf == nil {
 			return errors.New("Couldn't load key family")
