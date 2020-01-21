@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/keybase/client/go/libkb"
-	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 )
 
 // TestTrackerList2 creates a new fake user and has that user track
@@ -28,7 +27,7 @@ func _testListTrackers2(t *testing.T, sigVersion libkb.SigVersion) {
 	trackAlice(tc, fu, sigVersion)
 	defer untrackAlice(tc, fu, sigVersion)
 
-	e := NewListTrackersUnverified(tc.G, keybase1.ListTrackersUnverifiedArg{Assertion: "t_alice"})
+	e := NewListTrackersUnverifiedEngine(tc.G, ListTrackersUnverifiedEngineArg{Assertion: "t_alice"})
 	m := NewMetaContextForTestWithLogUI(tc)
 	if err := RunEngine2(m, e); err != nil {
 		t.Fatal(err)

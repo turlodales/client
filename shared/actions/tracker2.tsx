@@ -169,7 +169,7 @@ const loadFollow = async (action: Tracker2Gen.LoadPayload) => {
 
   try {
     const [followers, following] = await Promise.all([
-      RPCTypes.userListTrackersUnverifiedRpcPromise({assertion, filter: ''}, Constants.profileLoadWaitingKey).then(
+      RPCTypes.userListTrackersUnverifiedRpcPromise({assertion}, Constants.profileLoadWaitingKey).then(
         convertTrackers
       ),
       RPCTypes.userListTrackingRpcPromise({assertion, filter: ''}, Constants.profileLoadWaitingKey).then(convertTracking),

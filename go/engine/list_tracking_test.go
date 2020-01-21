@@ -84,7 +84,7 @@ func _testListTracking(t *testing.T, sigVersion libkb.SigVersion) {
 	if err := RunEngine2(NewMetaContextForTest(tc), eng); err != nil {
 		t.Fatal("Error in ListTrackingEngine:", err)
 	}
-	if err := _verifyListTrackingEntries(eng.TableResult()); err != nil {
+	if err := _verifyListTrackingEntries(eng.TableResult().Users); err != nil {
 		t.Fatal("Error in tracking engine result entries verification:", err)
 	}
 
@@ -99,7 +99,7 @@ func _testListTracking(t *testing.T, sigVersion libkb.SigVersion) {
 	if err := RunEngine2(NewMetaContextForTest(tc2), eng); err != nil {
 		t.Fatal("Error in ListTrackingEngine:", err)
 	}
-	if err := _verifyListTrackingEntries(eng.TableResult()); err != nil {
+	if err := _verifyListTrackingEntries(eng.TableResult().Users); err != nil {
 		t.Fatal("Error in tracking engine result entries verification:", err)
 	}
 }
@@ -158,7 +158,7 @@ func TestListTrackingLocal(t *testing.T) {
 		t.Fatal("Error in ListTrackingEngine:", err)
 	}
 
-	entries := eng.TableResult()
+	entries := eng.TableResult().Users
 	if len(entries) != 2 {
 		t.Errorf("Num tracks: %d, exected 2", len(entries))
 	}
