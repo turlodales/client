@@ -1,4 +1,4 @@
-// Copyright 015 Keybase, Inc. All rights reserved. Use of
+// Copyright 2015 Keybase, Inc. All rights reserved. Use of
 // this source code is governed by the included BSD license.
 
 package engine
@@ -17,12 +17,16 @@ type ListTrackersUnverifiedEngine struct {
 	uid keybase1.UID
 }
 
+// If a UID is given, the engine will list its trackers
+// If an Assertion is given, the engine will try to resolve it to a UID via
+// remote unless CachedOnly is true.
+// Otherwise, the logged-in uid is used.
+// If no user is logged in, NoUIDError is returned.
 type ListTrackersUnverifiedEngineArg struct {
-	Filter      string
-	Assertion   string
-	UID         keybase1.UID
-	CachedOnly  bool
-	LoadUserArg *libkb.LoadUserArg
+	UID        keybase1.UID
+	Assertion  string
+	Filter     string
+	CachedOnly bool
 }
 
 func NewListTrackersUnverifiedEngine(g *libkb.GlobalContext, arg ListTrackersUnverifiedEngineArg) *ListTrackersUnverifiedEngine {

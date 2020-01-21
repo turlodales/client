@@ -12,11 +12,17 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+type trackerLoaderContext struct {
+	ctx    context.Context
+	cancel context.CancelFunc
+}
+
 type TrackerLoader struct {
 	libkb.Contextified
 	sync.Mutex
 
 	eg         errgroup.Group
+	ctx        *trackerLoaderContext
 	started    bool
 	shutdownCh chan struct{}
 	queueCh    chan keybase1.UID
@@ -49,7 +55,9 @@ func (l *TrackerLoader) Run(ctx context.Context) {
 	}
 	l.started = true
 	l.shutdownCh = make(chan struct{})
-	l.eg.Go(func() error { return l.loadLoop(l.shutdownCh) })
+	ctx, cancel := context.WithCancel(ctx)
+	l.ctx = &trackerLoaderContext{ctx: ctx, cancel: cancel}
+	l.eg.Go(func() error { return l.loadLoop(l.ctx.ctx, l.shutdownCh) })
 }
 
 func (l *TrackerLoader) Shutdown(ctx context.Context) chan struct{} {
@@ -58,6 +66,9 @@ func (l *TrackerLoader) Shutdown(ctx context.Context) chan struct{} {
 	defer l.Unlock()
 	ch := make(chan struct{})
 	if l.started {
+		if l.ctx != nil {
+			l.ctx.cancel()
+		}
 		close(l.shutdownCh)
 		l.started = false
 		go func() {
@@ -80,19 +91,6 @@ func (l *TrackerLoader) Queue(ctx context.Context, uid keybase1.UID) (err error)
 	return nil
 }
 
-// func (l *TrackerLoader) argsFromSyncer(syncer *ServertrustTracker2Syncer) (followers []string, followees []string) {
-// 	res := syncer.Result()
-// 	for _, u := range res.Users {
-// 		if u.IsFollower {
-// 			followers = append(followers, u.Username)
-// 		}
-// 		if u.IsFollowee {
-// 			followees = append(followees, u.Username)
-// 		}
-// 	}
-// 	return followers, followees
-// }
-
 func (l *TrackerLoader) trackingArg(mctx libkb.MetaContext, uid keybase1.UID, withNetwork bool) *engine.ListTrackingEngineArg {
 	loadUserArg := libkb.NewLoadUserArgWithMetaContext(mctx).WithUID(uid).WithCachedOnly(!withNetwork)
 	return &engine.ListTrackingEngineArg{LoadUserArg: &loadUserArg}
@@ -102,7 +100,6 @@ func (l *TrackerLoader) trackersArg(uid keybase1.UID, withNetwork bool) engine.L
 	return engine.ListTrackersUnverifiedEngineArg{UID: uid, CachedOnly: !withNetwork}
 }
 
-// loadCached should not make any network calls
 func (l *TrackerLoader) loadInner(mctx libkb.MetaContext, uid keybase1.UID, withNetwork bool) error {
 	eng := engine.NewListTrackingEngine(mctx.G(), l.trackingArg(mctx, uid, withNetwork))
 	err := engine.RunEngine2(mctx, eng)
@@ -141,8 +138,7 @@ func (l *TrackerLoader) load(ctx context.Context, uid keybase1.UID) error {
 	return l.loadInner(mctx, uid, withNetwork)
 }
 
-func (l *TrackerLoader) loadLoop(stopCh chan struct{}) error {
-	ctx := context.Background()
+func (l *TrackerLoader) loadLoop(ctx context.Context, stopCh chan struct{}) error {
 	for {
 		select {
 		case uid := <-l.queueCh:
