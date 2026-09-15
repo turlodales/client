@@ -1,13 +1,14 @@
-// Auto-generated to Go types and interfaces using avdl-compiler v1.4.10 (https://github.com/keybase/node-avdl-compiler)
+// Code generated to Go types and interfaces using avdl-compiler v1.4.10 (https://github.com/keybase/node-avdl-compiler). DO NOT EDIT.
 //   Input file: avdl/keybase1/notify_runtimestats.avdl
 
 package keybase1
 
 import (
+	"context"
 	"fmt"
-	"github.com/keybase/go-framed-msgpack-rpc/rpc"
-	context "golang.org/x/net/context"
 	"time"
+
+	"github.com/keybase/go-framed-msgpack-rpc/rpc"
 )
 
 type StatsSeverityLevel int
@@ -32,11 +33,11 @@ var StatsSeverityLevelRevMap = map[StatsSeverityLevel]string{
 	2: "SEVERE",
 }
 
-func (e StatsSeverityLevel) String() string {
-	if v, ok := StatsSeverityLevelRevMap[e]; ok {
+func (o StatsSeverityLevel) String() string {
+	if v, ok := StatsSeverityLevelRevMap[o]; ok {
 		return v
 	}
-	return fmt.Sprintf("%v", int(e))
+	return fmt.Sprintf("%v", int(o))
 }
 
 type DbStats struct {
@@ -72,11 +73,11 @@ var ProcessTypeRevMap = map[ProcessType]string{
 	1: "KBFS",
 }
 
-func (e ProcessType) String() string {
-	if v, ok := ProcessTypeRevMap[e]; ok {
+func (o ProcessType) String() string {
+	if v, ok := ProcessTypeRevMap[o]; ok {
 		return v
 	}
-	return fmt.Sprintf("%v", int(e))
+	return fmt.Sprintf("%v", int(o))
 }
 
 type ProcessRuntimeStats struct {
@@ -144,11 +145,11 @@ var PerfEventTypeRevMap = map[PerfEventType]string{
 	7: "TEAMTREELOAD",
 }
 
-func (e PerfEventType) String() string {
-	if v, ok := PerfEventTypeRevMap[e]; ok {
+func (o PerfEventType) String() string {
+	if v, ok := PerfEventTypeRevMap[o]; ok {
 		return v
 	}
-	return fmt.Sprintf("%v", int(e))
+	return fmt.Sprintf("%v", int(o))
 }
 
 type PerfEvent struct {
@@ -226,11 +227,11 @@ func NotifyRuntimeStatsProtocol(i NotifyRuntimeStatsInterface) rpc.Protocol {
 		Name: "keybase.1.NotifyRuntimeStats",
 		Methods: map[string]rpc.ServeHandlerDescription{
 			"runtimeStatsUpdate": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]RuntimeStatsUpdateArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]RuntimeStatsUpdateArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]RuntimeStatsUpdateArg)(nil), args)
@@ -250,6 +251,6 @@ type NotifyRuntimeStatsClient struct {
 
 func (c NotifyRuntimeStatsClient) RuntimeStatsUpdate(ctx context.Context, stats *RuntimeStats) (err error) {
 	__arg := RuntimeStatsUpdateArg{Stats: stats}
-	err = c.Cli.Notify(ctx, "keybase.1.NotifyRuntimeStats.runtimeStatsUpdate", []interface{}{__arg}, 0*time.Millisecond)
+	err = c.Cli.Notify(ctx, "keybase.1.NotifyRuntimeStats.runtimeStatsUpdate", []any{__arg}, 0*time.Millisecond)
 	return
 }

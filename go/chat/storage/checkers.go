@@ -11,8 +11,10 @@ import (
 	"github.com/keybase/client/go/protocol/chat1"
 )
 
-type BodyHashChecker func(bodyHash chat1.Hash, uniqueMsgID chat1.MessageID, uniqueConvID chat1.ConversationID) error
-type PrevChecker func(msgID chat1.MessageID, convID chat1.ConversationID, uniqueHeaderHash chat1.Hash) error
+type (
+	BodyHashChecker func(bodyHash chat1.Hash, uniqueMsgID chat1.MessageID, uniqueConvID chat1.ConversationID) error
+	PrevChecker     func(msgID chat1.MessageID, convID chat1.ConversationID, uniqueHeaderHash chat1.Hash) error
+)
 
 // These are globally unique. They don't include the UID.
 func makeBodyHashIndexKey(bodyHash chat1.Hash) libkb.DbKey {
@@ -26,7 +28,7 @@ func makeBodyHashIndexKey(bodyHash chat1.Hash) libkb.DbKey {
 // seen, to prevent replays. If the header hash is new, add it to the set.
 func CheckAndRecordBodyHash(ctx context.Context, g *globals.Context, bodyHash chat1.Hash, uniqueMsgID chat1.MessageID, uniqueConvID chat1.ConversationID) error {
 	bodyHashKey := makeBodyHashIndexKey(bodyHash)
-	bodyHashValue := []byte(fmt.Sprintf("%s:%s", uniqueConvID, uniqueMsgID))
+	bodyHashValue := fmt.Appendf(nil, "%s:%s", uniqueConvID, uniqueMsgID)
 	existingVal, found, err := g.LocalChatDb.GetRaw(bodyHashKey)
 	// Log errors as warnings, and skip this check. That prevents a corrupt
 	// leveldb cache from breaking chat.

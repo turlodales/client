@@ -1,4 +1,4 @@
-import * as Kb from '@/common-adapters/index'
+import * as Kb from '@/common-adapters'
 
 export type Props = {
   label: string
@@ -6,21 +6,21 @@ export type Props = {
   disabled: boolean
 }
 
-const ContinueButton = (props: Props) => (
-  <Kb.Button fullWidth={true} style={styles.button} onClick={props.onClick} disabled={props.disabled}>
-    <Kb.Text type="BodyBig" style={styles.continueText}>
-      {props.label}
-    </Kb.Text>
-  </Kb.Button>
-)
+const ContinueButton = (props: Props) => {
+  const styles = useStyles()
+  return (
+    <Kb.Button fullWidth={true} style={styles.button} onClick={props.onClick} disabled={props.disabled}>
+      <Kb.Text type="BodyBig" style={styles.continueText}>
+        {props.label}
+      </Kb.Text>
+    </Kb.Button>
+  )
+}
 
-const styles = Kb.Styles.styleSheetCreate(() => ({
-  button: {flexGrow: 0},
+const useStyles = Kb.Styles.createStyleHook(theme => ({
+  button: {alignSelf: 'center', flexGrow: 0},
   continueText: {
-    color: Kb.Styles.globalColors.white,
-  },
-  rabbitEmoji: {
-    marginLeft: Kb.Styles.globalMargins.xtiny,
+    color: theme.white,
   },
 }))
 

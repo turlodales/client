@@ -287,12 +287,12 @@ type ServerErrorUnwrapper struct{}
 var _ rpc.ErrorUnwrapper = ServerErrorUnwrapper{}
 
 // MakeArg implements rpc.ErrorUnwrapper.
-func (eu ServerErrorUnwrapper) MakeArg() interface{} {
+func (eu ServerErrorUnwrapper) MakeArg() any {
 	return &keybase1.Status{}
 }
 
 // UnwrapError implements rpc.ErrorUnwrapper.
-func (eu ServerErrorUnwrapper) UnwrapError(arg interface{}) (appError error, dispatchError error) {
+func (eu ServerErrorUnwrapper) UnwrapError(arg any) (appError error, dispatchError error) {
 	s, ok := arg.(*keybase1.Status)
 	if !ok {
 		return nil, errors.New("Error converting arg to keybase1.Status object in ServerErrorUnwrapper.UnwrapError")
@@ -312,12 +312,12 @@ func (eu ServerErrorUnwrapper) UnwrapError(arg interface{}) (appError error, dis
 	case StatusCodeServerErrorOverQuota:
 		quotaErr := ServerErrorOverQuota{Msg: s.Desc}
 		for _, f := range s.Fields {
-			switch {
-			case f.Key == "QUOTA_USAGE":
+			switch f.Key {
+			case "QUOTA_USAGE":
 				quotaErr.Usage, _ = strconv.ParseInt(f.Value, 10, 64)
-			case f.Key == "QUOTA_LIMIT":
+			case "QUOTA_LIMIT":
 				quotaErr.Limit, _ = strconv.ParseInt(f.Value, 10, 64)
-			case f.Key == "QUOTA_THROTTLE":
+			case "QUOTA_THROTTLE":
 				quotaErr.Throttled, _ = strconv.ParseBool(f.Value)
 			}
 		}
@@ -355,10 +355,11 @@ func (eu ServerErrorUnwrapper) UnwrapError(arg interface{}) (appError error, dis
 // IsThrottleError returns whether or not the given error signals
 // throttling.
 func IsThrottleError(err error) bool {
-	if _, ok := err.(ServerErrorThrottle); ok {
+	if _, ok := errors.AsType[ServerErrorThrottle](err); ok {
 		return true
 	}
-	if quotaErr, ok := err.(ServerErrorOverQuota); ok && quotaErr.Throttled {
+	var quotaErr ServerErrorOverQuota
+	if errors.As(err, &quotaErr) && quotaErr.Throttled {
 		return true
 	}
 	return false

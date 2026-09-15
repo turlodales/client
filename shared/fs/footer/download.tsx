@@ -1,29 +1,29 @@
 import * as Kb from '@/common-adapters'
 import * as Kbfs from '../common'
-import * as C from '@/constants'
-import * as Constants from '@/constants/fs'
 import * as T from '@/constants/types'
 import DownloadWrapper from './download-wrapper'
 import {formatDurationFromNowTo} from '@/util/timestamp'
-import {isMobile} from '@/constants/platform'
+import * as FS from '@/constants/fs'
+import {openLocalPathInSystemFileManagerDesktop} from '@/util/fs-storeless-actions'
 
 export type Props = {
   downloadID: string
   isFirst: boolean
 }
 
-const getProgress = (dlState: T.FS.DownloadState) => (
+const getProgress = (dlState: T.FS.DownloadState, styles: ReturnType<typeof useStyles>) => (
   <Kb.Box2 style={styles.progress} direction="horizontal" fullWidth={true} centerChildren={true} gap="xtiny">
-    <Kb.Box style={styles.tubeBox}>
-      <Kb.Box style={styles.tube} />
-      <Kb.Box
+    <Kb.Box2 direction="vertical" flex={1} relative={true}>
+      <Kb.Box2 direction="vertical" style={styles.tube} />
+      <Kb.Box2
+        direction="vertical"
         style={Kb.Styles.collapseStyles([
           styles.tube,
           styles.tubeStuffing,
           {width: `${Math.round(100 * dlState.progress)}%`},
         ])}
       />
-    </Kb.Box>
+    </Kb.Box2>
     <Kb.Text type="BodyTinySemibold" negative={true}>
       {formatDurationFromNowTo(dlState.endEstimate)}
     </Kb.Text>
@@ -31,17 +31,16 @@ const getProgress = (dlState: T.FS.DownloadState) => (
 )
 
 const Download = (props: Props) => {
+  const styles = useStyles()
+  const theme = Kb.Styles.useTheme()
   const dlInfo = Kbfs.useFsDownloadInfo(props.downloadID)
-  const dlState = C.useFSState(s => s.downloads.state.get(props.downloadID) || Constants.emptyDownloadState)
-  const openLocalPathInSystemFileManagerDesktop = C.useFSState(
-    s => s.dispatch.dynamic.openLocalPathInSystemFileManagerDesktop
-  )
+  const dlState = Kbfs.useFsDownloadState(props.downloadID)
+  const dismissDownload = Kbfs.useFsDismissDownload()
+  const cancelDownload = Kbfs.useFsCancelDownload()
   const open = dlState.localPath
-    ? () => openLocalPathInSystemFileManagerDesktop?.(dlState.localPath)
+    ? () => openLocalPathInSystemFileManagerDesktop(dlState.localPath)
     : () => {}
-  const dismissDownload = C.useFSState(s => s.dispatch.dismissDownload)
   const dismiss = () => dismissDownload(props.downloadID)
-  const cancelDownload = C.useFSState(s => s.dispatch.cancelDownload)
   const cancel = () => cancelDownload(props.downloadID)
   Kbfs.useFsWatchDownloadForMobile(props.downloadID, T.FS.DownloadIntent.None)
   return (
@@ -57,10 +56,10 @@ const Download = (props: Props) => {
         <Kb.Box2 direction="vertical" centerChildren={true} fullHeight={true}>
           <Kb.Icon
             type={dlState.done ? 'iconfont-success' : 'iconfont-download'}
-            color={Kb.Styles.globalColors.black_20}
+            color={theme.black_20}
           />
         </Kb.Box2>
-        <Kb.Box2 direction="vertical" style={styles.nameAndProgress}>
+        <Kb.Box2 direction="vertical" flex={1} style={styles.nameAndProgress}>
           <Kb.Text
             type="BodySmallSemibold"
             onClick={isMobile ? undefined : open}
@@ -69,13 +68,13 @@ const Download = (props: Props) => {
           >
             {dlInfo.filename}
           </Kb.Text>
-          {Constants.downloadIsOngoing(dlState) && getProgress(dlState)}
+          {FS.downloadIsOngoing(dlState) && getProgress(dlState, styles)}
         </Kb.Box2>
         <Kb.Box2 direction="vertical" centerChildren={true} fullHeight={true}>
           <Kb.Icon
             type="iconfont-remove"
-            color={Kb.Styles.globalColors.white}
-            onClick={!Constants.downloadIsOngoing(dlState) ? dismiss : cancel}
+            color={theme.white}
+            onClick={!FS.downloadIsOngoing(dlState) ? dismiss : cancel}
           />
         </Kb.Box2>
       </Kb.Box2>
@@ -83,13 +82,13 @@ const Download = (props: Props) => {
   )
 }
 
-const styles = Kb.Styles.styleSheetCreate(
-  () =>
+const useStyles = Kb.Styles.createStyleHook(
+  theme =>
     ({
       download: Kb.Styles.platformStyles({
         common: {
-          backgroundColor: Kb.Styles.globalColors.green,
-          borderRadius: 4,
+          backgroundColor: theme.green,
+          borderRadius: Kb.Styles.borderRadius,
         },
         isElectron: {
           height: 32,
@@ -102,16 +101,13 @@ const styles = Kb.Styles.styleSheetCreate(
       }),
       filename: Kb.Styles.platformStyles({
         common: {
-          color: Kb.Styles.globalColors.white,
+          color: theme.white,
         },
         isElectron: {
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
+          ...Kb.Styles.textEllipsis,
         },
       }),
       nameAndProgress: {
-        flex: 1,
         flexShrink: 1,
         minWidth: 0,
       },
@@ -119,20 +115,16 @@ const styles = Kb.Styles.styleSheetCreate(
         marginTop: -2,
       },
       red: {
-        backgroundColor: Kb.Styles.globalColors.red,
+        backgroundColor: theme.red,
       },
       tube: {
-        backgroundColor: Kb.Styles.globalColors.black_20,
+        backgroundColor: theme.black_20,
         borderRadius: 4.5,
         height: 4,
         width: '100%',
       },
-      tubeBox: {
-        flex: 1,
-        position: 'relative',
-      },
       tubeStuffing: {
-        backgroundColor: Kb.Styles.globalColors.white,
+        backgroundColor: theme.white,
         left: 0,
         position: 'absolute',
         top: 0,

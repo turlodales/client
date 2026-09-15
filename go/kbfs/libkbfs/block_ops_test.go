@@ -5,6 +5,7 @@
 package libkbfs
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"testing"
@@ -23,7 +24,6 @@ import (
 	"github.com/keybase/client/go/protocol/keybase1"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/context"
 )
 
 // fakeKeyMetadata is an implementation of KeyMetadata that just
@@ -60,7 +60,8 @@ func (kmd fakeKeyMetadata) TlfID() tlf.ID {
 type fakeBlockKeyGetter struct{}
 
 func (kg fakeBlockKeyGetter) GetTLFCryptKeyForEncryption(
-	ctx context.Context, kmd libkey.KeyMetadata) (kbfscrypto.TLFCryptKey, error) {
+	ctx context.Context, kmd libkey.KeyMetadata,
+) (kbfscrypto.TLFCryptKey, error) {
 	fkmd := kmd.(fakeKeyMetadata)
 	if len(fkmd.keys) == 0 {
 		return kbfscrypto.TLFCryptKey{}, errors.New(
@@ -71,7 +72,8 @@ func (kg fakeBlockKeyGetter) GetTLFCryptKeyForEncryption(
 
 func (kg fakeBlockKeyGetter) GetTLFCryptKeyForBlockDecryption(
 	ctx context.Context, kmd libkey.KeyMetadata, blockPtr data.BlockPointer) (
-	kbfscrypto.TLFCryptKey, error) {
+	kbfscrypto.TLFCryptKey, error,
+) {
 	fkmd := kmd.(fakeKeyMetadata)
 	i := int(blockPtr.KeyGen - kbfsmd.FirstValidKeyGen)
 	if i >= len(fkmd.keys) {
@@ -137,7 +139,8 @@ func (config testBlockOpsConfig) GetSettingsDB() *SettingsDB {
 
 func (config testBlockOpsConfig) SubscriptionManager(
 	_ SubscriptionManagerClientID, _ bool,
-	_ SubscriptionNotifier) SubscriptionManager {
+	_ SubscriptionNotifier,
+) SubscriptionManager {
 	return config.subscriptionManager
 }
 
@@ -156,13 +159,18 @@ func makeTestBlockOpsConfig(t *testing.T) testBlockOpsConfig {
 	clock := clocktest.NewTestClockNow()
 	mockPublisher := NewMockSubscriptionManagerPublisher(gomock.NewController(t))
 	mockPublisher.EXPECT().PublishChange(gomock.Any()).AnyTimes()
-	return testBlockOpsConfig{codecGetter, lm, bserver, crypto, cache, dbcg,
-		stgs, testInitModeGetter{InitDefault}, clock,
-		NewReporterSimple(clock, 1), nil, mockPublisher}
+	return testBlockOpsConfig{
+		codecGetter, lm, bserver, crypto, cache, dbcg,
+		stgs,
+		testInitModeGetter{InitDefault},
+		clock,
+		NewReporterSimple(clock, 1), nil, mockPublisher,
+	}
 }
 
 func testBlockOpsShutdown(
-	ctx context.Context, t *testing.T, bops *BlockOpsStandard) {
+	ctx context.Context, t *testing.T, bops *BlockOpsStandard,
+) {
 	err := bops.Shutdown(ctx)
 	require.NoError(t, err)
 }
@@ -205,7 +213,7 @@ func TestBlockOpsReadySuccess(t *testing.T) {
 		encryptedBlock, kmd.keys[latestKeyGen-kbfsmd.FirstValidKeyGen],
 		readyBlockData.ServerHalf, decryptedBlock)
 	require.NoError(t, err)
-	decryptedBlock.SetEncodedSize(uint32(readyBlockData.GetEncodedSize()))
+	decryptedBlock.SetEncodedSize(uint32(readyBlockData.GetEncodedSize())) //nolint:gosec // G115: Test data with bounded values
 	require.Equal(t, block, decryptedBlock)
 }
 
@@ -231,7 +239,8 @@ type badServerHalfMaker struct {
 }
 
 func (c badServerHalfMaker) MakeRandomBlockCryptKeyServerHalf() (
-	kbfscrypto.BlockCryptKeyServerHalf, error) {
+	kbfscrypto.BlockCryptKeyServerHalf, error,
+) {
 	return kbfscrypto.BlockCryptKeyServerHalf{}, errors.New(
 		"could not make server half")
 }
@@ -261,7 +270,8 @@ type badBlockEncryptor struct {
 func (c badBlockEncryptor) EncryptBlock(
 	block data.Block, tlfCryptKey kbfscrypto.TLFCryptKey,
 	blockServerHalf kbfscrypto.BlockCryptKeyServerHalf) (
-	plainSize int, encryptedBlock kbfscrypto.EncryptedBlock, err error) {
+	plainSize int, encryptedBlock kbfscrypto.EncryptedBlock, err error,
+) {
 	return 0, kbfscrypto.EncryptedBlock{}, errors.New("could not encrypt block")
 }
 
@@ -287,7 +297,7 @@ type badEncoder struct {
 	kbfscodec.Codec
 }
 
-func (c badEncoder) Encode(o interface{}) ([]byte, error) {
+func (c badEncoder) Encode(o any) ([]byte, error) {
 	return nil, errors.New("could not encode")
 }
 
@@ -296,7 +306,7 @@ func (c badEncoder) Encode(o interface{}) ([]byte, error) {
 func TestBlockOpsReadyFailEncode(t *testing.T) {
 	ctx := context.Background()
 	config := makeTestBlockOpsConfig(t)
-	config.testCodecGetter.codec = badEncoder{config.codec}
+	config.codec = badEncoder{config.codec}
 	bops := NewBlockOpsStandard(
 		config, testBlockRetrievalWorkerQueueSize, testPrefetchWorkerQueueSize,
 		0, env.EmptyAppStateUpdater{})
@@ -313,7 +323,7 @@ type tooSmallEncoder struct {
 	kbfscodec.Codec
 }
 
-func (c tooSmallEncoder) Encode(o interface{}) ([]byte, error) {
+func (c tooSmallEncoder) Encode(o any) ([]byte, error) {
 	return []byte{0x1}, nil
 }
 
@@ -333,7 +343,7 @@ func TestBlockOpsReadyTooSmallEncode(t *testing.T) {
 	kmd := makeFakeKeyMetadata(tlfID, kbfsmd.FirstValidKeyGen)
 
 	_, _, _, err := bops.Ready(ctx, kmd, &data.FileBlock{})
-	require.IsType(t, TooLowByteCountError{}, err)
+	require.ErrorAs(t, err, new(TooLowByteCountError))
 }
 
 // TestBlockOpsReadySuccess checks that BlockOpsStandard.Get()
@@ -368,8 +378,10 @@ func TestBlockOpsGetSuccess(t *testing.T) {
 	kmd2 := makeFakeKeyMetadata(tlfID, keyGen+3)
 	decryptedBlock := &data.FileBlock{}
 	err = bops.Get(ctx, kmd2,
-		data.BlockPointer{ID: id, DataVer: data.FirstValidVer,
-			KeyGen: keyGen, Context: bCtx},
+		data.BlockPointer{
+			ID: id, DataVer: data.FirstValidVer,
+			KeyGen: keyGen, Context: bCtx,
+		},
 		decryptedBlock, data.NoCacheEntry, data.MasterBranch)
 	require.NoError(t, err)
 	require.Equal(t, block, decryptedBlock)
@@ -396,10 +408,12 @@ func TestBlockOpsGetFailServerGet(t *testing.T) {
 		keybase1.MakeTestUID(1).AsUserOrTeam(), keybase1.BlockType_DATA)
 	var decryptedBlock data.FileBlock
 	err = bops.Get(ctx, kmd,
-		data.BlockPointer{ID: id, DataVer: data.FirstValidVer,
-			KeyGen: latestKeyGen, Context: bCtx},
+		data.BlockPointer{
+			ID: id, DataVer: data.FirstValidVer,
+			KeyGen: latestKeyGen, Context: bCtx,
+		},
 		&decryptedBlock, data.NoCacheEntry, data.MasterBranch)
-	require.IsType(t, kbfsblock.ServerErrorBlockNonExistent{}, err)
+	require.ErrorAs(t, err, new(kbfsblock.ServerErrorBlockNonExistent))
 }
 
 type badGetBlockServer struct {
@@ -409,7 +423,8 @@ type badGetBlockServer struct {
 func (bserver badGetBlockServer) Get(
 	ctx context.Context, tlfID tlf.ID, id kbfsblock.ID,
 	context kbfsblock.Context, cacheType DiskBlockCacheType) (
-	[]byte, kbfscrypto.BlockCryptKeyServerHalf, error) {
+	[]byte, kbfscrypto.BlockCryptKeyServerHalf, error,
+) {
 	buf, serverHalf, err := bserver.BlockServer.Get(
 		ctx, tlfID, id, context, cacheType)
 	if err != nil {
@@ -446,10 +461,12 @@ func TestBlockOpsGetFailVerify(t *testing.T) {
 
 	var decryptedBlock data.FileBlock
 	err = bops.Get(ctx, kmd,
-		data.BlockPointer{ID: id, DataVer: data.FirstValidVer,
-			KeyGen: latestKeyGen, Context: bCtx},
+		data.BlockPointer{
+			ID: id, DataVer: data.FirstValidVer,
+			KeyGen: latestKeyGen, Context: bCtx,
+		},
 		&decryptedBlock, data.NoCacheEntry, data.MasterBranch)
-	require.IsType(t, kbfshash.HashMismatchError{}, errors.Cause(err))
+	require.ErrorAs(t, errors.Cause(err), new(kbfshash.HashMismatchError))
 }
 
 // TestBlockOpsReadyFailKeyGet checks that BlockOpsStandard.Get()
@@ -478,8 +495,10 @@ func TestBlockOpsGetFailKeyGet(t *testing.T) {
 
 	var decryptedBlock data.FileBlock
 	err = bops.Get(ctx, kmd,
-		data.BlockPointer{ID: id, DataVer: data.FirstValidVer,
-			KeyGen: latestKeyGen + 1, Context: bCtx},
+		data.BlockPointer{
+			ID: id, DataVer: data.FirstValidVer,
+			KeyGen: latestKeyGen + 1, Context: bCtx,
+		},
 		&decryptedBlock, data.NoCacheEntry, data.MasterBranch)
 	require.EqualError(t, err, fmt.Sprintf(
 		"no key for block decryption (keygen=%d)", latestKeyGen+1))
@@ -504,7 +523,7 @@ func (c *badDecoder) putError(buf []byte, err error) {
 	c.errors[k] = err
 }
 
-func (c *badDecoder) Decode(buf []byte, o interface{}) error {
+func (c *badDecoder) Decode(buf []byte, o any) error {
 	k := string(buf)
 	err := func() error {
 		c.errorsLock.RLock()
@@ -551,8 +570,10 @@ func TestBlockOpsGetFailDecode(t *testing.T) {
 
 	var decryptedBlock data.FileBlock
 	err = bops.Get(ctx, kmd,
-		data.BlockPointer{ID: id, DataVer: data.FirstValidVer,
-			KeyGen: latestKeyGen, Context: bCtx},
+		data.BlockPointer{
+			ID: id, DataVer: data.FirstValidVer,
+			KeyGen: latestKeyGen, Context: bCtx,
+		},
 		&decryptedBlock, data.NoCacheEntry, data.MasterBranch)
 	require.Equal(t, decodeErr, err)
 }
@@ -563,7 +584,8 @@ type badBlockDecryptor struct {
 
 func (c badBlockDecryptor) DecryptBlock(
 	_ kbfscrypto.EncryptedBlock, _ kbfscrypto.TLFCryptKey,
-	_ kbfscrypto.BlockCryptKeyServerHalf, _ data.Block) error {
+	_ kbfscrypto.BlockCryptKeyServerHalf, _ data.Block,
+) error {
 	return errors.New("could not decrypt block")
 }
 
@@ -594,8 +616,10 @@ func TestBlockOpsGetFailDecrypt(t *testing.T) {
 
 	var decryptedBlock data.FileBlock
 	err = bops.Get(ctx, kmd,
-		data.BlockPointer{ID: id, DataVer: data.FirstValidVer,
-			KeyGen: latestKeyGen, Context: bCtx},
+		data.BlockPointer{
+			ID: id, DataVer: data.FirstValidVer,
+			KeyGen: latestKeyGen, Context: bCtx,
+		},
 		&decryptedBlock, data.NoCacheEntry, data.MasterBranch)
 	require.EqualError(t, err, "could not decrypt block")
 }

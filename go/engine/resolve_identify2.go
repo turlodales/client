@@ -26,7 +26,7 @@ type ResolveThenIdentify2 struct {
 	trackOptions keybase1.TrackOptions
 }
 
-var _ (Engine2) = (*ResolveThenIdentify2)(nil)
+var _ Engine2 = (*ResolveThenIdentify2)(nil)
 
 func NewResolveThenIdentify2(g *libkb.GlobalContext, arg *keybase1.Identify2Arg) *ResolveThenIdentify2 {
 	return &ResolveThenIdentify2{
@@ -127,6 +127,9 @@ func (e *ResolveThenIdentify2) Run(m libkb.MetaContext) (err error) {
 	defer m.Trace("ResolveThenIdentify2#Run", &err)()
 
 	e.i2eng = NewIdentify2WithUID(m.G(), e.arg)
+	// Record the request before resolving its assertion. Another identify can
+	// finish a proof check while this request is still resolving.
+	e.i2eng.requestedAt = m.G().Clock().Now()
 	if e.responsibleGregorItem != nil {
 		e.i2eng.SetResponsibleGregorItem(e.responsibleGregorItem)
 	}
@@ -189,7 +192,6 @@ func (e *ResolveThenIdentify2) GetIdentifyOutcome() *libkb.IdentifyOutcome {
 // but the UPAK cache will be used, and busted with ForceRepoll semantics. The output, on success,
 // is a populated UserPlusKeysV2.
 func ResolveAndCheck(m libkb.MetaContext, s string, useTracking bool) (ret keybase1.UserPlusKeysV2, err error) {
-
 	m = m.WithLogTag("RAC")
 	defer m.Trace(fmt.Sprintf("ResolveAndCheck(%q,%t)", s, useTracking), &err)()
 

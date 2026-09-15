@@ -1,16 +1,24 @@
 import * as C from '@/constants'
+import {getBotsAndParticipants} from '@/constants/chat/helpers'
+import * as Teams from '@/constants/teams'
 import * as React from 'react'
 import * as Kb from '@/common-adapters'
 import * as T from '@/constants/types'
-import type {Section} from '@/common-adapters/section-list'
 import Participant from './participant'
+import {useUsersState} from '@/stores/users'
+import {navToProfile} from '@/constants/router'
+import {useChatTeamMembers} from '../team-hooks'
+import {useConversationMetadata} from '../data-hooks'
+import {useRefreshParticipantsOnTeamMembershipChange} from '@/chat/inbox/refresh-participants'
 
 type Props = {
-  renderTabs: () => React.ReactElement | null
-  commonSections: Array<Section<unknown, {type: 'header-section'}>>
+  commonSections: ReadonlyArray<Section>
+  conversationIDKey: T.Chat.ConversationIDKey
 }
 
-type ParticipantSectionData =
+type Item =
+  | {type: 'header-item'}
+  | {type: 'tabs'}
   | {type: 'auditingItem'}
   | {type: 'spinnerItem'}
   | {key: string; type: 'common'}
@@ -22,31 +30,29 @@ type ParticipantSectionData =
       username: string
       type: 'member'
     }
-type ParticipantSectionType = Section<ParticipantSectionData, {type: 'participant'}>
 
-const MembersTab = (props: Props) => {
-  const conversationIDKey = C.useChatContext(s => s.id)
-  const infoMap = C.useUsersState(s => s.infoMap)
-  const {channelname, teamID, teamname} = C.useChatContext(
-    C.useShallow(s => {
-      const {meta} = s
-      const {teamID, channelname, teamname} = meta
-      return {channelname, teamID, teamname}
-    })
-  )
+type Section = Kb.SectionType<Item>
 
-  const teamMembers = C.useTeamsState(s => s.teamIDToMembers.get(teamID))
+type MemberItem = Extract<Item, {type: 'member'}>
+
+// The list the info panel renders, and everything that keeps it current. Extracted so the
+// refresh wiring can be exercised without standing up the whole section list.
+export const useChannelMembers = (conversationIDKey: T.Chat.ConversationIDKey) => {
+  const infoMap = useUsersState(s => s.infoMap)
+  const {meta, participants: participantInfo} = useConversationMetadata(conversationIDKey)
+  const {channelname, teamID, teamname} = meta
+
+  const {loading: loadingTeamMembers, members: teamMembers} = useChatTeamMembers(teamID)
   const isGeneral = channelname === 'general'
-  const showAuditingBanner = isGeneral && !teamMembers
+  const showAuditingBanner = isGeneral && loadingTeamMembers
   const refreshParticipants = C.useRPC(T.RPCChat.localRefreshParticipantsRpcPromise)
-  const participantInfo = C.useChatContext(s => s.participants)
-  const participants = C.useChatContext(
-    s => C.Chat.getBotsAndParticipants(s.meta, s.participants).participants
-  )
-  const cidChanged = C.Chat.useCIDChanged(conversationIDKey)
-  const [lastTeamName, setLastTeamName] = React.useState('')
-  if (lastTeamName !== teamname || cidChanged) {
-    setLastTeamName(teamname)
+  const participants = getBotsAndParticipants(meta, participantInfo, teamMembers).participants
+  const lastTeamNameRef = React.useRef('')
+  React.useEffect(() => {
+    if (lastTeamNameRef.current === teamname) {
+      return
+    }
+    lastTeamNameRef.current = teamname
     if (teamname) {
       refreshParticipants(
         [{convID: T.Chat.keyToConversationID(conversationIDKey)}],
@@ -54,18 +60,24 @@ const MembersTab = (props: Props) => {
         () => {}
       )
     }
-  }
+  }, [conversationIDKey, refreshParticipants, teamname])
+
+  // a kick, an add-to-team or a reset user let back in changes this channel's members
+  // too, including when another client does it
+  useRefreshParticipantsOnTeamMembershipChange(teamID, conversationIDKey)
 
   const showSpinner = !participants.length
-  const participantsItems = participants
+  const participantsItems: ReadonlyArray<MemberItem> = participants
     .map(
       p =>
         ({
-          fullname: (infoMap.get(p) || {fullname: ''}).fullname || participantInfo.contactName.get(p) || '',
-          isAdmin:
-            teamname && teamMembers ? C.Teams.userIsRoleInTeamWithInfo(teamMembers, p, 'admin') : false,
-          isOwner:
-            teamname && teamMembers ? C.Teams.userIsRoleInTeamWithInfo(teamMembers, p, 'owner') : false,
+          fullname:
+            (infoMap.get(p) || {fullname: ''}).fullname ||
+            teamMembers.get(p)?.fullName ||
+            participantInfo.contactName.get(p) ||
+            '',
+          isAdmin: teamname ? Teams.userIsRoleInTeamWithInfo(teamMembers, p, 'admin') : false,
+          isOwner: teamname ? Teams.userIsRoleInTeamWithInfo(teamMembers, p, 'owner') : false,
           key: `user-${p}`,
           type: 'member',
           username: p,
@@ -82,14 +94,19 @@ const MembersTab = (props: Props) => {
       return l.username.localeCompare(r.username)
     })
 
-  const showUserProfile = C.useProfileState(s => s.dispatch.showUserProfile)
-  const onShowProfile = showUserProfile
+  return {participantsItems, showAuditingBanner, showSpinner}
+}
 
-  const participantSection: ParticipantSectionType = {
+const MembersTab = (props: Props) => {
+  const styles = useStyles()
+  const {conversationIDKey} = props
+  const {participantsItems, showAuditingBanner, showSpinner} = useChannelMembers(conversationIDKey)
+
+  const participantSection: Section = {
     data: showSpinner
       ? [{type: 'spinnerItem'} as const]
       : [...(showAuditingBanner ? [{type: 'auditingItem'} as const] : []), ...participantsItems],
-    renderItem: ({index, item}: {index: number; item: ParticipantSectionData}) => {
+    renderItem: ({index, item}: {index: number; item: Item}) => {
       if (item.type === 'auditingItem') {
         return (
           <Kb.Banner color="grey" small={true}>
@@ -105,39 +122,30 @@ const MembersTab = (props: Props) => {
             isAdmin={item.isAdmin}
             isOwner={item.isOwner}
             username={item.username}
-            onShowProfile={onShowProfile}
+            onShowProfile={navToProfile}
             firstItem={index === 0}
           />
         )
       }
       return null
     },
-    type: 'participant',
   }
 
   const sections = [...props.commonSections, participantSection]
-
   return (
     <Kb.SectionList
       stickySectionHeadersEnabled={true}
       keyboardShouldPersistTaps="handled"
-      desktopReactListTypeOverride="variable"
-      desktopItemSizeEstimatorOverride={() => 56}
-      getItemHeight={(item, secIdx) => {
-        if (sections[secIdx]?.type === 'participant') {
-          const i = item as ParticipantSectionData
-          return i.type === 'member' && i.username ? 56 : 0
-        }
-        return 0
+      getItemHeight={item => {
+        return item?.type === 'member' && item.username ? 56 : 0
       }}
-      renderSectionHeader={({section}) => (section.type === 'participant' ? props.renderTabs() : null)}
       sections={sections}
     />
   )
 }
 export default MembersTab
 
-const styles = Kb.Styles.styleSheetCreate(
+const useStyles = Kb.Styles.createStyleHook(
   () =>
     ({
       membersSpinner: {marginTop: Kb.Styles.globalMargins.small},

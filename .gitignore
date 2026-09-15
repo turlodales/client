@@ -69,9 +69,10 @@ shared/android/app/.idea/
 shared/android/captures
 shared/android/app/local.properties
 
-browser/node_modules
-browser/js/bundle.js
 go/.go_package_deps*
+
+# Leftovers from killed test runs that wrote temp dirs into the package dir
+go/kbfs/kbpagesconfig/kbpagesconfig-editor-test-*/
 
 # Files used during the Docker build
 .docker
@@ -86,3 +87,16 @@ go/keybase_freebsd
 go/keybase_netbsd
 go/keybase_openbsd
 
+.playwright-cli
+shared/tests/results/
+.cursor
+.claude/settings.local.json
+.*-mcp
+CLAUDE.md
+.tsOuts
+docs
+.codegraph
+.mcp.json
+
+# Scratch plans (not part of the codebase)
+plans/2*.md

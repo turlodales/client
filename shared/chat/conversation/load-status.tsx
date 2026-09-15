@@ -1,10 +1,12 @@
-import * as C from '@/constants'
 import * as React from 'react'
 import * as Kb from '@/common-adapters'
 import * as T from '@/constants/types'
 import logger from '@/logger'
+import {useThreadLoadStatus} from './thread-load-status-context'
+import {useConversationThreadID} from './thread-context'
 
 const ValidatedStatus = () => {
+  const styles = useStyles()
   const [visible, setVisible] = React.useState(true)
   React.useEffect(() => {
     const timer = setTimeout(() => {
@@ -21,34 +23,20 @@ const ValidatedStatus = () => {
   ) : null
 }
 
-const getBkgColor = (status: T.RPCChat.UIChatThreadStatusTyp) => {
-  switch (status) {
-    case T.RPCChat.UIChatThreadStatusTyp.validated:
-      return 'green'
-    default:
-      return 'grey'
-  }
-}
-
 const ThreadLoadStatus = () => {
-  const status = C.useChatContext(s => s.threadLoadStatus)
-  const conversationIDKey = C.useChatContext(s => s.id)
+  const styles = useStyles()
+  const status = useThreadLoadStatus()
+  const conversationIDKey = useConversationThreadID()
 
   logger.info(`ThreadLoadStatus: convID: ${conversationIDKey} status: ${status}`)
-  if (status === T.RPCChat.UIChatThreadStatusTyp.none) {
-    return null
-  }
   switch (status) {
     case T.RPCChat.UIChatThreadStatusTyp.server:
-      return (
-        <Kb.Banner color={getBkgColor(status)} small={true} style={styles.banner}>
-          Syncing messages with server...
-        </Kb.Banner>
-      )
     case T.RPCChat.UIChatThreadStatusTyp.validating:
       return (
-        <Kb.Banner color={getBkgColor(status)} small={true} style={styles.banner}>
-          Validating sender signing keys...
+        <Kb.Banner color="grey" small={true} style={styles.banner}>
+          {status === T.RPCChat.UIChatThreadStatusTyp.server
+            ? 'Syncing messages with server...'
+            : 'Validating sender signing keys...'}
         </Kb.Banner>
       )
     case T.RPCChat.UIChatThreadStatusTyp.validated:
@@ -58,7 +46,7 @@ const ThreadLoadStatus = () => {
   }
 }
 
-const styles = Kb.Styles.styleSheetCreate(
+const useStyles = Kb.Styles.createStyleHook(
   () =>
     ({
       banner: {

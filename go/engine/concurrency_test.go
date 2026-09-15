@@ -4,6 +4,7 @@
 package engine
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"math/rand"
@@ -11,8 +12,7 @@ import (
 	"testing"
 
 	"github.com/keybase/client/go/libkb"
-	"github.com/stretchr/testify/require"
-	context "golang.org/x/net/context"
+	"github.com/stretchr/testify/assert"
 )
 
 var runConc = flag.Bool("conc", false, "run (expensive) concurrency tests")
@@ -31,14 +31,14 @@ func TestConcurrentLogin(t *testing.T) {
 
 	done := make(chan bool)
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		lwg.Add(1)
 		go func(index int) {
 			defer lwg.Done()
-			for j := 0; j < 4; j++ {
+			for range 4 {
 				Logout(tc)
 				err := u.Login(tc.G)
-				require.NoError(t, err)
+				assert.NoError(t, err)
 			}
 			fmt.Printf("logout/login #%d done\n", index)
 		}(i)
@@ -53,7 +53,7 @@ func TestConcurrentLogin(t *testing.T) {
 					return
 				default:
 					_, err := tc.G.ActiveDevice.NIST(context.Background())
-					require.NoError(t, err)
+					assert.NoError(t, err)
 					tc.G.ActiveDevice.UID()
 					tc.G.ActiveDevice.Valid()
 				}
@@ -83,14 +83,14 @@ func TestConcurrentGetPassphraseStream(t *testing.T) {
 
 	done := make(chan bool)
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		lwg.Add(1)
 		go func(index int) {
 			defer lwg.Done()
-			for j := 0; j < 4; j++ {
+			for range 4 {
 				Logout(tc)
 				err := u.Login(tc.G)
-				require.NoError(t, err)
+				assert.NoError(t, err)
 			}
 			fmt.Printf("logout/login #%d done\n", index)
 		}(i)
@@ -132,14 +132,14 @@ func TestConcurrentSignup(t *testing.T) {
 
 	done := make(chan bool)
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		lwg.Add(1)
 		go func(index int) {
 			defer lwg.Done()
-			for j := 0; j < 4; j++ {
+			for range 4 {
 				Logout(tc)
 				err := u.Login(tc.G)
-				require.NoError(t, err)
+				assert.NoError(t, err)
 				Logout(tc)
 			}
 			fmt.Printf("logout/login #%d done\n", index)
@@ -149,7 +149,7 @@ func TestConcurrentSignup(t *testing.T) {
 		go func(index int) {
 			defer mwg.Done()
 			_, err := CreateAndSignupFakeUserSafe(tc.G, "login")
-			require.NoError(t, err)
+			assert.NoError(t, err)
 			Logout(tc)
 			fmt.Printf("func caller %d done\n", index)
 		}(i)
@@ -173,11 +173,11 @@ func TestConcurrentGlobals(t *testing.T) {
 		genv,
 	}
 	var wg sync.WaitGroup
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		wg.Add(1)
-		go func(index int) {
-			for j := 0; j < 10; j++ {
-				f := fns[rand.Intn(len(fns))]
+		go func(_ int) {
+			for range 10 {
+				f := fns[rand.Intn(len(fns))] //nolint:gosec // G404: Test code with randomized function calls, not security-critical
 				f(tc.G)
 			}
 			wg.Done()

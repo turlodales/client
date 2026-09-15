@@ -1,84 +1,79 @@
-// Cache in the module. This can get called from multiple places and env vars can get lost
-const skipAnimation = require('./common-adapters/skip-animations')
-const enableWDYR = require('./util/why-did-you-render-enabled')
+const reactCompilerPlugin = 'babel-plugin-react-compiler'
+const moduleResolverPlugin = ['module-resolver', {alias: {'@': './'}}]
 
-let isElectron = null
-let isReactNative = null
-let isTest = null
+// Replaces platform globals (isMobile, isElectron, isAndroid, isIOS) with boolean
+// literals at Babel transform time. This lets Metro's constant-folding-plugin DCE
+// dead platform branches in production bundles.
+const makePlatformPlugin = defines => babel => {
+  const {types: t} = babel
+  return {
+    name: 'inline-platform-globals',
+    visitor: {
+      Identifier(path) {
+        const {name} = path.node
+        if (!(name in defines) || !path.isReferencedIdentifier()) return
+        if (path.scope.getBinding(name)) return
+        path.replaceWith(t.booleanLiteral(defines[name]))
+      },
+    },
+  }
+}
+
+// Electron only reaches Babel through jest (BABEL_ENV=test) — the Vite desktop
+// build does not load this config. React-native covers Metro builds.
+// No platformPlugin here: tests read the platform globals from jest.setup.js at
+// runtime (and may flip them per-test); inlining would bake them in at transform time.
+const makeElectronConfig = () => ({
+  presets: [
+    ['@babel/preset-env', {targets: {node: 'current'}}],
+    ['@babel/preset-react', {runtime: 'automatic'}],
+    '@babel/preset-typescript',
+  ],
+  plugins: [
+    reactCompilerPlugin, // must run first!
+  ],
+})
+
+// Worklets Bundle Mode: we pass options to the worklets plugin ourselves, so the
+// preset's auto-added (optionless) copy must be disabled via worklets/reanimated: false.
+const workletsPlugin = ['react-native-worklets/plugin', {bundleMode: true, strictGlobal: true}]
+
+const makeReactNativeConfig = platformPlugin => ({
+  plugins: [
+    reactCompilerPlugin, // must run first!
+    moduleResolverPlugin,
+    platformPlugin,
+    workletsPlugin,
+  ],
+  presets: [
+    [
+      'babel-preset-expo',
+      {
+        jsxRuntime: 'automatic',
+        reanimated: false,
+        unstable_transformImportMeta: true,
+        worklets: false,
+      },
+    ],
+  ],
+  sourceMaps: true,
+})
 
 module.exports = function (api /*: any */) {
   const apiEnv = api.env()
-  const isDev = apiEnv === 'development'
+  const metroPlatform = api.caller(c => c?.platform ?? null) // 'ios' | 'android' | null
+  const isElectron = apiEnv === 'test'
 
-  if (apiEnv === 'test') {
-    isTest = true
-    isElectron = true
-  } else if (apiEnv === 'test-rn') {
-    isTest = true
-    isReactNative = true
-  } else {
-    api.caller(c => {
-      // console.error('KB: Babel config detected caller: ', c, c && c.name, api.env())
-      if (!c || c.name === 'metro') {
-        isReactNative = true
-      } else {
-        isElectron = true
-      }
-    })
-  }
+  api.cache.using(() => `${apiEnv}:${metroPlatform ?? 'none'}`)
 
-  api.cache(true)
+  if (isElectron) return makeElectronConfig()
 
-  // console.error('KB babel.config.js ', {isElectron, isReactNative, apiEnv})
+  const platformPlugin = makePlatformPlugin({
+    isMobile: !isElectron,
+    isElectron,
+    isAndroid: metroPlatform === 'android',
+    isIOS: metroPlatform === 'ios',
+  })
 
-  if (!isElectron && !isReactNative) {
-    throw new Error('MUST have env var BABEL_PLATFORM to all babel')
-  }
-  if (isElectron && isReactNative) {
-    throw new Error('Packager is confused about babel platform')
-  }
-
-  // this is used just for our node side but not any bundling
-  if (isElectron) {
-    // console.error('KB babel.config.js for Electron')
-    return {
-      presets: [
-        isTest ? ['@babel/preset-env', {targets: {node: 'current'}}] : '@babel/preset-env',
-        '@babel/preset-typescript',
-      ],
-    }
-  } else if (isReactNative) {
-    // console.error('KB babel.config.js for ReactNative')
-    return {
-      plugins: [
-        [
-          'module-resolver',
-          {
-            alias: {
-              '@': './',
-              'react-native-kb': '../rnmodules/react-native-kb',
-              'react-native-drop-view': '../rnmodules/react-native-drop-view',
-            },
-          },
-        ],
-        ...(skipAnimation ? [] : ['react-native-reanimated/plugin']),
-        '@babel/plugin-proposal-numeric-separator',
-        '@babel/plugin-transform-export-namespace-from',
-        isDev
-          ? [
-              '@babel/plugin-transform-react-jsx-development',
-              {
-                runtime: 'automatic',
-                ...(enableWDYR ? {importSource: '@welldone-software/why-did-you-render'} : {}),
-              },
-            ]
-          : ['@babel/plugin-transform-react-jsx', {runtime: 'automatic'}],
-      ],
-      presets: [
-        // lets us set our own jsx above
-        ['module:metro-react-native-babel-preset', {useTransformReactJSXExperimental: true}],
-      ],
-      sourceMaps: true,
-    }
-  }
+  return makeReactNativeConfig(platformPlugin)
 }

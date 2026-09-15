@@ -4,6 +4,7 @@
 package client
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -14,7 +15,6 @@ import (
 	"github.com/keybase/client/go/protocol/chat1"
 	gregor1 "github.com/keybase/client/go/protocol/gregor1"
 	"github.com/keybase/client/go/protocol/keybase1"
-	"golang.org/x/net/context"
 )
 
 type CmdChatSetRetention struct {
@@ -233,7 +233,7 @@ func (c *CmdChatSetRetention) showNonTeamConv(conv *chat1.ConversationLocal) {
 	if conv.ConvRetention != nil {
 		policy = *conv.ConvRetention
 	}
-	c.println(dui, policy.HumanSummary())
+	c.println(dui, "%s", policy.HumanSummary())
 }
 
 func (c *CmdChatSetRetention) showTeamChannel(conv *chat1.ConversationLocal) {
@@ -278,10 +278,7 @@ func (c *CmdChatSetRetention) parseEphemeralAgeLimited(s string) (gregor1.Durati
 	var d time.Duration
 	var err error
 	switch s {
-	case "30s",
-		"5m",
-		"1h",
-		"6h":
+	case "30s", "5m", "1h", "6h":
 		d, err = time.ParseDuration(s)
 	case "1d", "24h":
 		d = 24 * time.Hour
@@ -315,6 +312,6 @@ func (c *CmdChatSetRetention) parseExpireAgeLimited(s string) (gregor1.DurationS
 	return gregor1.DurationSec(d.Seconds()), nil
 }
 
-func (c *CmdChatSetRetention) println(dui libkb.DumbOutputUI, format string, args ...interface{}) {
-	dui.Printf(fmt.Sprintf(format, args...) + "\n")
+func (c *CmdChatSetRetention) println(dui libkb.DumbOutputUI, format string, args ...any) {
+	_, _ = dui.Printf("%s\n", fmt.Sprintf(format, args...))
 }

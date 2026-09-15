@@ -35,7 +35,8 @@ type LoaderPackage struct {
 // it loads any stored hidden team data for the team from local storage. The getter function is used to get a recent PTK
 // for this team, which is needed to poll the Merkle Tree endpoint when asking "does a hidden team chain exist for this team?"
 func NewLoaderPackage(mctx libkb.MetaContext, id keybase1.TeamID,
-	getter func() (keybase1.KID, keybase1.PerTeamKeyGeneration, keybase1.TeamRole, error)) (ret *LoaderPackage, err error) {
+	getter func() (keybase1.KID, keybase1.PerTeamKeyGeneration, keybase1.TeamRole, error),
+) (ret *LoaderPackage, err error) {
 	encKID, gen, role, err := getter()
 	if err != nil {
 		return nil, err
@@ -125,7 +126,7 @@ func (l *LoaderPackage) checkPrev(mctx libkb.MetaContext, first sig3.Generic) (e
 }
 
 // checkExpectedHighSeqno enforces that the links we got down from the server
-// (links) are at or surpass the sequence number ther server promised through
+// (links) are at or surpass the sequence number there server promised through
 // the ratchet sets and the maxUncommittedSeqnoPromised obtained through the
 // merkle/path api call. We look at both the loaded and the received downloaded
 // ratchets for this check.
@@ -135,18 +136,15 @@ func (l *LoaderPackage) checkExpectedHighSeqno(mctx libkb.MetaContext, links []s
 		return nil
 	}
 	last := l.LastSeqno()
-	max := l.MaxRatchet()
-	if max < maxUncommittedSeqnoPromised {
-		max = maxUncommittedSeqnoPromised
-	}
-	if max <= last {
+	maxR := max(l.MaxRatchet(), maxUncommittedSeqnoPromised)
+	if maxR <= last {
 		return nil
 	}
-	if len(links) > 0 && links[len(links)-1].Seqno() >= max {
+	if len(links) > 0 && links[len(links)-1].Seqno() >= maxR {
 		return nil
 	}
 	return libkb.NewHiddenMerkleError(libkb.HiddenMerkleErrorServerWitholdingLinks,
-		"Server promised a hidden chain up to %d, but never received; is it withholding?", max)
+		"Server promised a hidden chain up to %d, but never received; is it withholding?", maxR)
 }
 
 // checkLoadedRatchet checks the given loaded ratchet against the consumed update and verifies a (seqno, linkID) match
@@ -367,7 +365,6 @@ func (l *LoaderPackage) LastReaderKeyRotator(mctx libkb.MetaContext) *keybase1.S
 // mergeData takes the data from the update and merges it with the last load of this hidden team chain
 // from local storage. The result is just in memory, not stored to disk yet. That happens in Commit().
 func (l *LoaderPackage) mergeData(mctx libkb.MetaContext, newData *keybase1.HiddenTeamChain) (err error) {
-
 	if newData == nil && (!l.newRatchetSet.IsEmpty() || l.lastCommittedSeqno > 0) {
 		newData = keybase1.NewHiddenTeamChain(l.id)
 	}

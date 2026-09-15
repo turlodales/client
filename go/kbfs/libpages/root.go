@@ -6,6 +6,7 @@ package libpages
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -114,9 +115,9 @@ func (fs CacheableFS) EnsureNoSuchFileOutsideRoot(name string) (err error) {
 		}
 		p = strings.TrimSuffix(p, "/")
 		_, statErr := fs.tlfFS.Stat(path.Join(p, name))
-		switch statErr {
-		case os.ErrNotExist:
-		case nil:
+		switch {
+		case errors.Is(statErr, os.ErrNotExist):
+		case statErr == nil:
 			return fmt.Errorf("%s exists in a parent dir", name)
 		default:
 			return statErr
@@ -134,8 +135,10 @@ func (fs CacheableFS) Use() (*libfs.FS, error) {
 // Caller must call Use() to get a usable FS.
 func (r *Root) MakeFS(
 	ctx context.Context, log *zap.Logger, kbfsConfig libkbfs.Config) (
-	fs CacheableFS, tlfID tlf.ID, shutdown func(), err error) {
+	fs CacheableFS, tlfID tlf.ID, shutdown func(), err error,
+) {
 	fsCtx, cancel := context.WithCancel(context.Background())
+	var unsubscribe func()
 	defer func() {
 		zapFields := []zapcore.Field{
 			zap.String("root_type", r.Type.String()),
@@ -146,6 +149,9 @@ func (r *Root) MakeFS(
 		if err == nil {
 			log.Info("root.MakeFS", zapFields...)
 		} else {
+			if unsubscribe != nil {
+				unsubscribe()
+			}
 			cancel()
 			log.Warn("root.MakeFS", append(zapFields, zap.Error(err))...)
 		}
@@ -171,10 +177,11 @@ func (r *Root) MakeFS(
 		if err != nil {
 			return CacheableFS{}, tlf.ID{}, nil, err
 		}
-		obsoleteCh, err := tlfFS.SubscribeToObsolete()
+		obsoleteCh, unsub, err := tlfFS.SubscribeToObsolete()
 		if err != nil {
 			return CacheableFS{}, tlf.ID{}, nil, err
 		}
+		unsubscribe = unsub
 		cacheableFS := CacheableFS{
 			obsoleteTrackingCh: obsoleteCh,
 			tlfFS:              tlfFS,
@@ -183,7 +190,10 @@ func (r *Root) MakeFS(
 		if _, err = cacheableFS.Use(); err != nil {
 			return CacheableFS{}, tlf.ID{}, nil, err
 		}
-		return cacheableFS, tlfHandle.TlfID(), cancel, nil
+		return cacheableFS, tlfHandle.TlfID(), func() {
+			unsub()
+			cancel()
+		}, nil
 	case GitRoot:
 		tlfHandle, err := libkbfs.GetHandleFromFolderNameAndType(
 			ctx, kbfsConfig.KBPKI(), kbfsConfig.MDOps(), kbfsConfig,
@@ -210,11 +220,13 @@ func (r *Root) MakeFS(
 	}
 }
 
-const gitPrefix = "git@keybase:"
-const kbfsPrefix = "/keybase/"
-const privatePrefix = "private/"
-const publicPrefix = "public/"
-const teamPrefix = "team/"
+const (
+	gitPrefix     = "git@keybase:"
+	kbfsPrefix    = "/keybase/"
+	privatePrefix = "private/"
+	publicPrefix  = "public/"
+	teamPrefix    = "team/"
+)
 
 func setRootTlfNameAndPath(root *Root, str string) {
 	parts := strings.SplitN(str, "/", 2)

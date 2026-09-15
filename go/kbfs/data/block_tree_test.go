@@ -1,15 +1,16 @@
 package data
 
 import (
-	"fmt"
-	"github.com/golang/mock/gomock"
-	"github.com/stretchr/testify/require"
 	"reflect"
 	"testing"
+
+	"github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/require"
 )
 
 func makePaths(childIndices [][]int,
-	mockBlock BlockWithPtrs) [][]ParentBlockAndChildIndex {
+	mockBlock BlockWithPtrs,
+) [][]ParentBlockAndChildIndex {
 	result := [][]ParentBlockAndChildIndex(nil)
 	for _, indexList := range childIndices {
 		Path := []ParentBlockAndChildIndex(nil)
@@ -41,8 +42,7 @@ func TestCheckForHolesAndTruncate(t *testing.T) {
 		paths := makePaths(goodEx, mockBlock)
 		newPaths := checkForHolesAndTruncate(paths)
 		require.True(t, reflect.DeepEqual(paths, newPaths),
-			fmt.Sprintf("Paths incorrectly truncated from %v to %v",
-				paths, newPaths))
+			"Paths incorrectly truncated from %v to %v", paths, newPaths)
 	}
 
 	badExamples := [][][]int{

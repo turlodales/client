@@ -9,7 +9,14 @@ import (
 	"github.com/keybase/client/go/protocol/chat1"
 )
 
-const indexMetadataVersion = 3
+// Bumping this forces a full reindex by discarding all SeenIDs. This fixes damaged
+// indexes where messages were marked indexed but their tokens never reached disk.
+//
+// Bumps metadata only (not indexVersion) to keep search working during repair:
+// reindexing atop surviving tokens keeps results live instead of going dark until
+// rebuild completes. Tradeoff: inflated alias refcounts and stale deleted-message
+// entries, filtered at search time (costs a lookup, not a wrong result).
+const indexMetadataVersion = 4
 
 type indexMetadata struct {
 	SeenIDs map[chat1.MessageID]chat1.EmptyStruct `codec:"s"`
@@ -39,14 +46,12 @@ func (m *indexMetadata) dup() (res *indexMetadata) {
 }
 
 func (m *indexMetadata) Size() int64 {
-	size := unsafe.Sizeof(m.Version)
-	size += uintptr(len(m.SeenIDs)) * unsafe.Sizeof(chat1.MessageID(0))
-	return int64(size)
+	return int64(unsafe.Sizeof(m.Version)) + int64(len(m.SeenIDs))*int64(unsafe.Sizeof(chat1.MessageID(0)))
 }
 
 func (m *indexMetadata) MissingIDForConv(conv chat1.Conversation) (res []chat1.MessageID) {
-	min, max := MinMaxIDs(conv)
-	for i := min; i <= max; i++ {
+	minID, maxID := MinMaxIDs(conv)
+	for i := minID; i <= maxID; i++ {
 		if _, ok := m.SeenIDs[i]; !ok {
 			res = append(res, i)
 		}
@@ -54,8 +59,8 @@ func (m *indexMetadata) MissingIDForConv(conv chat1.Conversation) (res []chat1.M
 	return res
 }
 
-func (m *indexMetadata) numMissing(min, max chat1.MessageID) (numMissing int) {
-	for i := min; i <= max; i++ {
+func (m *indexMetadata) numMissing(minID, maxID chat1.MessageID) (numMissing uint) {
+	for i := minID; i <= maxID; i++ {
 		if _, ok := m.SeenIDs[i]; !ok {
 			numMissing++
 		}
@@ -64,34 +69,29 @@ func (m *indexMetadata) numMissing(min, max chat1.MessageID) (numMissing int) {
 }
 
 func (m *indexMetadata) indexStatus(conv chat1.Conversation) indexStatus {
-	min, max := MinMaxIDs(conv)
-	numMsgs := int(max) - int(min) + 1
+	minID, maxID := MinMaxIDs(conv)
+	numMsgs := uint(maxID - minID + 1)
 	if numMsgs <= 1 {
 		return indexStatus{numMsgs: numMsgs}
 	}
-	numMissing := m.numMissing(min, max)
+	numMissing := m.numMissing(minID, maxID)
 	return indexStatus{numMissing: numMissing, numMsgs: numMsgs}
 }
 
-func (m *indexMetadata) PercentIndexed(conv chat1.Conversation) int {
-	status := m.indexStatus(conv)
-	if status.numMsgs <= 1 {
+type indexStatus struct {
+	numMissing uint
+	numMsgs    uint
+}
+
+func (s indexStatus) fullyIndexed() bool {
+	return s.numMissing == 0
+}
+
+func (s indexStatus) percentIndexed() int {
+	if s.numMsgs <= 1 {
 		return 100
 	}
-	return int(100 * (1 - (float64(status.numMissing) / float64(status.numMsgs))))
-}
-
-func (m *indexMetadata) FullyIndexed(conv chat1.Conversation) bool {
-	min, max := MinMaxIDs(conv)
-	if max <= min {
-		return true
-	}
-	return m.numMissing(min, max) == 0
-}
-
-type indexStatus struct {
-	numMissing int
-	numMsgs    int
+	return int(100 * (1 - (float64(s.numMissing) / float64(s.numMsgs))))
 }
 
 type inboxIndexStatus struct {
@@ -133,11 +133,11 @@ func (p *inboxIndexStatus) numConvs() int {
 	return len(p.inbox)
 }
 
-func (p *inboxIndexStatus) addConv(m *indexMetadata, conv chat1.Conversation) {
+func (p *inboxIndexStatus) addConv(status indexStatus, conv chat1.Conversation) {
 	p.Lock()
 	defer p.Unlock()
 	p.dirty = true
-	p.inbox[conv.GetConvID().ConvIDStr()] = m.indexStatus(conv)
+	p.inbox[conv.GetConvID().ConvIDStr()] = status
 }
 
 func (p *inboxIndexStatus) rmConv(conv chat1.Conversation) {
@@ -155,7 +155,7 @@ func (p *inboxIndexStatus) percentIndexed() int {
 
 func (p *inboxIndexStatus) percentIndexedLocked() int {
 	if p.dirty {
-		var numMissing, numMsgs int
+		var numMissing, numMsgs uint
 		for _, status := range p.inbox {
 			numMissing += status.numMissing
 			numMsgs += status.numMsgs

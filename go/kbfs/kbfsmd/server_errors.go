@@ -95,6 +95,10 @@ func (e ServerError) Error() string {
 	return "ServerError"
 }
 
+func (e ServerError) Unwrap() error {
+	return e.Err
+}
+
 // ServerErrorBadRequest is a generic client-side error.
 type ServerErrorBadRequest struct {
 	Reason string
@@ -183,8 +187,7 @@ func (e ServerErrorConflictDiskUsage) Error() string {
 }
 
 // ServerErrorLocked is returned when the folder truncation lock is acquired by someone else.
-type ServerErrorLocked struct {
-}
+type ServerErrorLocked struct{}
 
 // Error implements the Error interface for ServerErrorLocked.
 func (e ServerErrorLocked) Error() string {
@@ -211,6 +214,10 @@ func (e ServerErrorUnauthorized) Error() string {
 		msg += ": " + e.Err.Error()
 	}
 	return msg
+}
+
+func (e ServerErrorUnauthorized) Unwrap() error {
+	return e.Err
 }
 
 // ToStatus implements the ExportableError interface for ServerErrorUnauthorized.
@@ -252,6 +259,10 @@ func (e ServerErrorThrottle) Error() string {
 	return fmt.Sprintf("ServerErrorThrottle[%s]{%s}", *e.SuggestedRetryIn, e.Err.Error())
 }
 
+func (e ServerErrorThrottle) Unwrap() error {
+	return e.Err
+}
+
 // ToStatus implements the ExportableError interface for ServerErrorThrottle.
 func (e ServerErrorThrottle) ToStatus() (s keybase1.Status) {
 	s.Code = StatusCodeServerErrorThrottle
@@ -276,6 +287,10 @@ type ServerErrorConditionFailed struct {
 // Error implements the Error interface for ServerErrorConditionFailed.
 func (e ServerErrorConditionFailed) Error() string {
 	return "ServerErrorConditionFailed{" + e.Err.Error() + "}"
+}
+
+func (e ServerErrorConditionFailed) Unwrap() error {
+	return e.Err
 }
 
 // ToStatus implements the ExportableError interface for ServerErrorConditionFailed.
@@ -420,12 +435,12 @@ type ServerErrorUnwrapper struct{}
 var _ rpc.ErrorUnwrapper = ServerErrorUnwrapper{}
 
 // MakeArg implements rpc.ErrorUnwrapper for ServerErrorUnwrapper.
-func (eu ServerErrorUnwrapper) MakeArg() interface{} {
+func (eu ServerErrorUnwrapper) MakeArg() any {
 	return &keybase1.Status{}
 }
 
 // UnwrapError implements rpc.ErrorUnwrapper for ServerErrorUnwrapper.
-func (eu ServerErrorUnwrapper) UnwrapError(arg interface{}) (appError error, dispatchError error) {
+func (eu ServerErrorUnwrapper) UnwrapError(arg any) (appError error, dispatchError error) {
 	s, ok := arg.(*keybase1.Status)
 	if !ok {
 		return nil, errors.New("Error converting arg to keybase1.Status object in ServerErrorUnwrapper.UnwrapError")

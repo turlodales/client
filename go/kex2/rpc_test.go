@@ -4,6 +4,7 @@
 package kex2
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
@@ -14,7 +15,8 @@ import (
 
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 	"github.com/keybase/go-framed-msgpack-rpc/rpc"
-	"golang.org/x/net/context"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -40,14 +42,13 @@ func newMockProvisioner(t *testing.T) *mockProvisioner {
 	}
 }
 
-type nullLogOutput struct {
-}
+type nullLogOutput struct{}
 
-func (n *nullLogOutput) Error(s string, args ...interface{})   {}
-func (n *nullLogOutput) Warning(s string, args ...interface{}) {}
-func (n *nullLogOutput) Info(s string, args ...interface{})    {}
-func (n *nullLogOutput) Debug(s string, args ...interface{})   {}
-func (n *nullLogOutput) Profile(s string, args ...interface{}) {}
+func (n *nullLogOutput) Error(_ string, _ ...any)   {}
+func (n *nullLogOutput) Warning(_ string, _ ...any) {}
+func (n *nullLogOutput) Info(_ string, _ ...any)    {}
+func (n *nullLogOutput) Debug(_ string, _ ...any)   {}
+func (n *nullLogOutput) Profile(_ string, _ ...any) {}
 
 var _ rpc.LogOutput = (*nullLogOutput)(nil)
 
@@ -61,7 +62,8 @@ func makeLogFactory() rpc.LogFactory {
 func genUID(t *testing.T) keybase1.UID {
 	uid := make([]byte, 8)
 	if _, err := rand.Read(uid); err != nil {
-		t.Fatalf("rand failed: %v\n", err)
+		assert.NoError(t, err,
+			"rand failed: %v\n", err)
 	}
 	return keybase1.UID(hex.EncodeToString(uid))
 }
@@ -69,12 +71,13 @@ func genUID(t *testing.T) keybase1.UID {
 func genKeybase1DeviceID(t *testing.T) keybase1.DeviceID {
 	did := make([]byte, 16)
 	if _, err := rand.Read(did); err != nil {
-		t.Fatalf("rand failed: %v\n", err)
+		assert.NoError(t, err,
+			"rand failed: %v\n", err)
 	}
 	return keybase1.DeviceID(hex.EncodeToString(did))
 }
 
-func newMockProvisionee(t *testing.T, behavior int) *mockProvisionee {
+func newMockProvisionee(_ *testing.T, behavior int) *mockProvisionee {
 	return &mockProvisionee{behavior}
 }
 
@@ -100,6 +103,7 @@ func (mp *mockProvisioner) GetHelloArg() (res keybase1.HelloArg, err error) {
 	res.Uid = mp.uid
 	return res, err
 }
+
 func (mp *mockProvisioner) GetHello2Arg() (res keybase1.Hello2Arg, err error) {
 	res.Uid = mp.uid
 	return res, err
@@ -113,9 +117,11 @@ func (mp *mockProvisionee) GetNetworkInstrumenter() rpc.NetworkInstrumenterStora
 	return &rpc.DummyInstrumentationStorage{}
 }
 
-var ErrHandleHello = errors.New("handle hello failure")
-var ErrHandleDidCounterSign = errors.New("handle didCounterSign failure")
-var testTimeout = time.Duration(500) * time.Millisecond
+var (
+	ErrHandleHello          = errors.New("handle hello failure")
+	ErrHandleDidCounterSign = errors.New("handle didCounterSign failure")
+	testTimeout             = time.Duration(500) * time.Millisecond
+)
 
 func (mp *mockProvisionee) HandleHello2(ctx context.Context, arg2 keybase1.Hello2Arg) (res keybase1.Hello2Res, err error) {
 	arg1 := keybase1.HelloArg{
@@ -153,7 +159,6 @@ func (mp *mockProvisionee) HandleDidCounterSign2(ctx context.Context, arg keybas
 }
 
 func testProtocolXWithBehavior(t *testing.T, provisioneeBehavior int) (results [2]error) {
-
 	timeout := testTimeout
 	router := newMockRouterWithBehaviorAndMaxPoll(GoodRouter, timeout)
 
@@ -164,6 +169,7 @@ func testProtocolXWithBehavior(t *testing.T, provisioneeBehavior int) (results [
 	secretCh := make(chan Secret)
 
 	ctx, cancelFn := context.WithCancel(context.Background())
+	defer cancelFn()
 
 	testLogCtx, cleanup := newTestLogCtx(t)
 	defer cleanup()
@@ -211,9 +217,10 @@ func testProtocolXWithBehavior(t *testing.T, provisioneeBehavior int) (results [
 
 	secretCh <- s2
 
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		if e, eof := <-ch; !eof {
-			t.Fatalf("got unexpected channel close (try %d)", i)
+			require.True(t, eof,
+				"got unexpected channel close (try %d)", i)
 		} else if e != nil {
 			results[i] = e
 		}
@@ -225,9 +232,8 @@ func testProtocolXWithBehavior(t *testing.T, provisioneeBehavior int) (results [
 func TestFullProtocolXSuccess(t *testing.T) {
 	results := testProtocolXWithBehavior(t, GoodProvisionee)
 	for i, e := range results {
-		if e != nil {
-			t.Fatalf("Bad error %d: %v", i, e)
-		}
+		require.NoError(t, e,
+			"Bad error %d: %v", i, e)
 	}
 }
 
@@ -246,44 +252,37 @@ func errHasSuffix(err, errSuffix error) bool {
 
 func TestFullProtocolXProvisioneeFailHello(t *testing.T) {
 	results := testProtocolXWithBehavior(t, BadProvisioneeFailHello)
-	if !eeq(results[0], ErrHandleHello) {
-		t.Fatalf("Bad error 0: %v", results[0])
-	}
-	if !eeq(results[1], ErrHandleHello) {
-		t.Fatalf("Bad error 1: %v", results[1])
-	}
+	require.True(t, eeq(results[0], ErrHandleHello),
+		"Bad error 0: %v", results[0])
+	require.True(t, eeq(results[1], ErrHandleHello),
+		"Bad error 1: %v", results[1])
 }
 
 func TestFullProtocolXProvisioneeFailDidCounterSign(t *testing.T) {
 	results := testProtocolXWithBehavior(t, BadProvisioneeFailDidCounterSign)
-	if !eeq(results[0], ErrHandleDidCounterSign) {
-		t.Fatalf("Bad error 0: %v", results[0])
-	}
-	if !eeq(results[1], ErrHandleDidCounterSign) {
-		t.Fatalf("Bad error 1: %v", results[1])
-	}
+	require.True(t, eeq(results[0], ErrHandleDidCounterSign),
+		"Bad error 0: %v", results[0])
+	require.True(t, eeq(results[1], ErrHandleDidCounterSign),
+		"Bad error 1: %v", results[1])
 }
 
 func TestFullProtocolXProvisioneeSlowHello(t *testing.T) {
 	results := testProtocolXWithBehavior(t, BadProvisioneeSlowHello)
 	for i, e := range results {
-		if !errHasSuffix(e, ErrTimedOut) && !errHasSuffix(e, io.EOF) && !errHasSuffix(e, ErrHelloTimeout) {
-			t.Fatalf("Bad error %d: %v", i, e)
-		}
+		require.True(t, errHasSuffix(e, ErrTimedOut) || errHasSuffix(e, io.EOF) || errHasSuffix(e, ErrHelloTimeout),
+			"Bad error %d: %v", i, e)
 	}
 }
 
 func TestFullProtocolXProvisioneeSlowHelloWithCancel(t *testing.T) {
 	results := testProtocolXWithBehavior(t, BadProvisioneeSlowHello|BadProvisioneeCancel)
 	for i, e := range results {
-		if !eeq(e, ErrCanceled) && !eeq(e, io.EOF) {
-			t.Fatalf("Bad error %d: %v", i, e)
-		}
+		require.True(t, eeq(e, ErrCanceled) || eeq(e, io.EOF),
+			"Bad error %d: %v", i, e)
 	}
 }
 
 func TestFullProtocolY(t *testing.T) {
-
 	timeout := time.Duration(60) * time.Second
 	router := newMockRouterWithBehaviorAndMaxPoll(GoodRouter, timeout)
 
@@ -331,12 +330,13 @@ func TestFullProtocolY(t *testing.T) {
 
 	secretCh <- s1
 
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		if e, eof := <-ch; !eof {
-			t.Fatalf("got unexpected channel close (try %d)", i)
+			require.True(t, eof,
+				"got unexpected channel close (try %d)", i)
 		} else if e != nil {
-			t.Fatalf("Unexpected error (receive %d): %v", i, e)
+			require.NoError(t, e,
+				"Unexpected error (receive %d): %v", i, e)
 		}
 	}
-
 }

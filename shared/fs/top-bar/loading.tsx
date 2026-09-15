@@ -1,6 +1,7 @@
 import * as T from '@/constants/types'
-import * as C from '@/constants'
 import * as Kb from '@/common-adapters'
+import * as FS from '@/constants/fs'
+import {useFsPathItem, useFsTlfs} from '../common'
 
 // The behavior is to only show spinner when user first time lands on a screen
 // and when don't have the data that drives it yet. Since RPCs happen
@@ -8,26 +9,24 @@ import * as Kb from '@/common-adapters'
 
 type OwnProps = {path: T.FS.Path}
 
-const styles = Kb.Styles.styleSheetCreate(
+const useStyles = Kb.Styles.createStyleHook(
   () =>
     ({
-      progressIndicator: {
-        height: 18,
-        width: 18,
-      },
+      progressIndicator: Kb.Styles.size(18),
     }) as const
 )
 
 const Loading = (op: OwnProps) => {
+  const styles = useStyles()
   const {path} = op
-  const _pathItem = C.useFSState(s => C.FS.getPathItem(s.pathItems, path))
-  const _tlfsLoaded = C.useFSState(s => !!s.tlfs.private.size)
-  const parsedPath = C.FS.parsePath(path)
+  const pathItem = useFsPathItem(path)
+  const tlfs = useFsTlfs()
+  const parsedPath = FS.parsePath(path)
   let show = false
 
   switch (parsedPath.kind) {
     case T.FS.PathKind.TlfList:
-      show = !_tlfsLoaded
+      show = !tlfs.private.size
       break
     case T.FS.PathKind.TeamTlf:
     case T.FS.PathKind.GroupTlf:
@@ -36,11 +35,11 @@ const Loading = (op: OwnProps) => {
       // Only show the loading spinner when we are first-time loading a pathItem.
       // If we already have content to show, just don't show spinner anymore even
       // if we are loading.
-      if (_pathItem.type === T.FS.PathType.Unknown) {
+      if (pathItem.type === T.FS.PathType.Unknown) {
         show = true
         break
       }
-      if (_pathItem.type === T.FS.PathType.Folder && _pathItem.progress === T.FS.ProgressType.Pending) {
+      if (pathItem.type === T.FS.PathType.Folder && pathItem.progress === T.FS.ProgressType.Pending) {
         show = true
         break
       }

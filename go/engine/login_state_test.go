@@ -4,13 +4,13 @@
 package engine
 
 import (
+	"context"
 	"errors"
 	"testing"
 
 	"github.com/keybase/client/go/libkb"
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/context"
 )
 
 // TODO: These tests should really be in libkb/. However, any test
@@ -27,7 +27,7 @@ type GetPassphraseMock struct {
 	LastErr     error
 }
 
-func (m *GetPassphraseMock) GetPassphrase(p keybase1.GUIEntryArg, terminal *keybase1.SecretEntryArg) (res keybase1.GetPassphraseRes, err error) {
+func (m *GetPassphraseMock) GetPassphrase(p keybase1.GUIEntryArg, _ *keybase1.SecretEntryArg) (res keybase1.GetPassphraseRes, err error) {
 	if m.Called {
 		m.LastErr = errors.New("GetPassphrase unexpectedly called more than once")
 		return res, m.LastErr
@@ -37,9 +37,7 @@ func (m *GetPassphraseMock) GetPassphrase(p keybase1.GUIEntryArg, terminal *keyb
 }
 
 func (m *GetPassphraseMock) CheckLastErr(t *testing.T) {
-	if m.LastErr != nil {
-		t.Fatal(m.LastErr)
-	}
+	require.NoError(t, m.LastErr)
 }
 
 // Test that login works while already logged in.
@@ -90,9 +88,8 @@ func TestLoginNonexistent(t *testing.T) {
 	m := NewMetaContextForTest(tc)
 	m = m.WithNewProvisionalLoginContext().WithUIs(libkb.UIs{SecretUI: secretUI})
 	err := libkb.PassphraseLoginPrompt(m, "nonexistent", 1)
-	if _, ok := err.(libkb.NotFoundError); !ok {
-		t.Errorf("error type: %T, expected libkb.NotFoundError", err)
-	}
+	_, ok := err.(libkb.NotFoundError)
+	require.True(t, ok, "error type: %T, expected libkb.NotFoundError", err)
 }
 
 type GetUsernameMock struct {
@@ -125,7 +122,8 @@ func (m *GetUsernameMock) DisplayPrimaryPaperKey(_ context.Context, arg keybase1
 }
 
 func (m *GetUsernameMock) PromptResetAccount(_ context.Context,
-	arg keybase1.PromptResetAccountArg) (keybase1.ResetPromptResponse, error) {
+	arg keybase1.PromptResetAccountArg,
+) (keybase1.ResetPromptResponse, error) {
 	return keybase1.ResetPromptResponse_NOTHING, nil
 }
 
@@ -134,9 +132,7 @@ func (m *GetUsernameMock) DisplayResetProgress(_ context.Context, arg keybase1.D
 }
 
 func (m *GetUsernameMock) CheckLastErr(t *testing.T) {
-	if m.LastErr != nil {
-		t.Fatal(m.LastErr)
-	}
+	require.NoError(t, m.LastErr)
 }
 
 func (m *GetUsernameMock) ExplainDeviceRecovery(_ context.Context, arg keybase1.ExplainDeviceRecoveryArg) error {
@@ -173,9 +169,8 @@ func TestLoginWithPromptPassphrase(t *testing.T) {
 	err := libkb.PassphraseLoginPrompt(mctx, fu.Username, 1)
 	require.NoError(t, err, "prompt with username")
 	mockGetKeybasePassphrase.CheckLastErr(t)
-	if !mockGetKeybasePassphrase.Called {
-		t.Fatalf("secretUI.GetKeybasePassphrase() unexpectedly not called")
-	}
+	require.True(t, mockGetKeybasePassphrase.Called,
+		"secretUI.GetKeybasePassphrase() unexpectedly not called")
 
 	Logout(tc)
 
@@ -194,12 +189,10 @@ func TestLoginWithPromptPassphrase(t *testing.T) {
 	mockGetUsername.CheckLastErr(t)
 	mockGetKeybasePassphrase.CheckLastErr(t)
 
-	if !mockGetUsername.Called {
-		t.Fatalf("loginUI.GetEmailOrUsername() unexpectedly not called")
-	}
-	if !mockGetKeybasePassphrase.Called {
-		t.Fatalf("secretUI.GetKeybasePassphrase() unexpectedly not called")
-	}
+	require.True(t, mockGetUsername.Called,
+		"loginUI.GetEmailOrUsername() unexpectedly not called")
+	require.True(t, mockGetKeybasePassphrase.Called,
+		"secretUI.GetKeybasePassphrase() unexpectedly not called")
 }
 
 func userHasStoredSecretViaConfiguredAccounts(tc *libkb.TestContext, username string) bool {
@@ -235,16 +228,13 @@ func userHasStoredSecret(tc *libkb.TestContext, username string) bool {
 
 // Test that the login flow using the secret store works.
 func TestLoginWithStoredSecret(t *testing.T) {
-
 	tc := SetupEngineTest(t, "login with stored secret")
 	defer tc.Cleanup()
 
 	fu := CreateAndSignupFakeUser(tc, "lwss")
 	Logout(tc)
 
-	if userHasStoredSecret(&tc, fu.Username) {
-		t.Errorf("User %s unexpectedly has a stored secret", fu.Username)
-	}
+	require.False(t, userHasStoredSecret(&tc, fu.Username), "User %s unexpectedly has a stored secret", fu.Username)
 
 	mockGetPassphrase := &GetPassphraseMock{
 		Passphrase:  fu.Passphrase,
@@ -256,13 +246,9 @@ func TestLoginWithStoredSecret(t *testing.T) {
 
 	mockGetPassphrase.CheckLastErr(t)
 
-	if !mockGetPassphrase.Called {
-		t.Errorf("secretUI.GetKeybasePassphrase() unexpectedly not called")
-	}
+	require.True(t, mockGetPassphrase.Called, "secretUI.GetKeybasePassphrase() unexpectedly not called")
 
-	if !userHasStoredSecret(&tc, fu.Username) {
-		t.Errorf("User %s unexpectedly does not have a stored secret", fu.Username)
-	}
+	require.True(t, userHasStoredSecret(&tc, fu.Username), "User %s unexpectedly does not have a stored secret", fu.Username)
 
 	mctx = mctx.CommitProvisionalLogin()
 
@@ -272,13 +258,10 @@ func TestLoginWithStoredSecret(t *testing.T) {
 
 	Logout(tc)
 
-	if err := libkb.ClearStoredSecret(mctx, fu.NormalizedUsername()); err != nil {
-		t.Error(err)
-	}
+	err = libkb.ClearStoredSecret(mctx, fu.NormalizedUsername())
+	require.NoError(t, err)
 
-	if userHasStoredSecret(&tc, fu.Username) {
-		t.Errorf("User %s unexpectedly has a stored secret", fu.Username)
-	}
+	require.False(t, userHasStoredSecret(&tc, fu.Username), "User %s unexpectedly has a stored secret", fu.Username)
 
 	ili, _ = isLoggedIn(mctx)
 	require.False(t, ili, "cannot finagle a login")
@@ -301,20 +284,17 @@ func TestLoginWithPassphraseErrors(t *testing.T) {
 
 	mctx := NewMetaContextForTest(tc).WithNewProvisionalLoginContext()
 	err := libkb.PassphraseLoginNoPrompt(mctx, "", "")
-	if _, ok := err.(libkb.AppStatusError); !ok {
-		t.Error("Did not get expected AppStatusError")
-	}
+	_, ok := err.(libkb.AppStatusError)
+	require.True(t, ok, "Did not get expected AppStatusError")
 	mctx = mctx.WithNewProvisionalLoginContext()
 	err = libkb.PassphraseLoginNoPrompt(mctx, fu.Username, fu.Passphrase+"x")
-	if _, ok := err.(libkb.PassphraseError); !ok {
-		t.Error("Did not get expected PassphraseError")
-	}
+	_, ok = err.(libkb.PassphraseError)
+	require.True(t, ok, "Did not get expected PassphraseError")
 }
 
 // Test that the login flow with passphrase but without saving the
 // secret works.
 func TestLoginWithPassphraseNoStore(t *testing.T) {
-
 	tc := SetupEngineTest(t, "login with passphrase (no store)")
 	defer tc.Cleanup()
 
@@ -341,9 +321,7 @@ func TestSignupWithStoreThenLogout(t *testing.T) {
 
 	fu := NewFakeUserOrBust(tc.T, "lssl")
 
-	if userHasStoredSecret(&tc, fu.Username) {
-		t.Errorf("User %s unexpectedly has a stored secret", fu.Username)
-	}
+	require.False(t, userHasStoredSecret(&tc, fu.Username), "User %s unexpectedly has a stored secret", fu.Username)
 
 	arg := MakeTestSignupEngineRunArg(fu)
 	arg.StoreSecret = true
@@ -351,9 +329,7 @@ func TestSignupWithStoreThenLogout(t *testing.T) {
 
 	Logout(tc)
 
-	if userHasStoredSecret(&tc, fu.Username) {
-		t.Errorf("User %s unexpectedly has a stored secret", fu.Username)
-	}
+	require.False(t, userHasStoredSecret(&tc, fu.Username), "User %s unexpectedly has a stored secret", fu.Username)
 }
 
 type timeoutAPI struct {
@@ -365,6 +341,7 @@ var errFakeNetworkTimeout = errors.New("fake network timeout in test")
 func (r *timeoutAPI) GetDecode(mctx libkb.MetaContext, arg libkb.APIArg, w libkb.APIResponseWrapper) error {
 	return libkb.APINetError{Err: errFakeNetworkTimeout}
 }
+
 func (r *timeoutAPI) PostDecode(mctx libkb.MetaContext, arg libkb.APIArg, w libkb.APIResponseWrapper) error {
 	return libkb.APINetError{Err: errFakeNetworkTimeout}
 }
@@ -380,9 +357,7 @@ func TestSignupWithStoreThenOfflineLogout(t *testing.T) {
 
 	fu := NewFakeUserOrBust(tc.T, "lssol")
 
-	if userHasStoredSecret(&tc, fu.Username) {
-		t.Errorf("User %s unexpectedly has a stored secret", fu.Username)
-	}
+	require.False(t, userHasStoredSecret(&tc, fu.Username), "User %s unexpectedly has a stored secret", fu.Username)
 
 	arg := MakeTestSignupEngineRunArg(fu)
 	arg.StoreSecret = true
@@ -399,7 +374,5 @@ func TestSignupWithStoreThenOfflineLogout(t *testing.T) {
 
 	Logout(tc)
 
-	if userHasStoredSecret(&tc, fu.Username) {
-		t.Errorf("User %s unexpectedly has a stored secret", fu.Username)
-	}
+	require.False(t, userHasStoredSecret(&tc, fu.Username), "User %s unexpectedly has a stored secret", fu.Username)
 }

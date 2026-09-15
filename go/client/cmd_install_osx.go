@@ -2,7 +2,6 @@
 // this source code is governed by the included BSD license.
 
 //go:build darwin
-// +build darwin
 
 package client
 
@@ -93,7 +92,6 @@ var defaultInstallComponents = []string{
 	install.ComponentNameFuse.String(),
 	install.ComponentNameMountDir.String(),
 	install.ComponentNameKBFS.String(),
-	install.ComponentNameKBNM.String(),
 	install.ComponentNameRedirector.String(),
 }
 
@@ -128,9 +126,10 @@ func (v *CmdInstall) runInstall() keybase1.InstallResult {
 		return keybase1.InstallResult{Status: err.Status(), Fatal: true}
 	}
 
-	if v.installer == "auto" {
+	switch v.installer {
+	case "auto":
 		return install.AutoInstallWithStatus(v.G(), v.binPath, v.force, v.timeout, v.G().Log)
-	} else if v.installer == "" {
+	case "":
 		return install.Install(v.G(), v.binPath, v.sourcePath, v.components, v.force, v.timeout, v.G().Log)
 	}
 
@@ -167,7 +166,6 @@ func exitOnError(result keybase1.InstallResult) {
 var defaultUninstallComponents = []string{
 	install.ComponentNameService.String(),
 	install.ComponentNameKBFS.String(),
-	install.ComponentNameKBNM.String(),
 	install.ComponentNameRedirector.String(),
 	install.ComponentNameMountDir.String(),
 	install.ComponentNameUpdater.String(),

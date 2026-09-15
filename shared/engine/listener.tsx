@@ -1,45 +1,10 @@
-import type * as Framed from 'framed-msgpack-rpc'
 import {getEngine} from './require'
-import {RPCError} from '@/util/errors'
+import {ensureError, RPCError} from '@/util/errors'
 import {printOutstandingRPCs} from '@/local-debug'
-import type {CommonResponseHandler} from './types'
+import type {CommonResponseHandler, WaitingKey} from './types'
 import {wrapErrors} from '@/util/debug'
+import type {ErrorType} from './rpc-transport'
 
-type WaitingKey = string | Array<string>
-
-// Wraps a response to update the waiting state
-const makeWaitingResponse = (_r?: Partial<CommonResponseHandler>, waitingKey?: WaitingKey) => {
-  const r = _r
-  if (!r || !waitingKey) {
-    return r
-  }
-
-  const response: Partial<CommonResponseHandler> = {}
-
-  if (r.error) {
-    response.error = (e: Framed.ErrorType) => {
-      // Waiting on the server again
-      if (waitingKey) {
-        getEngine().dispatchWaitingAction(waitingKey, true)
-      }
-      r.error?.(e)
-    }
-  }
-
-  if (r.result) {
-    response.result = (...args: Array<unknown>) => {
-      // Waiting on the server again
-      if (waitingKey) {
-        getEngine().dispatchWaitingAction(waitingKey, true)
-      }
-      r.result?.(...args)
-    }
-  }
-
-  return response
-}
-
-// TODO could have a mechanism to ensure only one is in flight at a time. maybe by some key or something
 async function listener(p: {
   method: string
   params?: object
@@ -48,31 +13,61 @@ async function listener(p: {
     [K in string]: (params: unknown, response: Partial<CommonResponseHandler>) => Promise<void>
   }
   waitingKey?: WaitingKey
+  onSessionCreated?: (cancel: () => void) => void
 }) {
   return new Promise((resolve, reject) => {
     const {method, params, waitingKey} = p
     const incomingCallMap = p.incomingCallMap || {}
     const customResponseIncomingCallMap = p.customResponseIncomingCallMap || {}
 
-    // custom and normal incomingCallMaps
-    const bothCallMaps = [
-      ...Object.keys(incomingCallMap).map(method => ({custom: false, method})),
-      ...Object.keys(customResponseIncomingCallMap).map(method => ({custom: true, method})),
-    ]
-
-    // Waiting on the server
-    if (waitingKey) {
-      getEngine().dispatchWaitingAction(waitingKey, true)
+    // Whether we've told the waiting store the server is working (vs. parked on a GUI prompt).
+    // Dispatches are deduped through this flag so a client-side cancel arriving while a prompt is
+    // up can't dispatch a second waiting=false and decrement the count below zero.
+    let waitingOnServer = false
+    const setWaitingOnServer = (waiting: boolean, error?: RPCError) => {
+      if (!waitingKey || waitingOnServer === waiting) {
+        return
+      }
+      waitingOnServer = waiting
+      getEngine().dispatchWaitingAction(waitingKey, waiting, error)
     }
 
-    const callMap = bothCallMaps.reduce((map: {[key: string]: unknown}, {method, custom}) => {
-      map[method] = (params: unknown, _response: CommonResponseHandler) => {
-        // No longer waiting on the server
-        if (waitingKey) {
-          getEngine().dispatchWaitingAction(waitingKey, false)
-        }
+    // Wraps a response to update the waiting state
+    const makeWaitingResponse = (r?: Partial<CommonResponseHandler>) => {
+      if (!r || !waitingKey) {
+        return r
+      }
 
-        let response = makeWaitingResponse(_response, waitingKey)
+      const response: Partial<CommonResponseHandler> = {}
+
+      if (r.error) {
+        response.error = (e: ErrorType) => {
+          // Waiting on the server again
+          setWaitingOnServer(true)
+          r.error?.(e)
+        }
+      }
+
+      if (r.result) {
+        response.result = (...args: Array<unknown>) => {
+          // Waiting on the server again
+          setWaitingOnServer(true)
+          r.result?.(...args)
+        }
+      }
+
+      return response
+    }
+
+    // Waiting on the server
+    setWaitingOnServer(true)
+
+    const makeHandler = (method: string, custom: boolean) => {
+      return (params: unknown, _response: CommonResponseHandler) => {
+        // No longer waiting on the server
+        setWaitingOnServer(false)
+
+        let response = makeWaitingResponse(_response)
 
         if (__DEV__) {
           if (incomingCallMap[method] && customResponseIncomingCallMap[method]) {
@@ -87,7 +82,8 @@ async function listener(p: {
           }
         }
 
-        // defer to process network first
+        // Yield after sending the auto-response so transport work can flush
+        // before handlers do heavier state updates.
         setTimeout(() => {
           const invokeAndDispatch = wrapErrors(async () => {
             if (response) {
@@ -99,13 +95,18 @@ async function listener(p: {
             }
           }, method)
 
-          invokeAndDispatch()
-            .then(() => {})
-            .catch(() => {})
-        }, 5)
+          invokeAndDispatch().catch(() => {})
+        }, 0)
       }
-      return map
-    }, {})
+    }
+
+    const callMap: {[key: string]: unknown} = {}
+    for (const method of Object.keys(incomingCallMap)) {
+      callMap[method] = makeHandler(method, false)
+    }
+    for (const method of Object.keys(customResponseIncomingCallMap)) {
+      callMap[method] = makeHandler(method, true)
+    }
 
     // Make the actual call
     let outstandingIntervalID: ReturnType<typeof setInterval>
@@ -115,19 +116,17 @@ async function listener(p: {
       }, 2000)
     }
 
-    getEngine()._rpcOutgoing({
+    const sessionID = getEngine()._rpcOutgoing({
       callback: (error?: RPCError, params?: unknown) => {
         if (printOutstandingRPCs) {
           clearInterval(outstandingIntervalID)
         }
 
-        if (waitingKey) {
-          // No longer waiting
-          getEngine().dispatchWaitingAction(waitingKey, false, error instanceof RPCError ? error : undefined)
-        }
+        // No longer waiting
+        setWaitingOnServer(false, error instanceof RPCError ? error : undefined)
 
         if (error) {
-          reject(error)
+          reject(ensureError(error))
         } else {
           resolve(params)
         }
@@ -136,6 +135,7 @@ async function listener(p: {
       method,
       params,
     })
+    p.onSessionCreated?.(() => getEngine().cancelSession(sessionID))
   })
 }
 

@@ -2,11 +2,11 @@
 // this source code is governed by the included BSD license.
 
 //go:build darwin
-// +build darwin
 
 package client
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/keybase/cli"
@@ -15,7 +15,6 @@ import (
 	"github.com/keybase/client/go/libcmdline"
 	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/protocol/keybase1"
-	"golang.org/x/net/context"
 )
 
 // NewCmdCtlStop constructs ctl start command

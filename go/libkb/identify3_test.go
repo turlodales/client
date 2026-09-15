@@ -1,6 +1,7 @@
 package libkb
 
 import (
+	"context"
 	"encoding/hex"
 	"testing"
 	"time"
@@ -8,7 +9,6 @@ import (
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 	"github.com/keybase/clockwork"
 	"github.com/stretchr/testify/require"
-	context "golang.org/x/net/context"
 )
 
 type id3FakeUIRouter struct {
@@ -20,15 +20,23 @@ func (i *id3FakeUIRouter) GetIdentifyUI() (IdentifyUI, error) { return nil, nil 
 func (i *id3FakeUIRouter) GetIdentifyUICtx(ctx context.Context) (int, IdentifyUI, error) {
 	return 0, nil, nil
 }
-func (i *id3FakeUIRouter) GetSecretUI(sessionID int) (SecretUI, error)               { return nil, nil }
-func (i *id3FakeUIRouter) GetRekeyUI() (keybase1.RekeyUIInterface, int, error)       { return nil, 0, nil }
+
+func (i *id3FakeUIRouter) GetSecretUI(sessionID int) (SecretUI, error) { return nil, nil }
+
+func (i *id3FakeUIRouter) GetRekeyUI() (keybase1.RekeyUIInterface, int, error) { return nil, 0, nil }
+
 func (i *id3FakeUIRouter) GetRekeyUINoSessionID() (keybase1.RekeyUIInterface, error) { return nil, nil }
-func (i *id3FakeUIRouter) GetHomeUI() (keybase1.HomeUIInterface, error)              { return nil, nil }
-func (i *id3FakeUIRouter) GetChatUI() (ChatUI, error)                                { return nil, nil }
-func (i *id3FakeUIRouter) GetLogUI() (LogUI, error)                                  { return nil, nil }
+
+func (i *id3FakeUIRouter) GetHomeUI() (keybase1.HomeUIInterface, error) { return nil, nil }
+
+func (i *id3FakeUIRouter) GetChatUI() (ChatUI, error) { return nil, nil }
+
+func (i *id3FakeUIRouter) GetLogUI() (LogUI, error) { return nil, nil }
+
 func (i *id3FakeUIRouter) GetIdentify3UIAdapter(MetaContext) (IdentifyUI, error) {
 	return nil, nil
 }
+
 func (i *id3FakeUIRouter) DumpUIs() map[UIKind]ConnectionID {
 	return nil
 }
@@ -47,7 +55,7 @@ type id3FakeUI struct {
 }
 
 func (i *id3FakeUI) assertAndCleanState(t *testing.T, expected []keybase1.Identify3GUIID) {
-	require.Equal(t, len(expected), len(i.timeOuts))
+	require.Len(t, i.timeOuts, len(expected))
 	for j, v := range expected {
 		require.Equal(t, v, i.timeOuts[j])
 	}
@@ -57,20 +65,26 @@ func (i *id3FakeUI) assertAndCleanState(t *testing.T, expected []keybase1.Identi
 func (i *id3FakeUI) Identify3ShowTracker(context.Context, keybase1.Identify3ShowTrackerArg) error {
 	return nil
 }
+
 func (i *id3FakeUI) Identify3UpdateRow(context.Context, keybase1.Identify3Row) error {
 	return nil
 }
+
 func (i *id3FakeUI) Identify3UpdateUserCard(context.Context, keybase1.Identify3UpdateUserCardArg) error {
 	return nil
 }
+
 func (i *id3FakeUI) Identify3UserReset(_ context.Context, id keybase1.Identify3GUIID) error {
 	return nil
 }
+
 func (i *id3FakeUI) Identify3TrackerTimedOut(_ context.Context, id keybase1.Identify3GUIID) error {
 	i.timeOuts = append(i.timeOuts, id)
 	return nil
 }
+
 func (i *id3FakeUI) Identify3Result(context.Context, keybase1.Identify3ResultArg) error { return nil }
+
 func (i *id3FakeUI) Identify3Summary(_ context.Context, summary keybase1.Identify3Summary) error {
 	return nil
 }
@@ -90,6 +104,9 @@ func TestIdentify3State(t *testing.T) {
 
 	mkID := func(i int) keybase1.Identify3GUIID {
 		var buf [1]byte
+		if i < 0 || i > 255 {
+			t.Fatalf("test id out of range: %d", i)
+		}
 		buf[0] = byte(i)
 		return keybase1.Identify3GUIID(hex.EncodeToString(buf[:]))
 	}
@@ -102,12 +119,12 @@ func TestIdentify3State(t *testing.T) {
 
 	assertState := func(cache, queue []int) {
 		id3state.Lock()
-		require.Equal(t, len(cache), len(id3state.cache))
+		require.Len(t, id3state.cache, len(cache))
 		for _, v := range cache {
 			_, found := id3state.cache[mkID(v)]
 			require.True(t, found)
 		}
-		require.Equal(t, len(queue), len(id3state.expirationQueue))
+		require.Len(t, id3state.expirationQueue, len(queue))
 		for i, v := range queue {
 			require.Equal(t, mkID(v), id3state.expirationQueue[i].id)
 		}

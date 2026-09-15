@@ -4,12 +4,11 @@
 package service
 
 import (
+	"context"
 	"path/filepath"
 	"strings"
 
 	"github.com/keybase/client/go/encrypteddb"
-
-	"golang.org/x/net/context"
 
 	"github.com/keybase/client/go/chat"
 	"github.com/keybase/client/go/chat/globals"
@@ -77,7 +76,8 @@ func (h *KBFSHandler) FSSyncEvent(ctx context.Context, arg keybase1.FSPathSyncSt
 }
 
 func (h *KBFSHandler) FSOverallSyncEvent(
-	_ context.Context, arg keybase1.FolderSyncStatus) (err error) {
+	_ context.Context, arg keybase1.FolderSyncStatus,
+) (err error) {
 	h.G().NotifyRouter.HandleFSOverallSyncStatusChanged(arg)
 	return nil
 }
@@ -149,7 +149,7 @@ func (h *KBFSHandler) CreateTLF(ctx context.Context, arg keybase1.CreateTLFArg) 
 
 func (h *KBFSHandler) GetKBFSTeamSettings(ctx context.Context, arg keybase1.GetKBFSTeamSettingsArg) (ret keybase1.KBFSTeamSettings, err error) {
 	mctx := libkb.NewMetaContext(ctx, h.G()).WithLogTag("SETTINGS")
-	loader := func(mctx libkb.MetaContext) (interface{}, error) {
+	loader := func(mctx libkb.MetaContext) (any, error) {
 		return teams.GetKBFSTeamSettings(mctx.Ctx(), mctx.G(), arg.TeamID.IsPublic(), arg.TeamID)
 	}
 	servedRet, err := h.service.offlineRPCCache.Serve(mctx, arg.Oa, offline.Version(1), "kbfs.getKBFSTeamSettings", false, arg, &ret, loader)
@@ -178,13 +178,15 @@ func (h *KBFSHandler) getKeyFn() func(context.Context) ([32]byte, error) {
 
 // EncryptFavorites encrypts cached favorites to store on disk.
 func (h *KBFSHandler) EncryptFavorites(ctx context.Context,
-	dataToDecrypt []byte) (res []byte, err error) {
+	dataToDecrypt []byte,
+) (res []byte, err error) {
 	return encrypteddb.EncodeBox(ctx, dataToDecrypt, h.getKeyFn())
 }
 
 // DecryptFavorites decrypts cached favorites stored on disk.
 func (h *KBFSHandler) DecryptFavorites(ctx context.Context,
-	dataToEncrypt []byte) (res []byte, err error) {
+	dataToEncrypt []byte,
+) (res []byte, err error) {
 	err = encrypteddb.DecodeBox(ctx, dataToEncrypt, h.getKeyFn(), &res)
 	return res, err
 }

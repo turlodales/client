@@ -1,15 +1,16 @@
 package sig3
 
 import (
+	"crypto/ed25519"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+
 	"github.com/keybase/client/go/kbcrypto"
 	"github.com/keybase/client/go/msgpack"
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
-	"github.com/keybase/go-crypto/ed25519"
 )
 
 // Generic sig3 wrapper class, should implement the following interface.
@@ -55,9 +56,11 @@ type LinkFromFuture struct {
 	Base
 }
 
-var _ Generic = (*Base)(nil)
-var _ Generic = (*RotateKey)(nil)
-var _ Generic = (*LinkFromFuture)(nil)
+var (
+	_ Generic = (*Base)(nil)
+	_ Generic = (*RotateKey)(nil)
+	_ Generic = (*LinkFromFuture)(nil)
+)
 
 // NewRotateKey makes a new rotate key given sig3 skeletons (Outer and Inner) and
 // also the PTKs that are going to be advertised in the sig3 link.
@@ -74,7 +77,7 @@ func NewRotateKey(o OuterLink, i InnerLink, b RotateKeyBody) *RotateKey {
 // rkb returns the RotateKeyBody that we are expecting at r.Base.inner. It should never fail, if it does,
 // the program will crash.
 func (r *RotateKey) rkb() *RotateKeyBody {
-	ret, _ := r.Base.inner.Body.(*RotateKeyBody)
+	ret, _ := r.inner.Body.(*RotateKeyBody)
 	return ret
 }
 
@@ -156,7 +159,7 @@ func (i InnerLink) hash() (LinkID, error) {
 	return hashInterface(i)
 }
 
-func hashInterface(i interface{}) (LinkID, error) {
+func hashInterface(i any) (LinkID, error) {
 	b, err := msgpack.Encode(i)
 	if err != nil {
 		return LinkID{}, err
@@ -195,14 +198,14 @@ func (r RotateKey) verifyReverseSig() (err error) {
 	for _, ptk := range r.rkb().PTKs {
 		reverseSigs = append(reverseSigs, ptk.ReverseSig)
 	}
-	innerLinkID := r.Base.outer.InnerLinkID
+	innerLinkID := r.outer.InnerLinkID
 
 	// Make sure to replace them on the way out of the function, even in an error.
 	defer func() {
 		for j, rs := range reverseSigs {
 			r.rkb().PTKs[j].ReverseSig = rs
 		}
-		r.Base.outer.InnerLinkID = innerLinkID
+		r.outer.InnerLinkID = innerLinkID
 	}()
 
 	// Verify signatures in the reverse order they were signed, nulling them out
@@ -215,11 +218,11 @@ func (r RotateKey) verifyReverseSig() (err error) {
 		}
 
 		ptk.ReverseSig = nil
-		r.Base.outer.InnerLinkID, err = r.Base.inner.hash()
+		r.outer.InnerLinkID, err = r.inner.hash()
 		if err != nil {
 			return err
 		}
-		b, err := msgpack.Encode(r.Base.outer)
+		b, err := msgpack.Encode(r.outer)
 		if err != nil {
 			return err
 		}
@@ -471,7 +474,7 @@ func signGeneric(g Generic, privkey kbcrypto.NaclSigningKeyPrivate) (ret *Sig3Bu
 
 // Export a sig3 up to the server in base64'ed JSON format, as in a POST request.
 func (s Sig3Bundle) Export() (ret ExportJSON, err error) {
-	enc := func(i interface{}) (string, error) {
+	enc := func(i any) (string, error) {
 		b, err := msgpack.Encode(i)
 		if err != nil {
 			return "", err

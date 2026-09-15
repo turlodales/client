@@ -4,9 +4,8 @@
 package client
 
 import (
+	"context"
 	"fmt"
-
-	"golang.org/x/net/context"
 
 	"github.com/keybase/cli"
 	"github.com/keybase/client/go/engine"
@@ -124,7 +123,7 @@ func (v *CmdPGPGen) propmptPGPIDs() (err error) {
 	if err != nil {
 		return
 	}
-	v.arg.Gen.Ids = append(v.arg.Gen.Ids, id)
+	v.arg.Gen.IDs = append(v.arg.Gen.IDs, id)
 
 	emailsSeen := make(map[string]struct{})
 
@@ -147,7 +146,7 @@ func (v *CmdPGPGen) propmptPGPIDs() (err error) {
 		}
 
 		emailsSeen[idAdditional.Email] = struct{}{}
-		v.arg.Gen.Ids = append(v.arg.Gen.Ids, idAdditional)
+		v.arg.Gen.IDs = append(v.arg.Gen.IDs, idAdditional)
 	}
 
 	return

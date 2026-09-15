@@ -16,21 +16,17 @@ import (
 func TestTime(t *testing.T) {
 	var time1 time.Time
 	kbTime1 := ToTime(time1)
-	if kbTime1 != 0 {
-		t.Fatalf("Protocol marshaling from zero time failed")
-	}
+	require.Zero(t, kbTime1,
+		"Protocol marshaling from zero time failed")
 	time2 := FromTime(kbTime1)
-	if !time2.IsZero() {
-		t.Fatalf("Protocol marshaling to zero time failed")
-	}
+	require.True(t, time2.IsZero(),
+		"Protocol marshaling to zero time failed")
 
 	now := time.Now()
 	kbNow := ToTime(now)
 	rev := FromTime(kbNow)
 
-	if rev.Unix() != now.Unix() {
-		t.Errorf("keybase time messed up: now = %s, rev = %s", now, rev)
-	}
+	require.Equal(t, now.Unix(), rev.Unix(), "keybase time messed up: now = %s, rev = %s", now, rev)
 }
 
 func Test0TimeConversion(t *testing.T) {
@@ -38,6 +34,24 @@ func Test0TimeConversion(t *testing.T) {
 	require.Equal(t, Time(0), ToTime(time.Time{}))
 	require.Equal(t, time.Time{}, FromUnixTime(UnixTime(0)))
 	require.Equal(t, time.Time{}, FromTime(Time(0)))
+}
+
+func TestMalformedSigIDHelpersDoNotPanic(t *testing.T) {
+	for _, sigID := range []SigID{"", "00", "zz"} {
+		t.Run(string(sigID), func(t *testing.T) {
+			require.NotPanics(t, func() {
+				require.Nil(t, sigID.ToBytes())
+				require.Empty(t, sigID.ToShortID())
+				_ = sigID.ToMediumID()
+				_ = sigID.ToMapKey()
+				_ = sigID.ToDisplayString(false)
+			})
+		})
+	}
+
+	valid := SigID(strings.Repeat("ab", SIG_ID_LEN+1))
+	require.Len(t, valid.ToBytes(), SIG_ID_LEN)
+	require.NotEmpty(t, valid.ToShortID())
 }
 
 func TestTimeConversions(t *testing.T) {
@@ -73,8 +87,8 @@ func TestTimeConversions(t *testing.T) {
 	}
 	assertTimesEqualMSec := func(t1, t2 time.Time) {
 		assertTimesEqualSec(t1, t2)
-		require.True(t, (t1.Nanosecond()-t2.Nanosecond()) < 1e6, "expected %v and %v to be equal (with up to a millisecond precision)", t1, t2)
-		require.True(t, (t2.Nanosecond()-t1.Nanosecond()) < 1e6, "expected %v and %v to be equal (with up to a millisecond precision)", t1, t2)
+		require.Less(t, (t1.Nanosecond() - t2.Nanosecond()), 1_000_000, "expected %v and %v to be equal (with up to a millisecond precision)", t1, t2)
+		require.Less(t, (t2.Nanosecond() - t1.Nanosecond()), 1_000_000, "expected %v and %v to be equal (with up to a millisecond precision)", t1, t2)
 	}
 	assertTimesEqualStrict := func(t1, t2 time.Time) {
 		require.True(t, t1.Equal(t2), "expected %v and %v to be equal", t1, t2)
@@ -102,58 +116,44 @@ func TestTimeConversions(t *testing.T) {
 // IsUser and co. should return false and
 // not crash on arbitrary input.
 func TestUserOrTeamIDChecking(t *testing.T) {
-	var invalidIDTestCases = [6]string{
+	invalidIDTestCases := [6]string{
 		"", "    ", "%%@#$", "223123",
 		"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 	}
-	var validUserIDTestCases = [4]string{
+	validUserIDTestCases := [4]string{
 		"bd9e818f230819d3ecc813522c71f600",
 		"bd9e818f230819d3ecc813522c71f619",
 		"2721c9d9a247028cf51efa0760af6d00",
 		"2721c9d9a247028cf51efa0760af6d19",
 	}
-	var validTeamIDTestCases = [2]string{
+	validTeamIDTestCases := [2]string{
 		"bd9e818f230819d3ecc813522c71f624",
 		"2721c9d9a247028cf51efa0760af6d24",
 	}
-	var validSubteamIDTestCases = [2]string{
+	validSubteamIDTestCases := [2]string{
 		"bd9e818f230819d3ecc813522c71f625",
 		"2721c9d9a247028cf51efa0760af6d25",
 	}
 
 	for _, idCase := range invalidIDTestCases {
 		ut := UserOrTeamID(idCase)
-		if ut.IsUser() || ut.IsTeam() || ut.IsSubteam() || ut.IsTeamOrSubteam() {
-			t.Errorf("Invalid ID %s is incorrectly marked valid.", idCase)
-		}
+		require.False(t, ut.IsUser() || ut.IsTeam() || ut.IsSubteam() || ut.IsTeamOrSubteam(), "Invalid ID %s is incorrectly marked valid.", idCase)
 	}
 	for _, idCase := range validUserIDTestCases {
 		ut := UserOrTeamID(idCase)
-		if !ut.IsUser() {
-			t.Errorf("Valid UserID %s is incorrectly marked invalid.", idCase)
-		}
-		if ut.IsTeam() || ut.IsSubteam() || ut.IsTeamOrSubteam() {
-			t.Errorf("Valid UserID %s is incorrectly marked as valid for another kind of ID.", idCase)
-		}
+		require.True(t, ut.IsUser(), "Valid UserID %s is incorrectly marked invalid.", idCase)
+		require.False(t, ut.IsTeam() || ut.IsSubteam() || ut.IsTeamOrSubteam(), "Valid UserID %s is incorrectly marked as valid for another kind of ID.", idCase)
 	}
 	for _, idCase := range validTeamIDTestCases {
 		ut := UserOrTeamID(idCase)
-		if !ut.IsTeam() || !ut.IsTeamOrSubteam() {
-			t.Errorf("Valid TeamID %s is incorrectly marked invalid.", idCase)
-		}
-		if ut.IsUser() || ut.IsSubteam() {
-			t.Errorf("Valid TeamID %s is incorrectly marked as valid for another kind of ID.", idCase)
-		}
+		require.True(t, ut.IsTeam() || !ut.IsTeamOrSubteam(), "Valid TeamID %s is incorrectly marked invalid.", idCase)
+		require.False(t, ut.IsUser() || ut.IsSubteam(), "Valid TeamID %s is incorrectly marked as valid for another kind of ID.", idCase)
 	}
 	for _, idCase := range validSubteamIDTestCases {
 		ut := UserOrTeamID(idCase)
-		if !ut.IsSubteam() || !ut.IsTeamOrSubteam() {
-			t.Errorf("Valid SubteamID %s is incorrectly marked invalid.", idCase)
-		}
-		if ut.IsUser() || ut.IsTeam() {
-			t.Errorf("Valid SubteamID %s is incorrectly marked as valid for another kind of ID.", idCase)
-		}
+		require.True(t, ut.IsSubteam() || !ut.IsTeamOrSubteam(), "Valid SubteamID %s is incorrectly marked invalid.", idCase)
+		require.False(t, ut.IsUser() || ut.IsTeam(), "Valid SubteamID %s is incorrectly marked as valid for another kind of ID.", idCase)
 	}
 }
 
@@ -184,22 +184,17 @@ func TestTeamNameFromString(t *testing.T) {
 	for i, tc := range tests {
 		nm, err := TeamNameFromString(tc.input)
 		if err == nil {
-			if tc.err != nil {
-				t.Fatalf("expected an error in test case %d", i)
-			}
-			if nm.IsNil() {
-				t.Fatalf("expected a non-nil TeamName since no error in test case %d", i)
-			}
-			if !nm.Eq(tc.name) {
-				t.Fatalf("failed name equality at test case %d", i)
-			}
+			require.NoError(t, tc.err,
+				"expected an error in test case %d", i)
+			require.False(t, nm.IsNil(),
+				"expected a non-nil TeamName since no error in test case %d", i)
+			require.True(t, nm.Eq(tc.name),
+				"failed name equality at test case %d", i)
 		} else {
-			if tc.err == nil {
-				t.Fatalf("got an error, but non expected at test case %d", i)
-			}
-			if tc.err.Error() != err.Error() {
-				t.Fatalf("bad error string at test case %d: %s != %s", i, tc.err.Error(), err.Error())
-			}
+			require.Error(t, tc.err,
+				"got an error, but non expected at test case %d", i)
+			require.Equal(t, tc.err.Error(), err.Error(),
+				"bad error string at test case %d: %s != %s", i, tc.err.Error(), err.Error())
 		}
 	}
 }
@@ -208,13 +203,15 @@ func TestRedact(t *testing.T) {
 	cmd1 := "keybase fs ls anything really here"
 	rcmd1 := fmt.Sprintf("keybase fs %s", redactedReplacer)
 	arg := ClientDetails{
-		Argv: strings.Split(cmd1, " ")}
+		Argv: strings.Split(cmd1, " "),
+	}
 	arg.Redact()
 	require.Equal(t, strings.Split(rcmd1, " "), arg.Argv)
 
 	cmd2 := "keybase whatever command paperkey --another-flag"
 	arg = ClientDetails{
-		Argv: strings.Split(cmd2, " ")}
+		Argv: strings.Split(cmd2, " "),
+	}
 	arg.Redact()
 	require.Equal(t, strings.Split(cmd2, " "), arg.Argv)
 }

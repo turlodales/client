@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"sync"
@@ -15,7 +16,6 @@ import (
 	"github.com/keybase/client/go/protocol/gregor1"
 	"github.com/keybase/client/go/protocol/keybase1"
 	"github.com/kyokomi/emoji"
-	context "golang.org/x/net/context"
 )
 
 func init() {
@@ -232,7 +232,7 @@ func (s *ReacjiStore) populateCacheLocked(ctx context.Context, uid gregor1.UID) 
 func (s *ReacjiStore) PutReacji(ctx context.Context, uid gregor1.UID, shortCode string) error {
 	s.Lock()
 	defer s.Unlock()
-	if !(EmojiHasAlias(shortCode) || globals.EmojiPattern.MatchString(shortCode)) {
+	if !EmojiHasAlias(shortCode) && !globals.EmojiPattern.MatchString(shortCode) {
 		return nil
 	}
 	cache := s.populateCacheLocked(ctx, uid)
@@ -253,7 +253,8 @@ func (s *ReacjiStore) PutReacji(ctx context.Context, uid gregor1.UID, shortCode 
 }
 
 func (s *ReacjiStore) PutSkinTone(ctx context.Context, uid gregor1.UID,
-	skinTone keybase1.ReacjiSkinTone) error {
+	skinTone keybase1.ReacjiSkinTone,
+) error {
 	s.Lock()
 	defer s.Unlock()
 
@@ -291,6 +292,11 @@ func (s *ReacjiStore) UserReacjis(ctx context.Context, uid gregor1.UID) keybase1
 	customMap := make(map[string]string)
 	customMapNoAnim := make(map[string]string)
 	cache := s.populateCacheLocked(ctx, uid)
+	noAnim, err := s.G().EmojiSource.AnimationsDisabled(ctx)
+	if err != nil {
+		s.Debug(ctx, "UserReacjis: failed to read animation setting: %s", err)
+		noAnim = false
+	}
 	// resolve custom emoji
 	for name := range cache.FrequencyMap {
 		if s.G().EmojiSource.IsStockEmoji(name) {
@@ -308,7 +314,7 @@ func (s *ReacjiStore) UserReacjis(ctx context.Context, uid gregor1.UID) keybase1
 			delete(cache.FrequencyMap, name)
 			continue
 		}
-		source, noAnimSource, err := s.G().EmojiSource.RemoteToLocalSource(ctx, uid, harvested[0].Source)
+		source, noAnimSource, err := s.G().EmojiSource.RemoteToLocalSource(ctx, harvested[0].Source, noAnim)
 		if err != nil {
 			s.Debug(ctx, "UserReacjis: failed to convert to local source: %s", err)
 			delete(cache.FrequencyMap, name)

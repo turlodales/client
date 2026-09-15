@@ -5,7 +5,9 @@
 package libkbfs
 
 import (
+	"context"
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 
@@ -20,7 +22,6 @@ import (
 	"github.com/keybase/client/go/logger"
 	"github.com/keybase/client/go/protocol/keybase1"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -131,13 +132,13 @@ type folderBlockManager struct {
 
 func newFolderBlockManager(
 	appStateUpdater env.AppStateUpdater, config Config, fb data.FolderBranch,
-	bType branchType, helper fbmHelper) *folderBlockManager {
+	bType branchType, helper fbmHelper,
+) *folderBlockManager {
 	tlfStringFull := fb.Tlf.String()
 	log := config.MakeLogger(fmt.Sprintf("FBM %s", tlfStringFull[:8]))
 
 	var latestMergedChan chan struct{}
-	qrEnabled :=
-		fb.Branch == data.MasterBranch && config.Mode().QuotaReclamationEnabled()
+	qrEnabled := fb.Branch == data.MasterBranch && config.Mode().QuotaReclamationEnabled()
 	if qrEnabled {
 		latestMergedChan = make(chan struct{}, 1)
 	}
@@ -229,7 +230,8 @@ func (fbm *folderBlockManager) cancelReclamation() {
 }
 
 func (fbm *folderBlockManager) setCleanDiskCacheCancel(
-	cancel context.CancelFunc) {
+	cancel context.CancelFunc,
+) {
 	fbm.cleanDiskCacheCancelLock.Lock()
 	defer fbm.cleanDiskCacheCancelLock.Unlock()
 	fbm.cleanDiskCacheCancel = cancel
@@ -274,7 +276,8 @@ func (fbm *folderBlockManager) shutdown() {
 // failed blocks should be built up in a separate data structure, and
 // this should be called when the operation finally succeeds.
 func (fbm *folderBlockManager) cleanUpBlockState(
-	md ReadOnlyRootMetadata, bps blockPutState, bdType blockDeleteType) {
+	md ReadOnlyRootMetadata, bps blockPutState, bdType blockDeleteType,
+) {
 	fbm.log.CDebugf(
 		context.TODO(), "Clean up md %d %s, bdType=%d", md.Revision(),
 		md.MergedStatus(), bdType)
@@ -298,7 +301,8 @@ func (fbm *folderBlockManager) enqueueBlocksToDelete(toDelete blocksToDelete) {
 }
 
 func (fbm *folderBlockManager) enqueueBlocksToDeleteAfterShortDelay(
-	ctx context.Context, toDelete blocksToDelete) {
+	ctx context.Context, toDelete blocksToDelete,
+) {
 	fbm.blocksToDeleteWaitGroup.Add(1)
 	duration := toDelete.backoff.NextBackOff()
 	if duration == backoff.Stop {
@@ -427,12 +431,14 @@ func (fbm *folderBlockManager) waitForDeletingBlocks(ctx context.Context) error 
 }
 
 func (fbm *folderBlockManager) waitForQuotaReclamations(
-	ctx context.Context) error {
+	ctx context.Context,
+) error {
 	return fbm.reclamationGroup.Wait(ctx)
 }
 
 func (fbm *folderBlockManager) waitForDiskCacheCleans(
-	ctx context.Context) error {
+	ctx context.Context,
+) error {
 	return fbm.cleanDiskCachesGroup.Wait(ctx)
 }
 
@@ -450,7 +456,8 @@ func (fbm *folderBlockManager) forceQuotaReclamation() {
 // a list of block IDs that no longer have any references.
 func (fbm *folderBlockManager) doChunkedDowngrades(ctx context.Context,
 	tlfID tlf.ID, ptrs []data.BlockPointer, archive bool) (
-	[]kbfsblock.ID, error) {
+	[]kbfsblock.ID, error,
+) {
 	fbm.log.CDebugf(ctx, "Downgrading %d pointers (archive=%t)",
 		len(ptrs), archive)
 	bops := fbm.config.BlockOps()
@@ -458,10 +465,7 @@ func (fbm *folderBlockManager) doChunkedDowngrades(ctx context.Context,
 	// Round up to find the number of chunks.
 	numChunks := (len(ptrs) + numPointersToDowngradePerChunk - 1) /
 		numPointersToDowngradePerChunk
-	numWorkers := numChunks
-	if numWorkers > maxParallelBlockPuts {
-		numWorkers = maxParallelBlockPuts
-	}
+	numWorkers := min(numChunks, maxParallelBlockPuts)
 	chunks := make(chan []data.BlockPointer, numChunks)
 
 	var wg sync.WaitGroup
@@ -503,22 +507,19 @@ func (fbm *folderBlockManager) doChunkedDowngrades(ctx context.Context,
 			}
 		}
 	}
-	for i := 0; i < numWorkers; i++ {
+	for range numWorkers {
 		wg.Add(1)
 		go worker()
 	}
 
 	for start := 0; start < len(ptrs); start += numPointersToDowngradePerChunk {
-		end := start + numPointersToDowngradePerChunk
-		if end > len(ptrs) {
-			end = len(ptrs)
-		}
+		end := min(start+numPointersToDowngradePerChunk, len(ptrs))
 		chunks <- ptrs[start:end]
 	}
 	close(chunks)
 
 	var zeroRefCounts []kbfsblock.ID
-	for i := 0; i < numChunks; i++ {
+	for range numChunks {
 		result := <-chunkResults
 		if result.err != nil {
 			// deferred cancel will stop the other workers.
@@ -533,7 +534,8 @@ func (fbm *folderBlockManager) doChunkedDowngrades(ctx context.Context,
 // for the given block pointers.  It returns a list of block IDs that
 // no longer have any references.
 func (fbm *folderBlockManager) deleteBlockRefs(ctx context.Context,
-	tlfID tlf.ID, ptrs []data.BlockPointer) ([]kbfsblock.ID, error) {
+	tlfID tlf.ID, ptrs []data.BlockPointer,
+) ([]kbfsblock.ID, error) {
 	return fbm.doChunkedDowngrades(ctx, tlfID, ptrs, false)
 }
 
@@ -654,13 +656,15 @@ const (
 const CtxFBMOpID = "FBMID"
 
 func (fbm *folderBlockManager) ctxWithFBMID(
-	ctx context.Context) context.Context {
+	ctx context.Context,
+) context.Context {
 	return CtxWithRandomIDReplayable(ctx, CtxFBMIDKey, CtxFBMOpID, fbm.log)
 }
 
 // Run the passed function with a context that's canceled on shutdown.
 func (fbm *folderBlockManager) runUnlessShutdownWithCtx(
-	ctx context.Context, fn func(ctx context.Context) error) error {
+	ctx context.Context, fn func(ctx context.Context) error,
+) error {
 	ctx, cancelFunc := context.WithCancel(ctx)
 	defer cancelFunc()
 	errChan := make(chan error, 1)
@@ -678,13 +682,15 @@ func (fbm *folderBlockManager) runUnlessShutdownWithCtx(
 
 // Run the passed function with a context that's canceled on shutdown.
 func (fbm *folderBlockManager) runUnlessShutdown(
-	fn func(ctx context.Context) error) error {
+	fn func(ctx context.Context) error,
+) error {
 	ctx := fbm.ctxWithFBMID(context.Background())
 	return fbm.runUnlessShutdownWithCtx(ctx, fn)
 }
 
 func (fbm *folderBlockManager) archiveBlockRefs(ctx context.Context,
-	tlfID tlf.ID, ptrs []data.BlockPointer) error {
+	tlfID tlf.ID, ptrs []data.BlockPointer,
+) error {
 	_, err := fbm.doChunkedDowngrades(ctx, tlfID, ptrs, true)
 	return err
 }
@@ -702,7 +708,8 @@ type unrefIterator struct {
 // from the beginning of the list.
 func (fbm *folderBlockManager) getUnrefPointersFromMD(
 	rmd ReadOnlyRootMetadata, includeGC bool, iter *unrefIterator) (
-	ptrs []data.BlockPointer, nextIter *unrefIterator) {
+	ptrs []data.BlockPointer, nextIter *unrefIterator,
+) {
 	currPtr := 0
 	complete := true
 	nextPtr := 0
@@ -710,7 +717,7 @@ func (fbm *folderBlockManager) getUnrefPointersFromMD(
 		nextPtr = iter.nextPtr
 	}
 	ptrMap := make(map[data.BlockPointer]bool)
-	max := fbm.config.Mode().MaxBlockPtrsToManageAtOnce()
+	maxBlockPtrs := fbm.config.Mode().MaxBlockPtrsToManageAtOnce()
 opLoop:
 	for _, op := range rmd.data.Changes.Ops {
 		if _, ok := op.(*GCOp); !includeGC && ok {
@@ -730,7 +737,7 @@ opLoop:
 				ptrMap[ptr] = true
 			}
 			nextPtr++
-			if max >= 0 && len(ptrMap) >= max {
+			if maxBlockPtrs >= 0 && len(ptrMap) >= maxBlockPtrs {
 				complete = false
 				break opLoop
 			}
@@ -750,7 +757,7 @@ opLoop:
 				ptrMap[update.Unref] = true
 			}
 			nextPtr++
-			if max >= 0 && len(ptrMap) >= max {
+			if maxBlockPtrs >= 0 && len(ptrMap) >= maxBlockPtrs {
 				complete = false
 				break opLoop
 			}
@@ -872,7 +879,8 @@ func (fbm *folderBlockManager) isOldEnough(rmd ImmutableRootMetadata) bool {
 // scrubbed by the previous gc op.
 func (fbm *folderBlockManager) getMostRecentGCRevision(
 	ctx context.Context, head ReadOnlyRootMetadata) (
-	lastGCRev kbfsmd.Revision, err error) {
+	lastGCRev kbfsmd.Revision, err error,
+) {
 	if head.data.LastGCRevision >= kbfsmd.RevisionInitial {
 		fbm.log.CDebugf(ctx, "Found last gc revision %d in "+
 			"head MD revision %d", head.data.LastGCRevision,
@@ -884,10 +892,9 @@ func (fbm *folderBlockManager) getMostRecentGCRevision(
 	// we need to walk backwards to find the latest gcOp.
 	endRev := head.Revision()
 	for {
-		startRev := endRev - maxMDsAtATime + 1 // (kbfsmd.Revision is signed)
-		if startRev < kbfsmd.RevisionInitial {
-			startRev = kbfsmd.RevisionInitial
-		}
+		startRev := max(
+			// (kbfsmd.Revision is signed)
+			endRev-maxMDsAtATime+1, kbfsmd.RevisionInitial)
 
 		rmds, err := getMDRange(
 			ctx, fbm.config, fbm.id, kbfsmd.NullBranchID, startRev,
@@ -897,16 +904,16 @@ func (fbm *folderBlockManager) getMostRecentGCRevision(
 		}
 
 		numNew := len(rmds)
-		for i := len(rmds) - 1; i >= 0; i-- {
-			rmd := rmds[i]
+		for _, rmd := range slices.Backward(rmds) {
+
 			if rmd.data.LastGCRevision >= kbfsmd.RevisionInitial {
 				fbm.log.CDebugf(ctx, "Found last gc revision %d in "+
 					"MD revision %d", rmd.data.LastGCRevision,
 					rmd.Revision())
 				return rmd.data.LastGCRevision, nil
 			}
-			for j := len(rmd.data.Changes.Ops) - 1; j >= 0; j-- {
-				GCOp, ok := rmd.data.Changes.Ops[j].(*GCOp)
+			for _, v := range slices.Backward(rmd.data.Changes.Ops) {
+				GCOp, ok := v.(*GCOp)
 				if !ok || GCOp.LatestRev == kbfsmd.RevisionUninitialized {
 					continue
 				}
@@ -934,7 +941,8 @@ func (fbm *folderBlockManager) getMostRecentGCRevision(
 func (fbm *folderBlockManager) getUnreferencedBlocks(
 	ctx context.Context, earliestRev, mostRecentRev kbfsmd.Revision) (
 	ptrs []data.BlockPointer, lastRev kbfsmd.Revision,
-	complete bool, err error) {
+	complete bool, err error,
+) {
 	fbm.log.CDebugf(ctx, "Getting unreferenced blocks between revisions "+
 		"%d and %d", earliestRev, mostRecentRev)
 	defer func() {
@@ -950,10 +958,7 @@ func (fbm *folderBlockManager) getUnreferencedBlocks(
 	startRev := earliestRev + 1
 outer:
 	for {
-		endRev := startRev + maxMDsAtATime
-		if endRev > mostRecentRev {
-			endRev = mostRecentRev
-		}
+		endRev := min(startRev+maxMDsAtATime, mostRecentRev)
 
 		rmds, err := getMDRange(
 			ctx, fbm.config, fbm.id, kbfsmd.NullBranchID, startRev,
@@ -978,10 +983,9 @@ outer:
 			newPtrs, iter := fbm.getUnrefPointersFromMD(
 				rmd.ReadOnlyRootMetadata, false, &unrefIterator{0})
 			if iter != nil {
-				return nil, kbfsmd.RevisionUninitialized, false, errors.New(
-					fmt.Sprintf(
-						"Can't handle the unref'd pointers of revision %d",
-						lastRev))
+				return nil, kbfsmd.RevisionUninitialized, false, fmt.Errorf(
+					"Can't handle the unref'd pointers of revision %d",
+					lastRev)
 			}
 			ptrs = append(ptrs, newPtrs...)
 			// TODO: when can we clean up the MD's unembedded block
@@ -1012,7 +1016,8 @@ outer:
 
 func (fbm *folderBlockManager) finalizeReclamation(ctx context.Context,
 	ptrs []data.BlockPointer, zeroRefCounts []kbfsblock.ID,
-	latestRev kbfsmd.Revision) error {
+	latestRev kbfsmd.Revision,
+) error {
 	gco := newGCOp(latestRev)
 	for _, id := range zeroRefCounts {
 		gco.AddUnrefBlock(data.BlockPointer{ID: id})
@@ -1034,7 +1039,8 @@ func (fbm *folderBlockManager) finalizeReclamation(ctx context.Context,
 }
 
 func (fbm *folderBlockManager) isQRNecessary(
-	ctx context.Context, head ImmutableRootMetadata) bool {
+	ctx context.Context, head ImmutableRootMetadata,
+) bool {
 	fbm.lastQRLock.Lock()
 	defer fbm.lastQRLock.Unlock()
 	if head == (ImmutableRootMetadata{}) {
@@ -1307,11 +1313,13 @@ func (fbm *folderBlockManager) reclaimQuotaInBackground() {
 		select {
 		case <-fbm.shutdownChan:
 			return
-		case state = <-fbm.appStateUpdater.NextAppStateUpdate(&state):
+		case <-fbm.appStateUpdater.NextAppStateUpdate(state):
+			state = fbm.appStateUpdater.AppState()
 			for state != keybase1.MobileAppState_FOREGROUND {
 				fbm.log.CDebugf(context.Background(),
 					"Pausing QR while not foregrounded: state=%s", state)
-				state = <-fbm.appStateUpdater.NextAppStateUpdate(&state)
+				<-fbm.appStateUpdater.NextAppStateUpdate(state)
+				state = fbm.appStateUpdater.AppState()
 			}
 			fbm.log.CDebugf(
 				context.Background(), "Resuming QR while foregrounded")
@@ -1352,22 +1360,20 @@ func (fbm *folderBlockManager) clearLastQRData() {
 
 func (fbm *folderBlockManager) doChunkedGetNonLiveBlocks(
 	ctx context.Context, ptrs []data.BlockPointer) (
-	nonLiveBlocks []kbfsblock.ID, err error) {
+	nonLiveBlocks []kbfsblock.ID, err error,
+) {
 	fbm.log.CDebugf(ctx, "Get live count for %d pointers", len(ptrs))
 	bops := fbm.config.BlockOps()
 
 	// Round up to find the number of chunks.
 	numChunks := (len(ptrs) + numPointersToDowngradePerChunk - 1) /
 		numPointersToDowngradePerChunk
-	numWorkers := numChunks
-	if numWorkers > maxParallelBlockPuts {
-		numWorkers = maxParallelBlockPuts
-	}
+	numWorkers := min(numChunks, maxParallelBlockPuts)
 	chunks := make(chan []data.BlockPointer, numChunks)
 
 	eg, groupCtx := errgroup.WithContext(ctx)
 	chunkResults := make(chan []kbfsblock.ID, numChunks)
-	for i := 0; i < numWorkers; i++ {
+	for range numWorkers {
 		eg.Go(func() error {
 			for chunk := range chunks {
 				fbm.log.CDebugf(groupCtx,
@@ -1398,10 +1404,7 @@ func (fbm *folderBlockManager) doChunkedGetNonLiveBlocks(
 	}
 
 	for start := 0; start < len(ptrs); start += numPointersToDowngradePerChunk {
-		end := start + numPointersToDowngradePerChunk
-		if end > len(ptrs) {
-			end = len(ptrs)
-		}
+		end := min(start+numPointersToDowngradePerChunk, len(ptrs))
 		chunks <- ptrs[start:end]
 	}
 	close(chunks)
@@ -1419,7 +1422,8 @@ func (fbm *folderBlockManager) doChunkedGetNonLiveBlocks(
 }
 
 func (fbm *folderBlockManager) doCleanDiskCache(cacheType DiskBlockCacheType) (
-	err error) {
+	err error,
+) {
 	dbc := fbm.config.DiskBlockCache()
 	if dbc == nil {
 		return nil
@@ -1584,12 +1588,14 @@ func (fbm *folderBlockManager) cleanDiskCachesInBackground() {
 		case <-fbm.latestMergedChan:
 		case <-fbm.shutdownChan:
 			return
-		case state = <-fbm.appStateUpdater.NextAppStateUpdate(&state):
+		case <-fbm.appStateUpdater.NextAppStateUpdate(state):
+			state = fbm.appStateUpdater.AppState()
 			for state != keybase1.MobileAppState_FOREGROUND {
 				fbm.log.CDebugf(context.Background(),
 					"Pausing sync-cache cleaning while not foregrounded: "+
 						"state=%s", state)
-				state = <-fbm.appStateUpdater.NextAppStateUpdate(&state)
+				<-fbm.appStateUpdater.NextAppStateUpdate(state)
+				state = fbm.appStateUpdater.AppState()
 			}
 			fbm.log.CDebugf(context.Background(),
 				"Resuming sync-cache cleaning while foregrounded")

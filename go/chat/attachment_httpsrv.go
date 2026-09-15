@@ -2,11 +2,13 @@ package chat
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"hash"
+	"html"
 	"io"
 	"net/http"
 	"net/url"
@@ -32,12 +34,11 @@ import (
 	"github.com/keybase/client/go/protocol/chat1"
 	"github.com/keybase/client/go/protocol/gregor1"
 	"github.com/keybase/client/go/protocol/keybase1"
-	"golang.org/x/net/context"
 )
 
 const keyPrefixLen = 2
 
-var blankProgress = func(bytesComplete, bytesTotal int64) {}
+var blankProgress = func(_, _ int64) {}
 
 type AttachmentHTTPSrv struct {
 	sync.Mutex
@@ -61,7 +62,8 @@ type AttachmentHTTPSrv struct {
 var _ types.AttachmentURLSrv = (*AttachmentHTTPSrv)(nil)
 
 func NewAttachmentHTTPSrv(g *globals.Context, httpSrv *manager.Srv, fetcher types.AttachmentFetcher,
-	ri func() chat1.RemoteInterface) *AttachmentHTTPSrv {
+	ri func() chat1.RemoteInterface,
+) *AttachmentHTTPSrv {
 	l, err := lru.New(2000)
 	if err != nil {
 		panic(err)
@@ -86,7 +88,7 @@ func NewAttachmentHTTPSrv(g *globals.Context, httpSrv *manager.Srv, fetcher type
 		fetcher:            fetcher,
 		httpSrv:            httpSrv,
 		hmacPool: sync.Pool{
-			New: func() interface{} {
+			New: func() any {
 				return hmac.New(sha256.New, token)
 			},
 		},
@@ -104,7 +106,7 @@ func (r *AttachmentHTTPSrv) GetAttachmentFetcher() types.AttachmentFetcher {
 	return r.fetcher
 }
 
-func (r *AttachmentHTTPSrv) genURLKey(prefix string, payload interface{}) (string, error) {
+func (r *AttachmentHTTPSrv) genURLKey(prefix string, payload any) (string, error) {
 	h := r.hmacPool.Get().(hash.Hash)
 	defer r.hmacPool.Put(h)
 	h.Reset()
@@ -118,7 +120,7 @@ func (r *AttachmentHTTPSrv) genURLKey(prefix string, payload interface{}) (strin
 	return prefix + hex.EncodeToString(h.Sum(nil)), nil
 }
 
-func (r *AttachmentHTTPSrv) getURL(ctx context.Context, prefix string, payload interface{}) string {
+func (r *AttachmentHTTPSrv) getURL(ctx context.Context, prefix string, payload any) string {
 	if !r.httpSrv.Active() {
 		r.Debug(ctx, "getURL: http server failed to start earlier")
 		return ""
@@ -138,7 +140,8 @@ func (r *AttachmentHTTPSrv) getURL(ctx context.Context, prefix string, payload i
 }
 
 func (r *AttachmentHTTPSrv) GetURL(ctx context.Context, convID chat1.ConversationID, msgID chat1.MessageID,
-	preview, noAnim, isEmoji bool) string {
+	preview, noAnim, isEmoji bool,
+) string {
 	r.Lock()
 	defer r.Unlock()
 	defer r.Trace(ctx, nil, "GetURL(%s,%d)", convID, msgID)()
@@ -164,7 +167,8 @@ type unfurlAsset struct {
 }
 
 func (r *AttachmentHTTPSrv) GetUnfurlAssetURL(ctx context.Context, convID chat1.ConversationID,
-	asset chat1.Asset) string {
+	asset chat1.Asset,
+) string {
 	defer r.Trace(ctx, nil, "GetUnfurlAssetURL")()
 	url := r.getURL(ctx, r.unfurlPrefix, unfurlAsset{
 		Asset:  asset,
@@ -182,7 +186,8 @@ func (r *AttachmentHTTPSrv) GetGiphyURL(ctx context.Context, giphyURL string) st
 }
 
 func (r *AttachmentHTTPSrv) GetGiphyGalleryURL(ctx context.Context, convID chat1.ConversationID,
-	tlfName string, results []chat1.GiphySearchResult) string {
+	tlfName string, results []chat1.GiphySearchResult,
+) string {
 	defer r.Trace(ctx, nil, "GetGiphyGalleryURL")()
 	url := r.getURL(ctx, r.giphyGalleryPrefix, giphyGalleryInfo{
 		Results: results,
@@ -254,7 +259,8 @@ type giphyGalleryInfo struct {
 }
 
 func (r *AttachmentHTTPSrv) getGiphyGallerySelectURL(ctx context.Context, convID chat1.ConversationID,
-	tlfName string, result chat1.GiphySearchResult) string {
+	tlfName string, result chat1.GiphySearchResult,
+) string {
 	addr, err := r.httpSrv.Addr()
 	if err != nil {
 		r.Debug(ctx, "getGiphySelectURL: failed to get HTTP server address: %s", err)
@@ -271,7 +277,8 @@ func (r *AttachmentHTTPSrv) getGiphyGallerySelectURL(ctx context.Context, convID
 }
 
 func (r *AttachmentHTTPSrv) serveGiphyGallerySelect(ctx context.Context, w http.ResponseWriter,
-	req *http.Request) {
+	req *http.Request,
+) {
 	defer r.Trace(ctx, nil, "serveGiphyGallerySelect")()
 	url := req.URL.Query().Get("url")
 	strConvID := req.URL.Query().Get("convID")
@@ -327,9 +334,9 @@ func (r *AttachmentHTTPSrv) serveGiphyGallery(ctx context.Context, w http.Respon
 		return
 	}
 	galleryInfo := infoInt.(giphyGalleryInfo)
-	var videoStr string
+	var videoStr strings.Builder
 	for _, res := range galleryInfo.Results {
-		videoStr += fmt.Sprintf(`
+		fmt.Fprintf(&videoStr, `
 			<img style="height: 100%%" src="%s" onclick="sendMessage('%s')" />
 		`, res.PreviewUrl, r.getGiphyGallerySelectURL(ctx, galleryInfo.ConvID, galleryInfo.TlfName,
 			res))
@@ -351,7 +358,7 @@ func (r *AttachmentHTTPSrv) serveGiphyGallery(ctx context.Context, w http.Respon
 				%s
 			</div>
 		</body>
-	</html>`, videoStr)
+	</html>`, videoStr.String())
 	if _, err := io.WriteString(w, res); err != nil {
 		r.makeError(context.TODO(), w, http.StatusInternalServerError, "failed to write giphy gallery: %s",
 			err)
@@ -369,12 +376,21 @@ func (r *AttachmentHTTPSrv) serveGiphyLink(ctx context.Context, w http.ResponseW
 	// Grab range headers
 	rangeHeader := req.Header.Get("Range")
 	client := giphy.AssetClient(libkb.NewMetaContext(ctx, r.G().GlobalContext))
-	url, err := giphy.ProxyURL(val.(string))
+	proxyURL, err := giphy.ProxyURL(val.(string))
 	if err != nil {
 		r.makeError(ctx, w, http.StatusInternalServerError, "url creation: %s", err)
 		return
 	}
-	giphyReq, err := http.NewRequest("GET", url, nil)
+	parsed, err := url.Parse(proxyURL)
+	if err != nil {
+		r.makeError(ctx, w, http.StatusInternalServerError, "url parse: %s", err)
+		return
+	}
+	if parsed.Scheme != "https" || parsed.Host != giphy.ProxyHost {
+		r.makeError(ctx, w, http.StatusBadRequest, "refusing non-giphy-proxy URL")
+		return
+	}
+	giphyReq, err := http.NewRequest("GET", parsed.String(), nil) //nolint:gosec // G704: host allowlisted to giphy-proxy above
 	if err != nil {
 		r.makeError(ctx, w, http.StatusInternalServerError, "request creation: %s", err)
 		return
@@ -383,7 +399,7 @@ func (r *AttachmentHTTPSrv) serveGiphyLink(ctx context.Context, w http.ResponseW
 		giphyReq.Header.Add("Range", rangeHeader)
 	}
 	giphyReq.Host = giphy.MediaHost
-	resp, err := client.Do(giphyReq)
+	resp, err := client.Do(giphyReq) //nolint:gosec // G704: request URL host allowlisted to giphy-proxy
 	if err != nil {
 		status := http.StatusInternalServerError
 		if resp != nil {
@@ -403,13 +419,14 @@ func (r *AttachmentHTTPSrv) serveGiphyLink(ctx context.Context, w http.ResponseW
 }
 
 func (r *AttachmentHTTPSrv) makeError(ctx context.Context, w http.ResponseWriter, code int, msg string,
-	args ...interface{}) {
+	args ...any,
+) {
 	r.Debug(ctx, "serve: error code: %d msg %s", code, fmt.Sprintf(msg, args...))
 	w.WriteHeader(code)
 }
 
 func (r *AttachmentHTTPSrv) shouldServeContent(ctx context.Context, asset chat1.Asset, req *http.Request) bool {
-	noStream := "true" == req.URL.Query().Get("nostream")
+	noStream := req.URL.Query().Get("nostream") == "true"
 	if noStream {
 		// If we just want the bits without streaming
 		return false
@@ -418,7 +435,7 @@ func (r *AttachmentHTTPSrv) shouldServeContent(ctx context.Context, asset chat1.
 }
 
 func (r *AttachmentHTTPSrv) serveUnfurlVideoHostPage(ctx context.Context, w http.ResponseWriter, req *http.Request) bool {
-	contentForce := "true" == req.URL.Query().Get("contentforce")
+	contentForce := req.URL.Query().Get("contentforce") == "true"
 	if r.G().IsMobileAppType() && !contentForce {
 		r.Debug(ctx, "serveUnfurlVideoHostPage: mobile client detected, showing the HTML video viewer")
 		w.Header().Set("Content-Type", "text/html")
@@ -426,7 +443,7 @@ func (r *AttachmentHTTPSrv) serveUnfurlVideoHostPage(ctx context.Context, w http
 		if req.URL.Query().Get("autoplay") != "true" {
 			autoplay = `onloadeddata="togglePlay('pause')"`
 		}
-		if _, err := w.Write([]byte(fmt.Sprintf(`
+		if _, err := fmt.Fprintf(w, `
 			<html>
 				<head>
 					<meta name="viewport" content="initial-scale=1, viewport-fit=cover">
@@ -450,7 +467,7 @@ func (r *AttachmentHTTPSrv) serveUnfurlVideoHostPage(ctx context.Context, w http
 					<video id="vid" %s preload="auto" style="width: 100%%; height: 100%%; border-radius: 4px; object-fit:fill" src="%s" playsinline webkit-playsinline loop autoplay muted />
 				</body>
 			</html>
-		`, autoplay, req.URL.String()+"&contentforce=true"))); err != nil {
+		`, autoplay, html.EscapeString(req.URL.String()+"&contentforce=true")); err != nil {
 			r.Debug(ctx, "serveUnfurlVideoHostPage: failed to write HTML video player: %s", err)
 		}
 		return true
@@ -459,11 +476,11 @@ func (r *AttachmentHTTPSrv) serveUnfurlVideoHostPage(ctx context.Context, w http
 }
 
 func (r *AttachmentHTTPSrv) serveVideoHostPage(ctx context.Context, w http.ResponseWriter, req *http.Request) bool {
-	contentForce := "true" == req.URL.Query().Get("contentforce")
+	contentForce := req.URL.Query().Get("contentforce") == "true"
 	if r.G().IsMobileAppType() && !contentForce {
 		r.Debug(ctx, "serve: mobile client detected, showing the HTML video viewer")
 		w.Header().Set("Content-Type", "text/html")
-		if _, err := w.Write([]byte(fmt.Sprintf(`
+		if _, err := fmt.Fprintf(w, `
 			<html>
 				<head>
 					<meta name="viewport" content="initial-scale=1, viewport-fit=cover">
@@ -485,7 +502,7 @@ func (r *AttachmentHTTPSrv) serveVideoHostPage(ctx context.Context, w http.Respo
 					<video id="vid" style="width: 100%%; height: 100%%; object-fit:fill; border-radius: 4px" poster="%s" src="%s" preload="none" playsinline webkit-playsinline />
 				</body>
 			</html>
-		`, req.URL.Query().Get("poster"), req.URL.String()+"&contentforce=true"))); err != nil {
+		`, html.EscapeString(req.URL.Query().Get("poster")), html.EscapeString(req.URL.String()+"&contentforce=true")); err != nil {
 			r.Debug(ctx, "serve: failed to write HTML video player: %s", err)
 		}
 		return true
@@ -496,9 +513,9 @@ func (r *AttachmentHTTPSrv) serveVideoHostPage(ctx context.Context, w http.Respo
 func (r *AttachmentHTTPSrv) serveAttachment(ctx context.Context, w http.ResponseWriter, req *http.Request) {
 	defer r.Trace(ctx, nil, "serveAttachment")()
 
-	preview := "true" == req.URL.Query().Get("prev")
-	noAnim := "true" == req.URL.Query().Get("noanim")
-	isEmoji := "true" == req.URL.Query().Get("isemoji")
+	preview := req.URL.Query().Get("prev") == "true"
+	noAnim := req.URL.Query().Get("noanim") == "true"
+	isEmoji := req.URL.Query().Get("isemoji") == "true"
 	key := req.URL.Query().Get("key")
 	r.Lock()
 	pairInt, ok := r.urlMap.Get(key)
@@ -637,7 +654,8 @@ func NewRemoteAttachmentFetcher(g *globals.Context, store attachments.Store) *Re
 }
 
 func (r *RemoteAttachmentFetcher) StreamAttachment(ctx context.Context, convID chat1.ConversationID,
-	asset chat1.Asset, ri func() chat1.RemoteInterface, signer s3.Signer) (res io.ReadSeeker, err error) {
+	asset chat1.Asset, ri func() chat1.RemoteInterface, signer s3.Signer,
+) (res io.ReadSeeker, err error) {
 	defer r.Trace(ctx, &err, "StreamAttachment")()
 	// Grab S3 params for the conversation
 	s3params, err := ri().GetS3Params(ctx, chat1.GetS3ParamsArg{
@@ -652,7 +670,8 @@ func (r *RemoteAttachmentFetcher) StreamAttachment(ctx context.Context, convID c
 
 func (r *RemoteAttachmentFetcher) FetchAttachment(ctx context.Context, w io.Writer,
 	convID chat1.ConversationID, asset chat1.Asset,
-	ri func() chat1.RemoteInterface, signer s3.Signer, progress types.ProgressReporter) (err error) {
+	ri func() chat1.RemoteInterface, signer s3.Signer, progress types.ProgressReporter,
+) (err error) {
 	defer r.Trace(ctx, &err, "FetchAttachment")()
 	// Grab S3 params for the conversation
 	s3params, err := ri().GetS3Params(ctx, chat1.GetS3ParamsArg{
@@ -666,7 +685,8 @@ func (r *RemoteAttachmentFetcher) FetchAttachment(ctx context.Context, w io.Writ
 }
 
 func (r *RemoteAttachmentFetcher) DeleteAssets(ctx context.Context,
-	convID chat1.ConversationID, assets []chat1.Asset, ri func() chat1.RemoteInterface, signer s3.Signer) (err error) {
+	convID chat1.ConversationID, assets []chat1.Asset, ri func() chat1.RemoteInterface, signer s3.Signer,
+) (err error) {
 	defer r.Trace(ctx, &err, "DeleteAssets")()
 
 	if len(assets) == 0 {
@@ -754,7 +774,7 @@ func (c *CachingAttachmentFetcher) cacheKey(asset chat1.Asset) string {
 }
 
 func (c *CachingAttachmentFetcher) createAttachmentFile(ctx context.Context) (*os.File, error) {
-	err := os.MkdirAll(c.getCacheDir(), os.ModePerm)
+	err := os.MkdirAll(c.getCacheDir(), libkb.PermDir)
 	if err != nil {
 		return nil, err
 	}
@@ -793,15 +813,16 @@ func (c *CachingAttachmentFetcher) localAssetPath(ctx context.Context, asset cha
 }
 
 func (c *CachingAttachmentFetcher) StreamAttachment(ctx context.Context, convID chat1.ConversationID,
-	asset chat1.Asset, ri func() chat1.RemoteInterface, signer s3.Signer) (res io.ReadSeeker, err error) {
+	asset chat1.Asset, ri func() chat1.RemoteInterface, signer s3.Signer,
+) (res io.ReadSeeker, err error) {
 	defer c.Trace(ctx, &err, "StreamAttachment")()
 	return NewRemoteAttachmentFetcher(c.G(), c.store).StreamAttachment(ctx, convID, asset, ri, signer)
 }
 
 func (c *CachingAttachmentFetcher) FetchAttachment(ctx context.Context, w io.Writer,
 	convID chat1.ConversationID, asset chat1.Asset, ri func() chat1.RemoteInterface, signer s3.Signer,
-	progress types.ProgressReporter) (err error) {
-
+	progress types.ProgressReporter,
+) (err error) {
 	defer c.Trace(ctx, &err, "FetchAttachment")()
 
 	// Check for a disk cache hit, and decrypt that onto the response stream
@@ -898,7 +919,8 @@ func (c *CachingAttachmentFetcher) PutUploadedAsset(ctx context.Context, filenam
 }
 
 func (c *CachingAttachmentFetcher) DeleteAssets(ctx context.Context,
-	convID chat1.ConversationID, assets []chat1.Asset, ri func() chat1.RemoteInterface, signer s3.Signer) (err error) {
+	convID chat1.ConversationID, assets []chat1.Asset, ri func() chat1.RemoteInterface, signer s3.Signer,
+) (err error) {
 	defer c.Trace(ctx, &err, "DeleteAssets")()
 
 	if len(assets) == 0 {

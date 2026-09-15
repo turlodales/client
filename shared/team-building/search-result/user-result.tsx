@@ -1,98 +1,95 @@
-import * as React from 'react'
+import type * as React from 'react'
 import * as Kb from '@/common-adapters'
-import CommonResult, {type ResultProps} from './common-result'
+import CommonResult, {type ResultProps, rowContainerWithLargePadding} from './common-result'
 import YouResult from './you-result'
 import HellobotResult from './hellobot-result'
 
-const UserResult = React.memo(function UserResult(props: ResultProps) {
-  if (props.isYou) {
+const UserResult = function UserResult(props: ResultProps) {
+  const {inTeam, isPreExistingTeamMember, isYou, namespace, onAdd, onRemove, userId, username} = props
+  if (isYou) {
     return <YouResult {...props} />
   }
 
   // Fancy special case for new convo hellobot row
-  if (props.username === 'hellobot' && props.namespace === 'chat2') {
+  if (username === 'hellobot' && namespace === 'chat') {
     return <HellobotResult {...props} />
   }
 
   return (
     <CommonResult
       {...props}
-      rowStyle={styles.rowContainer}
+      rowStyle={rowContainerWithLargePadding}
       rightButtons={
-        !props.isPreExistingTeamMember && (
+        !isPreExistingTeamMember && (
           <ActionButton
-            inTeam={props.inTeam}
-            onAdd={(e: React.BaseSyntheticEvent) => {
-              e.stopPropagation()
-              props.onAdd(props.userId)
+            inTeam={inTeam}
+            onAdd={(e?: React.BaseSyntheticEvent) => {
+              e?.stopPropagation()
+              onAdd(userId)
             }}
             onRemove={() => {
-              props.onRemove(props.userId)
+              onRemove(userId)
             }}
           />
         )
       }
     />
   )
-})
-const actionButtonSize = Kb.Styles.isMobile ? 22 : Kb.Styles.globalMargins.small
+}
+const actionButtonSize = isMobile ? 22 : Kb.Styles.globalMargins.small
 
 const ActionButton = (props: {
   inTeam: boolean
-  onAdd: (e: React.BaseSyntheticEvent) => void
+  onAdd: (e?: React.BaseSyntheticEvent) => void
   onRemove: () => void
 }) => {
+  const styles = useStyles()
   const Icon = props.inTeam ? AlreadyAddedIconButton : AddButton
 
   return (
-    <Kb.ClickableBox onClick={props.inTeam ? props.onRemove : props.onAdd}>
-      <Kb.Box2
-        direction="vertical"
-        centerChildren={true}
-        style={Kb.Styles.collapseStyles([styles.actionButton, props.inTeam && {backgroundColor: undefined}])}
-      >
-        <Icon />
-      </Kb.Box2>
+    <Kb.ClickableBox
+      onClick={props.inTeam ? props.onRemove : props.onAdd}
+      direction="vertical"
+      centerChildren={true}
+      style={Kb.Styles.collapseStyles([styles.actionButton, props.inTeam && {backgroundColor: undefined}])}
+    >
+      <Icon />
     </Kb.ClickableBox>
   )
 }
 
-const AddButton = () => (
-  <Kb.Icon
-    className="hover_contained_color_blue"
-    type="iconfont-circle"
-    fontSize={actionButtonSize}
-    color={Kb.Styles.globalColors.black_20}
-  />
-)
+const AddButton = () => {
+  const theme = Kb.Styles.useTheme()
+  return (
+    <Kb.Icon
+      className="hover_contained_color_blue"
+      type="iconfont-circle"
+      fontSize={actionButtonSize}
+      color={theme.black_20}
+    />
+  )
+}
 
-const AlreadyAddedIconButton = () => (
-  <Kb.Icon type="iconfont-success" fontSize={actionButtonSize} color={Kb.Styles.globalColors.blue} />
-)
+const AlreadyAddedIconButton = () => {
+  const theme = Kb.Styles.useTheme()
+  return (
+    <Kb.Icon type="iconfont-success" fontSize={actionButtonSize} color={theme.blue} />
+  )
+}
 
-const styles = Kb.Styles.styleSheetCreate(() => ({
+const useStyles = Kb.Styles.createStyleHook(() => ({
   actionButton: Kb.Styles.platformStyles({
     common: {
       marginLeft: Kb.Styles.globalMargins.tiny,
     },
     isElectron: {
-      height: Kb.Styles.globalMargins.small,
-      width: Kb.Styles.globalMargins.small,
+      ...Kb.Styles.size(Kb.Styles.globalMargins.small),
     },
     isMobile: {
-      height: Kb.Styles.globalMargins.large,
+      ...Kb.Styles.size(Kb.Styles.globalMargins.large),
       marginRight: Kb.Styles.globalMargins.tiny,
-      width: Kb.Styles.globalMargins.large,
     },
   }),
-  rowContainer: {
-    ...Kb.Styles.padding(
-      Kb.Styles.globalMargins.tiny,
-      Kb.Styles.globalMargins.medium,
-      Kb.Styles.globalMargins.tiny,
-      Kb.Styles.globalMargins.xsmall
-    ),
-  },
 }))
 
 export default UserResult

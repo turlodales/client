@@ -1,12 +1,16 @@
 package keybase
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"regexp"
 	"runtime"
+	"strconv"
+	"sync"
 	"time"
 
+	lru "github.com/hashicorp/golang-lru"
 	"github.com/keybase/client/go/chat"
 	"github.com/keybase/client/go/chat/globals"
 	"github.com/keybase/client/go/chat/storage"
@@ -17,8 +21,63 @@ import (
 	"github.com/keybase/client/go/protocol/gregor1"
 	"github.com/keybase/client/go/protocol/keybase1"
 	"github.com/kyokomi/emoji"
-	context "golang.org/x/net/context"
 )
+
+const seenNotificationsCacheSize = 100
+
+var (
+	seenNotificationsMtx  sync.Mutex
+	seenNotifications     *lru.Cache
+	seenNotificationsOnce sync.Once
+
+	multipleAccountsMtx    sync.Mutex
+	multipleAccountsCached *bool
+)
+
+var errAndroidNotificationForOtherAccount = errors.New("android notification for different account")
+
+func clearMultipleAccountsCache() {
+	multipleAccountsMtx.Lock()
+	multipleAccountsCached = nil
+	multipleAccountsMtx.Unlock()
+}
+
+// accountCacheHook clears the cached result of hasMultipleLoggedInAccounts
+// whenever login/logout changes the available stored-secret accounts.
+type accountCacheHook struct{}
+
+func (accountCacheHook) OnLogin(_ libkb.MetaContext) error {
+	clearMultipleAccountsCache()
+	return nil
+}
+
+func (accountCacheHook) OnLogout(_ libkb.MetaContext) error {
+	clearMultipleAccountsCache()
+	return nil
+}
+
+func hasMultipleLoggedInAccounts(ctx context.Context) bool {
+	multipleAccountsMtx.Lock()
+	defer multipleAccountsMtx.Unlock()
+	if multipleAccountsCached != nil {
+		return *multipleAccountsCached
+	}
+	users, err := kbCtx.GetUsersWithStoredSecrets(ctx)
+	if err != nil {
+		// Don't cache on error; retry next time.
+		return false
+	}
+	result := len(users) > 1
+	multipleAccountsCached = &result
+	return result
+}
+
+func getSeenNotificationsCache() *lru.Cache {
+	seenNotificationsOnce.Do(func() {
+		seenNotifications, _ = lru.New(seenNotificationsCacheSize)
+	})
+	return seenNotifications
+}
 
 type Person struct {
 	KeybaseUsername string
@@ -47,6 +106,12 @@ type ChatNotification struct {
 	IsPlaintext         bool
 	SoundName           string
 	BadgeCount          int
+	// Title is the notification title, e.g. "username@keybase"
+	Title string
+	// Uid is the UID of the account this notification belongs to.
+	// Included in the local notification's userInfo so that a notification
+	// tap can switch to the correct account if a different one is active.
+	Uid string
 }
 
 func HandlePostTextReply(strConvID, tlfName string, intMessageID int, body string) (err error) {
@@ -70,6 +135,10 @@ func HandlePostTextReply(strConvID, tlfName string, intMessageID int, body strin
 		return err
 	}
 
+	if intMessageID < 0 {
+		return fmt.Errorf("invalid message ID: %d", intMessageID)
+	}
+
 	msgID := chat1.MessageID(intMessageID)
 	if err = kbChatCtx.InboxSource.MarkAsRead(context.Background(), convID, uid, &msgID, false /* forceUnread */); err != nil {
 		kbCtx.Log.CDebugf(ctx, "Failed to mark as read from QuickReply: convID: %s. Err: %s", strConvID, err)
@@ -84,10 +153,15 @@ var spoileRegexp = regexp.MustCompile(`!>(.*?)<!`)
 
 func HandleBackgroundNotification(strConvID, body, serverMessageBody, sender string, intMembersType int,
 	displayPlaintext bool, intMessageID int, pushID string, badgeCount, unixTime int, soundName string,
-	pusher PushNotifier, showIfStale bool) (err error) {
-	if err := waitForInit(10 * time.Second); err != nil {
+	pusher PushNotifier, showIfStale bool, targetUID string,
+) (err error) {
+	// iOS gives roughly 30 seconds of background time for a remote
+	// notification; leave enough of that budget for unboxing and acking.
+	start := time.Now()
+	if err := waitForInit(15 * time.Second); err != nil {
 		return err
 	}
+	initDuration := time.Since(start)
 	gc := globals.NewContext(kbCtx, kbChatCtx)
 	ctx := globals.ChatCtx(context.Background(), gc,
 		keybase1.TLFIdentifyBehavior_CHAT_GUI, nil, chat.NewCachingIdentifyNotifier(gc))
@@ -95,17 +169,63 @@ func HandleBackgroundNotification(strConvID, body, serverMessageBody, sender str
 	defer kbCtx.CTrace(ctx, fmt.Sprintf("HandleBackgroundNotification(%s,%s,%v,%d,%d,%s,%d,%d)",
 		strConvID, sender, displayPlaintext, intMembersType, intMessageID, pushID, badgeCount, unixTime), &err)()
 	defer func() { err = flattenError(err) }()
+	kbCtx.Log.CDebugf(ctx, "HandleBackgroundNotification: waitForInit took %v", initDuration)
 
 	// Unbox
 	if !kbCtx.ActiveDevice.HaveKeys() {
 		return libkb.LoginRequiredError{}
 	}
+	// If the push includes a target UID, verify it matches the currently active account
+	// before doing any work or updating any state (including badge count).
+	if targetUID != "" {
+		activeUID := string(kbCtx.Env.GetUID())
+		if activeUID != targetUID {
+			kbCtx.Log.CDebugf(ctx, "HandleBackgroundNotification: push targetUID %s != active uid %s, ignoring", targetUID, activeUID)
+			// On Android, return an error so the caller can suppress badge updates for
+			// silent pushes and fall back to a visible notification for loud pushes.
+			// On iOS the system-delivered alert remains available, so returning nil
+			// avoids noisy background-processing failures.
+			if runtime.GOOS == "android" {
+				return errAndroidNotificationForOtherAccount
+			}
+			return nil
+		}
+	}
 	mp := chat.NewMobilePush(gc)
+	// Dedupe by convID||msgID
+	dupKey := strConvID + "||" + strconv.Itoa(intMessageID)
+	// Optimistic early-exit: check under the mutex so that if another goroutine
+	// is currently in the display+add critical section below, we wait for it to
+	// finish and then see the cache entry rather than proceeding with redundant work.
+	seenNotificationsMtx.Lock()
+	_, isDup := getSeenNotificationsCache().Get(dupKey)
+	seenNotificationsMtx.Unlock()
+	if isDup {
+		// Cancel any duplicate visible notifications
+		if len(pushID) > 0 {
+			ack := chat.NewPushAck(ctx, gc)
+			defer ack.Shutdown()
+			ack.Ack(ctx, []string{pushID})
+		}
+		kbCtx.Log.CDebugf(ctx, "HandleBackgroundNotification: duplicate notification convID=%s msgID=%d", strConvID, intMessageID)
+		// Return nil (not an error) so Android does not treat this as failure and show a fallback notification.
+		return nil
+	}
 	uid := gregor1.UID(kbCtx.Env.GetUID().ToBytes())
 	convID, err := chat1.MakeConvID(strConvID)
 	if err != nil {
 		kbCtx.Log.CDebugf(ctx, "HandleBackgroundNotification: invalid convID: %s msg: %s", strConvID, err)
 		return err
+	}
+	// Pre-dial the gregor connection used to ack this push: the connection
+	// starts its TLS/auth handshake at construction, so it connects in
+	// parallel with the conversation fetch and unbox below. The ack races the
+	// server's fallback timeout, after which it delivers the generic
+	// notification.
+	var ack *chat.PushAck
+	if len(pushID) > 0 {
+		ack = chat.NewPushAck(ctx, gc)
+		defer ack.Shutdown()
 	}
 	membersType := chat1.ConversationMembersType(intMembersType)
 	conv, err := utils.GetVerifiedConv(ctx, gc, uid, convID, types.InboxSourceDataSourceLocalOnly)
@@ -114,6 +234,11 @@ func HandleBackgroundNotification(strConvID, body, serverMessageBody, sender str
 		return err
 	}
 
+	currentUsername := string(kbCtx.Env.GetUsername())
+	title := "Keybase"
+	if hasMultipleLoggedInAccounts(ctx) {
+		title = fmt.Sprintf("%s@keybase", currentUsername)
+	}
 	chatNotification := ChatNotification{
 		IsPlaintext: displayPlaintext,
 		Message: &Message{
@@ -126,10 +251,13 @@ func HandleBackgroundNotification(strConvID, body, serverMessageBody, sender str
 		TopicName:           conv.Info.TopicName,
 		TlfName:             conv.Info.TlfName,
 		IsGroupConversation: len(conv.Info.Participants) > 2,
-		ConversationName:    utils.FormatConversationName(conv.Info, string(kbCtx.Env.GetUsername())),
+		ConversationName:    utils.FormatConversationName(conv.Info, currentUsername),
 		SoundName:           soundName,
 		BadgeCount:          badgeCount,
+		Title:               title,
+		Uid:                 uid.String(),
 	}
+	kbCtx.Log.CDebugf(ctx, "HandleBackgroundNotification: title=%s", chatNotification.Title)
 
 	msgUnboxed, err := mp.UnboxPushNotification(ctx, uid, convID, membersType, body)
 	if err == nil && msgUnboxed.IsValid() {
@@ -159,8 +287,7 @@ func HandleBackgroundNotification(strConvID, body, serverMessageBody, sender str
 				if err != nil {
 					return err
 				}
-				chatNotification.Message.Plaintext =
-					emoji.Sprintf("Reacted to your message with %v", reaction)
+				chatNotification.Message.Plaintext = emoji.Sprintf("Reacted to your message with %v", reaction)
 			default:
 				kbCtx.Log.CDebugf(ctx, "unboxNotification: Unknown message type: %v",
 					msgUnboxed.GetMessageType())
@@ -191,9 +318,25 @@ func HandleBackgroundNotification(strConvID, body, serverMessageBody, sender str
 
 	// only display and ack this notification if we actually have something to display
 	if pusher != nil && (len(chatNotification.Message.Plaintext) > 0 || len(chatNotification.Message.ServerMessage) > 0) {
+		// Lock and check if we've already processed this notification.
+		seenNotificationsMtx.Lock()
+		defer seenNotificationsMtx.Unlock()
+		if _, ok := getSeenNotificationsCache().Get(dupKey); ok {
+			// Cancel any duplicate visible notifications
+			if ack != nil {
+				ack.Ack(ctx, []string{pushID})
+			}
+			kbCtx.Log.CDebugf(ctx, "HandleBackgroundNotification: duplicate notification convID=%s msgID=%d", strConvID, intMessageID)
+			// Return nil (not an error) so Android does not treat this as failure and show a fallback notification.
+			return nil
+		}
+		// Add to cache before displaying so that any concurrent goroutine that
+		// reaches the second check while DisplayChatNotification is running will
+		// see the entry and bail out rather than displaying a duplicate.
+		getSeenNotificationsCache().Add(dupKey, struct{}{})
 		pusher.DisplayChatNotification(&chatNotification)
-		if len(pushID) > 0 {
-			mp.AckNotificationSuccess(ctx, []string{pushID})
+		if ack != nil {
+			ack.Ack(ctx, []string{pushID})
 		}
 	}
 	return nil

@@ -40,21 +40,21 @@ func NewMockLoaderContext(t *testing.T, g *libkb.GlobalContext, unit TestCase) *
 
 func (l *MockLoaderContext) getNewLinksFromServer(ctx context.Context,
 	teamID keybase1.TeamID, lows getLinksLows,
-	readSubteamID *keybase1.TeamID) (*rawTeam, error) {
-
+	readSubteamID *keybase1.TeamID,
+) (*rawTeam, error) {
 	return l.getLinksFromServerCommon(ctx, teamID, lows, nil, readSubteamID)
 }
 
 func (l *MockLoaderContext) getLinksFromServer(ctx context.Context,
-	teamID keybase1.TeamID, requestSeqnos []keybase1.Seqno, readSubteamID *keybase1.TeamID) (*rawTeam, error) {
-
+	teamID keybase1.TeamID, requestSeqnos []keybase1.Seqno, readSubteamID *keybase1.TeamID,
+) (*rawTeam, error) {
 	return l.getLinksFromServerCommon(ctx, teamID, getLinksLows{}, requestSeqnos, readSubteamID)
 }
 
 func (l *MockLoaderContext) getLinksFromServerCommon(ctx context.Context,
 	teamID keybase1.TeamID, lows getLinksLows,
-	requestSeqnos []keybase1.Seqno, readSubteamID *keybase1.TeamID) (*rawTeam, error) {
-
+	requestSeqnos []keybase1.Seqno, readSubteamID *keybase1.TeamID,
+) (*rawTeam, error) {
 	_ = readSubteamID // Allow all access.
 
 	name := l.defaultTeamName
@@ -96,7 +96,7 @@ func (l *MockLoaderContext) getLinksFromServerCommon(ctx context.Context,
 			// Omit if the client already has it, only if requestSeqnos is not set.
 			omit = true
 		}
-		if omit {
+		if omit { //nolint
 			// pass
 		} else if stub {
 			l.t.Logf("MockLoaderContext stubbing link seqno: %v", seqno)
@@ -149,7 +149,7 @@ func (l *MockLoaderContext) getLinksFromServerCommon(ctx context.Context,
 
 	var box *TeamBox
 	prevs := make(map[keybase1.PerTeamKeyGeneration]prevKeySealedEncoded)
-	require.NotEqual(l.t, len(teamSpec.TeamKeyBoxes), 0, "need some team key boxes")
+	require.NotEmpty(l.t, teamSpec.TeamKeyBoxes, "need some team key boxes")
 	for _, boxSpec := range teamSpec.TeamKeyBoxes {
 		require.NotEqual(l.t, 0, boxSpec.Seqno, "bad box seqno")
 		if (boxSpec.Seqno <= latestLinkToSend && boxSpec.ChainType == keybase1.SeqType_SEMIPRIVATE) ||
@@ -160,7 +160,7 @@ func (l *MockLoaderContext) getLinksFromServerCommon(ctx context.Context,
 
 			if boxSpec.Prev != nil {
 				omitPrevs := int(l.state.loadSpec.OmitPrevs)
-				if !(omitPrevs > 0 && int(boxSpec.TeamBox.Generation)-1 <= omitPrevs) {
+				if omitPrevs <= 0 || int(boxSpec.TeamBox.Generation)-1 > omitPrevs {
 					prevs[boxSpec.TeamBox.Generation] = *boxSpec.Prev
 				}
 			}
@@ -271,8 +271,8 @@ func (l *MockLoaderContext) merkleLookup(ctx context.Context, teamID keybase1.Te
 }
 
 func (l *MockLoaderContext) merkleLookupTripleInPast(ctx context.Context,
-	isPublic bool, leafID keybase1.UserOrTeamID, root keybase1.MerkleRootV2) (triple *libkb.MerkleTriple, err error) {
-
+	isPublic bool, leafID keybase1.UserOrTeamID, root keybase1.MerkleRootV2,
+) (triple *libkb.MerkleTriple, err error) {
 	hm := root.HashMeta
 	key := fmt.Sprintf("%s-%s", leafID, hm)
 	triple1, ok := l.unit.MerkleTriples[key]
@@ -296,8 +296,8 @@ func (l *MockLoaderContext) forceLinkMapRefreshForUser(ctx context.Context, uid 
 
 func (l *MockLoaderContext) loadKeyV2(ctx context.Context, uid keybase1.UID, kid keybase1.KID, _lkc *loadKeyCache) (
 	uv keybase1.UserVersion, pubKey *keybase1.PublicKeyV2NaCl, linkMap linkMapT,
-	err error) {
-
+	err error,
+) {
 	defer func() {
 		l.t.Logf("MockLoaderContext#loadKeyV2(%v, %v) -> %v", uid, kid, err)
 	}()
@@ -338,13 +338,13 @@ func (e *mockError) Error() string {
 	return fmt.Sprintf("error in mock: %s", e.Msg)
 }
 
-func NewMockError(format string, args ...interface{}) error {
+func NewMockError(format string, args ...any) error {
 	return &mockError{
 		Msg: fmt.Sprintf(format, args...),
 	}
 }
 
-func NewMockBoundsError(caller string, keydesc string, key interface{}) error {
+func NewMockBoundsError(caller string, keydesc string, key any) error {
 	return &mockError{
 		Msg: fmt.Sprintf("in %s: key not found (%s) %+v", caller, keydesc, key),
 	}

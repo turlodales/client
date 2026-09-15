@@ -15,26 +15,33 @@ type Storage struct {
 }
 
 // Increment to invalidate the disk cache.
-const diskStorageVersion = 12
-const memCacheLRUSize = 200
+const (
+	diskStorageVersion = 12
+	memCacheLRUSize    = 200
+)
 
 type DiskStorageItem struct {
 	Version int                `codec:"V"`
 	State   *keybase1.TeamData `codec:"S"`
 }
 
-var _ teamDataGeneric = (*keybase1.TeamData)(nil)
-var _ diskItemGeneric = (*DiskStorageItem)(nil)
+var (
+	_ teamDataGeneric = (*keybase1.TeamData)(nil)
+	_ diskItemGeneric = (*DiskStorageItem)(nil)
+)
 
 func (d *DiskStorageItem) version() int {
 	return d.Version
 }
+
 func (d *DiskStorageItem) value() teamDataGeneric {
 	return d.State
 }
+
 func (d *DiskStorageItem) setVersion(i int) {
 	d.Version = i
 }
+
 func (d *DiskStorageItem) setValue(v teamDataGeneric) error {
 	typed, ok := v.(*keybase1.TeamData)
 	if !ok {
@@ -50,12 +57,12 @@ func NewStorage(g *libkb.GlobalContext) *Storage {
 }
 
 func (s *Storage) Put(mctx libkb.MetaContext, state *keybase1.TeamData) {
-	s.storageGeneric.put(mctx, state)
+	s.put(mctx, state)
 }
 
 // Get can return nil and no error.
 func (s *Storage) Get(mctx libkb.MetaContext, teamID keybase1.TeamID, public bool) (data *keybase1.TeamData, frozen bool, tombstoned bool) {
-	vp := s.storageGeneric.get(mctx, teamID, public)
+	vp := s.get(mctx, teamID, public)
 	if vp == nil {
 		return nil, false, false
 	}

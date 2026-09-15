@@ -35,7 +35,7 @@ type opts struct {
 	Pause                time.Duration
 }
 
-func logError(f string, args ...interface{}) {
+func logError(f string, args ...any) {
 	s := fmt.Sprintf(f, args...)
 	if s[len(s)-1] != '\n' {
 		s += "\n"
@@ -114,7 +114,7 @@ func (r *runner) testerName() string {
 }
 
 func (r *runner) listTests() error {
-	cmd := exec.Command(r.testerName(), "-test.list", ".")
+	cmd := exec.Command(r.testerName(), "-test.list", ".") //nolint:gosec // G204: Test binary path from build output, args are test flags
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	err := cmd.Run()
@@ -225,8 +225,9 @@ func (r *runner) runTestOnce(test string, isRerun bool, canRerun bool) (outcome 
 		}
 	}()
 
-	cmd := exec.Command(r.testerName(), "-test.run", "^"+test+"$", "-test.timeout", r.opts.Timeout)
+	cmd := exec.Command(r.testerName(), "-test.run", "^"+test+"$", "-test.timeout", r.opts.Timeout) //nolint:gosec // G204: Test binary with test name and timeout flags
 	if isRerun {
+		cmd.Args = append(cmd.Args, "-test.v")
 		cmd.Env = append(os.Environ(), "CITOGO_FLAKE_RERUN=1")
 	}
 	var combined bytes.Buffer
@@ -251,7 +252,7 @@ func (r *runner) runTestFixError(t string) error {
 	if err == nil {
 		return nil
 	}
-	if err != errTestFailed {
+	if !errors.Is(err, errTestFailed) {
 		return err
 	}
 	r.fails = append(r.fails, t)
@@ -323,7 +324,6 @@ func (r *runner) testExists() (bool, error) {
 		return true, nil
 	}
 	return false, fmt.Errorf("%s: file of wrong type", f)
-
 }
 
 func (r *runner) run() error {
@@ -374,7 +374,7 @@ func main2() error {
 func main() {
 	err := main2()
 	if err != nil {
-		logError(err.Error())
+		logError("%s", err.Error())
 		fmt.Printf("EXIT: 2\n")
 		os.Exit(2)
 	}

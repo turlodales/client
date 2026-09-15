@@ -4,12 +4,13 @@
 package client
 
 import (
+	"context"
+
 	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/protocol/chat1"
 	"github.com/keybase/client/go/protocol/keybase1"
 	"github.com/keybase/client/go/protocol/stellar1"
 	"github.com/keybase/go-framed-msgpack-rpc/rpc"
-	"golang.org/x/net/context"
 )
 
 func getSocketWithRetry(g *libkb.GlobalContext) (xp rpc.Transporter, err error) {
@@ -490,14 +491,5 @@ func GetFeaturedBotsClient(g *libkb.GlobalContext) (cli keybase1.FeaturedBotClie
 		return cli, err
 	}
 	cli = keybase1.FeaturedBotClient{Cli: rcli}
-	return cli, nil
-}
-
-func GetWebOfTrustClient(g *libkb.GlobalContext) (cli keybase1.WotClient, err error) {
-	rcli, _, err := GetRPCClientWithContext(g)
-	if err != nil {
-		return cli, err
-	}
-	cli = keybase1.WotClient{Cli: rcli}
 	return cli, nil
 }

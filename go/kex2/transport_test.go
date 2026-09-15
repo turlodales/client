@@ -5,7 +5,10 @@ package kex2
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
+	"errors"
+	"fmt"
 	"io"
 	"net"
 	"runtime"
@@ -14,8 +17,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/context"
 )
 
 type message struct {
@@ -47,7 +50,7 @@ type session struct {
 
 func newSession(i SessionID) *session {
 	sess := &session{id: i}
-	for j := 0; j < 2; j++ {
+	for j := range 2 {
 		sess.simplexSessions[j] = newSimplexSession()
 	}
 	return sess
@@ -147,7 +150,7 @@ func (mr *mockRouter) Post(i SessionID, sender DeviceID, seqno Seqno, msg []byte
 	return ss.post(seqno, msg)
 }
 
-func (ss *simplexSession) get(seqno Seqno, poll time.Duration, behavior int) (ret [][]byte, err error) {
+func (ss *simplexSession) get(_ Seqno, poll time.Duration, behavior int) (ret [][]byte, err error) {
 	timeout := false
 	handleMessage := func(msg message) {
 		ret = append(ret, msg.msg)
@@ -192,17 +195,13 @@ func (mr *mockRouter) Get(i SessionID, receiver DeviceID, seqno Seqno, poll time
 
 func genSecret(t *testing.T) (ret Secret) {
 	_, err := rand.Read(ret[:])
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, err)
 	return ret
 }
 
 func genDeviceID(t *testing.T) (ret DeviceID) {
 	_, err := rand.Read(ret[:])
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	return ret
 }
 
@@ -221,7 +220,7 @@ func newTestLogCtx(t *testing.T) (ret *testLogCtx, closer func()) {
 	return ret, closer
 }
 
-func (t *testLogCtx) Debug(format string, args ...interface{}) {
+func (t *testLogCtx) Debug(format string, args ...any) {
 	t.Lock()
 	if t.t != nil {
 		t.t.Logf(format, args...)
@@ -231,9 +230,7 @@ func (t *testLogCtx) Debug(format string, args ...interface{}) {
 
 func genNewConn(t *testLogCtx, mr MessageRouter, s Secret, d DeviceID, rt time.Duration) net.Conn {
 	ret, err := NewConn(context.TODO(), t, mr, s, d, rt)
-	if err != nil {
-		t.t.Fatal(err)
-	}
+	require.NoError(t.t, err)
 	return ret
 }
 
@@ -259,25 +256,27 @@ func TestHello(t *testing.T) {
 	c1, c2, _, _ := genConnPair(testLogCtx, GoodRouter, time.Duration(0))
 	txt := []byte("hello friend")
 	if _, err := c1.Write(txt); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 	buf := make([]byte, 100)
 	if n, err := c2.Read(buf); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	} else if n != len(txt) {
-		t.Fatal("bad read len")
+		require.FailNow(t, "bad read len")
 	} else if !bytes.Equal(buf[0:n], txt) {
-		t.Fatal("wrong message back")
+		require.True(t, bytes.Equal(buf[0:n], txt),
+			"wrong message back")
 	}
 	txt2 := []byte("pong PONG pong PONG pong PONG")
 	if _, err := c2.Write(txt2); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	} else if n, err := c1.Read(buf); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	} else if n != len(txt2) {
-		t.Fatal("bad read len")
+		require.FailNow(t, "bad read len")
 	} else if !bytes.Equal(buf[0:n], txt2) {
-		t.Fatal("wrong ponged text")
+		require.True(t, bytes.Equal(buf[0:n], txt2),
+			"wrong ponged text")
 	}
 }
 
@@ -289,13 +288,14 @@ func TestBadMetadata(t *testing.T) {
 		c1, c2, _, _ := genConnPair(testLogCtx, b, time.Duration(0))
 		txt := []byte("hello friend")
 		if _, err := c1.Write(txt); err != nil {
-			t.Fatal(err)
+			require.NoError(t, err)
 		}
 		buf := make([]byte, 100)
 		if _, err := c2.Read(buf); err == nil {
-			t.Fatalf("behavior %d: wanted an error, didn't get one", b)
+			require.Error(t, err,
+				"behavior %d: wanted an error, didn't get one", b)
 		} else if err != wanted {
-			t.Fatalf("behavior %d: wanted error '%v', got '%v'", b, err, wanted)
+			require.FailNow(t, fmt.Sprintf("behavior %d: wanted error '%v', got '%v'", b, err, wanted))
 		}
 	}
 	testBehavior(BadRouterCorruptedSession, ErrBadMetadata)
@@ -316,9 +316,8 @@ func TestReadDeadline(t *testing.T) {
 	}()
 	buf := make([]byte, 100)
 	_, err = c2.Read(buf)
-	if err != ErrTimedOut {
-		t.Fatalf("wanted a read timeout")
-	}
+	require.ErrorIs(t, err, ErrTimedOut,
+		"wanted a read timeout")
 }
 
 func TestReadTimeout(t *testing.T) {
@@ -332,9 +331,8 @@ func TestReadTimeout(t *testing.T) {
 	}()
 	buf := make([]byte, 100)
 	_, err := c2.Read(buf)
-	if err != ErrTimedOut {
-		t.Fatalf("wanted a read timeout")
-	}
+	require.ErrorIs(t, err, ErrTimedOut,
+		"wanted a read timeout")
 }
 
 func TestReadDelayedWrite(t *testing.T) {
@@ -352,12 +350,8 @@ func TestReadDelayedWrite(t *testing.T) {
 	}()
 	buf := make([]byte, 100)
 	n, err := c2.Read(buf)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if n != len(text) {
-		t.Fatalf("wrong read length")
-	}
+	require.NoError(t, err)
+	require.Equal(t, len(text), n, "wrong read length")
 }
 
 func TestMultipleWritesOneRead(t *testing.T) {
@@ -377,14 +371,14 @@ func TestMultipleWritesOneRead(t *testing.T) {
 			m = "\n" + m
 		}
 		if _, err := c1.Write([]byte(m)); err != nil {
-			t.Fatal(err)
+			require.NoError(t, err)
 		}
 	}
 	buf := make([]byte, 1000)
 	if n, err := c2.Read(buf); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	} else if strings.Join(msgs, "\n") != string(buf[0:n]) {
-		t.Fatal("string mismatch")
+		require.FailNow(t, "string mismatch")
 	}
 }
 
@@ -401,20 +395,17 @@ as though a harpoon were sparring for the kill.`
 	small := make([]byte, 3)
 	var buf []byte
 	for {
-		if n, err := c2.Read(small); err != nil && err != ErrAgain {
-			t.Fatal(err)
+		if n, err := c2.Read(small); err != nil && !errors.Is(err, ErrAgain) {
+			require.FailNow(t, fmt.Sprint(err))
 		} else if n == 0 {
-			if err != ErrAgain {
-				t.Fatalf("exepcted ErrAgain if we read 0 bytes, but got %v", err)
-			}
+			require.ErrorIs(t, err, ErrAgain,
+				"exepcted ErrAgain if we read 0 bytes, but got %v", err)
 			break
 		} else {
 			buf = append(buf, small[0:n]...)
 		}
 	}
-	if string(buf) != msg {
-		t.Fatal("message mismatch")
-	}
+	require.Equal(t, msg, string(buf), "message mismatch")
 }
 
 func TestReorder(t *testing.T) {
@@ -433,13 +424,14 @@ func TestReorder(t *testing.T) {
 			m = "\n" + m
 		}
 		if _, err := c1.Write([]byte(m)); err != nil {
-			t.Fatal(err)
+			require.NoError(t, err)
 		}
 	}
 	buf := make([]byte, 1000)
 	_, err := c2.Read(buf)
 	if _, ok := err.(ErrBadPacketSequence); !ok {
-		t.Fatalf("expected an ErrBadPacketSequence; got %v", err)
+		require.True(t, ok,
+			"expected an ErrBadPacketSequence; got %v", err)
 	}
 }
 
@@ -459,13 +451,14 @@ func TestDrop(t *testing.T) {
 			m = "\n" + m
 		}
 		if _, err := c1.Write([]byte(m)); err != nil {
-			t.Fatal(err)
+			require.NoError(t, err)
 		}
 	}
 	buf := make([]byte, 1000)
 	_, err := c2.Read(buf)
 	if _, ok := err.(ErrBadPacketSequence); !ok {
-		t.Fatalf("expected an ErrBadPacketSequence; got %v", err)
+		require.True(t, ok,
+			"expected an ErrBadPacketSequence; got %v", err)
 	}
 }
 
@@ -475,26 +468,27 @@ func TestClose(t *testing.T) {
 	c1, c2, _, _ := genConnPair(testLogCtx, GoodRouter, time.Duration(4)*time.Second)
 	msg := "Hello friend. I'm going to mic drop."
 	if _, err := c1.Write([]byte(msg)); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 	if err := c1.Close(); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 	buf := make([]byte, 1000)
 	if n, err := c2.Read(buf); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	} else if n != len(msg) {
-		t.Fatalf("short read: %d v %d: %v", n, len(msg), msg)
+		require.FailNow(t, fmt.Sprintf("short read: %d v %d: %v", n, len(msg), msg))
 	} else if string(buf[0:n]) != msg {
-		t.Fatal("wrong msg")
+		require.FailNow(t, "wrong msg")
 	}
 
 	// Assert we get an EOF now and forever...
-	for i := 0; i < 3; i++ {
-		if n, err := c2.Read(buf); err != io.EOF {
-			t.Fatalf("expected EOF, but got err = %v", err)
+	for range 3 {
+		if n, err := c2.Read(buf); !errors.Is(err, io.EOF) {
+			require.ErrorIs(t, err, io.EOF,
+				"expected EOF, but got err = %v", err)
 		} else if n != 0 {
-			t.Fatalf("Expected 0-length read, but got %d", n)
+			require.FailNow(t, fmt.Sprintf("Expected 0-length read, but got %d", n))
 		}
 	}
 }
@@ -504,10 +498,11 @@ func TestErrAgain(t *testing.T) {
 	defer cleanup()
 	_, c2, _, _ := genConnPair(testLogCtx, GoodRouter, time.Duration(0))
 	buf := make([]byte, 100)
-	if n, err := c2.Read(buf); err != ErrAgain {
-		t.Fatalf("wanted ErrAgain, but got err = %v", err)
+	if n, err := c2.Read(buf); !errors.Is(err, ErrAgain) {
+		require.ErrorIs(t, err, ErrAgain,
+			"wanted ErrAgain, but got err = %v", err)
 	} else if n != 0 {
-		t.Fatalf("Wanted 0 bytes back; got %d", n)
+		require.FailNow(t, fmt.Sprintf("Wanted 0 bytes back; got %d", n))
 	}
 }
 
@@ -533,12 +528,8 @@ func TestPollLoopSuccess(t *testing.T) {
 	}()
 	buf := make([]byte, 100)
 	n, err := c2.Read(buf)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if n != len(text) {
-		t.Fatalf("wrong read length")
-	}
+	require.NoError(t, err)
+	require.Equal(t, len(text), n, "wrong read length")
 }
 
 func TestPollLoopTimeout(t *testing.T) {
@@ -562,7 +553,8 @@ func TestPollLoopTimeout(t *testing.T) {
 		_, _ = c1.Write([]byte(text))
 	}()
 	buf := make([]byte, 100)
-	if _, err := c2.Read(buf); err != ErrTimedOut {
-		t.Fatalf("Wanted ErrTimedOut; got %v", err)
+	if _, err := c2.Read(buf); !errors.Is(err, ErrTimedOut) {
+		require.ErrorIs(t, err, ErrTimedOut,
+			"Wanted ErrTimedOut; got %v", err)
 	}
 }

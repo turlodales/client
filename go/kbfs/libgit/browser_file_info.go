@@ -8,7 +8,7 @@ import (
 	"os"
 	"time"
 
-	"gopkg.in/src-d/go-git.v4/plumbing/object"
+	"github.com/go-git/go-git/v5/plumbing/object"
 )
 
 type browserFileInfo struct {
@@ -33,7 +33,7 @@ func (bfi *browserFileInfo) Mode() os.FileMode {
 		panic(err)
 	}
 	// Make it read-only.
-	return mode &^ 0222
+	return mode &^ 0o222
 }
 
 func (bfi *browserFileInfo) ModTime() time.Time {
@@ -46,6 +46,6 @@ func (bfi *browserFileInfo) IsDir() bool {
 	return !bfi.entry.Mode.IsFile()
 }
 
-func (bfi *browserFileInfo) Sys() interface{} {
+func (bfi *browserFileInfo) Sys() any {
 	return nil
 }

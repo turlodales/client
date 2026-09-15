@@ -5,6 +5,7 @@
 package libkbfs
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -22,7 +23,6 @@ import (
 	"github.com/keybase/client/go/protocol/keybase1"
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/storage"
-	"golang.org/x/net/context"
 )
 
 const (
@@ -198,7 +198,7 @@ func (f *Favorites) readCacheFromDisk(ctx context.Context) error {
 	}
 	user := []byte(string(session.UID))
 	data, err := db.Get(user, nil)
-	if err == leveldb.ErrNotFound {
+	if errors.Is(err, leveldb.ErrNotFound) {
 		f.log.CInfof(ctx, "No favorites cache found for user %v", user)
 		return nil
 	} else if err != nil {
@@ -212,8 +212,10 @@ func (f *Favorites) readCacheFromDisk(ctx context.Context) error {
 		return err
 	}
 	if decodedData.Version != favoritesDiskCacheStorageVersion {
-		return errIncorrectFavoritesCacheVersion{cache: "serialized",
-			version: decodedData.Version}
+		return errIncorrectFavoritesCacheVersion{
+			cache:   "serialized",
+			version: decodedData.Version,
+		}
 	}
 
 	// Send the data to the service to be decrypted
@@ -230,8 +232,10 @@ func (f *Favorites) readCacheFromDisk(ctx context.Context) error {
 		return err
 	}
 	if cacheDecoded.Version != favoritesDiskCacheVersion {
-		return errIncorrectFavoritesCacheVersion{cache: "encrypted",
-			version: decodedData.Version}
+		return errIncorrectFavoritesCacheVersion{
+			cache:   "encrypted",
+			version: decodedData.Version,
+		}
 	}
 
 	f.favCache = cacheDecoded.FavCache
@@ -523,10 +527,13 @@ func (f *Favorites) handleReq(req *favReq) (err error) {
 			}
 			// If we weren't explicitly asked to refresh, we can return possibly
 			// stale favorites rather than return nothing.
-			if err == context.DeadlineExceeded {
-				newCtx, _ := context.WithTimeout(context.Background(),
+			if errors.Is(err, context.DeadlineExceeded) {
+				newCtx, cancel := context.WithTimeout(context.Background(),
 					favoritesBackgroundRefreshTimeout)
-				go f.RefreshCache(newCtx, FavoritesRefreshModeBlocking)
+				go func() {
+					defer cancel()
+					f.RefreshCache(newCtx, FavoritesRefreshModeBlocking)
+				}()
 			}
 			f.log.CDebugf(req.ctx,
 				"Serving possibly stale favorites; new data could not be"+
@@ -731,7 +738,8 @@ func (f *Favorites) Shutdown() error {
 }
 
 func (f *Favorites) waitOnReq(ctx context.Context,
-	req *favReq) (retry bool, err error) {
+	req *favReq,
+) (retry bool, err error) {
 	select {
 	case <-ctx.Done():
 		return false, ctx.Err()
@@ -739,7 +747,7 @@ func (f *Favorites) waitOnReq(ctx context.Context,
 		err = req.err
 		// If the request was canceled due to a context timeout that
 		// wasn't our own, try it again.
-		if err == context.Canceled || err == context.DeadlineExceeded {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			select {
 			case <-ctx.Done():
 				return false, err
@@ -768,7 +776,8 @@ func (f *Favorites) sendReq(ctx context.Context, req *favReq) error {
 }
 
 func (f *Favorites) startOrJoinAddReq(
-	ctx context.Context, fav favorites.ToAdd) (req *favReq, doSend bool) {
+	ctx context.Context, fav favorites.ToAdd,
+) (req *favReq, doSend bool) {
 	f.inFlightLock.Lock()
 	defer f.inFlightLock.Unlock()
 	req, ok := f.inFlightAdds[fav.Folder]
@@ -944,7 +953,8 @@ func (f *Favorites) RefreshCache(ctx context.Context, mode FavoritesRefreshMode)
 // triggered a refresh, then we just ignore the refresh since it won't
 // materially change the order of the favorites by mtime.
 func (f *Favorites) RefreshCacheWhenMTimeChanged(
-	ctx context.Context, id tlf.ID) {
+	ctx context.Context, id tlf.ID,
+) {
 	f.muShutdown.RLock()
 	defer f.muShutdown.RUnlock()
 	if f.disabled || f.shutdown {
@@ -1005,7 +1015,8 @@ func (f *Favorites) ClearCache(ctx context.Context) {
 // GetFolderWithFavFlags returns the a FolderWithFavFlags for give folder, if found.
 func (f *Favorites) GetFolderWithFavFlags(
 	ctx context.Context, fav favorites.Folder) (
-	folderWithFavFlags *keybase1.FolderWithFavFlags, errr error) {
+	folderWithFavFlags *keybase1.FolderWithFavFlags, errr error,
+) {
 	if f.disabled {
 		return nil, nil
 	}
@@ -1087,7 +1098,8 @@ func (f *Favorites) setHomeTLFInfo(ctx context.Context, info homeTLFInfo) {
 // GetAll returns the logged-in user's list of favorite, new, and ignored TLFs.
 // It uses the cache.
 func (f *Favorites) GetAll(ctx context.Context) (keybase1.FavoritesResult,
-	error) {
+	error,
+) {
 	if f.disabled {
 		session, err := f.config.KBPKI().GetCurrentSession(ctx)
 		if err == nil {

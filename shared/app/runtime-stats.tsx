@@ -1,9 +1,8 @@
-import * as C from '@/constants'
 import * as React from 'react'
 import * as Kb from '@/common-adapters'
-import * as Styles from '@/styles'
-// import {isIPhoneX} from '@/constants/platform'
 import * as T from '@/constants/types'
+import {useConfigState} from '@/stores/config'
+
 const isIPhoneX = false as boolean
 // import lagRadar from 'lag-radar'
 
@@ -13,7 +12,7 @@ type Props = {
 
 const yesNo = (v?: boolean) => (v ? 'YES' : 'NO')
 
-const severityStyle = (s: T.RPCGen.StatsSeverityLevel) => {
+const severityStyle = (s: T.RPCGen.StatsSeverityLevel, styles: ReturnType<typeof useStyles>) => {
   switch (s) {
     case T.RPCGen.StatsSeverityLevel.warning:
       return styles.statWarning
@@ -80,24 +79,27 @@ const dbTypeString = (s: T.RPCGen.DbType) => {
 // and choose a max to show. We use refs a lot since we only want to figure stuff out based on an interval
 // TODO mobile
 const LogStats = (props: {num?: number}) => {
+  const styles = useStyles()
   const {num} = props
   const maxBuckets = num ?? 5
 
-  const bucketsRef = React.useRef<Array<{count: number; label: string; labelFull: string; updated: boolean}>>(
-    []
-  )
+  const [buckets, setBuckets] = React.useState<
+    Array<{count: number; label: string; labelFull: string; updated: boolean}>
+  >([])
   const [, setDoRender] = React.useState(0)
-  const events = C.useConfigState(s => s.runtimeStats?.perfEvents)
+  const events = useConfigState(s => s.runtimeStats?.perfEvents)
   const lastEventsRef = React.useRef(new WeakSet<ReadonlyArray<T.RPCGen.PerfEvent>>())
 
   const eventsRef = React.useRef<Array<T.RPCGen.PerfEvent>>([])
-  if (events) {
-    // only if unprocessed
-    if (!lastEventsRef.current.has(events)) {
-      lastEventsRef.current.add(events)
-      eventsRef.current.push(...events)
+  React.useEffect(() => {
+    if (events) {
+      // only if unprocessed
+      if (!lastEventsRef.current.has(events)) {
+        lastEventsRef.current.add(events)
+        eventsRef.current.push(...events)
+      }
     }
-  }
+  }, [events])
 
   Kb.useInterval(() => {
     const events = eventsRef.current
@@ -128,7 +130,7 @@ const LogStats = (props: {num?: number}) => {
     })
 
     // copy existing buckets
-    let newBuckets = bucketsRef.current.map(b => ({...b, updated: false}))
+    let newBuckets = buckets.map(b => ({...b, updated: false}))
 
     // find existing or add new ones
     incoming.forEach((i, idx) => {
@@ -172,7 +174,7 @@ const LogStats = (props: {num?: number}) => {
     // sort remainder by alpha so things don't move around a lot
     newBuckets = newBuckets.sort((a, b) => a.label.localeCompare(b.label))
 
-    bucketsRef.current = newBuckets
+    setBuckets(newBuckets)
     setDoRender(r => r + 1)
   }, 2000)
 
@@ -181,16 +183,16 @@ const LogStats = (props: {num?: number}) => {
       direction="vertical"
       style={{
         backgroundColor: 'rgba(0,0,0, 0.3)',
-        minHeight: (Styles.isMobile ? 12 : 20) * maxBuckets,
+        minHeight: (isMobile ? 12 : 20) * maxBuckets,
       }}
       fullWidth={true}
     >
-      {!Styles.isMobile && (
+      {!isMobile && (
         <Kb.Text type="BodyTinyBold" style={styles.stat}>
           Logs
         </Kb.Text>
       )}
-      {bucketsRef.current.map((b, i) => (
+      {buckets.map((b, i) => (
         <Kb.Text
           key={i}
           type={b.updated ? 'BodyTinyBold' : 'BodyTiny'}
@@ -206,6 +208,7 @@ const LogStats = (props: {num?: number}) => {
 }
 
 const RuntimeStatsDesktop = ({stats}: Props) => {
+  const styles = useStyles()
   // const [showRadar, setShowRadar] = React.useState(false)
   // const refContainer = React.useCallback(
   //   node => {
@@ -223,10 +226,8 @@ const RuntimeStatsDesktop = ({stats}: Props) => {
   const [moreLogs, setMoreLogs] = React.useState(false)
 
   return (
-    <>
-      <Kb.BoxGrow style={styles.boxGrow}>
-        <Kb.ClickableBox onClick={() => setMoreLogs(m => !m)}>
-          <Kb.Box2 direction="vertical" style={styles.container} gap="xxtiny" fullWidth={true}>
+    <Kb.BoxGrow style={styles.boxGrow}>
+      <Kb.ClickableBox onClick={() => setMoreLogs(m => !m)} direction="vertical" style={styles.container} gap="xxtiny" fullWidth={true}>
             {!moreLogs &&
               stats.processStats?.map((stat, i) => {
                 return (
@@ -235,11 +236,11 @@ const RuntimeStatsDesktop = ({stats}: Props) => {
                       {processTypeString(stat.type)}
                     </Kb.Text>
                     <Kb.Text
-                      style={Styles.collapseStyles([styles.stat, severityStyle(stat.cpuSeverity)])}
+                      style={Kb.Styles.collapseStyles([styles.stat, severityStyle(stat.cpuSeverity, styles)])}
                       type="BodyTiny"
                     >{`CPU: ${stat.cpu}`}</Kb.Text>
                     <Kb.Text
-                      style={Styles.collapseStyles([styles.stat, severityStyle(stat.residentSeverity)])}
+                      style={Kb.Styles.collapseStyles([styles.stat, severityStyle(stat.residentSeverity, styles)])}
                       type="BodyTiny"
                     >{`Res: ${stat.resident}`}</Kb.Text>
                     <Kb.Text style={styles.stat} type="BodyTiny">{`Virt: ${stat.virt}`}</Kb.Text>
@@ -260,7 +261,7 @@ const RuntimeStatsDesktop = ({stats}: Props) => {
             )}
             {!moreLogs && (
               <Kb.Text
-                style={Styles.collapseStyles([
+                style={Kb.Styles.collapseStyles([
                   styles.stat,
                   stats.convLoaderActive ? styles.statWarning : styles.statNormal,
                 ])}
@@ -269,7 +270,7 @@ const RuntimeStatsDesktop = ({stats}: Props) => {
             )}
             {!moreLogs && (
               <Kb.Text
-                style={Styles.collapseStyles([
+                style={Kb.Styles.collapseStyles([
                   styles.stat,
                   stats.selectiveSyncActive ? styles.statWarning : styles.statNormal,
                 ])}
@@ -288,7 +289,7 @@ const RuntimeStatsDesktop = ({stats}: Props) => {
                   <Kb.Box2 direction="vertical" key={`db${i}`} fullWidth={true}>
                     <Kb.Text
                       type="BodyTiny"
-                      style={Styles.collapseStyles([
+                      style={Kb.Styles.collapseStyles([
                         styles.stat,
                         stat.memCompActive || stat.tableCompActive ? styles.statWarning : styles.statNormal,
                       ])}
@@ -302,10 +303,8 @@ const RuntimeStatsDesktop = ({stats}: Props) => {
               <Kb.Box style={styles.radarContainer} forwardedRef={refContainer} onClick={toggleRadar} />
             )*/}
             <LogStats num={moreLogs ? 25 : 5} />
-          </Kb.Box2>
         </Kb.ClickableBox>
-      </Kb.BoxGrow>
-    </>
+    </Kb.BoxGrow>
   )
 }
 
@@ -321,6 +320,7 @@ const kbfsDbs = [
 ]
 
 const RuntimeStatsMobile = ({stats}: Props) => {
+  const styles = useStyles()
   const [showLogs, setShowLogs] = React.useState(true)
   const processStat = stats.processStats?.[0]
   const coreCompaction = compactionActive(stats.dbStats, chatDbs)
@@ -332,7 +332,7 @@ const RuntimeStatsMobile = ({stats}: Props) => {
         style={showLogs ? styles.modalLogStats : styles.modalLogStatsHidden}
         gap="xtiny"
       >
-        <Kb.ClickableBox onClick={() => setShowLogs(s => !s)}>
+        <Kb.ClickableBox onClick={() => setShowLogs(s => !s)} direction="vertical">
           <LogStats />
         </Kb.ClickableBox>
       </Kb.Box2>
@@ -341,11 +341,11 @@ const RuntimeStatsMobile = ({stats}: Props) => {
           <Kb.Box2 direction="vertical">
             <Kb.Box2 direction="horizontal" gap="xxtiny" alignSelf="flex-end">
               <Kb.Text
-                style={Styles.collapseStyles([styles.stat, severityStyle(processStat.cpuSeverity)])}
+                style={Kb.Styles.collapseStyles([styles.stat, severityStyle(processStat.cpuSeverity, styles)])}
                 type="BodyTiny"
               >{`C:${processStat.cpu}`}</Kb.Text>
               <Kb.Text
-                style={Styles.collapseStyles([styles.stat, severityStyle(processStat.residentSeverity)])}
+                style={Kb.Styles.collapseStyles([styles.stat, severityStyle(processStat.residentSeverity, styles)])}
                 type="BodyTiny"
               >{`R:${processStat.resident}`}</Kb.Text>
               <Kb.Text style={styles.stat} type="BodyTiny">{`V:${processStat.virt}`}</Kb.Text>
@@ -360,14 +360,14 @@ const RuntimeStatsMobile = ({stats}: Props) => {
         )}
         <Kb.Box2 direction="vertical">
           <Kb.Text
-            style={Styles.collapseStyles([
+            style={Kb.Styles.collapseStyles([
               styles.stat,
               stats.convLoaderActive ? styles.statWarning : styles.statNormal,
             ])}
             type="BodyTiny"
           >{`CLA: ${yesNo(stats.convLoaderActive)}`}</Kb.Text>
           <Kb.Text
-            style={Styles.collapseStyles([
+            style={Kb.Styles.collapseStyles([
               styles.stat,
               stats.selectiveSyncActive ? styles.statWarning : styles.statNormal,
             ])}
@@ -376,14 +376,14 @@ const RuntimeStatsMobile = ({stats}: Props) => {
         </Kb.Box2>
         <Kb.Box2 direction="vertical">
           <Kb.Text
-            style={Styles.collapseStyles([
+            style={Kb.Styles.collapseStyles([
               styles.stat,
               coreCompaction ? styles.statWarning : styles.statNormal,
             ])}
             type="BodyTiny"
           >{`LC: ${yesNo(coreCompaction)}`}</Kb.Text>
           <Kb.Text
-            style={Styles.collapseStyles([
+            style={Kb.Styles.collapseStyles([
               styles.stat,
               kbfsCompaction ? styles.statWarning : styles.statNormal,
             ])}
@@ -396,9 +396,9 @@ const RuntimeStatsMobile = ({stats}: Props) => {
 }
 
 const RuntimeStats = () => {
-  const stats = C.useConfigState(s => s.runtimeStats)
+  const stats = useConfigState(s => s.runtimeStats)
   return stats ? (
-    Styles.isMobile ? (
+    isMobile ? (
       <RuntimeStatsMobile stats={stats} />
     ) : (
       <RuntimeStatsDesktop stats={stats} />
@@ -406,76 +406,78 @@ const RuntimeStats = () => {
   ) : null
 }
 
-const styles = Styles.styleSheetCreate(() => ({
-  boxGrow: Styles.platformStyles({
-    isElectron: {
-      overflow: 'auto',
-    },
-  }),
-  container: Styles.platformStyles({
-    common: {backgroundColor: Styles.globalColors.blackOrBlack},
-    isElectron: {
-      overflow: 'auto',
-      padding: Styles.globalMargins.tiny,
-      position: 'relative',
-    },
-    isMobile: {
-      bottom: isIPhoneX ? 15 : 0,
-      position: 'absolute',
-      right: isIPhoneX ? 10 : 0,
-    },
-  }),
-  logStat: Styles.platformStyles({
-    common: {color: Styles.globalColors.whiteOrWhite},
-    isElectron: {wordBreak: 'break-all'},
-    isMobile: {
-      fontFamily: 'Courier',
-      fontSize: 12,
-      lineHeight: 16,
-    },
-  }),
-  modalLogStats: {
-    position: 'absolute',
-    right: 0,
-    top: 20,
-    width: 130,
-  },
-  modalLogStatsHidden: {
-    backgroundColor: 'yellow',
-    position: 'absolute',
-    right: 0,
-    top: 20,
-    width: 20,
-  },
-  // radarContainer: Styles.platformStyles({
-  //   isElectron: {
-  //     backgroundColor: Styles.globalColors.white_20,
-  //     borderRadius: '50%',
-  //     height: radarSize,
-  //     position: 'absolute',
-  //     right: Styles.globalMargins.tiny,
-  //     top: Styles.globalMargins.tiny,
-  //     width: radarSize,
-  //   },
-  // }),
-  stat: Styles.platformStyles({
-    common: {color: Styles.globalColors.whiteOrGreenDark},
-    isElectron: {wordBreak: 'break-all'},
-    isMobile: {
-      fontFamily: 'Courier',
-      fontSize: 10,
-      lineHeight: 14,
-    },
-  }),
-  statNormal: {
-    color: Styles.globalColors.whiteOrGreenDark,
-  },
-  statSevere: {
-    color: Styles.globalColors.red,
-  },
-  statWarning: {
-    color: Styles.globalColors.yellowOrYellowAlt,
-  },
-}))
+const useStyles = Kb.Styles.createStyleHook(
+  theme =>
+    ({
+      boxGrow: Kb.Styles.platformStyles({
+        isElectron: {
+          overflow: 'auto',
+        },
+      }),
+      container: Kb.Styles.platformStyles({
+        common: {backgroundColor: theme.blackOrBlack},
+        isElectron: {
+          overflow: 'auto',
+          padding: Kb.Styles.globalMargins.tiny,
+          position: 'relative',
+        },
+        isMobile: {
+          bottom: isIPhoneX ? 15 : 0,
+          position: 'absolute',
+          right: isIPhoneX ? 10 : 0,
+        },
+      }),
+      logStat: Kb.Styles.platformStyles({
+        common: {color: theme.whiteOrWhite},
+        isElectron: {wordBreak: 'break-all'},
+        isMobile: {
+          fontFamily: 'Courier',
+          fontSize: 12,
+          lineHeight: 16,
+        },
+      }),
+      modalLogStats: {
+        position: 'absolute',
+        right: 0,
+        top: 20,
+        width: 130,
+      },
+      modalLogStatsHidden: {
+        backgroundColor: 'yellow',
+        position: 'absolute',
+        right: 0,
+        top: 20,
+        width: 20,
+      },
+      // radarContainer: Kb.Styles.platformStyles({
+      //   isElectron: {
+      //     borderRadius: '50%',
+      //     height: radarSize,
+      //     position: 'absolute',
+      //     right: Kb.Styles.globalMargins.tiny,
+      //     top: Kb.Styles.globalMargins.tiny,
+      //     width: radarSize,
+      //   },
+      // }),
+      stat: Kb.Styles.platformStyles({
+        common: {color: theme.whiteOrGreenDark},
+        isElectron: {wordBreak: 'break-all'},
+        isMobile: {
+          fontFamily: 'Courier',
+          fontSize: 10,
+          lineHeight: 14,
+        },
+      }),
+      statNormal: {
+        color: theme.whiteOrGreenDark,
+      },
+      statSevere: {
+        color: theme.red,
+      },
+      statWarning: {
+        color: theme.yellowOrYellowAlt,
+      },
+    }) as const
+)
 
 export default RuntimeStats

@@ -18,7 +18,6 @@ import (
 	clockwork "github.com/keybase/clockwork"
 	rpc "github.com/keybase/go-framed-msgpack-rpc/rpc"
 	"github.com/stretchr/testify/require"
-	contextOld "golang.org/x/net/context"
 )
 
 // Tests for systests with multiuser, multidevice situations.
@@ -96,7 +95,7 @@ func (d *smuDeviceWrapper) KID() keybase1.KID {
 }
 
 func (d *smuDeviceWrapper) startService(numClones int) {
-	for i := 0; i < numClones; i++ {
+	for range numClones {
 		d.clones = append(d.clones, cloneContext(d.tctx))
 	}
 	d.stopCh = make(chan error)
@@ -121,19 +120,23 @@ func (d *smuDeviceWrapper) clearUPAKCache() {
 
 type smuTerminalUI struct{}
 
-func (t smuTerminalUI) ErrorWriter() io.Writer                                        { return nil }
-func (t smuTerminalUI) Output(string) error                                           { return nil }
-func (t smuTerminalUI) OutputDesc(libkb.OutputDescriptor, string) error               { return nil }
-func (t smuTerminalUI) OutputWriter() io.Writer                                       { return nil }
-func (t smuTerminalUI) UnescapedOutputWriter() io.Writer                              { return nil }
-func (t smuTerminalUI) Printf(fmt string, args ...interface{}) (int, error)           { return 0, nil }
-func (t smuTerminalUI) PrintfUnescaped(fmt string, args ...interface{}) (int, error)  { return 0, nil }
+func (t smuTerminalUI) ErrorWriter() io.Writer                          { return nil }
+func (t smuTerminalUI) Output(string) error                             { return nil }
+func (t smuTerminalUI) OutputDesc(libkb.OutputDescriptor, string) error { return nil }
+func (t smuTerminalUI) OutputWriter() io.Writer                         { return nil }
+func (t smuTerminalUI) UnescapedOutputWriter() io.Writer                { return nil }
+func (t smuTerminalUI) Printf(fmt string, args ...any) (int, error)     { return 0, nil }
+
+func (t smuTerminalUI) PrintfUnescaped(fmt string, args ...any) (int, error) { return 0, nil }
+
 func (t smuTerminalUI) Prompt(libkb.PromptDescriptor, string) (string, error)         { return "", nil }
 func (t smuTerminalUI) PromptForConfirmation(prompt string) error                     { return nil }
 func (t smuTerminalUI) PromptPassword(libkb.PromptDescriptor, string) (string, error) { return "", nil }
+
 func (t smuTerminalUI) PromptPasswordMaybeScripted(libkb.PromptDescriptor, string) (string, error) {
 	return "", nil
 }
+
 func (t smuTerminalUI) PromptYesNo(libkb.PromptDescriptor, string, libkb.PromptDefault) (bool, error) {
 	return false, nil
 }
@@ -161,33 +164,42 @@ type usernameLoginUI struct {
 
 var _ libkb.LoginUI = (*usernameLoginUI)(nil)
 
-func (s usernameLoginUI) GetEmailOrUsername(contextOld.Context, int) (string, error) {
+func (s usernameLoginUI) GetEmailOrUsername(context.Context, int) (string, error) {
 	return s.username, nil
 }
-func (s usernameLoginUI) PromptRevokePaperKeys(contextOld.Context, keybase1.PromptRevokePaperKeysArg) (ret bool, err error) {
+
+func (s usernameLoginUI) PromptRevokePaperKeys(context.Context, keybase1.PromptRevokePaperKeysArg) (ret bool, err error) {
 	return false, nil
 }
-func (s usernameLoginUI) DisplayPaperKeyPhrase(contextOld.Context, keybase1.DisplayPaperKeyPhraseArg) error {
+
+func (s usernameLoginUI) DisplayPaperKeyPhrase(context.Context, keybase1.DisplayPaperKeyPhraseArg) error {
 	return nil
 }
-func (s usernameLoginUI) DisplayPrimaryPaperKey(contextOld.Context, keybase1.DisplayPrimaryPaperKeyArg) error {
+
+func (s usernameLoginUI) DisplayPrimaryPaperKey(context.Context, keybase1.DisplayPrimaryPaperKeyArg) error {
 	return nil
 }
+
 func (s usernameLoginUI) PromptResetAccount(_ context.Context, arg keybase1.PromptResetAccountArg) (keybase1.ResetPromptResponse, error) {
 	return keybase1.ResetPromptResponse_NOTHING, nil
 }
+
 func (s usernameLoginUI) DisplayResetProgress(_ context.Context, arg keybase1.DisplayResetProgressArg) error {
 	return nil
 }
+
 func (s usernameLoginUI) ExplainDeviceRecovery(_ context.Context, arg keybase1.ExplainDeviceRecoveryArg) error {
 	return nil
 }
+
 func (s usernameLoginUI) PromptPassphraseRecovery(_ context.Context, arg keybase1.PromptPassphraseRecoveryArg) (bool, error) {
 	return false, nil
 }
+
 func (s usernameLoginUI) ChooseDeviceToRecoverWith(_ context.Context, arg keybase1.ChooseDeviceToRecoverWithArg) (keybase1.DeviceID, error) {
 	return "", nil
 }
+
 func (s usernameLoginUI) DisplayResetMessage(_ context.Context, arg keybase1.DisplayResetMessageArg) error {
 	return nil
 }
@@ -272,17 +284,14 @@ func (d *smuDeviceWrapper) startClient() {
 	var err error
 	tctx := d.popClone()
 	d.cli, d.xp, err = client.GetRPCClientWithContext(tctx.G)
-	if err != nil {
-		d.ctx.t.Fatal(err)
-	}
+	require.NoError(d.ctx.t, err)
 }
 
 func (d *smuDeviceWrapper) loadEncryptionKIDs() (devices []keybase1.KID, backups []backupKey) {
 	keyMap := make(map[keybase1.KID]keybase1.PublicKey)
 	keys, err := d.userClient().LoadMyPublicKeys(context.TODO(), 0)
-	if err != nil {
-		d.ctx.t.Fatalf("Failed to LoadMyPublicKeys: %s", err)
-	}
+	require.NoError(d.ctx.t, err,
+		"Failed to LoadMyPublicKeys: %s", err)
 	for _, key := range keys {
 		keyMap[key.KID] = key
 	}
@@ -331,20 +340,16 @@ func (u *smuUser) signupHelper(puk, paper bool) {
 	signup := client.NewCmdSignupRunner(g)
 	signup.SetTestWithPaper(paper)
 	if err := signup.Run(); err != nil {
-		ctx.t.Fatal(err)
+		require.NoError(ctx.t, err)
 	}
 	ctx.t.Logf("signed up %s", userInfo.username)
 	u.username = userInfo.username
 	var backupKey backupKey
 	devices, backups := dw.loadEncryptionKIDs()
-	if len(devices) != 1 {
-		ctx.t.Fatalf("Expected 1 device back; got %d", len(devices))
-	}
+	require.Len(ctx.t, devices, 1, "Expected 1 device back; got %d", len(devices))
 	dw.deviceKey.KID = devices[0]
 	if paper {
-		if len(backups) != 1 {
-			ctx.t.Fatalf("Expected 1 backup back; got %d", len(backups))
-		}
+		require.Len(ctx.t, backups, 1, "Expected 1 backup back; got %d", len(backups))
 		backupKey = backups[0]
 		backupKey.secret = signupUI.info.displayedPaperKey
 		u.backupKeys = append(u.backupKeys, backupKey)
@@ -386,11 +391,11 @@ func (u *smuUser) registerForNotifications() {
 	u.notifications = newTeamNotifyHandler()
 	srv := rpc.NewServer(u.primaryDevice().transport(), nil)
 	if err := srv.Register(keybase1.NotifyTeamProtocol(u.notifications)); err != nil {
-		u.ctx.t.Fatal(err)
+		require.NoError(u.ctx.t, err)
 	}
 	ncli := keybase1.NotifyCtlClient{Cli: u.primaryDevice().rpcClient()}
 	if err := ncli.SetNotifications(context.TODO(), keybase1.NotificationChannels{Team: true}); err != nil {
-		u.ctx.t.Fatal(err)
+		require.NoError(u.ctx.t, err)
 	}
 }
 
@@ -399,7 +404,7 @@ func (u *smuUser) waitForNewlyAddedToTeamByID(teamID keybase1.TeamID) {
 	u.ctx.t.Logf("waiting for newly added to team %s", teamID)
 
 	// process 10 team rotations or 10s worth of time
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		select {
 		case tid := <-u.notifications.newlyAddedToTeam:
 			u.ctx.t.Logf("team newly added notification received: %v", tid)
@@ -411,14 +416,14 @@ func (u *smuUser) waitForNewlyAddedToTeamByID(teamID keybase1.TeamID) {
 		case <-time.After(1 * time.Second * libkb.CITimeMultiplier(u.getPrimaryGlobalContext())):
 		}
 	}
-	u.ctx.t.Fatalf("timed out waiting for team newly added %s", teamID)
+	require.FailNow(u.ctx.t, fmt.Sprintf("timed out waiting for team newly added %s", teamID))
 }
 
 func (u *smuUser) waitForTeamAbandoned(teamID keybase1.TeamID) {
 	u.ctx.t.Logf("waiting for team abandoned %s", teamID)
 
 	// process 10 team rotations or 10s worth of time
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		select {
 		case abandonID := <-u.notifications.abandonCh:
 			u.ctx.t.Logf("team abandon notification received: %v", abandonID)
@@ -430,7 +435,7 @@ func (u *smuUser) waitForTeamAbandoned(teamID keybase1.TeamID) {
 		case <-time.After(1 * time.Second * libkb.CITimeMultiplier(u.getPrimaryGlobalContext())):
 		}
 	}
-	u.ctx.t.Fatalf("timed out waiting for team abandon %s", teamID)
+	require.FailNow(u.ctx.t, fmt.Sprintf("timed out waiting for team abandon %s", teamID))
 }
 
 func (u *smuUser) getTeamsClient() keybase1.TeamsClient {
@@ -438,16 +443,15 @@ func (u *smuUser) getTeamsClient() keybase1.TeamsClient {
 }
 
 func (u *smuUser) pollForMembershipUpdate(team smuTeam, keyGen keybase1.PerTeamKeyGeneration,
-	poller func(d keybase1.TeamDetails) bool) keybase1.TeamDetails {
+	poller func(d keybase1.TeamDetails) bool,
+) keybase1.TeamDetails {
 	wait := 100 * time.Millisecond
 	var totalWait time.Duration
 	i := 0
 	for {
 		cli := u.getTeamsClient()
 		details, err := cli.TeamGet(context.TODO(), keybase1.TeamGetArg{Name: team.name})
-		if err != nil {
-			u.ctx.t.Fatal(err)
-		}
+		require.NoError(u.ctx.t, err)
 		// If the caller specified a "poller" that means we should keep polling until
 		// the predicate turns true
 		if details.KeyGeneration == keyGen && (poller == nil || poller(details)) {
@@ -471,14 +475,13 @@ func (u *smuUser) pollForMembershipUpdate(team smuTeam, keyGen keybase1.PerTeamK
 }
 
 func (u *smuUser) pollForTeamSeqnoLink(team smuTeam, toSeqno keybase1.Seqno) {
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		details, err := teams.Load(context.TODO(), u.getPrimaryGlobalContext(), keybase1.LoadTeamArg{
 			Name:        team.name,
 			ForceRepoll: true,
 		})
-		if err != nil {
-			u.ctx.t.Fatalf("error while loading team %q: %v", team.name, err)
-		}
+		require.NoError(u.ctx.t, err,
+			"error while loading team %q: %v", team.name, err)
 
 		if details.CurrentSeqno() >= toSeqno {
 			u.ctx.t.Logf("Found new seqno %d at poll loop iter %d", details.CurrentSeqno(), i)
@@ -488,7 +491,7 @@ func (u *smuUser) pollForTeamSeqnoLink(team smuTeam, toSeqno keybase1.Seqno) {
 		time.Sleep(500 * time.Millisecond)
 	}
 
-	u.ctx.t.Fatalf("timed out waiting for team %s seqno link %d", team, toSeqno)
+	require.FailNow(u.ctx.t, fmt.Sprintf("timed out waiting for team %s seqno link %d", team, toSeqno))
 }
 
 func (u *smuUser) createTeam(writers []*smuUser) smuTeam {
@@ -503,8 +506,10 @@ func (u *smuUser) createTeam2(readers, writers, admins, owners []*smuUser) smuTe
 	x, err := cli.TeamCreate(context.TODO(), keybase1.TeamCreateArg{Name: nameK1.String()})
 	require.NoError(u.ctx.t, err)
 	lists := [][]*smuUser{readers, writers, admins, owners}
-	roles := []keybase1.TeamRole{keybase1.TeamRole_READER,
-		keybase1.TeamRole_WRITER, keybase1.TeamRole_ADMIN, keybase1.TeamRole_OWNER}
+	roles := []keybase1.TeamRole{
+		keybase1.TeamRole_READER,
+		keybase1.TeamRole_WRITER, keybase1.TeamRole_ADMIN, keybase1.TeamRole_OWNER,
+	}
 	for i, list := range lists {
 		for _, u2 := range list {
 			_, err = cli.TeamAddMember(context.TODO(), keybase1.TeamAddMemberArg{
@@ -527,9 +532,7 @@ func (u *smuUser) lookupImplicitTeam(create bool, displayName string, public boo
 	} else {
 		res, err = cli.LookupImplicitTeam(context.TODO(), keybase1.LookupImplicitTeamArg{Name: displayName, Public: public})
 	}
-	if err != nil {
-		u.ctx.t.Fatal(err)
-	}
+	require.NoError(u.ctx.t, err)
 	return smuImplicitTeam{ID: res.TeamID}
 }
 
@@ -588,9 +591,7 @@ func (u *smuUser) reset() {
 	g.SetUI(&ui)
 	cmd := client.NewCmdAccountResetRunner(g)
 	err := cmd.Run()
-	if err != nil {
-		u.ctx.t.Fatal(err)
-	}
+	require.NoError(u.ctx.t, err)
 }
 
 func (u *smuUser) delete() {
@@ -603,9 +604,7 @@ func (u *smuUser) delete() {
 	g.SetUI(&ui)
 	cmd := client.NewCmdAccountDeleteRunner(g)
 	err := cmd.Run()
-	if err != nil {
-		u.ctx.t.Fatal(err)
-	}
+	require.NoError(u.ctx.t, err)
 }
 
 func (u *smuUser) dbNuke() {
@@ -734,9 +733,7 @@ func (u *smuUser) openTeam(team smuTeam, role keybase1.TeamRole) {
 			JoinAs: role,
 		},
 	})
-	if err != nil {
-		u.ctx.t.Fatal(err)
-	}
+	require.NoError(u.ctx.t, err)
 }
 
 func (u *smuUser) requestAccess(team smuTeam) {
@@ -744,9 +741,7 @@ func (u *smuUser) requestAccess(team smuTeam) {
 	_, err := cli.TeamRequestAccess(context.Background(), keybase1.TeamRequestAccessArg{
 		Name: team.name,
 	})
-	if err != nil {
-		u.ctx.t.Fatal(err)
-	}
+	require.NoError(u.ctx.t, err)
 }
 
 func (u *smuUser) readChatsWithError(team smuTeam) (messages []chat1.MessageUnboxed, err error) {
@@ -829,7 +824,5 @@ func (u *smuUser) sendChat(t smuTeam, msg string) {
 	runner.SetTeamChatForTest(t.name)
 	runner.SetMessage(msg)
 	err := runner.Run()
-	if err != nil {
-		u.ctx.t.Fatal(err)
-	}
+	require.NoError(u.ctx.t, err)
 }

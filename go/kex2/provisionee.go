@@ -4,12 +4,13 @@
 package kex2
 
 import (
+	"context"
+	"errors"
 	"io"
 	"time"
 
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 	"github.com/keybase/go-framed-msgpack-rpc/rpc"
-	"golang.org/x/net/context"
 )
 
 type provisionee struct {
@@ -103,7 +104,6 @@ func (p *provisionee) DidCounterSign2(ctx context.Context, arg keybase1.DidCount
 }
 
 func (p *provisionee) run() (err error) {
-
 	if err = p.setDeviceID(); err != nil {
 		return err
 	}
@@ -132,7 +132,7 @@ func (p *provisionee) run() (err error) {
 	go func() {
 		<-p.serverDoneCh
 		tmp := p.server.Err()
-		if tmp != nil && tmp != io.EOF {
+		if tmp != nil && !errors.Is(tmp, io.EOF) {
 			p.debug("provisionee#run: RPC server died with an error: %s", tmp.Error())
 		}
 	}()
@@ -142,7 +142,7 @@ func (p *provisionee) run() (err error) {
 	return <-p.done
 }
 
-func (p *provisionee) debug(fmtString string, args ...interface{}) {
+func (p *provisionee) debug(fmtString string, args ...any) {
 	if p.arg.LogCtx != nil {
 		p.arg.LogCtx.Debug(fmtString, args...)
 	}
@@ -171,7 +171,6 @@ func (p *provisionee) startServer(s Secret) (err error) {
 }
 
 func (p *provisionee) pickFirstConnection() (err error) {
-
 	select {
 	case <-p.start:
 	case sec := <-p.arg.SecretChannel:
@@ -184,7 +183,8 @@ func (p *provisionee) pickFirstConnection() (err error) {
 			return err
 		}
 		cli := keybase1.Kex2ProvisionerClient{
-			Cli: rpc.NewClient(p.xp, nil, nil)}
+			Cli: rpc.NewClient(p.xp, nil, nil),
+		}
 		if err = cli.KexStart(p.arg.Ctx); err != nil {
 			return err
 		}

@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
+	billy "github.com/go-git/go-billy/v5"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/pkg/errors"
-	billy "gopkg.in/src-d/go-billy.v4"
-	"gopkg.in/src-d/go-git.v4/plumbing/object"
 )
 
 const (
@@ -30,7 +30,8 @@ var _ billy.File = (*diffFile)(nil)
 
 func newDiffFile(
 	ctx context.Context, from, to *object.Commit, header, name string) (
-	*diffFile, error) {
+	*diffFile, error,
+) {
 	s := header
 	patch, err := from.PatchContext(ctx, to)
 	if err != nil {
@@ -65,7 +66,7 @@ func (df *diffFile) Read(p []byte) (n int, err error) {
 
 func (df *diffFile) ReadAt(p []byte, off int64) (n int, err error) {
 	n, err = df.r.ReadAt(p, off)
-	if err == io.EOF {
+	if errors.Is(err, io.EOF) {
 		if n == 0 {
 			// The billy interface only likes EOFs when no data was read.
 			return 0, err
@@ -105,7 +106,8 @@ func (df *diffFile) GetInfo() *diffFileInfo {
 }
 
 func newCommitFile(
-	ctx context.Context, commit *object.Commit) (*diffFile, error) {
+	ctx context.Context, commit *object.Commit,
+) (*diffFile, error) {
 	header := commit.String()
 	name := AutogitCommitPrefix + commit.Hash.String()
 	// We can't get the patch for the initial commit, go-git doesn't

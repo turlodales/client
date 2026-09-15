@@ -53,8 +53,7 @@ type mdIDJournalEntry struct {
 }
 
 func makeMdIDJournal(codec kbfscodec.Codec, dir string) (mdIDJournal, error) {
-	j, err :=
-		makeDiskJournal(codec, dir, reflect.TypeOf(mdIDJournalEntry{}))
+	j, err := makeDiskJournal(codec, dir, reflect.TypeFor[mdIDJournalEntry]())
 	if err != nil {
 		return mdIDJournal{}, err
 	}
@@ -62,7 +61,7 @@ func makeMdIDJournal(codec kbfscodec.Codec, dir string) (mdIDJournal, error) {
 }
 
 func ordinalToRevision(o journalOrdinal) (kbfsmd.Revision, error) {
-	r := kbfsmd.Revision(o)
+	r := kbfsmd.Revision(o) //nolint:gosec // G115: Journal ordinals bounded by journal length and always positive
 	if r < kbfsmd.RevisionInitial {
 		return kbfsmd.RevisionUninitialized, errors.Errorf(
 			"Cannot convert ordinal %s to a kbfsmd.Revision", o)
@@ -75,7 +74,7 @@ func revisionToOrdinal(r kbfsmd.Revision) (journalOrdinal, error) {
 		return journalOrdinal(0), errors.Errorf(
 			"Cannot convert revision %s to an ordinal", r)
 	}
-	return journalOrdinal(r), nil
+	return journalOrdinal(r), nil //nolint:gosec // G115: Journal ordinals bounded by journal length
 }
 
 // TODO: Consider caching the values returned by the read functions
@@ -110,7 +109,8 @@ func (j mdIDJournal) writeLatestRevision(r kbfsmd.Revision) error {
 }
 
 func (j mdIDJournal) readJournalEntry(r kbfsmd.Revision) (
-	mdIDJournalEntry, error) {
+	mdIDJournalEntry, error,
+) {
 	o, err := revisionToOrdinal(r)
 	if err != nil {
 		return mdIDJournalEntry{}, err
@@ -142,7 +142,8 @@ func (j mdIDJournal) end() (kbfsmd.Revision, error) {
 }
 
 func (j mdIDJournal) getEarliestEntry() (
-	entry mdIDJournalEntry, exists bool, err error) {
+	entry mdIDJournalEntry, exists bool, err error,
+) {
 	earliestRevision, err := j.readEarliestRevision()
 	if err != nil {
 		return mdIDJournalEntry{}, false, err
@@ -157,7 +158,8 @@ func (j mdIDJournal) getEarliestEntry() (
 }
 
 func (j mdIDJournal) getLatestEntry() (
-	entry mdIDJournalEntry, exists bool, err error) {
+	entry mdIDJournalEntry, exists bool, err error,
+) {
 	latestRevision, err := j.readLatestRevision()
 	if err != nil {
 		return mdIDJournalEntry{}, false, err
@@ -172,7 +174,8 @@ func (j mdIDJournal) getLatestEntry() (
 }
 
 func (j mdIDJournal) getEntryRange(start, stop kbfsmd.Revision) (
-	kbfsmd.Revision, []mdIDJournalEntry, error) {
+	kbfsmd.Revision, []mdIDJournalEntry, error,
+) {
 	earliestRevision, err := j.readEarliestRevision()
 	if err != nil {
 		return kbfsmd.RevisionUninitialized, nil, err

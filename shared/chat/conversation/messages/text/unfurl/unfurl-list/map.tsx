@@ -3,66 +3,41 @@ import * as Kb from '@/common-adapters/index'
 import * as T from '@/constants/types'
 import * as React from 'react'
 import UnfurlImage from './image'
-import {OrdinalContext} from '@/chat/conversation/messages/ids-context'
 import {formatDurationForLocation} from '@/util/timestamp'
-import {getUnfurlInfo} from './use-state'
 import {maxWidth} from '@/chat/conversation/messages/attachment/shared'
 
-const UnfurlMap = React.memo(function UnfurlGeneric(p: {idx: number}) {
-  const {idx} = p
-  const ordinal = React.useContext(OrdinalContext)
-  const navigateAppend = C.useRouterState(s => s.dispatch.navigateAppend)
-
-  const data = C.useChatContext(
-    C.useShallow(s => {
-      const {unfurl, youAreAuthor, author} = getUnfurlInfo(s, ordinal, idx)
-      if (unfurl?.unfurlType !== T.RPCChat.UnfurlType.generic) {
-        return null
-      }
-      const {generic} = unfurl
-      const {mapInfo, media, url} = generic
-      const {coord, isLiveLocationDone, liveLocationEndTime, time} = mapInfo || {
-        coord: {accuracy: 0, lat: 0, lon: 0},
-        isLiveLocationDone: false,
-        liveLocationEndTime: 0,
-        time: 0,
-      }
-      const {height, width, url: imageURL} = media || {height: 0, url: '', width: 0}
-      const {id} = s
-
-      return {
-        author,
-        coord,
-        height,
-        id,
-        imageURL,
-        isLiveLocationDone,
-        liveLocationEndTime,
-        time,
-        url,
-        width,
-        youAreAuthor,
-      }
-    })
-  )
-
-  if (!data) {
+function UnfurlMap(p: {
+  author: string
+  conversationIDKey: T.Chat.ConversationIDKey
+  ordinal: T.Chat.Ordinal
+  unfurlInfo: T.RPCChat.UIMessageUnfurlInfo
+  youAreAuthor: boolean
+}) {
+  const styles = useStyles()
+  const {author, conversationIDKey, unfurlInfo, youAreAuthor} = p
+  const navigateAppend = C.Router2.navigateAppend
+  const {unfurl} = unfurlInfo
+  if (unfurl.unfurlType !== T.RPCChat.UnfurlType.generic) {
     return null
   }
-
-  const {author, url, coord, isLiveLocationDone, liveLocationEndTime} = data
-  const {height, width, imageURL, youAreAuthor, time, id} = data
+  const {generic} = unfurl
+  const {mapInfo, media, url} = generic
+  if (!mapInfo) {
+    return null
+  }
+  const {coord, isLiveLocationDone, liveLocationEndTime, time} = mapInfo
+  const {height, width, url: imageURL} = media || {height: 0, url: '', width: 0}
   const onViewMap = () => {
     navigateAppend({
-      props: {
+      name: 'chatUnfurlMapPopup',
+      params: {
         author,
-        conversationIDKey: id,
+        conversationIDKey,
         coord,
         isAuthor: youAreAuthor,
         isLiveLocation: !!liveLocationEndTime && !isLiveLocationDone,
         url,
       },
-      selected: 'chatUnfurlMapPopup',
     })
   }
 
@@ -93,15 +68,16 @@ const UnfurlMap = React.memo(function UnfurlGeneric(p: {idx: number}) {
       )}
     </Kb.Box2>
   )
-})
+}
 
 type AgeProps = {
   time: number
 }
 
 const UpdateAge = (props: AgeProps) => {
+  const styles = useStyles()
   const {time} = props
-  const [duration, setDuration] = React.useState(Date.now() - time)
+  const [duration, setDuration] = React.useState(() => Date.now() - time)
   React.useEffect(() => {
     const timer = setInterval(() => {
       setDuration(Date.now() - time)
@@ -110,7 +86,7 @@ const UpdateAge = (props: AgeProps) => {
       clearInterval(timer)
     }
   }, [time])
-  let durationText = ''
+  let durationText: string
   if (duration < 60000) {
     durationText = 'updated just now'
   } else if (duration > 14400000) {
@@ -131,8 +107,9 @@ type DurationProps = {
 }
 
 const LiveDuration = (props: DurationProps) => {
+  const styles = useStyles()
   const {liveLocationEndTime} = props
-  const [duration, setDuration] = React.useState(liveLocationEndTime - Date.now())
+  const [duration, setDuration] = React.useState(() => liveLocationEndTime - Date.now())
   React.useEffect(() => {
     const timer = setInterval(() => {
       setDuration(liveLocationEndTime - Date.now())
@@ -149,12 +126,12 @@ const LiveDuration = (props: DurationProps) => {
   )
 }
 
-const styles = Kb.Styles.styleSheetCreate(
-  () =>
+const useStyles = Kb.Styles.createStyleHook(
+  theme =>
     ({
-      fastStyle: {backgroundColor: Kb.Styles.globalColors.blueGrey},
+      fastStyle: {backgroundColor: theme.blueGrey},
       liveLocation: {
-        backgroundColor: Kb.Styles.globalColors.blueGrey,
+        backgroundColor: theme.blueGrey,
         borderBottomLeftRadius: Kb.Styles.borderRadius,
         borderBottomRightRadius: Kb.Styles.borderRadius,
         justifyContent: 'space-between',

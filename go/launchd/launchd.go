@@ -2,7 +2,6 @@
 // this source code is governed by the included BSD license.
 
 //go:build darwin
-// +build darwin
 
 package launchd
 
@@ -10,7 +9,6 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-
 	"os"
 	"os/exec"
 	"os/user"
@@ -145,7 +143,7 @@ func exitStatus(err error) int {
 // If false, nil is returned it means there was nothing to stop.
 func (s Service) Stop(wait time.Duration) (bool, error) {
 	// We stop by removing the job. This works for non-demand and demand jobs.
-	output, err := exec.Command("/bin/launchctl", "remove", s.label).CombinedOutput()
+	output, err := exec.Command("/bin/launchctl", "remove", s.label).CombinedOutput() //nolint:gosec // G204: launchctl with service label from config
 	s.log.Debug("Output (launchctl remove): %s", string(output))
 	if err != nil {
 		exitStatus := exitStatus(err)
@@ -334,7 +332,7 @@ func (s Service) savePlist(p Plist) error {
 	plist := p.plistXML()
 
 	s.log.Info("Saving %s", plistDest)
-	file := libkb.NewFile(plistDest, []byte(plist), 0644)
+	file := libkb.NewFile(plistDest, []byte(plist), 0o644)
 	return file.Save(s.log)
 }
 
@@ -609,7 +607,7 @@ func (p Plist) Env() []string {
 }
 
 func (p Plist) FallbackCommand() *exec.Cmd {
-	cmd := exec.Command(p.binPath, p.args...)
+	cmd := exec.Command(p.binPath, p.args...) //nolint:gosec // G204: Binary path and args from plist config for launchd fallback
 	cmd.Env = append(os.Environ(), p.Env()...)
 	return cmd
 }
@@ -681,16 +679,16 @@ func (p Plist) plistXML() string {
 
 // Log is the logging interface for this package
 type Log interface {
-	Debug(s string, args ...interface{})
-	Info(s string, args ...interface{})
-	Errorf(s string, args ...interface{})
+	Debug(s string, args ...any)
+	Info(s string, args ...any)
+	Errorf(s string, args ...any)
 }
 
 type emptyLog struct{}
 
-func (l emptyLog) Debug(s string, args ...interface{})  {}
-func (l emptyLog) Info(s string, args ...interface{})   {}
-func (l emptyLog) Errorf(s string, args ...interface{}) {}
+func (l emptyLog) Debug(s string, args ...any)  {}
+func (l emptyLog) Info(s string, args ...any)   {}
+func (l emptyLog) Errorf(s string, args ...any) {}
 
 func writable(path string) bool {
 	return unix.Access(path, unix.W_OK) == nil
@@ -701,5 +699,5 @@ func otherWritable(path string) bool {
 	if err != nil {
 		return false
 	}
-	return (fi.Mode() & 0002) != 0
+	return (fi.Mode() & 0o002) != 0
 }

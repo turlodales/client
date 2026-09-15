@@ -5,6 +5,7 @@
 package data
 
 import (
+	"maps"
 	"sync"
 	"testing"
 
@@ -120,21 +121,19 @@ func (dbf *dirBlockFuture) NewEmpty() Block {
 func (dbf *dirBlockFuture) Set(other Block) {
 	otherDbf := other.(*dirBlockFuture)
 	childrenCopy := make(map[string]dirEntryFuture, len(otherDbf.Children))
-	for k, v := range otherDbf.Children {
-		childrenCopy[k] = v
-	}
+	maps.Copy(childrenCopy, otherDbf.Children)
 	ptrsCopy := make([]indirectDirPtrFuture, len(otherDbf.IPtrs))
 	copy(ptrsCopy, otherDbf.IPtrs)
 	dbf.Children = childrenCopy
 	dbf.IPtrs = ptrsCopy
-	dbf.CommonBlock.IsInd = otherDbf.IsInd
-	dbf.CommonBlock.UnknownFieldSetHandler = otherDbf.UnknownFieldSetHandler
-	dbf.CommonBlock.SetEncodedSize(otherDbf.GetEncodedSize())
+	dbf.IsInd = otherDbf.IsInd
+	dbf.UnknownFieldSetHandler = otherDbf.UnknownFieldSetHandler
+	dbf.SetEncodedSize(otherDbf.GetEncodedSize())
 }
 
 func (dbf *dirBlockFuture) toCurrent() *dirBlockCurrent {
 	db := &dirBlockCurrent{
-		CommonBlock: dbf.CommonBlock.DeepCopy(),
+		CommonBlock: dbf.DeepCopy(),
 	}
 	db.Children = make(map[string]DirEntry, len(dbf.Children))
 	for k, v := range dbf.Children {
@@ -196,14 +195,14 @@ func (fbf *fileBlockFuture) Set(other Block) {
 	copy(fbf.Contents, otherFbf.Contents)
 	fbf.IPtrs = make([]indirectFilePtrFuture, len(otherFbf.IPtrs))
 	copy(fbf.IPtrs, otherFbf.IPtrs)
-	fbf.CommonBlock.IsInd = otherFbf.IsInd
-	fbf.CommonBlock.UnknownFieldSetHandler = otherFbf.UnknownFieldSetHandler
-	fbf.CommonBlock.SetEncodedSize(otherFbf.GetEncodedSize())
+	fbf.IsInd = otherFbf.IsInd
+	fbf.UnknownFieldSetHandler = otherFbf.UnknownFieldSetHandler
+	fbf.SetEncodedSize(otherFbf.GetEncodedSize())
 }
 
 func (fbf *fileBlockFuture) toCurrent() *fileBlockCurrent {
 	fb := &fileBlockCurrent{
-		CommonBlock: fbf.CommonBlock.DeepCopy(),
+		CommonBlock: fbf.DeepCopy(),
 		hash:        fbf.hash,
 	}
 	fb.IPtrs = make([]IndirectFilePtr, len(fbf.IPtrs))

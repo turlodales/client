@@ -5,6 +5,7 @@
 package libkbfs
 
 import (
+	"context"
 	"reflect"
 	"sync"
 	"time"
@@ -13,7 +14,6 @@ import (
 	"github.com/keybase/client/go/kbfs/tlf"
 	kbname "github.com/keybase/client/go/kbun"
 	"github.com/keybase/client/go/protocol/keybase1"
-	"golang.org/x/net/context"
 )
 
 // FolderBranchStatus is a simple data structure describing the
@@ -73,8 +73,8 @@ type KBFSStatus struct {
 	FailingServices      map[string]error
 	JournalManager       *JournalManagerStatus           `json:",omitempty"`
 	DiskBlockCacheStatus map[string]DiskBlockCacheStatus `json:",omitempty"`
-	DiskMDCacheStatus    DiskMDCacheStatus               `json:",omitempty"`
-	DiskQuotaCacheStatus DiskQuotaCacheStatus            `json:",omitempty"`
+	DiskMDCacheStatus    DiskMDCacheStatus
+	DiskQuotaCacheStatus DiskQuotaCacheStatus
 }
 
 // StatusUpdate is a dummy type used to indicate status has been updated.
@@ -102,7 +102,8 @@ type folderBranchStatusKeeper struct {
 
 func newFolderBranchStatusKeeper(
 	config Config, nodeCache NodeCache,
-	fboIDBytes []byte) *folderBranchStatusKeeper {
+	fboIDBytes []byte,
+) *folderBranchStatusKeeper {
 	return &folderBranchStatusKeeper{
 		config:     config,
 		nodeCache:  nodeCache,
@@ -133,7 +134,8 @@ func (fbsk *folderBranchStatusKeeper) setRootMetadata(md ImmutableRootMetadata) 
 }
 
 func (fbsk *folderBranchStatusKeeper) setCRSummary(unmerged []*crChainSummary,
-	merged []*crChainSummary) {
+	merged []*crChainSummary,
+) {
 	fbsk.dataMutex.Lock()
 	defer fbsk.dataMutex.Unlock()
 	if reflect.DeepEqual(unmerged, fbsk.unmerged) &&
@@ -188,7 +190,8 @@ func (fbsk *folderBranchStatusKeeper) rmDirtyNode(n Node) bool {
 
 // dataMutex should be taken by the caller
 func (fbsk *folderBranchStatusKeeper) convertNodesToPathsLocked(
-	m map[NodeID]Node) []string {
+	m map[NodeID]Node,
+) []string {
 	var ret []string
 	for _, n := range m {
 		ret = append(ret, fbsk.nodeCache.PathFromNode(n).String())
@@ -198,7 +201,8 @@ func (fbsk *folderBranchStatusKeeper) convertNodesToPathsLocked(
 
 func (fbsk *folderBranchStatusKeeper) getStatusWithoutJournaling(
 	ctx context.Context) (
-	FolderBranchStatus, <-chan StatusUpdate, tlf.ID, error) {
+	FolderBranchStatus, <-chan StatusUpdate, tlf.ID, error,
+) {
 	fbsk.dataMutex.Lock()
 	defer fbsk.dataMutex.Unlock()
 	fbsk.updateMutex.Lock()
@@ -229,7 +233,7 @@ func (fbsk *folderBranchStatusKeeper) getStatusWithoutJournaling(
 		prefetchStatus := fbsk.config.PrefetchStatus(ctx, fbsk.md.TlfID(),
 			fbsk.md.Data().Dir.BlockPointer)
 		fbs.PrefetchStatus = prefetchStatus.String()
-		fbs.RootBlockID = fbsk.md.Data().Dir.BlockPointer.ID.String()
+		fbs.RootBlockID = fbsk.md.Data().Dir.ID.String()
 		fbs.LocalTimestamp = fbsk.md.localTimestamp
 
 		chargedTo, err := chargedToForTLF(
@@ -240,9 +244,8 @@ func (fbsk *folderBranchStatusKeeper) getStatusWithoutJournaling(
 		}
 		qu := fbsk.config.GetQuotaUsage(chargedTo)
 		_, usageBytes, archiveBytes, limitBytes,
-			gitUsageBytes, gitArchiveBytes, gitLimitBytes, quErr :=
-			qu.GetAllTypes(
-				ctx, quotaUsageStaleTolerance/2, quotaUsageStaleTolerance)
+			gitUsageBytes, gitArchiveBytes, gitLimitBytes, quErr := qu.GetAllTypes(
+			ctx, quotaUsageStaleTolerance/2, quotaUsageStaleTolerance)
 		if quErr != nil {
 			// The error is ignored here so that other fields can
 			// still be populated even if this fails.
@@ -290,7 +293,8 @@ func (fbsk *folderBranchStatusKeeper) getStatusWithoutJournaling(
 // channel is closed whenever the status changes, except for journal
 // status changes.
 func (fbsk *folderBranchStatusKeeper) getStatus(ctx context.Context,
-	blocks *folderBlockOps) (FolderBranchStatus, <-chan StatusUpdate, error) {
+	blocks *folderBlockOps,
+) (FolderBranchStatus, <-chan StatusUpdate, error) {
 	fbs, ch, tlfID, err := fbsk.getStatusWithoutJournaling(ctx)
 	if err != nil {
 		return FolderBranchStatus{}, nil, err

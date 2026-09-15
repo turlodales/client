@@ -24,8 +24,10 @@ const (
 	ExitAllOnSuccess ExitOn = "all"
 )
 
-const terminationDelay = 200 * time.Millisecond
-const heartbealDelay = 1 * time.Hour
+const (
+	terminationDelay = 200 * time.Millisecond
+	heartbealDelay   = 1 * time.Hour
+)
 
 // Program is a program at path with arguments
 type Program struct {
@@ -38,10 +40,10 @@ type Program struct {
 
 // Log is the logging interface for the watchdog package
 type Log interface {
-	Debugf(s string, args ...interface{})
-	Infof(s string, args ...interface{})
-	Warningf(s string, args ...interface{})
-	Errorf(s string, args ...interface{})
+	Debugf(s string, args ...any)
+	Infof(s string, args ...any)
+	Warningf(s string, args ...any)
+	Errorf(s string, args ...any)
 }
 
 type Watchdog struct {
@@ -95,9 +97,9 @@ func (p *Program) dieIfRunning(log Log) bool {
 	return false
 }
 
-func (p *Program) Run(log Log, shutdownCh chan struct{}) (err error) {
+func (p *Program) Run(log Log, _ chan struct{}) (err error) {
 	p.dieIfRunning(log)
-	cmd := exec.Command(p.Path, p.Args...)
+	cmd := exec.Command(p.Path, p.Args...) //nolint:gosec // G204: Path/Args are keybase binary paths from config, used for process monitoring
 	if err = cmd.Start(); err != nil {
 		log.Errorf("Error starting %#v, err: %s", p, err.Error())
 		return err
@@ -136,7 +138,7 @@ func (w *Watchdog) heartbeatToLog(delay time.Duration) {
 // watchProgram will monitor a program and restart it if it exits.
 // This method will run forever.
 func (w *Watchdog) startProgram(idx int) {
-	program := &(w.Programs[idx])
+	program := &w.Programs[idx]
 	for {
 		start := time.Now()
 		err := program.Run(w.Log, w.shutdownCh)

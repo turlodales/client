@@ -1,4 +1,3 @@
-import * as React from 'react'
 import * as Kb from '@/common-adapters/index'
 
 export type Props = {
@@ -10,15 +9,17 @@ export type Props = {
   onNever: () => void
 }
 
-const promptIcon = Kb.Styles.isMobile
+const promptIcon = isMobile
   ? 'icon-fancy-unfurl-preview-mobile-128-128'
   : 'icon-fancy-unfurl-preview-desktop-96-96'
 
 const UnfurlPrompt = (p: Props) => {
+  const styles = useStyles()
+  const theme = Kb.Styles.useTheme()
   const {onAlways, onAccept, onOnetime, domain, onNotnow, onNever} = p
   return (
-    <Kb.Box2 direction="horizontal" style={styles.container} fullWidth={true}>
-      {!Kb.Styles.isMobile && <Kb.Icon type={promptIcon} style={styles.icon} />}
+    <Kb.Box2 direction="horizontal" alignSelf="flex-start" style={styles.container} fullWidth={true}>
+      {!isMobile && <Kb.ImageIcon type={promptIcon} style={styles.icon} />}
       <Kb.Box2 direction="vertical" style={styles.choiceContainer} gap="xtiny">
         <Kb.Box2 direction="vertical" fullWidth={true}>
           <Kb.Text type="BodySemibold">Would you like to post a preview?</Kb.Text>
@@ -40,21 +41,20 @@ const UnfurlPrompt = (p: Props) => {
           Never, for any site
         </Kb.Text>
       </Kb.Box2>
-      <Kb.Box2 direction="horizontal" style={styles.closeContainer}>
-        <Kb.Icon type="iconfont-close" onClick={onNotnow} fontSize={16} padding="xtiny" />
+      <Kb.Box2 direction="horizontal" alignSelf="flex-start" style={styles.closeContainer}>
+        <Kb.Icon type="iconfont-close" color={theme.black_20} onClick={onNotnow} fontSize={16} padding="xtiny" />
       </Kb.Box2>
     </Kb.Box2>
   )
 }
 
-const styles = Kb.Styles.styleSheetCreate(
-  () =>
+const useStyles = Kb.Styles.createStyleHook(
+  theme =>
     ({
       choiceContainer: Kb.Styles.platformStyles({
         isElectron: {width: 370},
       }),
       closeContainer: Kb.Styles.platformStyles({
-        common: {alignSelf: 'flex-start'},
         isElectron: {
           marginLeft: 'auto',
           width: 30,
@@ -63,19 +63,16 @@ const styles = Kb.Styles.styleSheetCreate(
       container: Kb.Styles.platformStyles({
         common: {
           ...Kb.Styles.globalStyles.flexBoxRow,
-          alignSelf: 'flex-start',
-          backgroundColor: Kb.Styles.globalColors.blueLighter3,
+          backgroundColor: theme.blueLighter3,
           borderRadius: Kb.Styles.borderRadius,
-          paddingBottom: Kb.Styles.globalMargins.tiny,
-          paddingTop: Kb.Styles.globalMargins.tiny,
+          ...Kb.Styles.paddingV(Kb.Styles.globalMargins.tiny),
         },
         isElectron: {maxWidth: 600},
       }),
       icon: Kb.Styles.platformStyles({
         isElectron: {
           alignSelf: 'center',
-          marginLeft: Kb.Styles.globalMargins.small,
-          marginRight: Kb.Styles.globalMargins.small,
+          ...Kb.Styles.marginH(Kb.Styles.globalMargins.small),
         },
       }),
     }) as const

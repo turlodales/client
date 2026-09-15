@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -79,9 +80,10 @@ func (s *Sender) getConvFullnames(ctx context.Context, uid gregor1.UID, convID c
 }
 
 func (s *Sender) getRecipientUsername(ctx context.Context, uid gregor1.UID, parts []string,
-	membersType chat1.ConversationMembersType, replyToUID gregor1.UID) (res string, err error) {
+	membersType chat1.ConversationMembersType, replyToUID gregor1.UID,
+) (res string, err error) {
 	// If this message is a reply, infer the recipient as the original sender
-	if !(replyToUID.IsNil() || uid.Eq(replyToUID)) {
+	if !replyToUID.IsNil() && !uid.Eq(replyToUID) {
 		username, err := s.G().GetUPAKLoader().LookupUsername(ctx, keybase1.UID(replyToUID.String()))
 		if err != nil {
 			return res, err
@@ -108,16 +110,12 @@ func (s *Sender) getRecipientUsername(ctx context.Context, uid gregor1.UID, part
 }
 
 func (s *Sender) validConvUsername(ctx context.Context, username string, parts []string) bool {
-	for _, p := range parts {
-		if username == p {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(parts, username)
 }
 
 func (s *Sender) ParsePayments(ctx context.Context, uid gregor1.UID, convID chat1.ConversationID,
-	body string, replyTo *chat1.MessageID) (res []types.ParsedStellarPayment) {
+	body string, replyTo *chat1.MessageID,
+) (res []types.ParsedStellarPayment) {
 	defer s.Trace(ctx, nil, "ParsePayments")()
 	parsed := FindChatTxCandidates(body)
 	if len(parsed) == 0 {
@@ -196,7 +194,8 @@ func (s *Sender) paymentsToMinis(payments []types.ParsedStellarPayment) (minis [
 }
 
 func (s *Sender) DescribePayments(ctx context.Context, uid gregor1.UID, convID chat1.ConversationID,
-	payments []types.ParsedStellarPayment) (res chat1.UIChatPaymentSummary, toSend []types.ParsedStellarPayment, err error) {
+	payments []types.ParsedStellarPayment,
+) (res chat1.UIChatPaymentSummary, toSend []types.ParsedStellarPayment, err error) {
 	defer s.Trace(ctx, &err, "DescribePayments")()
 	specs, err := s.G().GetStellar().SpecMiniChatPayments(s.G().MetaContext(ctx), s.paymentsToMinis(payments))
 	if err != nil {

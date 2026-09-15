@@ -2,12 +2,12 @@
 // this source code is governed by the included BSD license.
 
 //go:build darwin
-// +build darwin
 
 package libkb
 
 import (
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -71,7 +71,7 @@ func (k KeychainSecretStore) StoreSecret(mctx MetaContext, accountName Normalize
 
 	// Try until we successfully write the secret in the store and we are the
 	// last entry.
-	for i := 0; i < maxKeychainItemSlots; i++ {
+	for i := range maxKeychainItemSlots {
 		account := newKeychainSlottedAccount(accountName, i)
 		if err = k.storeSecret(mctx, account, encodedSecret); err != nil {
 			mctx.Debug("KeychainSecretStore.StoreSecret(%s): unable to store secret %v, attempt %d, retrying", accountName, err, i)
@@ -111,11 +111,11 @@ func (k KeychainSecretStore) storeSecret(mctx MetaContext, account keychainSlott
 
 func (k KeychainSecretStore) mobileKeychainPermissionDeniedCheck(mctx MetaContext, err error) {
 	mctx.G().Log.Debug("mobileKeychainPermissionDeniedCheck: checking for mobile permission denied")
-	if !(isIOS && mctx.G().IsMobileAppType()) {
+	if !isIOS || !mctx.G().IsMobileAppType() {
 		mctx.G().Log.Debug("mobileKeychainPermissionDeniedCheck: not an iOS app")
 		return
 	}
-	if err != keychain.ErrorInteractionNotAllowed {
+	if !errors.Is(err, keychain.ErrorInteractionNotAllowed) {
 		mctx.G().Log.Debug("mobileKeychainPermissionDeniedCheck: wrong kind of error: %s", err)
 		return
 	}
@@ -128,13 +128,13 @@ func (k KeychainSecretStore) RetrieveSecret(mctx MetaContext, accountName Normal
 
 	// find the last valid item we have stored in the keychain
 	var previousSecret LKSecFullSecret
-	for i := 0; i < maxKeychainItemSlots; i++ {
+	for i := range maxKeychainItemSlots {
 		account := newKeychainSlottedAccount(accountName, i)
 		secret, err = k.retrieveSecret(mctx, account)
 		if err == nil {
 			previousSecret = secret
 			mctx.Debug("successfully retrieved secret on attempt: %d, checking if there is another filled slot", i)
-		} else if _, ok := err.(SecretStoreError); ok || err == keychain.ErrorItemNotFound {
+		} else if _, ok := err.(SecretStoreError); ok || errors.Is(err, keychain.ErrorItemNotFound) {
 			// We've reached the end of the keychain entries so let's return
 			// the previous secret we found.
 			secret = previousSecret
@@ -182,7 +182,7 @@ func (k KeychainSecretStore) ClearSecret(mctx MetaContext, accountName Normalize
 
 	// Try all slots to fully clear any secrets for this user
 	epick := FirstErrorPicker{}
-	for i := 0; i < maxKeychainItemSlots; i++ {
+	for i := range maxKeychainItemSlots {
 		account := newKeychainSlottedAccount(accountName, i)
 		err = k.clearSecret(mctx, account)
 		switch err {
@@ -217,7 +217,8 @@ func HasSecretStore() bool {
 	return true
 }
 
-func (k KeychainSecretStore) GetUsersWithStoredSecrets(mctx MetaContext) ([]string, error) {
+func (k KeychainSecretStore) GetUsersWithStoredSecrets(mctx MetaContext) (_ []string, err error) {
+	defer mctx.Trace("KeychainSecretStore.GetUsersWithStoredSecrets", &err)()
 	accounts, err := keychain.GetAccountsForService(k.serviceName(mctx))
 	if err != nil {
 		mctx.Debug("KeychainSecretStore.GetUsersWithStoredSecrets() error: %s", err)

@@ -4,6 +4,7 @@
 package client
 
 import (
+	"context"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -13,7 +14,6 @@ import (
 	"github.com/keybase/client/go/libcmdline"
 	"github.com/keybase/client/go/libkb"
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
-	"golang.org/x/net/context"
 )
 
 type CmdDbClean struct {
@@ -344,7 +344,7 @@ func (c *CmdDbKeysWithPrefix) Run() error {
 		return err
 	}
 	for _, x := range res {
-		_, err = c.G().UI.GetTerminalUI().OutputWriter().Write([]byte(fmt.Sprintf("%s\n", x.Key)))
+		_, err = fmt.Fprintf(c.G().UI.GetTerminalUI().OutputWriter(), "%s\n", x.Key)
 		if err != nil {
 			return err
 		}

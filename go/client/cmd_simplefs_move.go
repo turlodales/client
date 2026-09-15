@@ -4,9 +4,8 @@
 package client
 
 import (
+	"context"
 	"errors"
-
-	"golang.org/x/net/context"
 
 	"github.com/keybase/cli"
 	"github.com/keybase/client/go/libcmdline"
@@ -74,7 +73,7 @@ func (c *CmdSimpleFSMove) Run() error {
 
 		dest, err := makeDestPath(ctx, c.G(), cli, src, c.dest, isDestDir, destPathString)
 
-		if err == ErrTargetFileExists {
+		if errors.Is(err, ErrTargetFileExists) {
 			if c.interactive {
 				err = doOverwritePrompt(c.G(), dest.String())
 			} else if c.force {

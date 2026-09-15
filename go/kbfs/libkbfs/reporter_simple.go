@@ -5,10 +5,9 @@
 package libkbfs
 
 import (
+	"context"
 	"runtime"
 	"sync"
-
-	"golang.org/x/net/context"
 
 	"github.com/keybase/client/go/kbfs/tlf"
 	"github.com/keybase/client/go/protocol/keybase1"
@@ -43,7 +42,8 @@ func NewReporterSimple(clock Clock, maxErrors int) *ReporterSimple {
 
 // ReportErr implements the Reporter interface for ReporterSimple.
 func (r *ReporterSimple) ReportErr(ctx context.Context,
-	_ tlf.CanonicalName, _ tlf.Type, _ ErrorModeType, err error) {
+	_ tlf.CanonicalName, _ tlf.Type, _ ErrorModeType, err error,
+) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
@@ -64,7 +64,6 @@ func (r *ReporterSimple) ReportErr(ctx context.Context,
 		}
 		r.errors[r.currErrorIndex] = re
 	}
-
 }
 
 // AllKnownErrors implements the Reporter interface for ReporterSimple.
@@ -104,7 +103,8 @@ func (r *ReporterSimple) NotifyPathUpdated(_ context.Context, _ string) {
 
 // NotifySyncStatus implements the Reporter interface for ReporterSimple.
 func (r *ReporterSimple) NotifySyncStatus(_ context.Context,
-	_ *keybase1.FSPathSyncStatus) {
+	_ *keybase1.FSPathSyncStatus,
+) {
 	// ignore notifications
 }
 
@@ -117,11 +117,11 @@ func (r *ReporterSimple) NotifyFavoritesChanged(_ context.Context) {
 // NotifyOverallSyncStatus implements the Reporter interface for
 // ReporterSimple.
 func (r *ReporterSimple) NotifyOverallSyncStatus(
-	_ context.Context, _ keybase1.FolderSyncStatus) {
+	_ context.Context, _ keybase1.FolderSyncStatus,
+) {
 	// ignore notifications
 }
 
 // Shutdown implements the Reporter interface for ReporterSimple.
 func (r *ReporterSimple) Shutdown() {
-
 }

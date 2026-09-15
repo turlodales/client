@@ -1,5 +1,6 @@
 import * as React from 'react'
 import * as Kb from '@/common-adapters'
+import * as TestIDs from '@/tests/e2e/shared/test-ids'
 
 type Props = {
   feedback?: string
@@ -11,167 +12,139 @@ type Props = {
   onFeedbackDone: (success: boolean) => void
 }
 
-type State = {
-  clickCount: number
-  email?: string
-  feedback: string
-  sendLogs: boolean
-  showSuccessBanner: boolean
-}
-
 const clickThreshold = 7
 
-class Feedback extends React.Component<Props, State> {
-  state: State = {
-    clickCount: 0,
-    email: undefined,
-    feedback: this.props.feedback || '',
-    sendLogs: true,
-    showSuccessBanner: false,
-  }
+const Feedback = (props: Props) => {
+  const styles = useStyles()
+  const {
+    sending,
+    sendError,
+    onFeedbackDone,
+    showInternalSuccessBanner,
+    feedback: _feedback,
+    loggedOut,
+    onSendFeedback,
+  } = props
+  const [clickCount, setClickCount] = React.useState(0)
+  const [email, setEmail] = React.useState<string | undefined>(undefined)
+  const [feedback, setFeedback] = React.useState(_feedback || '')
+  const [sendLogs, setSendLogs] = React.useState(true)
+  const [showSuccessBanner, setShowSuccessBanner] = React.useState(false)
 
-  _onLabelClick = () => {
-    this.setState(state => {
-      const clickCount = state.clickCount + 1
-      if (clickCount < clickThreshold) {
-        console.log(`clickCount = ${clickCount} (${clickThreshold - clickCount} away from sending full logs)`)
+  const _onLabelClick = () => {
+    setClickCount(prevCount => {
+      const newCount = prevCount + 1
+      if (newCount < clickThreshold) {
+        console.log(`clickCount = ${newCount} (${clickThreshold - newCount} away from sending full logs)`)
       }
-      return {clickCount}
+      return newCount
     })
   }
 
-  componentDidUpdate(prevProps: Props) {
-    if (prevProps.sending !== this.props.sending || this.props.sendError !== prevProps.sendError) {
-      const success = !this.props.sending && !this.props.sendError
-      this.setState(s => ({
-        feedback: success ? '' : s.feedback,
-        showSuccessBanner: this.props.showInternalSuccessBanner && success,
-      }))
-      this.props.onFeedbackDone(success)
+  const lastSendingRef = React.useRef(sending)
+  const lastSendErrorRef = React.useRef(sendError)
+
+  React.useEffect(() => {
+    if (lastSendingRef.current !== sending || sendError !== lastSendErrorRef.current) {
+      const success = !sending && !sendError
+      setFeedback(success ? '' : feedback)
+      setShowSuccessBanner(showInternalSuccessBanner && success)
+      onFeedbackDone(success)
     }
+    lastSendingRef.current = sending
+    lastSendErrorRef.current = sendError
+  }, [sending, sendError, onFeedbackDone, feedback, showInternalSuccessBanner])
+
+  const _sendMaxBytes = () => clickCount >= clickThreshold
+
+  const _onSendFeedback = () => {
+    const sendMaxBytes = _sendMaxBytes()
+    setClickCount(0)
+    setShowSuccessBanner(false)
+    onSendFeedback(email ? `${feedback} (email: ${email || ''} )` : feedback, sendLogs, sendMaxBytes)
   }
 
-  _onChangeFeedback = (feedback: string) => {
-    this.setState({feedback})
-  }
-
-  _onChangeSendLogs = (sendLogs: boolean) => this.setState({sendLogs})
-
-  _onChangeEmail = (email: string) => {
-    this.setState({email})
-  }
-
-  _sendMaxBytes = () => this.state.clickCount >= clickThreshold
-
-  _onSendFeedback = () => {
-    const sendMaxBytes = this._sendMaxBytes()
-    this.setState({clickCount: 0, showSuccessBanner: false})
-    this.props.onSendFeedback(
-      this.state.email ? `${this.state.feedback} (email: ${this.state.email || ''} )` : this.state.feedback,
-      this.state.sendLogs,
-      sendMaxBytes
-    )
-  }
-
-  render() {
-    const {sending, sendError} = this.props
-    return (
-      <Kb.ScrollView alwaysBounceVertical={false}>
-        <Kb.Box2 direction="vertical" fullWidth={true} alignItems="center">
-          {this.state.showSuccessBanner && (
+  return (
+    <Kb.ScrollView alwaysBounceVertical={false} testID={TestIDs.SETTINGS_FEEDBACK}>
+      <Kb.Box2 direction="vertical" fullWidth={true}>
+        {showSuccessBanner && (
+          <Kb.Banner color="green">
+            <Kb.BannerParagraph bannerColor="green" content="Thanks! Your feedback was sent." />
+          </Kb.Banner>
+        )}
+        <Kb.Box2 direction="vertical" padding="small" style={styles.mainBox} gap="xsmall">
+          <Kb.Input3
+            textType="BodySemibold"
+            autoCapitalize="sentences"
+            autoCorrect={true}
+            autoFocus={true}
+            containerStyle={styles.input}
+            inputStyle={styles.inputResize}
+            multiline={true}
+            onChangeText={setFeedback}
+            placeholder="Please tell us what you were doing, your experience, or anything else we should know. Thanks!"
+            rowsMin={4}
+            rowsMax={isMobile ? 4 : 10}
+            value={feedback}
+          />
+          {_sendMaxBytes() && (
             <Kb.Banner color="green">
-              <Kb.BannerParagraph bannerColor="green" content="Thanks! Your feedback was sent." />
+              <Kb.BannerParagraph bannerColor="green" content="next send will include full logs" />
             </Kb.Banner>
           )}
-          <Kb.Box2 direction="vertical" style={styles.mainBox} gap="xsmall">
-            <Kb.Box2 direction="horizontal" fullWidth={true}>
-              <Kb.NewInput
-                autoCapitalize="sentences"
-                autoCorrect={true}
-                autoFocus={true}
-                containerStyle={styles.input}
-                multiline={true}
-                onChangeText={this._onChangeFeedback}
-                placeholder="Please tell us what you were doing, your experience, or anything else we should know. Thanks!"
-                resize={true}
-                rowsMin={4}
-                rowsMax={Kb.Styles.isMobile ? 4 : 10}
-                value={this.state.feedback}
+          <Kb.ClickableBox onClick={_onLabelClick} direction="vertical" fullWidth={true}>
+            <Kb.Checkbox
+              label="Include your logs"
+              labelSubtitle="This includes some private metadata info (e.g., file sizes, but not names or contents) but it will help the developers fix bugs more quickly."
+              checked={sendLogs}
+              onCheck={setSendLogs}
+            />
+          </Kb.ClickableBox>
+          {loggedOut && (
+            <Kb.Input3
+              textType="BodySemibold"
+              containerStyle={styles.input}
+              placeholder="Your email address"
+              onChangeText={setEmail}
+            />
+          )}
+          <Kb.Box2 alignSelf={loggedOut ? 'center' : 'flex-start'} direction="horizontal" gap="tiny">
+            <Kb.ButtonBar>
+              <Kb.Button
+                label="Send"
+                onClick={_onSendFeedback}
+                waiting={sending}
+                fullWidth={!Kb.Styles.isTablet}
               />
-            </Kb.Box2>
-            {this._sendMaxBytes() && (
-              <Kb.Banner color="green">
-                <Kb.BannerParagraph bannerColor="green" content="next send will include full logs" />
-              </Kb.Banner>
-            )}
-            <Kb.Box2 direction="horizontal" gap="tiny" fullWidth={true}>
-              <Kb.ClickableBox onClick={this._onLabelClick} style={styles.includeLogs}>
-                <Kb.Checkbox
-                  label="Include your logs"
-                  labelSubtitle="This includes some private metadata info (e.g., file sizes, but not names or contents) but it will help the developers fix bugs more quickly."
-                  checked={this.state.sendLogs}
-                  onCheck={this._onChangeSendLogs}
-                />
-              </Kb.ClickableBox>
-            </Kb.Box2>
-            {this.props.loggedOut && (
-              <Kb.Box2 direction="horizontal" fullWidth={true}>
-                <Kb.NewInput
-                  containerStyle={styles.input}
-                  placeholder="Your email address"
-                  onChangeText={this._onChangeEmail}
-                />
-              </Kb.Box2>
-            )}
-            <Kb.Box2
-              alignSelf={this.props.loggedOut ? 'center' : 'flex-start'}
-              direction="horizontal"
-              gap="tiny"
-            >
-              <Kb.ButtonBar>
-                <Kb.Button
-                  label="Send"
-                  onClick={this._onSendFeedback}
-                  waiting={sending}
-                  fullWidth={!Kb.Styles.isTablet}
-                />
-              </Kb.ButtonBar>
-            </Kb.Box2>
-            {sendError && (
-              <Kb.Box2 direction="vertical" gap="small">
-                <Kb.Text type="BodySmallError">Could not send log</Kb.Text>
-                <Kb.Text type="BodySmall" selectable={true}>
-                  {sendError}
-                </Kb.Text>
-              </Kb.Box2>
-            )}
+            </Kb.ButtonBar>
           </Kb.Box2>
+          {sendError && (
+            <Kb.Box2 direction="vertical" gap="small">
+              <Kb.Text type="BodySmallError">Could not send log</Kb.Text>
+              <Kb.Text type="BodySmall" selectable={true}>
+                {sendError}
+              </Kb.Text>
+            </Kb.Box2>
+          )}
         </Kb.Box2>
-      </Kb.ScrollView>
-    )
-  }
+      </Kb.Box2>
+    </Kb.ScrollView>
+  )
 }
 
 export default Feedback
 
-const styles = Kb.Styles.styleSheetCreate(
+const useStyles = Kb.Styles.createStyleHook(
   () =>
     ({
-      container: Kb.Styles.platformStyles({
-        common: {flex: 1},
-      }),
-      includeLogs: {
-        ...Kb.Styles.globalStyles.fullWidth,
-      },
       input: Kb.Styles.platformStyles({
         isElectron: {padding: Kb.Styles.globalMargins.tiny},
         isMobile: {...Kb.Styles.padding(Kb.Styles.globalMargins.tiny, Kb.Styles.globalMargins.small)},
       }),
+      inputResize: Kb.Styles.platformStyles({isElectron: {resize: 'vertical'}}),
       mainBox: Kb.Styles.platformStyles({
-        common: {
-          padding: Kb.Styles.globalMargins.small,
-        },
         isElectron: {
+          alignSelf: 'flex-start',
           maxWidth: 550,
           width: '100%',
         },
@@ -180,7 +153,5 @@ const styles = Kb.Styles.styleSheetCreate(
           width: Kb.Styles.globalStyles.largeWidthPercent,
         },
       }),
-      outerStyle: {backgroundColor: Kb.Styles.globalColors.white},
-      smallLabel: {color: Kb.Styles.globalColors.black},
     }) as const
 )

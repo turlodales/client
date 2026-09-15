@@ -2,19 +2,17 @@
 // this source code is governed by the included BSD license.
 
 //go:build !production
-// +build !production
 
 // this command is only for testing purposes
 package client
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"sync"
-
-	"golang.org/x/net/context"
 
 	"github.com/keybase/cli"
 	"github.com/keybase/client/go/libcmdline"
@@ -78,11 +76,9 @@ func (c *CmdStress) Run() error {
 
 	var wg sync.WaitGroup
 	for i := 0; i < c.numUsers; i++ {
-		wg.Add(1)
-		go func() {
+		wg.Go(func() {
 			c.simulate(username, passphrase)
-			wg.Done()
-		}()
+		})
 	}
 	wg.Wait()
 
@@ -145,14 +141,14 @@ func (c *CmdStress) simulate(username, passphrase string) {
 		c.status,
 		c.trackSomeone,
 	}
-	for i := 0; i < 10; i++ {
-		f := funcs[libkb.RandIntn(len(funcs))]
+	for range 10 {
+		f := funcs[libkb.RandIntn(len(funcs))] //nolint:gosec // G602: RandIntn returns value in [0, n) via modulo, array access is safe
 		f()
 	}
 
 	// now add logout to the mix
 	funcs = append(funcs, c.logout)
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		f := funcs[libkb.RandIntn(len(funcs))]
 		f()
 	}
@@ -199,7 +195,6 @@ func (c *CmdStress) trackSomeone() {
 	_, err = tcli.Track(context.TODO(), keybase1.TrackArg{UserAssertion: username, Options: options})
 	if err != nil {
 		c.G().Log.Warning("follow %s error: %s", username, err)
-
 	}
 	if libkb.RandIntn(2) == 0 {
 		return
@@ -294,15 +289,19 @@ func (c *CmdStress) gpgUIProtocol() rpc.Protocol {
 func (c *CmdStress) SelectKey(_ context.Context, arg keybase1.SelectKeyArg) (string, error) {
 	return "", nil
 }
+
 func (c *CmdStress) SelectKeyAndPushOption(_ context.Context, arg keybase1.SelectKeyAndPushOptionArg) (res keybase1.SelectKeyRes, err error) {
 	return
 }
+
 func (c *CmdStress) WantToAddGPGKey(_ context.Context, _ int) (bool, error) {
 	return false, nil
 }
+
 func (c *CmdStress) ConfirmDuplicateKeyChosen(_ context.Context, _ int) (bool, error) {
 	return false, nil
 }
+
 func (c *CmdStress) ConfirmImportSecretToExistingKey(_ context.Context, _ int) (bool, error) {
 	return false, nil
 }
@@ -314,9 +313,11 @@ func (c *CmdStress) secretUIProtocol() rpc.Protocol {
 func (c *CmdStress) GetPassphrase(_ context.Context, arg keybase1.GetPassphraseArg) (res keybase1.GetPassphraseRes, err error) {
 	return
 }
+
 func (c *CmdStress) Sign(_ context.Context, arg keybase1.SignArg) (string, error) {
 	return "", nil
 }
+
 func (c *CmdStress) GetTTY(_ context.Context) (string, error) {
 	return "", nil
 }

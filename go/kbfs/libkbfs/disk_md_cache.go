@@ -115,7 +115,8 @@ type DiskMDCacheStatus struct {
 // cache.
 func newDiskMDCacheLocalFromStorage(
 	config diskMDCacheConfig, headsStorage storage.Storage, mode InitMode) (
-	cache *DiskMDCacheLocal, err error) {
+	cache *DiskMDCacheLocal, err error,
+) {
 	log := config.MakeLogger("DMC")
 	closers := make([]io.Closer, 0, 1)
 	closer := func() {
@@ -178,7 +179,8 @@ func newDiskMDCacheLocalFromStorage(
 // specified directory on the filesystem as storage.
 func newDiskMDCacheLocal(
 	config diskBlockCacheConfig, dirPath string, mode InitMode) (
-	cache *DiskMDCacheLocal, err error) {
+	cache *DiskMDCacheLocal, err error,
+) {
 	log := config.MakeLogger("DMC")
 	defer func() {
 		if err != nil {
@@ -198,7 +200,7 @@ func newDiskMDCacheLocal(
 	}
 	defer func() {
 		if err != nil {
-			headsStorage.Close()
+			_ = headsStorage.Close()
 		}
 	}()
 	return newDiskMDCacheLocalFromStorage(config, headsStorage, mode)
@@ -247,7 +249,8 @@ func (cache *DiskMDCacheLocal) syncMDCountsFromDb() error {
 // getMetadataLocked retrieves the metadata for a block in the cache, or
 // returns leveldb.ErrNotFound and a zero-valued metadata otherwise.
 func (cache *DiskMDCacheLocal) getMetadataLocked(
-	tlfID tlf.ID, metered bool) (metadata diskMDBlock, err error) {
+	tlfID tlf.ID, metered bool,
+) (metadata diskMDBlock, err error) {
 	var hitMeter, missMeter *ldbutils.CountMeter
 	if ldbutils.Metered {
 		hitMeter = cache.hitMeter
@@ -268,7 +271,8 @@ func (cache *DiskMDCacheLocal) getMetadataLocked(
 
 // checkAndLockCache checks whether the cache is started.
 func (cache *DiskMDCacheLocal) checkCacheLocked(
-	ctx context.Context, method string) error {
+	ctx context.Context, method string,
+) error {
 	// First see if the context has expired since we began.
 	select {
 	case <-ctx.Done():
@@ -302,7 +306,8 @@ func (cache *DiskMDCacheLocal) checkCacheLocked(
 // Get implements the DiskMDCache interface for DiskMDCacheLocal.
 func (cache *DiskMDCacheLocal) Get(
 	ctx context.Context, tlfID tlf.ID) (
-	buf []byte, ver kbfsmd.MetadataVer, timestamp time.Time, err error) {
+	buf []byte, ver kbfsmd.MetadataVer, timestamp time.Time, err error,
+) {
 	cache.lock.RLock()
 	defer cache.lock.RUnlock()
 	err = cache.checkCacheLocked(ctx, "MD(Get)")
@@ -325,7 +330,8 @@ func (cache *DiskMDCacheLocal) Get(
 // Stage implements the DiskMDCache interface for DiskMDCacheLocal.
 func (cache *DiskMDCacheLocal) Stage(
 	ctx context.Context, tlfID tlf.ID, rev kbfsmd.Revision, buf []byte,
-	ver kbfsmd.MetadataVer, timestamp time.Time) error {
+	ver kbfsmd.MetadataVer, timestamp time.Time,
+) error {
 	cache.lock.Lock()
 	defer cache.lock.Unlock()
 	err := cache.checkCacheLocked(ctx, "MD(Stage)")
@@ -351,7 +357,8 @@ func (cache *DiskMDCacheLocal) Stage(
 
 // Commit implements the DiskMDCache interface for DiskMDCacheLocal.
 func (cache *DiskMDCacheLocal) Commit(
-	ctx context.Context, tlfID tlf.ID, rev kbfsmd.Revision) error {
+	ctx context.Context, tlfID tlf.ID, rev kbfsmd.Revision,
+) error {
 	cache.lock.Lock()
 	defer cache.lock.Unlock()
 	err := cache.checkCacheLocked(ctx, "MD(Commit)")
@@ -367,7 +374,7 @@ func (cache *DiskMDCacheLocal) Commit(
 	newStagedMDs := make([]diskMDBlock, 0, len(stagedMDs)-1)
 	foundMD := false
 	// The staged MDs list is unordered, so iterate through the whole
-	// thing to find what should remain after commiting `rev`.
+	// thing to find what should remain after committing `rev`.
 	for _, md := range stagedMDs {
 		switch {
 		case md.Revision > rev:
@@ -409,7 +416,8 @@ func (cache *DiskMDCacheLocal) Commit(
 
 // Unstage implements the DiskMDCache interface for DiskMDCacheLocal.
 func (cache *DiskMDCacheLocal) Unstage(
-	ctx context.Context, tlfID tlf.ID, rev kbfsmd.Revision) error {
+	ctx context.Context, tlfID tlf.ID, rev kbfsmd.Revision,
+) error {
 	cache.lock.Lock()
 	defer cache.lock.Unlock()
 	err := cache.checkCacheLocked(ctx, "MD(Unstage)")

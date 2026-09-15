@@ -3,7 +3,6 @@
 // license that can be found in the LICENSE file.
 //
 //go:build !windows
-// +build !windows
 
 package main
 
@@ -47,13 +46,14 @@ type symlink struct {
 }
 
 func (s symlink) Attr(ctx context.Context, a *fuse.Attr) (err error) {
-	a.Mode = os.ModeSymlink | a.Mode | 0555
+	a.Mode = os.ModeSymlink | a.Mode | 0o555
 	a.Valid = 0
 	return nil
 }
 
 func (s symlink) Readlink(ctx context.Context, req *fuse.ReadlinkRequest) (
-	link string, err error) {
+	link string, err error,
+) {
 	return s.link, nil
 }
 
@@ -99,7 +99,7 @@ func (r *root) Root() (fs.Node, error) {
 }
 
 func (r *root) Attr(ctx context.Context, attr *fuse.Attr) error {
-	attr.Mode = os.ModeDir | 0555
+	attr.Mode = os.ModeDir | 0o555
 	return nil
 }
 
@@ -140,7 +140,8 @@ func mountpointMatchesRunmode(mp, runmode string) bool {
 }
 
 func (r *root) findKBFSMount(ctx context.Context) (
-	mountpoint string, err error) {
+	mountpoint string, err error,
+) {
 	// Get the UID, and crash intentionally if it's not set, because
 	// that means we're not compiled against the correct version of
 	// bazil.org/fuse.
@@ -260,7 +261,8 @@ func (r *root) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
 
 func (r *root) Lookup(
 	ctx context.Context, req *fuse.LookupRequest, resp *fuse.LookupResponse) (
-	n fs.Node, err error) {
+	n fs.Node, err error,
+) {
 	select {
 	case <-r.shutdownCh:
 		return nil, fuse.ENOENT
@@ -293,7 +295,7 @@ func unmount(currUID, mountAsUID uint64, dir string) {
 	if currUID != mountAsUID {
 		// Unmounting requires escalating the effective user to the
 		// mounting user.  But we leave the real user ID the same.
-		err := syscall.Seteuid(int(mountAsUID))
+		err := syscall.Seteuid(int(mountAsUID)) //nolint:gosec // G115: UID values are bounded by system limits
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Can't setuid: %+v\n", err)
 			os.Exit(1)
@@ -307,7 +309,7 @@ func unmount(currUID, mountAsUID uint64, dir string) {
 
 	// Set it back.
 	if currUID != mountAsUID {
-		err := syscall.Seteuid(int(currUID))
+		err := syscall.Seteuid(int(currUID)) //nolint:gosec // G115: UID values are bounded by system limits
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Can't setuid: %+v\n", err)
 			os.Exit(1)
@@ -389,7 +391,7 @@ func main() {
 		// Escalate privileges of the effective user to the mounting
 		// user briefly, just for the `Mount` call.  Keep the real
 		// user the same throughout.
-		err := syscall.Seteuid(int(mountAsUID))
+		err := syscall.Seteuid(int(mountAsUID)) //nolint:gosec // G115: UID values are bounded by system limits
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Can't seteuid: %+v\n", err)
 			os.Exit(1)
@@ -404,7 +406,7 @@ func main() {
 
 	if currUser.Uid != u.Uid {
 		runtime.LockOSThread()
-		err := syscall.Seteuid(int(currUID))
+		err := syscall.Seteuid(int(currUID)) //nolint:gosec // G115: UID values are bounded by system limits
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Can't seteuid: %+v\n", err)
 			os.Exit(1)
@@ -446,7 +448,7 @@ func main() {
 				"Couldn't get the current executable: %v", err)
 			os.Exit(1)
 		}
-		cmd := exec.Command(ex, os.Args[1])
+		cmd := exec.Command(ex, os.Args[1]) //nolint:gosec // G204: Redirector launching updater with single arg
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		err = cmd.Start()

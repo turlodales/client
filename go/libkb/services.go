@@ -4,6 +4,7 @@
 package libkb
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"strings"
@@ -11,7 +12,6 @@ import (
 
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 	jsonw "github.com/keybase/go-jsonw"
-	"golang.org/x/net/context"
 )
 
 // =============================================================================
@@ -90,7 +90,8 @@ func (t *BaseServiceType) PreProofCheck(MetaContext, string) (*Markup, error) { 
 func (t *BaseServiceType) PreProofWarning(remotename string) *Markup          { return nil }
 
 func (t *BaseServiceType) FormatProofText(m MetaContext, ppr *PostProofRes,
-	kbUsername, remoteUsername string, sigID keybase1.SigID) (string, error) {
+	kbUsername, remoteUsername string, sigID keybase1.SigID,
+) (string, error) {
 	return ppr.Text, nil
 }
 

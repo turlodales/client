@@ -5,6 +5,7 @@
 package libkbfs
 
 import (
+	"context"
 	"time"
 
 	"github.com/keybase/client/go/kbfs/kbfscodec"
@@ -12,7 +13,6 @@ import (
 	"github.com/keybase/client/go/logger"
 	"github.com/keybase/client/go/protocol/keybase1"
 	"github.com/keybase/go-framed-msgpack-rpc/rpc"
-	"golang.org/x/net/context"
 )
 
 // CryptoClientRPC is an RPC based implementation for Crypto.
@@ -36,9 +36,9 @@ func NewCryptoClientRPC(config Config, kbCtx Context) *CryptoClientRPC {
 		config: config,
 	}
 	conn := NewSharedKeybaseConnection(kbCtx, config, c)
-	c.CryptoClient.client = keybase1.CryptoClient{Cli: conn.GetClient()}
-	c.CryptoClient.teamsClient = keybase1.TeamsClient{Cli: conn.GetClient()}
-	c.CryptoClient.shutdownFn = conn.Shutdown
+	c.client = keybase1.CryptoClient{Cli: conn.GetClient()}
+	c.teamsClient = keybase1.TeamsClient{Cli: conn.GetClient()}
+	c.shutdownFn = conn.Shutdown
 	return c
 }
 
@@ -63,7 +63,8 @@ func (CryptoClientRPC) HandlerName() string {
 
 // OnConnect implements the ConnectionHandler interface.
 func (c *CryptoClientRPC) OnConnect(ctx context.Context, conn *rpc.Connection,
-	_ rpc.GenericClient, server *rpc.Server) error {
+	_ rpc.GenericClient, server *rpc.Server,
+) error {
 	c.config.KBFSOps().PushConnectionStatusChange(KeybaseServiceName, nil)
 	return nil
 }
@@ -84,7 +85,8 @@ func (c *CryptoClientRPC) OnDoCommandError(err error, wait time.Duration) {
 
 // OnDisconnected implements the ConnectionHandler interface.
 func (c *CryptoClientRPC) OnDisconnected(_ context.Context,
-	status rpc.DisconnectStatus) {
+	status rpc.DisconnectStatus,
+) {
 	if status == rpc.StartingNonFirstConnection {
 		c.log.Warning("CryptoClient is disconnected")
 		c.config.KBFSOps().PushConnectionStatusChange(KeybaseServiceName, errDisconnected{})

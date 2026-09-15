@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"image/gif"
 	"io"
+	"maps"
 	"net/http"
 	"os"
 	"sort"
@@ -45,6 +46,13 @@ func (e *EmojiValidationError) Error() string {
 		return ""
 	}
 	return e.Underlying.Error()
+}
+
+func (e *EmojiValidationError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Underlying
 }
 
 func (e *EmojiValidationError) Export() *chat1.EmojiError {
@@ -137,9 +145,7 @@ func (s *DevConvEmojiSource) getAliasLookup(ctx context.Context, uid gregor1.UID
 	defer s.aliasLookupLock.Unlock()
 	if s.aliasLookup != nil {
 		res = make(map[string]chat1.Emoji, len(s.aliasLookup))
-		for alias, emoji := range s.aliasLookup {
-			res[alias] = emoji
-		}
+		maps.Copy(res, s.aliasLookup)
 		return res, nil
 	}
 	res = make(map[string]chat1.Emoji)
@@ -155,7 +161,8 @@ func (s *DevConvEmojiSource) getAliasLookup(ctx context.Context, uid gregor1.UID
 }
 
 func (s *DevConvEmojiSource) putAliasLookup(ctx context.Context, uid gregor1.UID,
-	aliasLookup map[string]chat1.Emoji, opts chat1.EmojiFetchOpts) error {
+	aliasLookup map[string]chat1.Emoji, opts chat1.EmojiFetchOpts,
+) error {
 	s.aliasLookupLock.Lock()
 	defer s.aliasLookupLock.Unlock()
 	// set this if it is blank, or a full fetch
@@ -171,7 +178,8 @@ func (s *DevConvEmojiSource) putAliasLookup(ctx context.Context, uid gregor1.UID
 
 func (s *DevConvEmojiSource) addAdvanced(ctx context.Context, uid gregor1.UID,
 	storageConv *chat1.ConversationLocal, convID chat1.ConversationID,
-	alias, filename string, allowOverwrite bool, storage types.ConvConversationBackedStorage) (res chat1.EmojiRemoteSource, err error) {
+	alias, filename string, allowOverwrite bool, storage types.ConvConversationBackedStorage,
+) (res chat1.EmojiRemoteSource, err error) {
 	var stored chat1.EmojiStorage
 	alias = strings.ReplaceAll(alias, ":", "") // drop any colons from alias
 	if storageConv != nil {
@@ -301,7 +309,7 @@ func (s *DevConvEmojiSource) validateFile(ctx context.Context, filename string) 
 }
 
 func (s *DevConvEmojiSource) fromURL(ctx context.Context, url string) (string, error) {
-	resp, err := http.Get(url)
+	resp, err := http.Get(url) //nolint:gosec // G107: URL added by user.
 	if err != nil {
 		return "", err
 	}
@@ -315,7 +323,8 @@ func (s *DevConvEmojiSource) fromURL(ctx context.Context, url string) (string, e
 }
 
 func (s *DevConvEmojiSource) Add(ctx context.Context, uid gregor1.UID, convID chat1.ConversationID,
-	alias, filename string, allowOverwrite bool) (res chat1.EmojiRemoteSource, err error) {
+	alias, filename string, allowOverwrite bool,
+) (res chat1.EmojiRemoteSource, err error) {
 	defer s.Trace(ctx, &err, "Add")()
 	if strings.HasPrefix(filename, "http://") || strings.HasPrefix(filename, "https://") {
 		filename, err = s.fromURL(ctx, filename)
@@ -332,7 +341,8 @@ func (s *DevConvEmojiSource) Add(ctx context.Context, uid gregor1.UID, convID ch
 }
 
 func (s *DevConvEmojiSource) AddAlias(ctx context.Context, uid gregor1.UID, convID chat1.ConversationID,
-	newAlias, existingAlias string) (res chat1.EmojiRemoteSource, err error) {
+	newAlias, existingAlias string,
+) (res chat1.EmojiRemoteSource, err error) {
 	defer s.Trace(ctx, &err, "AddAlias")()
 	if err = s.validateShortName(newAlias); err != nil {
 		return res, err
@@ -385,7 +395,8 @@ func (s *DevConvEmojiSource) AddAlias(ctx context.Context, uid gregor1.UID, conv
 }
 
 func (s *DevConvEmojiSource) removeRemoteSource(ctx context.Context, uid gregor1.UID,
-	conv chat1.ConversationLocal, source chat1.EmojiRemoteSource) error {
+	conv chat1.ConversationLocal, source chat1.EmojiRemoteSource,
+) error {
 	typ, err := source.Typ()
 	if err != nil {
 		return err
@@ -407,7 +418,8 @@ func (s *DevConvEmojiSource) removeRemoteSource(ctx context.Context, uid gregor1
 }
 
 func (s *DevConvEmojiSource) Remove(ctx context.Context, uid gregor1.UID, convID chat1.ConversationID,
-	alias string) (err error) {
+	alias string,
+) (err error) {
 	defer s.Trace(ctx, &err, "Remove")()
 	var stored chat1.EmojiStorage
 	storage := s.makeStorage(chat1.TopicType_EMOJI)
@@ -447,23 +459,20 @@ func (s *DevConvEmojiSource) Remove(ctx context.Context, uid gregor1.UID, convID
 	return storage.Put(ctx, uid, convID, topicName, stored)
 }
 
-func (s *DevConvEmojiSource) animationsDisabled(ctx context.Context, uid gregor1.UID) bool {
+func (s *DevConvEmojiSource) AnimationsDisabled(ctx context.Context) (bool, error) {
 	st, err := s.G().GregorState.State(ctx)
 	if err != nil {
-		s.Debug(ctx, "animationsDisabled: failed to get state: %s", err)
-		return false
+		return false, err
 	}
 	cat, err := gregor1.ObjFactory{}.MakeCategory(animationKey)
 	if err != nil {
-		s.Debug(ctx, "animationsDisabled: failed to make category: %s", err)
-		return false
+		return false, err
 	}
 	items, err := st.ItemsInCategory(cat)
 	if err != nil {
-		s.Debug(ctx, "animationsDisabled: failed to get items: %s", err)
-		return false
+		return false, err
 	}
-	return len(items) > 0
+	return len(items) > 0, nil
 }
 
 func (s *DevConvEmojiSource) ToggleAnimations(ctx context.Context, uid gregor1.UID, enabled bool) (err error) {
@@ -480,17 +489,22 @@ func (s *DevConvEmojiSource) ToggleAnimations(ctx context.Context, uid gregor1.U
 	return err
 }
 
-func (s *DevConvEmojiSource) RemoteToLocalSource(ctx context.Context, uid gregor1.UID,
-	remote chat1.EmojiRemoteSource) (source chat1.EmojiLoadSource, noAnimSource chat1.EmojiLoadSource, err error) {
+func (s *DevConvEmojiSource) RemoteToLocalSource(ctx context.Context, remote chat1.EmojiRemoteSource,
+	noAnim bool,
+) (source chat1.EmojiLoadSource, noAnimSource chat1.EmojiLoadSource, err error) {
 	typ, err := remote.Typ()
 	if err != nil {
 		return source, noAnimSource, err
 	}
-	noAnim := s.animationsDisabled(ctx, uid)
 	switch typ {
 	case chat1.EmojiRemoteSourceTyp_MESSAGE:
 		msg := remote.Message()
 		sourceURL := s.G().AttachmentURLSrv.GetURL(ctx, msg.ConvID, msg.MsgID, false, noAnim, true)
+		if noAnim {
+			// same arguments, so the second lookup would return the same URL
+			ret := chat1.NewEmojiLoadSourceWithHttpsrv(sourceURL)
+			return ret, ret, nil
+		}
 		noAnimSourceURL := s.G().AttachmentURLSrv.GetURL(ctx, msg.ConvID, msg.MsgID, false, true, true)
 		return chat1.NewEmojiLoadSourceWithHttpsrv(sourceURL),
 			chat1.NewEmojiLoadSourceWithHttpsrv(noAnimSourceURL), nil
@@ -503,7 +517,8 @@ func (s *DevConvEmojiSource) RemoteToLocalSource(ctx context.Context, uid gregor
 }
 
 func (s *DevConvEmojiSource) creationInfo(ctx context.Context, uid gregor1.UID,
-	remote chat1.EmojiRemoteSource) (res chat1.EmojiCreationInfo, err error) {
+	remote chat1.EmojiRemoteSource,
+) (res chat1.EmojiCreationInfo, err error) {
 	typ, err := remote.Typ()
 	if err != nil {
 		return res, err
@@ -534,7 +549,8 @@ func (s *DevConvEmojiSource) creationInfo(ctx context.Context, uid gregor1.UID,
 }
 
 func (s *DevConvEmojiSource) getNoSet(ctx context.Context, uid gregor1.UID, convID *chat1.ConversationID,
-	opts chat1.EmojiFetchOpts) (res chat1.UserEmojis, aliasLookup map[string]chat1.Emoji, err error) {
+	opts chat1.EmojiFetchOpts,
+) (res chat1.UserEmojis, aliasLookup map[string]chat1.Emoji, err error) {
 	aliasLookup = make(map[string]chat1.Emoji)
 	topicType := chat1.TopicType_EMOJI
 	storage := s.makeStorage(topicType)
@@ -558,6 +574,12 @@ func (s *DevConvEmojiSource) getNoSet(ctx context.Context, uid gregor1.UID, conv
 	}
 	convs := ibox.Convs
 	seenAliases := make(map[string]int)
+	// Reconstruct the local Gregor state once for the whole emoji set.
+	noAnim, animationErr := s.AnimationsDisabled(ctx)
+	if animationErr != nil {
+		s.Debug(ctx, "Get: failed to read animation setting: %s", animationErr)
+		noAnim = false
+	}
 	addEmojis := func(convs []chat1.ConversationLocal, isCrossTeam bool) {
 		if opts.OnlyInTeam && isCrossTeam {
 			return
@@ -581,7 +603,7 @@ func (s *DevConvEmojiSource) getNoSet(ctx context.Context, uid gregor1.UID, conv
 					continue
 				}
 				var creationInfo *chat1.EmojiCreationInfo
-				source, noAnimSource, err := s.RemoteToLocalSource(ctx, uid, storedEmoji)
+				source, noAnimSource, err := s.RemoteToLocalSource(ctx, storedEmoji, noAnim)
 				if err != nil {
 					s.Debug(ctx, "Get: skipping emoji on remote-to-local error: %s", err)
 					continue
@@ -636,7 +658,8 @@ func (s *DevConvEmojiSource) getNoSet(ctx context.Context, uid gregor1.UID, conv
 }
 
 func (s *DevConvEmojiSource) Get(ctx context.Context, uid gregor1.UID, convID *chat1.ConversationID,
-	opts chat1.EmojiFetchOpts) (res chat1.UserEmojis, err error) {
+	opts chat1.EmojiFetchOpts,
+) (res chat1.UserEmojis, err error) {
 	defer s.Trace(ctx, &err, "Get %v", opts)()
 	var aliasLookup map[string]chat1.Emoji
 	if res, aliasLookup, err = s.getNoSet(ctx, uid, convID, opts); err != nil {
@@ -679,7 +702,8 @@ func (s *DevConvEmojiSource) stripAlias(alias string) string {
 }
 
 func (s *DevConvEmojiSource) versionMatch(ctx context.Context, uid gregor1.UID, l chat1.EmojiRemoteSource,
-	r chat1.EmojiRemoteSource) bool {
+	r chat1.EmojiRemoteSource,
+) bool {
 	if !l.IsMessage() || !r.IsMessage() {
 		return false
 	}
@@ -713,7 +737,8 @@ func (s *DevConvEmojiSource) versionMatch(ctx context.Context, uid gregor1.UID, 
 }
 
 func (s *DevConvEmojiSource) getCrossTeamConv(ctx context.Context, uid gregor1.UID,
-	convID chat1.ConversationID, sourceConvID chat1.ConversationID) (res chat1.ConversationLocal, err error) {
+	convID chat1.ConversationID, sourceConvID chat1.ConversationID,
+) (res chat1.ConversationLocal, err error) {
 	baseConv, err := utils.GetVerifiedConv(ctx, s.G(), uid, convID, types.InboxSourceDataSourceAll)
 	if err != nil {
 		s.Debug(ctx, "getCrossTeamConv: failed to get base conv: %s", err)
@@ -753,7 +778,7 @@ func (s *DevConvEmojiSource) getCrossTeamConv(ctx context.Context, uid gregor1.U
 			s.testingCreatedSyncConv <- struct{}{}
 		}
 	} else {
-		s.Debug(ctx, "getCrossTeamConv: using exising sync conv: %s (topicID: %s)", res.GetConvID(), topicID)
+		s.Debug(ctx, "getCrossTeamConv: using existing sync conv: %s (topicID: %s)", res.GetConvID(), topicID)
 	}
 	return res, nil
 }
@@ -766,7 +791,8 @@ func (s *DevConvEmojiSource) getCacheDir() string {
 }
 
 func (s *DevConvEmojiSource) syncCrossTeam(ctx context.Context, uid gregor1.UID, emoji chat1.HarvestedEmoji,
-	convID chat1.ConversationID) (res chat1.HarvestedEmoji, err error) {
+	convID chat1.ConversationID,
+) (res chat1.HarvestedEmoji, err error) {
 	typ, err := emoji.Source.Typ()
 	if err != nil {
 		return res, err
@@ -839,7 +865,8 @@ func (s *DevConvEmojiSource) syncCrossTeam(ctx context.Context, uid gregor1.UID,
 }
 
 func (s *DevConvEmojiSource) Harvest(ctx context.Context, body string, uid gregor1.UID,
-	convID chat1.ConversationID, mode types.EmojiHarvestMode) (res []chat1.HarvestedEmoji, err error) {
+	convID chat1.ConversationID, mode types.EmojiHarvestMode,
+) (res []chat1.HarvestedEmoji, err error) {
 	if globals.IsEmojiHarvesterCtx(ctx) {
 		s.Debug(ctx, "Harvest: in an existing harvest context, bailing")
 		return nil, nil
@@ -905,7 +932,8 @@ func (s *DevConvEmojiSource) Harvest(ctx context.Context, body string, uid grego
 }
 
 func (s *DevConvEmojiSource) Decorate(ctx context.Context, body string, uid gregor1.UID,
-	messageType chat1.MessageType, emojis []chat1.HarvestedEmoji) string {
+	messageType chat1.MessageType, emojis []chat1.HarvestedEmoji,
+) string {
 	if len(emojis) == 0 {
 		return body
 	}
@@ -933,9 +961,15 @@ func (s *DevConvEmojiSource) Decorate(ctx context.Context, body string, uid greg
 	offset := 0
 	added := 0
 	isReacji := messageType == chat1.MessageType_REACTION
+	// Reconstruct the local Gregor state once for the whole message.
+	noAnim, err := s.AnimationsDisabled(ctx)
+	if err != nil {
+		s.Debug(ctx, "Decorate: failed to read animation setting: %s", err)
+		noAnim = false
+	}
 	for _, match := range matches {
 		if remoteSource, ok := emojiMap[match.name]; ok {
-			source, noAnimSource, err := s.RemoteToLocalSource(ctx, uid, remoteSource)
+			source, noAnimSource, err := s.RemoteToLocalSource(ctx, remoteSource, noAnim)
 			if err != nil {
 				s.Debug(ctx, "Decorate: failed to get local source: %s", err)
 				continue

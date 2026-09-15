@@ -1,13 +1,14 @@
 package sig3
 
 import (
+	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/base64"
-	"github.com/keybase/client/go/msgpack"
-	"github.com/keybase/go-crypto/ed25519"
-	"github.com/stretchr/testify/require"
 	"testing"
 	"time"
+
+	"github.com/keybase/client/go/msgpack"
+	"github.com/stretchr/testify/require"
 )
 
 func genKey(t *testing.T) (pair KeyPair) {
@@ -89,7 +90,7 @@ func genTest(t *testing.T, n int) (bun *Sig3Bundle, ex ExportJSON, rk *RotateKey
 
 	var ptks []PerTeamKey
 	var innerKeys []KeyPair
-	for i := 0; i < n; i++ {
+	for i := range n {
 		ptk := PerTeamKey{
 			AppkeyDerivationVersion: 1,
 			Generation:              PerTeamKeyGeneration(5),
@@ -118,7 +119,7 @@ func TestSignAndVerifyHappyPath(t *testing.T) {
 	require.True(t, castOk)
 	require.NotNil(t, rk2.Signer())
 	require.Equal(t, rk2.Signer().KID, outerKey.pub)
-	require.Equal(t, rk2.Signer().UID, rk.Base.inner.Signer.UID)
+	require.Equal(t, rk2.Signer().UID, rk.inner.Signer.UID)
 }
 
 func TestSignAndVerifyHappyPathFourFold(t *testing.T) {
@@ -129,8 +130,8 @@ func TestSignAndVerifyHappyPathFourFold(t *testing.T) {
 	require.True(t, castOk)
 	require.NotNil(t, rk2.Signer())
 	require.Equal(t, rk2.Signer().KID, outerKey.pub)
-	require.Equal(t, rk2.Signer().UID, rk.Base.inner.Signer.UID)
-	require.Equal(t, len(rk2.rkb().PTKs), 4)
+	require.Equal(t, rk2.Signer().UID, rk.inner.Signer.UID)
+	require.Len(t, rk2.rkb().PTKs, 4)
 }
 
 func TestMissingSig(t *testing.T) {
@@ -198,7 +199,7 @@ func testMutateOuter(t *testing.T, f func(o *OuterLink), wantedErr error) {
 	ex.Outer = base64.StdEncoding.EncodeToString(b)
 	_, err = ex.Import()
 	require.Error(t, err)
-	require.Equal(t, err, wantedErr)
+	require.Equal(t, wantedErr, err)
 }
 
 func TestBadPayload(t *testing.T) {

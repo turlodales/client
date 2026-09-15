@@ -42,7 +42,8 @@ var _ fmt.Stringer = PathPartString{}
 // plaintext string representing one part of a path, and a
 // `Obfuscator`.
 func NewPathPartString(
-	plaintext string, obfuscator Obfuscator) PathPartString {
+	plaintext string, obfuscator Obfuscator,
+) PathPartString {
 	var toObfuscate string
 	_, ext := SplitFileExtension(plaintext)
 	// Treat the long tarball suffix specially, since it's already
@@ -55,8 +56,8 @@ func NewPathPartString(
 	}
 
 	isFileInfo := false
-	if strings.HasPrefix(plaintext, prefixFileInfo) {
-		toObfuscate = strings.TrimPrefix(plaintext, prefixFileInfo)
+	if after, ok := strings.CutPrefix(plaintext, prefixFileInfo); ok {
+		toObfuscate = after
 		isFileInfo = true
 	} else if strings.HasPrefix(plaintext, prefixToSkipObfsucation) {
 		// Nil out the obfuscator since this string doesn't need

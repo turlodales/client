@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -13,7 +14,6 @@ import (
 	"github.com/keybase/client/go/libcmdline"
 	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/protocol/keybase1"
-	"golang.org/x/net/context"
 )
 
 func NewCmdNetworkStats(cl *libcmdline.CommandLine, g *libkb.GlobalContext) cli.Command {
@@ -153,7 +153,7 @@ func (c *CmdNetworkStats) Run() (err error) {
 			return err
 		}
 		dui := c.G().UI.GetDumbOutputUI()
-		_, err = dui.Printf(string(b) + "\n")
+		_, err = dui.Printf("%s\n", b)
 		return err
 	}
 
@@ -249,19 +249,19 @@ func (c *CmdNetworkStats) Run() (err error) {
 			},
 			flexibletable.Cell{
 				Alignment: flexibletable.Left,
-				Content:   flexibletable.SingleCell{Item: humanize.Bytes(uint64(stat.AvgSize))},
+				Content:   flexibletable.SingleCell{Item: humanize.Bytes(uint64(stat.AvgSize))}, //nolint:gosec // G115: File size is non-negative, safe to convert
 			},
 			flexibletable.Cell{
 				Alignment: flexibletable.Left,
-				Content:   flexibletable.SingleCell{Item: humanize.Bytes(uint64(stat.MinSize))},
+				Content:   flexibletable.SingleCell{Item: humanize.Bytes(uint64(stat.MinSize))}, //nolint:gosec // G115: File size is non-negative, safe to convert
 			},
 			flexibletable.Cell{
 				Alignment: flexibletable.Left,
-				Content:   flexibletable.SingleCell{Item: humanize.Bytes(uint64(stat.MaxSize))},
+				Content:   flexibletable.SingleCell{Item: humanize.Bytes(uint64(stat.MaxSize))}, //nolint:gosec // G115: File size is non-negative, safe to convert
 			},
 			flexibletable.Cell{
 				Alignment: flexibletable.Left,
-				Content:   flexibletable.SingleCell{Item: humanize.Bytes(uint64(stat.TotalSize))},
+				Content:   flexibletable.SingleCell{Item: humanize.Bytes(uint64(stat.TotalSize))}, //nolint:gosec // G115: File size is non-negative, safe to convert
 			},
 		})
 		if err != nil {

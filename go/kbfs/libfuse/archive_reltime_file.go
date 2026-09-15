@@ -3,16 +3,15 @@
 // license that can be found in the LICENSE file.
 //
 //go:build !windows
-// +build !windows
 
 package libfuse
 
 import (
+	"context"
 	"time"
 
 	"github.com/keybase/client/go/kbfs/libfs"
 	"github.com/keybase/client/go/kbfs/tlfhandle"
-	"golang.org/x/net/context"
 )
 
 // NewArchiveRelTimeFile returns a special read file that contains a
@@ -20,7 +19,8 @@ import (
 // time string for the given folder.
 func NewArchiveRelTimeFile(
 	fs *FS, handle *tlfhandle.Handle, filename string,
-	entryValid *time.Duration) *SpecialReadFile {
+	entryValid *time.Duration,
+) *SpecialReadFile {
 	*entryValid = 0
 	return &SpecialReadFile{
 		read: func(ctx context.Context) ([]byte, time.Time, error) {

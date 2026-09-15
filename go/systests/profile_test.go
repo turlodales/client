@@ -2,7 +2,6 @@ package systests
 
 import (
 	"context"
-
 	"io"
 	"net/http"
 	"testing"
@@ -88,9 +87,10 @@ func TestProofSuggestions(t *testing.T) {
 			ProfileText:   "Prove your Quantum Resistant Ledger",
 			PickerText:    "Quantum Resistant Ledger",
 			PickerSubtext: "theqrl.org",
-		}}}
+		}},
+	}
 	require.Equal(t, expected.ShowMore, res.ShowMore)
-	require.True(t, len(res.Suggestions) >= len(expected.Suggestions), "should be at least as many results as expected")
+	require.GreaterOrEqual(t, len(res.Suggestions), len(expected.Suggestions), "should be at least as many results as expected")
 	iconExempt := map[string]struct{}{
 		"gubble-with-dashes.dot": {},
 		"mastodon.local":         {},
@@ -142,21 +142,20 @@ func TestProofSuggestions(t *testing.T) {
 }
 
 func checkIcon(t testing.TB, icon keybase1.SizedImage) {
-	if icon.Width < 2 {
-		t.Fatalf("unreasonable icon size")
-	}
+	require.GreaterOrEqual(t, icon.Width, 2,
+		"unreasonable icon size")
 	if kbtest.SkipIconRemoteTest() {
 		t.Logf("Skipping icon remote test")
-		require.True(t, len(icon.Path) > 8)
+		require.Greater(t, len(icon.Path), 8)
 	} else {
 		resp, err := http.Get(icon.Path)
-		require.Equal(t, 200, resp.StatusCode, "icon file should be reachable: %v", icon.Path)
 		require.NoError(t, err)
+		defer resp.Body.Close()
+		require.Equal(t, 200, resp.StatusCode, "icon file should be reachable: %v", icon.Path)
 		body, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
-		if len(body) < 150 {
-			t.Fatalf("unreasonable icon payload size")
-		}
+		require.GreaterOrEqual(t, len(body), 150,
+			"unreasonable icon payload size")
 	}
 }
 

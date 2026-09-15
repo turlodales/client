@@ -1,10 +1,9 @@
 package teams
 
 import (
+	"context"
 	"errors"
 	"fmt"
-
-	"golang.org/x/net/context"
 
 	"github.com/keybase/client/go/engine"
 	"github.com/keybase/client/go/libkb"
@@ -150,7 +149,8 @@ func CreateImplicitTeam(ctx context.Context, g *libkb.GlobalContext, impTeam key
 
 func makeSigAndPostRootTeam(ctx context.Context, g *libkb.GlobalContext, me libkb.UserForSignatures, members SCTeamMembers,
 	invites *SCTeamInvites, secretboxRecipients map[keybase1.UserVersion]keybase1.PerUserKey, name string,
-	teamID keybase1.TeamID, public, implicit bool, settings *SCTeamSettings, merkleRoot libkb.MerkleRoot) (err error) {
+	teamID keybase1.TeamID, public, implicit bool, settings *SCTeamSettings, merkleRoot libkb.MerkleRoot,
+) (err error) {
 	mctx := libkb.NewMetaContext(ctx, g)
 	defer g.Trace("makeSigAndPostRootTeam", &err)()
 	mctx.Debug("makeSigAndPostRootTeam get device keys")
@@ -264,7 +264,7 @@ func makeSigAndPostRootTeam(ctx context.Context, g *libkb.GlobalContext, me libk
 
 	mctx.Debug("makeSigAndPostRootTeam post sigs")
 	payload := make(libkb.JSONPayload)
-	payload["sigs"] = []interface{}{sigMultiItem}
+	payload["sigs"] = []any{sigMultiItem}
 	payload["per_team_key"] = secretboxes
 
 	_, err = mctx.G().API.PostJSON(mctx, libkb.APIArg{
@@ -337,7 +337,8 @@ func CreateRootTeam(ctx context.Context, g *libkb.GlobalContext, nameString stri
 }
 
 func CreateSubteam(ctx context.Context, g *libkb.GlobalContext, subteamBasename string,
-	parentName keybase1.TeamName, addSelfAs keybase1.TeamRole) (ret *keybase1.TeamID, err error) {
+	parentName keybase1.TeamName, addSelfAs keybase1.TeamRole,
+) (ret *keybase1.TeamID, err error) {
 	defer g.CTrace(ctx, "CreateSubteam", &err)()
 	mctx := libkb.NewMetaContext(ctx, g)
 
@@ -420,7 +421,7 @@ func CreateSubteam(ctx context.Context, g *libkb.GlobalContext, subteamBasename 
 	}
 
 	payload := make(libkb.JSONPayload)
-	payload["sigs"] = []interface{}{newSubteamSig, subteamHeadSig}
+	payload["sigs"] = []any{newSubteamSig, subteamHeadSig}
 	payload["per_team_key"] = secretboxes
 	ratchet.AddToJSONPayload(payload)
 
@@ -437,10 +438,11 @@ func CreateSubteam(ctx context.Context, g *libkb.GlobalContext, subteamBasename 
 }
 
 func makeRootTeamSection(teamName string, teamID keybase1.TeamID, members SCTeamMembers, invites *SCTeamInvites,
-	perTeamSigningKID keybase1.KID, perTeamEncryptionKID keybase1.KID, public bool, implicit bool, settings *SCTeamSettings) (SCTeamSection, error) {
+	perTeamSigningKID keybase1.KID, perTeamEncryptionKID keybase1.KID, public bool, implicit bool, settings *SCTeamSettings,
+) (SCTeamSection, error) {
 	teamSection := SCTeamSection{
 		Name:     (*SCTeamName)(&teamName),
-		ID:       (SCTeamID)(teamID),
+		ID:       SCTeamID(teamID),
 		Public:   public,
 		Implicit: implicit,
 		PerTeamKey: &SCPerTeamKey{
@@ -510,7 +512,8 @@ func generateNewSubteamSigForParentChain(m libkb.MetaContext, me libkb.UserForSi
 func generateHeadSigForSubteamChain(ctx context.Context, g *libkb.GlobalContext, me libkb.UserForSignatures,
 	signingKey libkb.GenericKey, parentTeam *TeamSigChainState, subteamName keybase1.TeamName,
 	subteamID keybase1.TeamID, admin *SCTeamAdmin, allParentAdmins []keybase1.UserVersion,
-	addSelfAs keybase1.TeamRole, merkleRoot libkb.MerkleRoot) (item *libkb.SigMultiItem, boxes *PerTeamSharedSecretBoxes, err error) {
+	addSelfAs keybase1.TeamRole, merkleRoot libkb.MerkleRoot,
+) (item *libkb.SigMultiItem, boxes *PerTeamSharedSecretBoxes, err error) {
 	deviceEncryptionKey, err := g.ActiveDevice.EncryptionKey()
 	if err != nil {
 		return
@@ -648,12 +651,12 @@ func generateHeadSigForSubteamChain(ctx context.Context, g *libkb.GlobalContext,
 
 func makeSubteamTeamSection(subteamName keybase1.TeamName, subteamID keybase1.TeamID,
 	parentTeam *TeamSigChainState, members SCTeamMembers, perTeamSigningKID keybase1.KID,
-	perTeamEncryptionKID keybase1.KID, admin *SCTeamAdmin) (SCTeamSection, error) {
-
+	perTeamEncryptionKID keybase1.KID, admin *SCTeamAdmin,
+) (SCTeamSection, error) {
 	subteamName2 := subteamName.String()
 	teamSection := SCTeamSection{
 		Name: (*SCTeamName)(&subteamName2),
-		ID:   (SCTeamID)(subteamID),
+		ID:   SCTeamID(subteamID),
 		Parent: &SCTeamParent{
 			ID:      SCTeamID(parentTeam.GetID()),
 			Seqno:   parentTeam.GetLatestSeqno() + 1, // the seqno of the *new* parent link

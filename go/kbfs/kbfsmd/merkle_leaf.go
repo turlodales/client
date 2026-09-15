@@ -22,7 +22,7 @@ type MerkleLeaf struct {
 var _ merkle.ValueConstructor = (*MerkleLeaf)(nil)
 
 // Construct implements the go-merkle-tree.ValueConstructor interface.
-func (l MerkleLeaf) Construct() interface{} {
+func (l MerkleLeaf) Construct() any {
 	// In the Merkle tree leaves are simply byte slices.
 	return &[]byte{}
 }
@@ -35,7 +35,7 @@ type EncryptedMerkleLeaf struct {
 }
 
 // Construct implements the go-merkle-tree.ValueConstructor interface.
-func (el EncryptedMerkleLeaf) Construct() interface{} {
+func (el EncryptedMerkleLeaf) Construct() any {
 	// In the Merkle tree leaves are simply byte slices.
 	return &[]byte{}
 }
@@ -43,7 +43,8 @@ func (el EncryptedMerkleLeaf) Construct() interface{} {
 // Encrypt encrypts a Merkle leaf node with the given key pair.
 func (l MerkleLeaf) Encrypt(codec kbfscodec.Codec,
 	pubKey kbfscrypto.TLFPublicKey, nonce *[24]byte,
-	ePrivKey kbfscrypto.TLFEphemeralPrivateKey) (EncryptedMerkleLeaf, error) {
+	ePrivKey kbfscrypto.TLFEphemeralPrivateKey,
+) (EncryptedMerkleLeaf, error) {
 	// encode the clear-text leaf
 	leafBytes, err := codec.Encode(l)
 	if err != nil {
@@ -63,7 +64,8 @@ func (l MerkleLeaf) Encrypt(codec kbfscodec.Codec,
 // Decrypt decrypts a Merkle leaf node with the given key pair.
 func (el EncryptedMerkleLeaf) Decrypt(codec kbfscodec.Codec,
 	privKey kbfscrypto.TLFPrivateKey, nonce *[24]byte,
-	ePubKey kbfscrypto.TLFEphemeralPublicKey) (MerkleLeaf, error) {
+	ePubKey kbfscrypto.TLFEphemeralPublicKey,
+) (MerkleLeaf, error) {
 	eLeaf := kbfscrypto.MakeEncryptedMerkleLeaf(
 		el.Version, el.EncryptedData, nonce)
 	leafBytes, err := kbfscrypto.DecryptMerkleLeaf(privKey, ePubKey, eLeaf)

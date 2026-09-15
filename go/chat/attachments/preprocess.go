@@ -1,7 +1,9 @@
 package attachments
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,7 +18,6 @@ import (
 	"github.com/keybase/client/go/chat/utils"
 
 	"github.com/keybase/client/go/protocol/chat1"
-	"golang.org/x/net/context"
 )
 
 type Dimension struct {
@@ -194,9 +195,9 @@ func processCallerPreview(ctx context.Context, g *globals.Context, callerPreview
 func DetectMIMEType(ctx context.Context, src ReadResetter, filename string) (res string, err error) {
 	head := make([]byte, 512)
 	_, err = io.ReadFull(src, head)
-	switch err {
-	case nil:
-	case io.EOF, io.ErrUnexpectedEOF:
+	switch {
+	case err == nil:
+	case errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF):
 		return "", nil
 	default:
 		return res, err
@@ -217,7 +218,8 @@ func DetectMIMEType(ctx context.Context, src ReadResetter, filename string) (res
 }
 
 func PreprocessAsset(ctx context.Context, g *globals.Context, log utils.DebugLabeler, src ReadResetter, filename string,
-	nvh types.NativeVideoHelper, callerPreview *chat1.MakePreviewRes) (p Preprocess, err error) {
+	nvh types.NativeVideoHelper, callerPreview *chat1.MakePreviewRes,
+) (p Preprocess, err error) {
 	if callerPreview != nil && callerPreview.Location != nil {
 		log.Debug(ctx, "preprocessAsset: caller provided preview, using that")
 		if p, err = processCallerPreview(ctx, g, *callerPreview); err != nil {
@@ -277,6 +279,8 @@ func PreprocessAsset(ctx context.Context, g *globals.Context, log utils.DebugLab
 			p.PreviewDim = &Dimension{Width: previewRes.PreviewWidth, Height: previewRes.PreviewHeight}
 		}
 		p.BaseDurationMs = previewRes.BaseDurationMs
+		p.BaseIsAudio = previewRes.BaseIsAudio
+		p.PreviewAudioAmps = previewRes.AudioAmps
 		p.PreviewDurationMs = previewRes.PreviewDurationMs
 	}
 

@@ -3,7 +3,6 @@
 // license that can be found in the LICENSE file.
 
 //go:build !windows
-// +build !windows
 
 package libkbfs
 
@@ -17,7 +16,8 @@ import (
 // getDiskLimits gets the disk limits for the logical disk containing
 // the given path.
 func getDiskLimits(path string) (
-	availableBytes, totalBytes, availableFiles, totalFiles uint64, err error) {
+	availableBytes, totalBytes, availableFiles, totalFiles uint64, err error,
+) {
 	// Notably we are using syscall rather than golang.org/x/sys/unix here.
 	// The latter is broken on iOS with go1.11.8 (and likely earlier versions)
 	// and always gives us 0 as available storage space. go1.12.3 is known to
@@ -29,7 +29,9 @@ func getDiskLimits(path string) (
 	}
 
 	// Bavail is the free block count for an unprivileged user.
+	// #nosec G115 -- Bsize is typically uint32 or int64 depending on platform, conversion to uint64 is safe
 	availableBytes = stat.Bavail * uint64(stat.Bsize)
+	// #nosec G115 -- Bsize is typically uint32 or int64 depending on platform, conversion to uint64 is safe
 	totalBytes = stat.Blocks * uint64(stat.Bsize)
 	// Some filesystems, like btrfs, don't keep track of inodes.
 	// (See https://github.com/keybase/client/issues/6206 .) Use

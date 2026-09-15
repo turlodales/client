@@ -2,25 +2,30 @@ import * as C from '@/constants'
 import * as Kb from '@/common-adapters'
 import * as React from 'react'
 import {SignupScreen, errorBanner} from '../signup/common'
-import {isMobile} from '@/constants/platform'
+import {submitProvisionPassphrase} from './flow'
 
-const Container = () => {
-  const error = C.useProvisionState(s => s.error)
-  const hint = C.useProvisionState(s => `${s.codePageOtherDevice.name || ''}...`)
-  const waiting = C.Waiting.useAnyWaiting(C.Provision.waitingKey)
-  const navigateUp = C.useRouterState(s => s.dispatch.navigateUp)
-  const onBack = () => {
-    navigateUp()
+type RouteProps = {
+  route: {
+    params: {
+      deviceName: string
+      error?: string
+    }
   }
-  const onSubmit = C.useProvisionState(s => s.dispatch.dynamic.setPassphrase)
-  const props = {
-    error: error,
-    hint: hint,
-    onBack: onBack,
-    onSubmit: (paperkey: string) => !waiting && onSubmit?.(paperkey),
-    waiting: waiting,
-  }
-  return <PaperKey {...props} />
+}
+
+const Container = ({route}: RouteProps) => {
+  const error = route.params.error ?? ''
+  const hint = `${route.params.deviceName || ''}...`
+  const waiting = C.Waiting.useAnyWaiting(C.waitingKeyProvision)
+  return (
+    <PaperKey
+      error={error}
+      hint={hint}
+      onBack={C.Router2.navigateUp}
+      onSubmit={(paperkey: string) => !waiting && submitProvisionPassphrase(paperkey)}
+      waiting={waiting}
+    />
+  )
 }
 
 type Props = {
@@ -31,92 +36,77 @@ type Props = {
   waiting: boolean
 }
 
-export class PaperKey extends React.Component<Props, {paperKey: string}> {
-  state = {paperKey: ''}
-  _onSubmit = () => this.props.onSubmit(this.state.paperKey)
+export const PaperKey = (props: Props) => {
+  const styles = useStyles()
+  const {onSubmit: onSubmitFunc} = props
+  const [paperKey, setPaperKey] = React.useState('')
+  const onSubmit = () => onSubmitFunc(paperKey)
 
-  render() {
-    const props = this.props
-
-    return (
-      <SignupScreen
-        banners={errorBanner(props.error)}
-        buttons={[
-          {
-            disabled: !this.state.paperKey,
-            label: 'Continue',
-            onClick: this._onSubmit,
-            type: 'Success',
-            waiting: props.waiting,
-          },
-        ]}
-        noBackground={true}
-        onBack={this.props.onBack}
-        title={isMobile ? 'Enter paper key' : 'Enter your paper key'}
+  return (
+    <SignupScreen
+      hideDesktopHeader={!isMobile}
+      waitingOverlay={true}
+      banners={errorBanner(props.error)}
+      buttons={[
+        {
+          disabled: !paperKey,
+          label: 'Continue',
+          onClick: onSubmit,
+          type: 'Success',
+          waiting: props.waiting,
+        },
+      ]}
+      noBackground={true}
+      onBack={props.onBack}
+      title={isMobile ? 'Enter paper key' : 'Enter your paper key'}
+    >
+      <Kb.Box2
+        direction="vertical"
+        fullWidth={true}
+        style={styles.contents}
+        centerChildren={!isAndroid /* android keyboardAvoiding doesnt work well */}
+        gap={isMobile ? 'tiny' : 'medium'}
       >
-        <Kb.Box2
-          direction="vertical"
-          style={styles.contents}
-          centerChildren={!Kb.Styles.isAndroid /* android keyboardAvoiding doesnt work well */}
-          gap={Kb.Styles.isMobile ? 'tiny' : 'medium'}
-        >
-          <Kb.Box2 direction="vertical" gap="tiny" centerChildren={true} gapEnd={true}>
-            <Kb.Icon type="icon-paper-key-64" />
-            <Kb.Text type="Header">{props.hint}</Kb.Text>
-          </Kb.Box2>
-          <Kb.Box2 direction="vertical" style={styles.inputContainer}>
-            <Kb.PlainInput
-              autoFocus={true}
-              multiline={true}
-              rowsMax={3}
-              placeholder="Type in your entire paper key"
-              textType="Body"
-              style={styles.input}
-              onEnterKeyDown={this._onSubmit}
-              onChangeText={paperKey => this.setState({paperKey})}
-              value={this.state.paperKey}
-            />
-          </Kb.Box2>
+        <Kb.Box2 direction="vertical" gap="tiny" centerChildren={true} gapEnd={true}>
+          <Kb.ImageIcon type="icon-paper-key-64" />
+          <Kb.Text type="Header">{props.hint}</Kb.Text>
         </Kb.Box2>
-      </SignupScreen>
-    )
-  }
+        <Kb.Input3
+          autoFocus={true}
+          multiline={true}
+          rowsMax={3}
+          placeholder="Type in your entire paper key"
+          textType="Body"
+          containerStyle={styles.container2}
+          inputStyle={styles.inputText}
+          onEnterKeyDown={onSubmit}
+          onChangeText={setPaperKey}
+          value={paperKey}
+        />
+      </Kb.Box2>
+    </SignupScreen>
+  )
 }
 
-const styles = Kb.Styles.styleSheetCreate(
-  () =>
+const useStyles = Kb.Styles.createStyleHook(
+  theme =>
     ({
-      backButton: Kb.Styles.platformStyles({
-        isElectron: {
-          marginLeft: Kb.Styles.globalMargins.medium,
-          marginTop: Kb.Styles.globalMargins.medium,
-        },
-        isMobile: {
-          marginLeft: 0,
-          marginTop: 0,
-        },
-      }),
+      container2: {
+        minHeight: 77,
+        padding: Kb.Styles.globalMargins.small,
+        width: '100%',
+      },
       contents: Kb.Styles.platformStyles({
         common: {
           flexGrow: 1,
-          width: '100%',
         },
         isElectron: {maxWidth: 460},
         isMobile: {maxWidth: 300},
         isTablet: {maxWidth: 460},
       }),
-      input: {
-        color: Kb.Styles.globalColors.black,
+      inputText: {
         ...Kb.Styles.globalStyles.fontTerminal,
-      },
-      inputContainer: {
-        borderColor: Kb.Styles.globalColors.black_10,
-        borderRadius: 4,
-        borderStyle: 'solid',
-        borderWidth: 1,
-        minHeight: 77,
-        padding: Kb.Styles.globalMargins.small,
-        width: '100%',
+        color: theme.black,
       },
     }) as const
 )

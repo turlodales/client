@@ -4,9 +4,9 @@
 package home
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"math/rand"
 	"strings"
 	"sync"
 	"time"
@@ -17,7 +17,6 @@ import (
 	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/protocol/gregor1"
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
-	"golang.org/x/net/context"
 )
 
 type homeCache struct {
@@ -59,7 +58,8 @@ func homeRetry(a libkb.APIArg) libkb.APIArg {
 }
 
 func decodeContactNotifications(mctx libkb.MetaContext, home keybase1.
-	HomeScreen) (decoded keybase1.HomeScreen, err error) {
+	HomeScreen,
+) (decoded keybase1.HomeScreen, err error) {
 	items := home.Items
 	for i, item := range items {
 		t, err := item.Data.T()
@@ -77,7 +77,8 @@ func decodeContactNotifications(mctx libkb.MetaContext, home keybase1.
 					item, err)
 				continue
 			}
-			if innerT == keybase1.HomeScreenPeopleNotificationType_CONTACT {
+			switch innerT {
+			case keybase1.HomeScreenPeopleNotificationType_CONTACT:
 				contact := peopleItem.Contact()
 				decryptedContact,
 					err := contacts.DecryptContactBlob(mctx,
@@ -91,7 +92,7 @@ func decodeContactNotifications(mctx libkb.MetaContext, home keybase1.
 				item.Data = keybase1.NewHomeScreenItemDataWithPeople(
 					keybase1.NewHomeScreenPeopleNotificationWithContact(contact))
 				items[i] = item
-			} else if innerT == keybase1.HomeScreenPeopleNotificationType_CONTACT_MULTI {
+			case keybase1.HomeScreenPeopleNotificationType_CONTACT_MULTI:
 				contactMulti := peopleItem.ContactMulti()
 				contactList := contactMulti.Contacts
 				for i, contact := range contactList {
@@ -121,10 +122,7 @@ func (h *Home) getToCache(ctx context.Context, markedViewed bool, numPeopleWante
 	mctx := libkb.NewMetaContext(ctx, h.G())
 	defer mctx.Trace("Home#getToCache", &err)()
 
-	numPeopleToRequest := 100
-	if numPeopleWanted > numPeopleToRequest {
-		numPeopleToRequest = numPeopleWanted
-	}
+	numPeopleToRequest := max(numPeopleWanted, 100)
 	if skipPeople {
 		numPeopleToRequest = 0
 	}
@@ -439,7 +437,6 @@ func (h *Home) handleUpdate(ctx context.Context, item gregor.Item) (err error) {
 }
 
 func (h *Home) handleUpdateWithVersions(ctx context.Context, homeVersion int, announcementsVersion int, refreshHome bool) {
-
 	h.Lock()
 	defer func() {
 		if refreshHome {
@@ -524,7 +521,7 @@ func (h *Home) RunUpdateLoop(m libkb.MetaContext) {
 func (h *Home) updateLoopThread(m libkb.MetaContext) {
 	m = m.WithLogTag("HULT")
 	m.Debug("Starting Home#updateLoopThread")
-	slp := time.Minute * (time.Duration(5) + time.Duration((rand.Int() % 10)))
+	slp := 5*time.Minute + libkb.RandomJitter(5*time.Minute)
 	var err error
 	for {
 		m.Debug("Sleeping %v until next poll", slp)

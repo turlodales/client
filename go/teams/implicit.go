@@ -1,6 +1,8 @@
 package teams
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -9,7 +11,6 @@ import (
 	"github.com/keybase/client/go/kbfs/tlf"
 	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/protocol/keybase1"
-	"golang.org/x/net/context"
 )
 
 type implicitTeamConflict struct {
@@ -42,7 +43,8 @@ type ImplicitTeamOptions struct {
 // Lookup an implicit team by name like "alice,bob+bob@twitter (conflicted copy 2017-03-04 #1)"
 // Resolves social assertions.
 func LookupImplicitTeam(ctx context.Context, g *libkb.GlobalContext, displayName string, public bool, opts ImplicitTeamOptions) (
-	team *Team, teamName keybase1.TeamName, impTeamName keybase1.ImplicitTeamDisplayName, err error) {
+	team *Team, teamName keybase1.TeamName, impTeamName keybase1.ImplicitTeamDisplayName, err error,
+) {
 	team, teamName, impTeamName, _, err = LookupImplicitTeamAndConflicts(ctx, g, displayName, public, opts)
 	return team, teamName, impTeamName, err
 }
@@ -50,7 +52,8 @@ func LookupImplicitTeam(ctx context.Context, g *libkb.GlobalContext, displayName
 // Lookup an implicit team by name like "alice,bob+bob@twitter (conflicted copy 2017-03-04 #1)"
 // Resolves social assertions.
 func LookupImplicitTeamAndConflicts(ctx context.Context, g *libkb.GlobalContext, displayName string, public bool, opts ImplicitTeamOptions) (
-	team *Team, teamName keybase1.TeamName, impTeamName keybase1.ImplicitTeamDisplayName, conflicts []keybase1.ImplicitTeamConflictInfo, err error) {
+	team *Team, teamName keybase1.TeamName, impTeamName keybase1.ImplicitTeamDisplayName, conflicts []keybase1.ImplicitTeamConflictInfo, err error,
+) {
 	impName, err := ResolveImplicitTeamDisplayName(ctx, g, displayName, public)
 	if err != nil {
 		return team, teamName, impTeamName, conflicts, err
@@ -59,7 +62,8 @@ func LookupImplicitTeamAndConflicts(ctx context.Context, g *libkb.GlobalContext,
 }
 
 func LookupImplicitTeamIDUntrusted(ctx context.Context, g *libkb.GlobalContext, displayName string,
-	public bool) (res keybase1.TeamID, err error) {
+	public bool,
+) (res keybase1.TeamID, err error) {
 	imp, _, err := loadImpteam(ctx, g, displayName, public, false /* skipCache */)
 	if err != nil {
 		return res, err
@@ -103,7 +107,7 @@ func loadImpteamFromServer(ctx context.Context, g *libkb.GlobalContext, displayN
 			code := keybase1.StatusCode(aerr.Code)
 			switch code {
 			case keybase1.StatusCode_SCTeamReadError:
-				return imp, NewTeamDoesNotExistError(public, displayName)
+				return imp, NewTeamDoesNotExistError(public, "%s", displayName)
 			case keybase1.StatusCode_SCTeamProvisionalCanKey, keybase1.StatusCode_SCTeamProvisionalCannotKey:
 				return imp, libkb.NewTeamProvisionalError(
 					(code == keybase1.StatusCode_SCTeamProvisionalCanKey), public, displayName)
@@ -119,8 +123,8 @@ func loadImpteamFromServer(ctx context.Context, g *libkb.GlobalContext, displayN
 // conflict was not in cache. This can be detected with `hitCache` return
 // value, and mitigated by passing skipCache=false argument.
 func attemptLoadImpteamAndConflict(ctx context.Context, g *libkb.GlobalContext, impTeamName keybase1.ImplicitTeamDisplayName,
-	nameWithoutConflict string, preResolveDisplayName string, skipCache bool) (conflicts []keybase1.ImplicitTeamConflictInfo, teamID keybase1.TeamID, hitCache bool, err error) {
-
+	nameWithoutConflict string, preResolveDisplayName string, skipCache bool,
+) (conflicts []keybase1.ImplicitTeamConflictInfo, teamID keybase1.TeamID, hitCache bool, err error) {
 	defer g.CTrace(ctx,
 		fmt.Sprintf("attemptLoadImpteamAndConflict(impName=%q,woConflict=%q,preResolve=%q,skipCache=%t)", impTeamName, nameWithoutConflict, preResolveDisplayName, skipCache),
 		&err)()
@@ -177,8 +181,8 @@ func attemptLoadImpteamAndConflict(ctx context.Context, g *libkb.GlobalContext, 
 // preResolveDisplayName is used for logging and errors
 func lookupImplicitTeamAndConflicts(ctx context.Context, g *libkb.GlobalContext,
 	preResolveDisplayName string, impTeamNameInput keybase1.ImplicitTeamDisplayName, opts ImplicitTeamOptions) (
-	team *Team, teamName keybase1.TeamName, impTeamName keybase1.ImplicitTeamDisplayName, conflicts []keybase1.ImplicitTeamConflictInfo, err error) {
-
+	team *Team, teamName keybase1.TeamName, impTeamName keybase1.ImplicitTeamDisplayName, conflicts []keybase1.ImplicitTeamConflictInfo, err error,
+) {
 	defer g.CTrace(ctx, fmt.Sprintf("lookupImplicitTeamAndConflicts(%v,opts=%+v)", preResolveDisplayName, opts), &err)()
 
 	impTeamName = impTeamNameInput
@@ -237,7 +241,7 @@ func lookupImplicitTeamAndConflicts(ctx context.Context, g *libkb.GlobalContext,
 
 func isDupImplicitTeamError(err error) bool {
 	if err != nil {
-		if aerr, ok := err.(libkb.AppStatusError); ok {
+		if aerr, ok := errors.AsType[libkb.AppStatusError](err); ok {
 			code := keybase1.StatusCode(aerr.Code)
 			switch code {
 			case keybase1.StatusCode_SCTeamImplicitDuplicate:
@@ -396,11 +400,11 @@ func newImplicitTeamCache(g *libkb.GlobalContext) *implicitTeamCache {
 	}
 }
 
-func (i *implicitTeamCache) Get(key interface{}) (interface{}, bool) {
+func (i *implicitTeamCache) Get(key any) (any, bool) {
 	return i.cache.Get(key)
 }
 
-func (i *implicitTeamCache) Put(key, value interface{}) bool {
+func (i *implicitTeamCache) Put(key, value any) bool {
 	return i.cache.Add(key, value)
 }
 

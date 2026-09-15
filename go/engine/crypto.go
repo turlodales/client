@@ -4,13 +4,13 @@
 package engine
 
 import (
+	"context"
 	"sync"
 
 	"github.com/keybase/client/go/kbcrypto"
 	"github.com/keybase/client/go/libkb"
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 	"golang.org/x/crypto/nacl/box"
-	"golang.org/x/net/context"
 )
 
 // getKeyMu synchronizes all accesses to the need to pull in pinentries/secret keys
@@ -24,7 +24,7 @@ var getKeyMu sync.Mutex
 // have your device keys cached, or you aren't.
 //
 // If the key isn't found in the ActiveDevice cache, this will return LoginRequiredError.
-func GetMySecretKey(ctx context.Context, g *libkb.GlobalContext, secretKeyType libkb.SecretKeyType, reason string) (libkb.GenericKey, error) {
+func GetMySecretKey(ctx context.Context, g *libkb.GlobalContext, secretKeyType libkb.SecretKeyType, _ string) (libkb.GenericKey, error) {
 	key, err := g.ActiveDevice.KeyByType(secretKeyType)
 	if err != nil {
 		if _, ok := err.(libkb.NotFoundError); ok {
@@ -77,7 +77,8 @@ func SignED25519(ctx context.Context, g *libkb.GlobalContext, arg keybase1.SignE
 // SignED25519ForKBFS signs the given message with the current user's private
 // signing key on behalf of KBFS.
 func SignED25519ForKBFS(ctx context.Context, g *libkb.GlobalContext, arg keybase1.SignED25519ForKBFSArg) (
-	ret keybase1.ED25519SignatureInfo, err error) {
+	ret keybase1.ED25519SignatureInfo, err error,
+) {
 	signingKey, err := GetMySecretKey(ctx, g, libkb.DeviceSigningKeyType, arg.Reason)
 	if err != nil {
 		return
@@ -182,7 +183,6 @@ func unboxBytes32(encryptionKey libkb.GenericKey, ciphertext keybase1.EncryptedB
 
 	copy(bytes32[:], decryptedData)
 	return
-
 }
 
 func getMatchingSecretKey(m libkb.MetaContext, getSecretUI func() libkb.SecretUI, arg keybase1.UnboxBytes32AnyArg) (key libkb.GenericKey, index int, err error) {

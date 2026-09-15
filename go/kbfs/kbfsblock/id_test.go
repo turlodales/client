@@ -7,7 +7,6 @@ package kbfsblock
 import (
 	"encoding/binary"
 	"math"
-	"math/rand"
 	"testing"
 
 	"github.com/keybase/client/go/kbfs/kbfscodec"
@@ -28,8 +27,7 @@ func TestIDEncodeDecode(t *testing.T) {
 	// https://github.com/msgpack/msgpack/blob/master/spec.md#formats-bin
 	// for why there are two bytes of overhead.
 	const overhead = 2
-	require.Equal(t, kbfshash.DefaultHashByteLength+overhead,
-		len(encodedID))
+	require.Len(t, encodedID, kbfshash.DefaultHashByteLength+overhead)
 
 	var id2 ID
 	err = codec.Decode(encodedID, &id2)
@@ -66,7 +64,6 @@ func TestTemporaryIDRandom(t *testing.T) {
 
 // Test that MakeRandomIDInRange returns items in the range specified.
 func TestRandomIDInRange(t *testing.T) {
-	rand.Seed(1)
 	idToInt := func(id ID) uint64 {
 		idBytes := id.Bytes()[1:9]
 		return binary.BigEndian.Uint64(idBytes)
@@ -81,19 +78,19 @@ func TestRandomIDInRange(t *testing.T) {
 				UseMathRandForTest)
 			require.NoError(t, err)
 			asInt := idToInt(id)
-			require.True(t, asInt >= i)
-			require.True(t, asInt < j)
+			require.GreaterOrEqual(t, asInt, i)
+			require.Less(t, asInt, j)
 		}
 	}
 
 	t.Log("Test that the distribution of IDs is roughly uniform.")
 	buckets := make([]int, 16)
 	numIds := 100000
-	for i := 0; i < numIds; i++ {
+	for range numIds {
 		id, err := MakeRandomIDInRange(0, 1.0, UseMathRandForTest)
 		require.NoError(t, err)
 		asInt := idToInt(id)
-		buckets[asInt>>60]++
+		buckets[asInt>>60]++ //nolint:gosec // G602: Test asserts range is valid
 	}
 	t.Log("Buckets:")
 	for i, v := range buckets {

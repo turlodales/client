@@ -2,14 +2,13 @@ package teams
 
 import (
 	"fmt"
+	"time"
+
 	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/protocol/keybase1"
-	insecurerand "math/rand"
-	"time"
 )
 
 func getUnpinnedTLF(m libkb.MetaContext) (res *unpinnedTLF, err error) {
-
 	arg := libkb.NewAPIArg("kbfs/unpinned")
 	arg.SessionType = libkb.APISessionTypeREQUIRED
 	arg.Args = libkb.HTTPArgs{
@@ -92,7 +91,7 @@ type defaultPinLoopTimer struct{}
 var _ pinLoopTimer = defaultPinLoopTimer{}
 
 func (p defaultPinLoopTimer) wait(m libkb.MetaContext, why string, rangeMinutes int64, minMinutes int64) error {
-	dur := time.Duration(minMinutes)*time.Minute + time.Duration(insecurerand.Int63n(rangeMinutes*60))*time.Second
+	dur := time.Duration(minMinutes)*time.Minute + libkb.RandomJitter(time.Duration(rangeMinutes)*time.Minute)
 	m.Debug("BackgroundPinLoop: waiting %v before %s", dur, why)
 	wakeAt := m.G().Clock().Now().Add(dur)
 	return libkb.SleepUntilWithContext(m.Ctx(), m.G().Clock(), wakeAt)
@@ -106,11 +105,11 @@ func (p defaultPinLoopTimer) StartupWait(m libkb.MetaContext) error {
 func (p defaultPinLoopTimer) LoopWait(m libkb.MetaContext, lastRes error) error {
 	// Wait at least 1 minute for the next, or 30 minutes if there was an error
 	// of any sort. Jiggle the wait for up to 3 minutes.
-	min := int64(1)
+	minV := int64(1)
 	if lastRes != nil {
-		min = int64(30)
+		minV = int64(30)
 	}
-	return p.wait(m, "next iteration", 3, min)
+	return p.wait(m, "next iteration", 3, minV)
 }
 
 type backgroundTLFPinner struct {
@@ -120,7 +119,6 @@ type backgroundTLFPinner struct {
 }
 
 func newBackgroundTLFPinner() *backgroundTLFPinner {
-
 	// We can override this members for the purposes of testing.
 	return &backgroundTLFPinner{
 		timer:          defaultPinLoopTimer{},

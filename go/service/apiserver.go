@@ -4,6 +4,7 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 
@@ -11,7 +12,6 @@ import (
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 	"github.com/keybase/go-framed-msgpack-rpc/rpc"
 	jsonw "github.com/keybase/go-jsonw"
-	"golang.org/x/net/context"
 )
 
 type APIServerHandler struct {
@@ -134,7 +134,7 @@ func (a *APIServerHandler) doPostJSON(mctx libkb.MetaContext, rawarg keybase1.Po
 	arg := a.setupArg(rawarg)
 	jsonPayload := make(libkb.JSONPayload)
 	for _, kvpair := range rawarg.JSONPayload {
-		var value interface{}
+		var value any
 		err = jsonw.EnsureMaxDepthBytesDefault([]byte(kvpair.Value))
 		if err != nil {
 			return keybase1.APIRes{}, err

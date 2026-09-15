@@ -4,6 +4,8 @@
 package client
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"text/tabwriter"
@@ -11,7 +13,6 @@ import (
 	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/protocol/keybase1"
 	"github.com/keybase/go-framed-msgpack-rpc/rpc"
-	"golang.org/x/net/context"
 )
 
 func NewGPGUIProtocol(g *libkb.GlobalContext) rpc.Protocol {
@@ -40,13 +41,13 @@ func (g GPGUI) SelectKeyID(_ context.Context, keys []keybase1.GPGKey) (string, e
 		for j, userID := range k.Identities {
 			userIDs[j] = fmt.Sprintf("%s <%s>", userID.Username, userID.Email)
 		}
-		(fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\n", i+1, k.Algorithm, k.KeyID, k.Creation, strings.Join(userIDs, ", ")))
+		fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\n", i+1, k.Algorithm, k.KeyID, k.Creation, strings.Join(userIDs, ", "))
 	}
 	w.Flush()
 
 	ret, err := PromptSelectionOrCancel(PromptDescriptorGPGSelectKey, g.parent, "Choose a key", 1, len(keys))
 	if err != nil {
-		if err == ErrInputCanceled {
+		if errors.Is(err, ErrInputCanceled) {
 			return "", nil
 		}
 		return "", err

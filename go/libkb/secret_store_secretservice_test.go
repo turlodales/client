@@ -2,7 +2,6 @@
 // this source code is governed by the included BSD license.
 
 //go:build linux && !skipkeyringtests
-// +build linux,!skipkeyringtests
 
 // nolint:unused
 package libkb
@@ -29,9 +28,11 @@ func requireError(t *testing.T, err error, msg string) {
 	require.Contains(t, err.Error(), msg)
 }
 
-var alice = NewNormalizedUsername("alice")
-var bob = NewNormalizedUsername("bob")
-var charlie = NewNormalizedUsername("charlie")
+var (
+	alice   = NewNormalizedUsername("alice")
+	bob     = NewNormalizedUsername("bob")
+	charlie = NewNormalizedUsername("charlie")
+)
 
 func TestSSSSBasic(t *testing.T) {
 	t.Skip("Skipping secret service test while Linux CI AMI is being upgraded to include keyring")
@@ -91,7 +92,7 @@ func TestSSSSCorruptKeystore(t *testing.T) {
 
 	keystore := s.keystore(mctx, "alice", nil)
 	keypath := keystore.(*FileErasableKVStore).filepath(s.keystoreKey())
-	file, err := os.OpenFile(keypath, os.O_RDWR, 0755)
+	file, err := os.OpenFile(keypath, os.O_RDWR, 0o755)
 	defer func() {
 		err := file.Close()
 		require.NoError(t, err)
@@ -122,7 +123,7 @@ func TestSSSSCorruptNoise(t *testing.T) {
 	keystore := s.keystore(mctx, "alice", nil)
 	fileKeystore := keystore.(*FileErasableKVStore)
 	keypath := fileKeystore.filepath(fileKeystore.noiseKey(s.keystoreKey()))
-	file, err := os.OpenFile(keypath, os.O_RDWR, 0755)
+	file, err := os.OpenFile(keypath, os.O_RDWR, 0o755)
 	defer func() {
 		err := file.Close()
 		require.NoError(t, err)
@@ -133,7 +134,7 @@ func TestSSSSCorruptNoise(t *testing.T) {
 
 	_, err = s.RetrieveSecret(mctx, alice)
 	require.Error(t, err)
-	require.Equal(t, err.(UnboxError).Info(), "noise hashes do not match")
+	require.Equal(t, "noise hashes do not match", err.(UnboxError).Info())
 
 	err = s.ClearSecret(mctx, alice)
 	require.NoError(t, err)
@@ -169,7 +170,7 @@ func TestSSSSCorruptKeyring(t *testing.T) {
 
 	_, err = s.RetrieveSecret(mctx, alice)
 	require.Error(t, err)
-	require.Equal(t, err.(UnboxError).Info(), "noise hashes match")
+	require.Equal(t, "noise hashes match", err.(UnboxError).Info())
 	// (i.e., issue is something else - likely a MAC mismatch, but secretbox.Open doesn't give a more specific error)
 
 	err = s.ClearSecret(mctx, alice)

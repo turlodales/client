@@ -5,6 +5,7 @@
 package libkbfs
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"reflect"
@@ -21,11 +22,11 @@ import (
 	"github.com/keybase/client/go/kbfs/kbfsmd"
 	"github.com/keybase/client/go/kbfs/tlf"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/context"
 )
 
 func fbStatusTestInit(t *testing.T) (*gomock.Controller, *ConfigMock,
-	*folderBranchStatusKeeper, *MockNodeCache) {
+	*folderBranchStatusKeeper, *MockNodeCache,
+) {
 	ctr := NewSafeTestReporter(t)
 	mockCtrl := gomock.NewController(ctr)
 	config := NewConfigMock(mockCtrl, ctr)
@@ -56,28 +57,27 @@ func TestFBStatusSignal(t *testing.T) {
 	ctx := context.Background()
 
 	_, c, err := fbsk.getStatus(ctx, nil)
-	if err != nil {
-		t.Fatalf("Couldn't get status: %v", err)
-	}
+	require.NoError(t, err,
+		"Couldn't get status: %v", err)
 
 	n := newMockNode(mockCtrl)
 	p1 := data.Path{
-		Path: []data.PathNode{{Name: testPPS("a1")}, {Name: testPPS("b1")}}}
+		Path: []data.PathNode{{Name: testPPS("a1")}, {Name: testPPS("b1")}},
+	}
 	nodeCache.EXPECT().PathFromNode(mockNodeMatcher{n}).AnyTimes().Return(p1)
 
 	fbsk.addDirtyNode(n)
 	<-c
 
 	_, c, err = fbsk.getStatus(ctx, nil)
-	if err != nil {
-		t.Fatalf("Couldn't get status: %v", err)
-	}
+	require.NoError(t, err,
+		"Couldn't get status: %v", err)
 
 	// no change should result in no signal
 	fbsk.addDirtyNode(n)
 	select {
 	case <-c:
-		t.Fatalf("Status should not have signalled a change")
+		require.FailNow(t, "Status should not have signalled a change")
 	default:
 	}
 }
@@ -88,7 +88,7 @@ type mockNodeMatcher struct {
 	node *MockNode
 }
 
-func (m mockNodeMatcher) Matches(x interface{}) bool {
+func (m mockNodeMatcher) Matches(x any) bool {
 	n, ok := x.(*MockNode)
 	if !ok {
 		return false
@@ -103,9 +103,7 @@ func (m mockNodeMatcher) String() string {
 func checkStringSlices(t *testing.T, expected, got []string) {
 	sort.Strings(expected)
 	sort.Strings(got)
-	if !reflect.DeepEqual(expected, got) {
-		t.Errorf("Expected %v; got %v", expected, got)
-	}
+	require.True(t, reflect.DeepEqual(expected, got), "Expected %v; got %v", expected, got)
 }
 
 func TestFBStatusAllFields(t *testing.T) {
@@ -131,11 +129,13 @@ func TestFBStatusAllFields(t *testing.T) {
 	// make two nodes with expected PathFromNode calls
 	n1 := newMockNode(mockCtrl)
 	p1 := data.Path{
-		Path: []data.PathNode{{Name: testPPS("a1")}, {Name: testPPS("b1")}}}
+		Path: []data.PathNode{{Name: testPPS("a1")}, {Name: testPPS("b1")}},
+	}
 	nodeCache.EXPECT().PathFromNode(mockNodeMatcher{n1}).AnyTimes().Return(p1)
 	n2 := newMockNode(mockCtrl)
 	p2 := data.Path{
-		Path: []data.PathNode{{Name: testPPS("a2")}, {Name: testPPS("b2")}}}
+		Path: []data.PathNode{{Name: testPPS("a2")}, {Name: testPPS("b2")}},
+	}
 	nodeCache.EXPECT().PathFromNode(mockNodeMatcher{n2}).AnyTimes().Return(p2)
 
 	fbsk.setRootMetadata(
@@ -161,16 +161,11 @@ func TestFBStatusAllFields(t *testing.T) {
 
 	// check the returned status for accuracy
 	status, _, err := fbsk.getStatus(ctx, nil)
-	if err != nil {
-		t.Fatalf("Couldn't get status: %v", err)
-	}
+	require.NoError(t, err,
+		"Couldn't get status: %v", err)
 
-	if !status.Staged {
-		t.Errorf("Status does not show staged changes")
-	}
-	if string(status.HeadWriter) != "alice" {
-		t.Errorf("Unexpected head writer in status: %s", status.HeadWriter)
-	}
+	require.True(t, status.Staged, "Status does not show staged changes")
+	require.Equal(t, "alice", string(status.HeadWriter), "Unexpected head writer in status: %s", status.HeadWriter)
 	expectedDirtyPaths := []string{p1.String(), p2.String()}
 	checkStringSlices(t, expectedDirtyPaths, status.DirtyPaths)
 

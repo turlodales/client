@@ -66,8 +66,6 @@ func (fod fileOrDir) Close() (err error) {
 	if fod.dir != nil {
 		fod.dir.node = nil
 	}
-	fod.file = nil
-	fod.dir = nil
 	return err
 }
 
@@ -141,7 +139,7 @@ func (hfs httpFileSystem) Open(filename string) (entry http.File, err error) {
 		}
 	}()
 
-	n, ei, err := hfs.fs.lookupOrCreateEntry(filename, os.O_RDONLY, 0600)
+	n, ei, err := hfs.fs.lookupOrCreateEntry(filename, os.O_RDONLY, 0o600)
 	if err != nil {
 		return fileOrDir{}, err
 	}

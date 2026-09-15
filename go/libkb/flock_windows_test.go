@@ -2,7 +2,6 @@
 // this source code is governed by the included BSD license.
 
 //go:build windows
-// +build windows
 
 package libkb
 
@@ -11,6 +10,8 @@ import (
 	"os/exec"
 	"syscall"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func exists(name string) bool {
@@ -35,27 +36,26 @@ func run(arg ...string) (int, error) {
 }
 
 func TestLockPIDFile_windows(t *testing.T) {
-
 	g := MakeThinGlobalContextForTesting(t)
 	lpFile := NewLockPIDFile(g, "TestLockPIDWin")
 	err := lpFile.Lock()
 
 	if !exists("TestLockPIDWin") {
-		t.Fatalf("LockPIDFile: file creation failed")
+		require.True(t, exists("TestLockPIDWin"),
+			"LockPIDFile: file creation failed")
 	} else if err != nil {
-		t.Fatalf("LockPIDFile failed: %v", err)
+		require.NoError(t, err,
+			"LockPIDFile failed: %v", err)
 	} else {
 		// External process should be blocked from deleting the file
 		run("cmd", "/c", "del", "TestLockPIDWin")
-		if !exists("TestLockPIDWin") {
-			t.Fatalf("LockPIDFile: expected error deleting locked file")
-		}
+		require.True(t, exists("TestLockPIDWin"),
+			"LockPIDFile: expected error deleting locked file")
 	}
 	lpFile.Close()
 
 	// External process should be able to delete the file now
 	exitcode, err := run("cmd", "/c", "del", "TestLockPIDWin")
-	if err != nil || exitcode != 0 || exists("TestLockPIDWin") {
-		t.Fatalf("LockPIDFile: exe.Command(del) failed: %v", err)
-	}
+	require.False(t, err != nil || exitcode != 0 || exists("TestLockPIDWin"),
+		"LockPIDFile: exe.Command(del) failed: %v", err)
 }

@@ -2,7 +2,6 @@
 // this source code is governed by the included BSD license.
 
 //go:build !windows
-// +build !windows
 
 // socket_nix.go
 
@@ -27,7 +26,6 @@ import (
 var bindLock sync.Mutex
 
 func (s SocketInfo) BindToSocket() (ret net.Listener, err error) {
-
 	// Lock so that multiple goroutines can't race over current working dir.
 	// See note above.
 	bindLock.Lock()
@@ -78,8 +76,15 @@ func (s SocketInfo) BindToSocket() (ret net.Listener, err error) {
 	ret, err = net.Listen("unix", bindFile)
 	if err != nil {
 		s.log.Warning("net.Listen failed with: %s", err.Error())
+		return ret, err
 	}
-	return ret, err
+	// Set restrictive permissions on socket file
+	if err = os.Chmod(bindFile, PermFile); err != nil {
+		s.log.Warning("os.Chmod failed with: %s", err.Error())
+		ret.Close()
+		return nil, err
+	}
+	return ret, nil
 }
 
 func (s SocketInfo) DialSocket() (net.Conn, error) {
@@ -95,7 +100,6 @@ func (s SocketInfo) DialSocket() (net.Conn, error) {
 }
 
 func (s SocketInfo) dialSocket(dialFile string) (ret net.Conn, err error) {
-
 	// Lock so that multiple goroutines can't race over current working dir.
 	// See note above.
 	bindLock.Lock()
@@ -160,7 +164,8 @@ func NewSocket(g *GlobalContext) (ret Socket, err error) {
 }
 
 func NewSocketWithFiles(
-	log logger.Logger, bindFile string, dialFiles []string) Socket {
+	log logger.Logger, bindFile string, dialFiles []string,
+) Socket {
 	return SocketInfo{
 		log:       log,
 		bindFile:  bindFile,

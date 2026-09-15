@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	billy "github.com/go-git/go-billy/v5"
 	"github.com/keybase/client/go/kbfs/data"
 	"github.com/keybase/client/go/kbfs/ioutil"
 	"github.com/keybase/client/go/kbfs/kbfsmd"
@@ -23,11 +24,11 @@ import (
 	"github.com/keybase/client/go/protocol/keybase1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	billy "gopkg.in/src-d/go-billy.v4"
 )
 
 func makeFSWithBranch(t *testing.T, branch data.BranchName, subdir string) (
-	context.Context, *tlfhandle.Handle, *FS) {
+	context.Context, *tlfhandle.Handle, *FS,
+) {
 	ctx := libcontext.BackgroundContextWithCancellationDelayer()
 	config := libkbfs.MakeTestConfigOrBust(t, "user1", "user2")
 	h, err := tlfhandle.ParseHandle(
@@ -40,12 +41,14 @@ func makeFSWithBranch(t *testing.T, branch data.BranchName, subdir string) (
 }
 
 func makeFS(t *testing.T, subdir string) (
-	context.Context, *tlfhandle.Handle, *FS) {
+	context.Context, *tlfhandle.Handle, *FS,
+) {
 	return makeFSWithBranch(t, data.MasterBranch, subdir)
 }
 
 func makeFSWithJournal(t *testing.T, subdir string) (
-	context.Context, *tlfhandle.Handle, *FS, func()) {
+	context.Context, *tlfhandle.Handle, *FS, func(),
+) {
 	ctx := libcontext.BackgroundContextWithCancellationDelayer()
 	config := libkbfs.MakeTestConfigOrBustLoggedInWithMode(
 		t, 0, libkbfs.InitSingleOp, "user1")
@@ -54,7 +57,7 @@ func makeFSWithJournal(t *testing.T, subdir string) (
 	require.NoError(t, err)
 	defer func() {
 		if err != nil {
-			os.RemoveAll(tempdir)
+			_ = os.RemoveAll(tempdir)
 		}
 	}()
 	err = config.EnableDiskLimiter(tempdir)
@@ -81,7 +84,8 @@ func makeFSWithJournal(t *testing.T, subdir string) (
 
 func testCreateFile(
 	ctx context.Context, t *testing.T, fs *FS, file string,
-	parent libkbfs.Node) {
+	parent libkbfs.Node,
+) {
 	f, err := fs.Create(file)
 	require.NoError(t, err)
 	require.Equal(t, file, f.Name())
@@ -110,7 +114,7 @@ func testCreateFile(
 
 	// Shouldn't be able to write to a read-only file.
 	_, err = f.Write(gotData)
-	require.NotNil(t, err)
+	require.Error(t, err)
 
 	err = f.Close()
 	require.NoError(t, err)
@@ -173,7 +177,7 @@ func TestAppendFile(t *testing.T) {
 	require.NoError(t, err)
 
 	testCreateFile(ctx, t, fs, "foo", rootNode)
-	f, err := fs.OpenFile("foo", os.O_APPEND, 0600)
+	f, err := fs.OpenFile("foo", os.O_APPEND, 0o600)
 	require.NoError(t, err)
 
 	// Append one byte to the file.
@@ -217,11 +221,11 @@ func TestRecreateAndExcl(t *testing.T) {
 	require.NoError(t, err)
 
 	// Try to create it with EXCL, and fail.
-	_, err = fs.OpenFile("foo", os.O_CREATE|os.O_EXCL, 0600)
-	require.NotNil(t, err)
+	_, err = fs.OpenFile("foo", os.O_CREATE|os.O_EXCL, 0o600)
+	require.Error(t, err)
 
 	// Creating a different file exclusively should work though.
-	f, err = fs.OpenFile("foo2", os.O_CREATE|os.O_EXCL, 0600)
+	f, err = fs.OpenFile("foo2", os.O_CREATE|os.O_EXCL, 0o600)
 	require.NoError(t, err)
 	err = f.Close()
 	require.NoError(t, err)
@@ -250,10 +254,10 @@ func TestStat(t *testing.T) {
 	checkDir := func(fi os.FileInfo, isWriter bool) {
 		require.Equal(t, "a", fi.Name())
 		// Not sure exactly what the dir size should be.
-		require.True(t, fi.Size() > 0)
-		expectedMode := os.FileMode(0500) | os.ModeDir
+		require.Positive(t, fi.Size())
+		expectedMode := os.FileMode(0o500) | os.ModeDir
 		if isWriter {
-			expectedMode |= 0200
+			expectedMode |= 0o200
 		}
 		require.Equal(t, expectedMode, fi.Mode())
 		require.True(t, clock.Now().Equal(fi.ModTime()))
@@ -267,9 +271,9 @@ func TestStat(t *testing.T) {
 	checkFile := func(fi os.FileInfo, isWriter bool) {
 		require.Equal(t, "foo", fi.Name())
 		require.Equal(t, int64(1), fi.Size())
-		expectedMode := os.FileMode(0400)
+		expectedMode := os.FileMode(0o400)
 		if isWriter {
-			expectedMode |= 0200
+			expectedMode |= 0o200
 		}
 		require.Equal(t, expectedMode, fi.Mode())
 		require.True(t, clock.Now().Equal(fi.ModTime()))
@@ -320,7 +324,7 @@ func TestRename(t *testing.T) {
 		ctx, h, data.MasterBranch)
 	require.NoError(t, err)
 	testCreateFile(ctx, t, fs, "foo", rootNode)
-	err = fs.MkdirAll("a/b", os.FileMode(0600))
+	err = fs.MkdirAll("a/b", os.FileMode(0o600))
 	require.NoError(t, err)
 
 	f, err := fs.Open("foo")
@@ -344,7 +348,7 @@ func TestRename(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = fs.Open("foo")
-	require.NotNil(t, err)
+	require.Error(t, err)
 
 	err = fs.SyncAll()
 	require.NoError(t, err)
@@ -358,24 +362,24 @@ func TestRemove(t *testing.T) {
 		ctx, h, data.MasterBranch)
 	require.NoError(t, err)
 	testCreateFile(ctx, t, fs, "foo", rootNode)
-	err = fs.MkdirAll("a/b", os.FileMode(0600))
+	err = fs.MkdirAll("a/b", os.FileMode(0o600))
 	require.NoError(t, err)
 
 	// Remove a file.
 	err = fs.Remove("foo")
 	require.NoError(t, err)
 	_, err = fs.Open("foo")
-	require.NotNil(t, err)
+	require.Error(t, err)
 
 	// Removing "a" should fail because it's not empty.
 	err = fs.Remove("a")
-	require.NotNil(t, err)
+	require.Error(t, err)
 
 	// Remove an empty dir and verify it's gone.
 	err = fs.Remove("a/b")
 	require.NoError(t, err)
 	_, err = fs.Lstat("a/b")
-	require.NotNil(t, err)
+	require.Error(t, err)
 
 	err = fs.SyncAll()
 	require.NoError(t, err)
@@ -404,17 +408,17 @@ func TestReadDir(t *testing.T) {
 		require.True(t, expectedNames[fi.Name()])
 		delete(expectedNames, fi.Name())
 	}
-	require.Len(t, expectedNames, 0)
+	require.Empty(t, expectedNames)
 }
 
 func TestMkdirAll(t *testing.T) {
 	ctx, _, fs := makeFS(t, "")
 	defer libkbfs.CheckConfigAndShutdown(ctx, t, fs.config)
 
-	err := fs.MkdirAll("a/b", os.FileMode(0600))
+	err := fs.MkdirAll("a/b", os.FileMode(0o600))
 	require.NoError(t, err)
 
-	err = fs.MkdirAll("a/b/c/d", os.FileMode(0600))
+	err = fs.MkdirAll("a/b/c/d", os.FileMode(0o600))
 	require.NoError(t, err)
 
 	f, err := fs.Create("a/b/c/d/foo")
@@ -428,7 +432,7 @@ func TestSymlink(t *testing.T) {
 	ctx, _, fs := makeFS(t, "")
 	defer libkbfs.CheckConfigAndShutdown(ctx, t, fs.config)
 
-	err := fs.MkdirAll("a/b/c", os.FileMode(0600))
+	err := fs.MkdirAll("a/b/c", os.FileMode(0o600))
 	require.NoError(t, err)
 
 	foo, err := fs.Create("a/b/c/foo")
@@ -477,7 +481,7 @@ func TestSymlink(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Log("File symlink across to a higher dir")
-	err = fs.MkdirAll("a/b/c/d/e/f", os.FileMode(0600))
+	err = fs.MkdirAll("a/b/c/d/e/f", os.FileMode(0o600))
 	require.NoError(t, err)
 	err = fs.Symlink("../../../foo", "a/b/c/d/e/f/bar")
 	require.NoError(t, err)
@@ -502,19 +506,19 @@ func TestSymlink(t *testing.T) {
 	err = fs.Symlink("y", "x")
 	require.NoError(t, err)
 	_, err = fs.Open("x")
-	require.NotNil(t, err)
+	require.Error(t, err)
 
 	t.Log("Symlink that tries to break chroot")
 	err = fs.Symlink("../../a", "a/breakout")
 	require.NoError(t, err)
 	_, err = fs.Open("a/breakout")
-	require.NotNil(t, err)
+	require.Error(t, err)
 
 	t.Log("Symlink to absolute path")
 	err = fs.Symlink("/etc/passwd", "absolute")
 	require.NoError(t, err)
 	_, err = fs.Open("absolute")
-	require.NotNil(t, err)
+	require.Error(t, err)
 
 	t.Log("Readlink")
 	link, err := fs.Readlink("a/bar")
@@ -540,14 +544,14 @@ func TestChmod(t *testing.T) {
 
 	fi, err := fs.Stat("foo")
 	require.NoError(t, err)
-	require.True(t, fi.Mode()&0100 == 0)
+	require.Zero(t, fi.Mode()&0o100)
 
-	err = fs.Chmod("foo", 0777)
+	err = fs.Chmod("foo", 0o777)
 	require.NoError(t, err)
 
 	fi, err = fs.Stat("foo")
 	require.NoError(t, err)
-	require.True(t, fi.Mode()&0100 != 0)
+	require.NotZero(t, fi.Mode()&0o100)
 }
 
 func TestChtimes(t *testing.T) {
@@ -582,7 +586,7 @@ func TestChroot(t *testing.T) {
 
 	require.Equal(t, "/keybase/private/user1", fs.Root())
 
-	err := fs.MkdirAll("a/b/c", os.FileMode(0600))
+	err := fs.MkdirAll("a/b/c", os.FileMode(0o600))
 	require.NoError(t, err)
 
 	foo, err := fs.Create("a/b/c/foo")
@@ -615,7 +619,7 @@ func TestChroot(t *testing.T) {
 
 	t.Log("Attempt a breakout")
 	_, err = fs.Chroot("../../../etc/passwd")
-	require.NotNil(t, err)
+	require.Error(t, err)
 }
 
 func TestFileLocking(t *testing.T) {
@@ -709,7 +713,7 @@ func TestArchivedByRevision(t *testing.T) {
 	defer libkbfs.CheckConfigAndShutdown(ctx, t, fsArchived.config)
 	fis, err = fsArchived.ReadDir("")
 	require.NoError(t, err)
-	require.Len(t, fis, 0)
+	require.Empty(t, fis)
 }
 
 func TestEmptyFS(t *testing.T) {
@@ -728,8 +732,32 @@ func TestEmptyFS(t *testing.T) {
 
 	fis, err := fs.ReadDir("")
 	require.NoError(t, err)
-	require.Len(t, fis, 0)
+	require.Empty(t, fis)
 
-	err = fs.MkdirAll("a", 0777)
+	err = fs.MkdirAll("a", 0o777)
 	require.Error(t, err)
+}
+
+// TestSubscribeToObsolete is a smoke test for the (ch, unsubscribe, err)
+// contract: subscribe returns a live channel and a callable unsubscribe, the
+// channel is not closed while the TLF handle is unchanged, and unsubscribe is
+// safe to call multiple times.
+func TestSubscribeToObsolete(t *testing.T) {
+	ctx, _, fs := makeFS(t, "")
+	defer libkbfs.CheckConfigAndShutdown(ctx, t, fs.config)
+
+	obsoleteCh, unsubscribe, err := fs.SubscribeToObsolete()
+	require.NoError(t, err)
+	require.NotNil(t, obsoleteCh)
+	require.NotNil(t, unsubscribe)
+
+	select {
+	case <-obsoleteCh:
+		t.Fatal("obsoleteCh unexpectedly closed before any handle change")
+	default:
+	}
+
+	unsubscribe()
+	// Idempotent: second call must not panic.
+	unsubscribe()
 }

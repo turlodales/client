@@ -1,57 +1,33 @@
-import * as C from '@/constants'
-import * as Constants from '@/constants/tracker2'
-import type {Section as _Section} from '@/common-adapters/section-list'
 import * as Kb from '@/common-adapters'
+import * as C from '@/constants'
 import * as React from 'react'
-import Actions from './actions/container'
-import Assertion from '@/tracker2/assertion/container'
-import Bio from '@/tracker2/bio/container'
-import Friend from './friend/container'
-import Measure from './measure'
+import Actions from './actions'
+import Assertion from '@/tracker/assertion'
+import Bio from '@/tracker/bio'
+import Friend from './friend'
 import Teams from './teams'
+import SharedTeams from './shared-teams'
 import chunk from 'lodash/chunk'
 import * as T from '@/constants/types'
 import type {RPCError} from '@/util/errors'
 import upperFirst from 'lodash/upperFirst'
-import {SiteIcon} from '../generic/shared'
+import {SiteIcon} from '../generic/site-icon'
+import useUserData from './hooks'
+import {LoadedTeamsListProvider} from '@/teams/use-teams-list'
+import * as TestIDs from '@/tests/e2e/shared/test-ids'
+import {registerExternalResetter} from '@/util/zustand'
 
 export type BackgroundColorType = 'red' | 'green' | 'blue'
 
-type Section = _Section<'bioTeamProofs'> | _Section<ChunkType[number], {itemWidth: number}>
+type Item =
+  | {type: 'bioTeamProofs'}
+  | {type: 'noFriends'; text: string}
+  | {type: 'loading'; text: string}
+  | {type: 'friend'; itemWidth: number; usernames: Array<string>}
 
-export type Props = {
-  assertionKeys?: ReadonlyArray<string>
-  backgroundColorType: BackgroundColorType
-  blocked: boolean
-  followThem: boolean
-  followers?: ReadonlyArray<string>
-  followersCount?: number
-  following?: ReadonlyArray<string>
-  followingCount?: number
-  hidFromFollowers: boolean
-  notAUser: boolean
-  onAddIdentity?: () => void
-  onBack: () => void
-  onReload: () => void
-  onEditAvatar?: (e?: React.BaseSyntheticEvent) => void
-  // onIKnowThem?: () => void
-  reason: string
-  sbsAvatarUrl?: string
-  state: T.Tracker.DetailsState
-  suggestionKeys?: ReadonlyArray<string>
-  userIsYou: boolean
-  username: string
-  name: string // assertion value
-  service: string // assertion key (if SBS)
-  serviceIcon?: ReadonlyArray<T.Tracker.SiteIcon>
-  fullName?: string // full name from external profile
-  title: string
-  // vouchShowButton: boolean
-  // vouchDisableButton: boolean
-  // webOfTrustEntries: ReadonlyArray<T.Tracker.WebOfTrustEntry>
-}
+type Section = Kb.SectionType<Item>
 
-const colorTypeToStyle = (type: 'red' | 'green' | 'blue') => {
+const colorTypeToStyle = (type: 'red' | 'green' | 'blue', styles: ReturnType<typeof useStyles>) => {
   switch (type) {
     case 'red':
       return styles.typedBackgroundRed
@@ -76,33 +52,60 @@ const SbsTitle = (p: SbsTitleProps) => (
     <Kb.Text type="HeaderBig">{p.sbsUsername}</Kb.Text>
   </Kb.Box2>
 )
-const BioLayout = (p: BioTeamProofsProps) => (
-  <Kb.Box2 direction="vertical" style={styles.bio}>
-    <Kb.ConnectedNameWithIcon
-      onClick={p.title === p.username ? 'profile' : noopOnClick}
-      title={
-        p.title !== p.username ? <SbsTitle sbsUsername={p.title} serviceIcon={p.serviceIcon} /> : undefined
-      }
-      username={p.username}
-      underline={false}
-      selectable={true}
-      colorFollowing={true}
-      notFollowingColorOverride={p.notAUser ? Kb.Styles.globalColors.black_50 : Kb.Styles.globalColors.orange}
-      editableIcon={!!p.onEditAvatar}
-      onEditIcon={p.onEditAvatar || undefined}
-      avatarSize={avatarSize}
-      size="huge"
-      avatarImageOverride={p.sbsAvatarUrl}
-      withProfileCardPopup={false}
-    />
-    <Kb.Box2 direction="vertical" fullWidth={true} gap="small">
-      <Bio inTracker={false} username={p.username} />
-      <Actions username={p.username} />
+const BioLayout = (p: BioTeamProofsProps) => {
+  const styles = useStyles()
+  const theme = Kb.Styles.useTheme()
+  return (
+    <Kb.Box2 direction="vertical" alignSelf="flex-start" style={styles.bio}>
+      <Kb.NameWithIcon
+        onClick={p.title === p.username ? 'profile' : noopOnClick}
+        title={
+          p.title !== p.username ? <SbsTitle sbsUsername={p.title} serviceIcon={p.serviceIcon} /> : undefined
+        }
+        username={p.username}
+        underline={false}
+        selectable={true}
+        colorFollowing={true}
+        notFollowingColorOverride={p.notAUser ? theme.black_50 : theme.orange}
+        editableIcon={!!p.onEditAvatar}
+        onEditIcon={p.onEditAvatar || undefined}
+        avatarSize={avatarSize}
+        size="huge"
+        avatarImageOverride={p.sbsAvatarUrl}
+        withProfileCardPopup={false}
+      />
+      <Kb.Box2 direction="vertical" fullWidth={true} gap="small">
+        <Bio
+          bio={p.bio}
+          blocked={p.blocked}
+          followThem={p.followThem}
+          followersCount={p.followersCount}
+          followingCount={p.followingCount}
+          followsYou={p.followsYou}
+          fullname={p.fullName}
+          hidFromFollowers={p.hidFromFollowers}
+          inTracker={false}
+          location={p.location}
+          sbsDescription={p.sbsDescription}
+          username={p.username}
+        />
+        <Actions
+          blocked={p.blocked}
+          followThem={p.followThem}
+          followsYou={p.followsYou}
+          guiID={p.guiID}
+          hidFromFollowers={p.hidFromFollowers}
+          onReload={p.onReload}
+          state={p.state}
+          username={p.username}
+        />
+      </Kb.Box2>
     </Kb.Box2>
-  </Kb.Box2>
-)
+  )
+}
 
 const ProveIt = (p: BioTeamProofsProps) => {
+  const styles = useStyles()
   let doWhat: string
   switch (p.service) {
     case 'phone':
@@ -116,6 +119,7 @@ const ProveIt = (p: BioTeamProofsProps) => {
       break
   }
   const url = 'https://keybase.io/install'
+  const installUrlProps = Kb.useClickURL(url)
   return (
     <>
       <Kb.Text type="BodySmall" style={styles.proveIt}>
@@ -123,7 +127,7 @@ const ProveIt = (p: BioTeamProofsProps) => {
       </Kb.Text>
       <Kb.Text type="BodySmall" style={styles.proveIt}>
         Send them this link:{' '}
-        <Kb.Text type="BodySmallPrimaryLink" onClickURL={url} selectable={true}>
+        <Kb.Text type="BodySmallPrimaryLink" {...installUrlProps} selectable={true}>
           {url}
         </Kb.Text>
       </Kb.Text>
@@ -132,17 +136,27 @@ const ProveIt = (p: BioTeamProofsProps) => {
 }
 
 const Proofs = (p: BioTeamProofsProps) => {
-  let assertions: React.ReactNode
-  if (p.assertionKeys) {
-    assertions = [
-      ...p.assertionKeys.map(a => <Assertion key={a} username={p.username} assertionKey={a} />),
-      ...(p.suggestionKeys || []).map(s => (
-        <Assertion isSuggestion={true} key={s} username={p.username} assertionKey={s} />
-      )),
-    ]
-  } else {
-    assertions = null
-  }
+  const assertions = [
+    ...(p.assertions || []).map(a => (
+      <Assertion
+        key={a.assertionKey}
+        assertion={a}
+        notAUser={p.notAUser}
+        onRefresh={p.onReload}
+        stellarHidden={!!p.stellarHidden}
+        username={p.username}
+      />
+    )),
+    ...(p.suggestions || []).map(s => (
+      <Assertion
+        assertion={s}
+        isSuggestion={true}
+        key={s.assertionKey}
+        onRefresh={p.onReload}
+        username={p.username}
+      />
+    )),
+  ]
 
   return (
     <Kb.Box2 direction="vertical" fullWidth={true}>
@@ -152,6 +166,20 @@ const Proofs = (p: BioTeamProofsProps) => {
   )
 }
 
+const TeamSections = (props: {
+  notAUser: boolean
+  sharedTeams?: ReadonlyArray<T.RPCChat.SharedTeam>
+  teamShowcase?: ReadonlyArray<T.Tracker.TeamShowcase>
+  username: string
+}) => (
+  <LoadedTeamsListProvider>
+    <Kb.Box2 direction="horizontal" fullWidth={true} gap="small" alignItems="flex-start">
+      <Teams username={props.username} teamShowcase={props.teamShowcase} />
+      {!props.notAUser && <SharedTeams sharedTeams={props.sharedTeams} username={props.username} />}
+    </Kb.Box2>
+  </LoadedTeamsListProvider>
+)
+
 type TabsProps = {
   loadingFollowers: boolean
   loadingFollowing: boolean
@@ -159,48 +187,44 @@ type TabsProps = {
   selectedTab: string
   numFollowers: number | undefined
   numFollowing: number | undefined
-  // numWebOfTrust: number | undefined
 }
 
-class Tabs extends React.Component<TabsProps> {
-  _onClickFollowing = () => this.props.onSelectTab('following')
-  _onClickFollowers = () => this.props.onSelectTab('followers')
-  _tab = (tab: Tab) => (
+const Tabs = (p: TabsProps) => {
+  const styles = useStyles()
+  const {onSelectTab} = p
+  const onClickFollowing = () => onSelectTab('following')
+  const onClickFollowers = () => onSelectTab('followers')
+  const tab = (tab: Tab) => (
     <Kb.ClickableBox
-      onClick={tab === 'following' ? this._onClickFollowing : this._onClickFollowers}
-      style={Kb.Styles.collapseStyles([
-        styles.followTab,
-        tab === this.props.selectedTab && styles.followTabSelected,
-      ])}
+      direction="horizontal"
+      gap="xtiny"
+      onClick={tab === 'following' ? onClickFollowing : onClickFollowers}
+      style={Kb.Styles.collapseStyles([styles.followTab, tab === p.selectedTab && styles.followTabSelected])}
     >
-      <Kb.Box2 direction="horizontal" gap="xtiny">
-        <Kb.Text
-          type="BodySmallSemibold"
-          style={tab === this.props.selectedTab ? styles.followTabTextSelected : styles.followTabText}
-        >
-          {tab === 'following'
-            ? `Following${!this.props.loadingFollowing ? ` (${this.props.numFollowing || 0})` : ''}`
-            : `Followers${!this.props.loadingFollowers ? ` (${this.props.numFollowers || 0})` : ''}`}
-        </Kb.Text>
-        {((tab === 'following' && this.props.loadingFollowing) || this.props.loadingFollowers) && (
-          <Kb.ProgressIndicator style={styles.progress} />
-        )}
-      </Kb.Box2>
+      <Kb.Text
+        type="BodySmallSemibold"
+        style={tab === p.selectedTab ? styles.followTabTextSelected : styles.followTabText}
+      >
+        {tab === 'following'
+          ? `Following${!p.loadingFollowing ? ` (${p.numFollowing || 0})` : ''}`
+          : `Followers${!p.loadingFollowers ? ` (${p.numFollowers || 0})` : ''}`}
+      </Kb.Text>
+      {((tab === 'following' && p.loadingFollowing) || p.loadingFollowers) && (
+        <Kb.ProgressIndicator style={styles.progress} />
+      )}
     </Kb.ClickableBox>
   )
 
-  render() {
-    return (
-      <Kb.Box2 direction="horizontal" style={styles.followTabContainer} fullWidth={true}>
-        {this._tab('followers')}
-        {this._tab('following')}
-      </Kb.Box2>
-    )
-  }
+  return (
+    <Kb.Box2 direction="horizontal" style={styles.followTabContainer} fullWidth={true}>
+      {tab('followers')}
+      {tab('following')}
+    </Kb.Box2>
+  )
 }
 
 const widthToDimensions = (width: number) => {
-  const singleItemWidth = Kb.Styles.isMobile ? 130 : 120
+  const singleItemWidth = isMobile ? 134 : 120
   const itemsInARow = Math.floor(Math.max(1, width / singleItemWidth))
   const itemWidth = Math.floor(width / itemsInARow)
   return {itemWidth, itemsInARow}
@@ -211,310 +235,370 @@ type FriendRowProps = {
   itemWidth: number
 }
 
-class FriendRow extends React.Component<FriendRowProps> {
-  shouldComponentUpdate(nextProps: FriendRowProps) {
-    return (
-      this.props.itemWidth !== nextProps.itemWidth ||
-      !C.shallowEqual(this.props.usernames, nextProps.usernames)
-    )
-  }
-
-  render() {
-    return (
-      <Kb.Box2 direction="horizontal" fullWidth={true} style={styles.friendRow}>
-        {this.props.usernames.map(u => (
-          <Friend key={u} username={u} width={this.props.itemWidth} />
-        ))}
-      </Kb.Box2>
-    )
-  }
+function FriendRow(p: FriendRowProps) {
+  const styles = useStyles()
+  return (
+    <Kb.Box2 direction="horizontal" fullWidth={true} style={styles.friendRow}>
+      {p.usernames.map(u => (
+        <Friend key={u} username={u} width={p.itemWidth} />
+      ))}
+    </Kb.Box2>
+  )
 }
 
 export type BioTeamProofsProps = {
   onAddIdentity?: () => void
-  assertionKeys?: ReadonlyArray<string>
+  assertions?: ReadonlyArray<T.Tracker.Assertion>
   backgroundColorType: BackgroundColorType
+  bio?: string
+  blocked: boolean
+  followThem: boolean
+  followersCount?: number
+  followsYou: boolean
+  followingCount?: number
+  guiID: string
+  hidFromFollowers: boolean
   onEditAvatar?: (e?: React.BaseSyntheticEvent) => void
   notAUser: boolean
-  suggestionKeys?: ReadonlyArray<string>
+  onReload: () => void
+  suggestions?: ReadonlyArray<T.Tracker.Assertion>
   username: string
   reason: string
   name: string
+  location?: string
   sbsAvatarUrl?: string
+  sbsDescription?: string
   service: string
   serviceIcon?: ReadonlyArray<T.Tracker.SiteIcon>
+  state: T.Tracker.DetailsState
+  stellarHidden: boolean
+  sharedTeams?: ReadonlyArray<T.RPCChat.SharedTeam>
+  teamShowcase?: ReadonlyArray<T.Tracker.TeamShowcase>
   fullName?: string
   title: string
 }
-const BioTeamProofs = (props: BioTeamProofsProps) => {
-  const addIdentity = props.onAddIdentity ? (
-    <Kb.ButtonBar style={styles.addIdentityContainer}>
-      <Kb.Button
-        fullWidth={true}
-        onClick={props.onAddIdentity}
-        style={styles.addIdentityButton}
-        mode="Secondary"
-        label="Add more identities"
-      />
-    </Kb.ButtonBar>
-  ) : null
-  return Kb.Styles.isMobile ? (
-    <Kb.Box2 direction="vertical" fullWidth={true} style={styles.bioAndProofs}>
-      {!!props.reason && (
-        <Kb.Text
-          type="BodySmallSemibold"
-          negative={true}
-          center={true}
-          style={Kb.Styles.collapseStyles([styles.reason, colorTypeToStyle(props.backgroundColorType)])}
-        >
-          {props.reason}
-        </Kb.Text>
-      )}
-      <Kb.Box2 direction="vertical" fullWidth={true} style={{position: 'relative'}}>
-        <Kb.Box2
-          direction="vertical"
-          fullWidth={true}
-          style={Kb.Styles.collapseStyles([
-            styles.backgroundColor,
-            colorTypeToStyle(props.backgroundColorType),
-          ])}
-        />
-      </Kb.Box2>
-      <BioLayout {...props} />
-      <Kb.Box2 direction="vertical" fullWidth={true} style={styles.proofsArea}>
-        <Teams username={props.username} />
-        <Proofs {...props} />
-        {addIdentity}
-      </Kb.Box2>
-    </Kb.Box2>
-  ) : (
+const BackgroundColorBox = (p: {backgroundColorType: BackgroundColorType}) => {
+  const styles = useStyles()
+  return (
+    <Kb.Box2
+      direction="vertical"
+      fullWidth={true}
+      style={Kb.Styles.collapseStyles([styles.backgroundColor, colorTypeToStyle(p.backgroundColorType, styles)])}
+    />
+  )
+}
+
+const TeamsAndProofs = (props: BioTeamProofsProps) => {
+  const styles = useStyles()
+  return (
     <>
-      <Kb.Box2
-        direction="vertical"
-        fullWidth={true}
-        style={Kb.Styles.collapseStyles([
-          styles.backgroundColor,
-          colorTypeToStyle(props.backgroundColorType),
-        ])}
+      <TeamSections
+        notAUser={props.notAUser}
+        sharedTeams={props.sharedTeams}
+        teamShowcase={props.teamShowcase}
+        username={props.username}
       />
-      <Kb.Box2 key="bioTeam" direction="horizontal" fullWidth={true} style={styles.bioAndProofs}>
-        <BioLayout {...props} />
-        <Kb.Box2 direction="vertical" style={styles.proofs}>
-          <Kb.Text type="BodySmallSemibold" negative={true} center={true} style={styles.reason}>
-            {props.reason}
-          </Kb.Text>
-          <Teams username={props.username} />
-          <Proofs {...props} />
-          {addIdentity}
-        </Kb.Box2>
-      </Kb.Box2>
+      <Proofs {...props} />
+      {!!props.onAddIdentity && (
+        <Kb.ButtonBar style={styles.addIdentityContainer}>
+          <Kb.Button
+            fullWidth={true}
+            onClick={props.onAddIdentity}
+            style={styles.addIdentityButton}
+            mode="Secondary"
+            label="Add more identities"
+          />
+        </Kb.ButtonBar>
+      )}
     </>
   )
 }
 
-type State = {
-  selectedTab: string
-  width: number
+const BioTeamProofs = (props: BioTeamProofsProps) => {
+  const styles = useStyles()
+  return isMobile ? (
+      <Kb.Box2
+        direction="vertical"
+        fullWidth={true}
+        justifyContent="space-around"
+        relative={true}
+        style={styles.bioAndProofs}
+      >
+        {!!props.reason && (
+          <Kb.Text
+            type="BodySmallSemibold"
+            negative={true}
+            center={true}
+            style={Kb.Styles.collapseStyles([styles.reason, colorTypeToStyle(props.backgroundColorType, styles)])}
+          >
+            {props.reason}
+          </Kb.Text>
+        )}
+        <Kb.Box2 direction="vertical" fullWidth={true} relative={true}>
+          <BackgroundColorBox backgroundColorType={props.backgroundColorType} />
+        </Kb.Box2>
+        <BioLayout {...props} />
+        <Kb.Box2 direction="vertical" fullWidth={true} style={styles.proofsArea}>
+          <TeamsAndProofs {...props} />
+        </Kb.Box2>
+      </Kb.Box2>
+    ) : (
+      <>
+        <BackgroundColorBox backgroundColorType={props.backgroundColorType} />
+        <Kb.Box2
+          key="bioTeam"
+          direction="horizontal"
+          fullWidth={true}
+          justifyContent="space-around"
+          relative={true}
+          style={styles.bioAndProofs}
+        >
+          <BioLayout {...props} />
+          <Kb.Box2 direction="vertical" noShrink={true} style={styles.proofs}>
+            <Kb.Text type="BodySmallSemibold" negative={true} center={true} style={styles.reason}>
+              {props.reason}
+            </Kb.Text>
+            <TeamsAndProofs {...props} />
+          </Kb.Box2>
+        </Kb.Box2>
+      </>
+    )
 }
 
 type Tab = 'followers' | 'following'
 
-type ChunkType = Array<Array<string> | {type: 'noFriends'; text: string} | {type: 'loading'; text: string}>
+const User = (props: {username: string}) => {
+  const styles = useStyles()
+  const p = useUserData(props.username)
+  const insetTop = Kb.useSafeAreaInsets().top
+  const {username} = p
+  const [selectedTab, setSelectedTab] = React.useState<Tab>(usernameSelectedTab.get(username) ?? 'followers')
+  const [width, setWidth] = React.useState(Kb.Styles.dimensionWidth)
 
-// TODO move container and get rid of this simple wrapper
-const UserWrap = (p: Props) => {
-  const insets = Kb.useSafeAreaInsets()
-  return <User {...p} insetTop={insets.top} />
-}
+  const changeTab = React.useCallback(
+    (tab: Tab) => {
+      setSelectedTab(tab)
+      usernameSelectedTab.set(username, tab)
+    },
+    [username]
+  )
 
-type Props2 = Props & {insetTop: number}
-
-class User extends React.Component<Props2, State> {
-  constructor(props: Props2) {
-    super(props)
-    this.state = {
-      selectedTab: usernameSelectedTab.get(props.username) ?? 'followers',
-      width: Kb.Styles.dimensionWidth,
-    }
-  }
-
-  _changeTab = (tab: Tab) => {
-    this.setState(p => {
-      if (p.selectedTab === tab) {
-        return null
-      }
-      const selectedTab = tab
-      usernameSelectedTab.set(this.props.username, selectedTab)
-      return {selectedTab}
+  const wrapperRef = React.useRef<Kb.MeasureRef | null>(null)
+  React.useEffect(() => {
+    if (isMobile) return
+    const el = wrapperRef.current
+    if (!el) return
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry) setWidth(entry.contentRect.width)
     })
-  }
+    observer.observe(el as unknown as Element)
+    return () => observer.disconnect()
+  }, [])
 
-  _renderSectionHeader = ({section}: {section: Section}) => {
-    if (section === this._bioTeamProofsSection) return null
-    if (this.props.notAUser) return null
+  const errorFilter = (e: RPCError) => e.code !== T.RPCGen.StatusCode.scresolutionfailed
 
-    const loadingFollowing = this.props.following === undefined
-    const loadingFollowers = this.props.followers === undefined
-    return (
-      <Tabs
-        key="tabs"
-        loadingFollowing={loadingFollowing}
-        loadingFollowers={loadingFollowers}
-        numFollowers={this.props.followersCount}
-        numFollowing={this.props.followingCount}
-        // numWebOfTrust={this.props.webOfTrustEntries.length}
-        onSelectTab={this._changeTab}
-        selectedTab={this.state.selectedTab}
-      />
-    )
-  }
-
-  _renderOtherUsers = ({
-    item,
-    section,
-    index,
-  }: {
-    item: 'bioTeamProofs' | ChunkType[number]
-    section: {itemWidth: number}
-    index: number
-  }) => {
-    if (item === 'bioTeamProofs') return null
-    if (Array.isArray(item)) {
-      return <FriendRow key={'friend' + index} usernames={item} itemWidth={section.itemWidth} />
-    }
-    return this.props.notAUser ? null : (
-      <Kb.Box2 direction="horizontal" style={styles.textEmpty} centerChildren={true}>
-        <Kb.Text type="BodySmall">{item.text}</Kb.Text>
-      </Kb.Box2>
-    )
-  }
-
-  _bioTeamProofsSection = {
-    data: ['bioTeamProofs'],
-    renderItem: () => (
-      <BioTeamProofs
-        onAddIdentity={this.props.onAddIdentity}
-        assertionKeys={this.props.assertionKeys}
-        backgroundColorType={this.props.backgroundColorType}
-        username={this.props.username}
-        name={this.props.name}
-        service={this.props.service}
-        serviceIcon={this.props.serviceIcon}
-        reason={this.props.reason}
-        sbsAvatarUrl={this.props.sbsAvatarUrl}
-        suggestionKeys={this.props.suggestionKeys}
-        onEditAvatar={this.props.onEditAvatar}
-        notAUser={this.props.notAUser}
-        fullName={this.props.fullName}
-        title={this.props.title}
-      />
-    ),
-  } as const
-
-  _onMeasured = (width: number) => this.setState(p => (p.width !== width ? {width} : null))
-  _keyExtractor = (_: unknown, index: number) => String(index)
-
-  componentDidUpdate(prevProps: Props) {
-    if (this.props.username !== prevProps.username) {
-      this.props.onReload()
-    }
-  }
-
-  _errorFilter = (e: RPCError) => e.code !== T.RPCGen.StatusCode.scresolutionfailed
-
-  render() {
-    const friends =
-      this.state.selectedTab === 'following'
-        ? this.props.following
-        : this.state.selectedTab === 'followers'
-          ? this.props.followers
-          : null
-    const {itemsInARow, itemWidth} = widthToDimensions(this.state.width)
-    const chunks: ChunkType = this.state.width ? chunk(friends, itemsInARow) : []
-    if (chunks.length === 0) {
-      if (this.props.following && this.props.followers) {
-        chunks.push({
+  const {itemsInARow, itemWidth} = widthToDimensions(width)
+  const chunks: Array<Item> = React.useMemo(() => {
+    const friends = selectedTab === 'following' ? p.following : p.followers
+    const result: Array<Item> = width
+      ? chunk(friends, itemsInARow).map(c => {
+          return {
+            itemWidth,
+            type: 'friend',
+            usernames: c,
+          } as const
+        })
+      : []
+    if (result.length === 0) {
+      if (p.following && p.followers) {
+        result.push({
           text:
-            this.state.selectedTab === 'following'
-              ? `${this.props.userIsYou ? 'You are' : `${this.props.username} is`} not following anyone.`
-              : `${this.props.userIsYou ? 'You have' : `${this.props.username} has`} no followers.`,
+            selectedTab === 'following'
+              ? `${p.userIsYou ? 'You are' : `${p.username} is`} not following anyone.`
+              : `${p.userIsYou ? 'You have' : `${p.username} has`} no followers.`,
           type: 'noFriends',
         })
       } else {
-        chunks.push({
-          text: 'Loading...',
-          type: 'loading',
-        })
+        result.push({text: 'Loading...', type: 'loading'})
       }
     }
+    return result
+  }, [selectedTab, p.following, p.followers, width, itemsInARow, itemWidth, p.userIsYou, p.username])
 
-    const containerStyle = {
-      paddingTop:
-        (Kb.Styles.isAndroid ? 56 : Kb.Styles.isTablet ? 80 : Kb.Styles.isIOS ? 46 : 80) +
-        this.props.insetTop,
-    }
-
-    return (
-      <Kb.Reloadable
-        reloadOnMount={true}
-        onReload={this.props.onReload}
-        waitingKeys={[Constants.profileLoadWaitingKey]}
-        errorFilter={this._errorFilter}
-        style={styles.reloadable}
-      >
-        <Kb.Box2
-          direction="vertical"
-          fullWidth={true}
-          fullHeight={true}
-          style={Kb.Styles.collapseStyles([containerStyle, colorTypeToStyle(this.props.backgroundColorType)])}
-        >
-          <Kb.Box2 direction="vertical" style={styles.innerContainer}>
-            {!Kb.Styles.isMobile && <Measure onMeasured={this._onMeasured} />}
-            {!!this.state.width && (
-              <Kb.SectionList<Section>
-                key={this.props.username + this.state.width /* force render on user change or width change */}
-                desktopReactListTypeOverride="variable"
-                desktopItemSizeEstimatorOverride={() => 113}
-                getItemHeight={item => (Array.isArray(item) ? 113 : 0)}
-                stickySectionHeadersEnabled={true}
-                renderSectionHeader={this._renderSectionHeader}
-                keyExtractor={this._keyExtractor}
-                sections={
-                  [
-                    this._bioTeamProofsSection,
-                    {
-                      data: chunks,
-                      itemWidth,
-                      renderItem: this._renderOtherUsers,
-                    },
-                  ] as const
-                }
-                style={styles.sectionList}
-                contentContainerStyle={styles.sectionListContentStyle}
-              />
-            )}
-          </Kb.Box2>
-        </Kb.Box2>
-      </Kb.Reloadable>
-    )
+  const containerStyle = {
+    paddingTop: (isAndroid ? 56 : Kb.Styles.isTablet ? 80 : isIOS ? 46 : 80) + insetTop,
   }
+
+  const loadingFollowing = p.following === undefined
+  const loadingFollowers = p.followers === undefined
+  const renderSectionHeader = React.useCallback(
+    ({section}: {section: Section}) => {
+      if (section.data[0]?.type === 'bioTeamProofs') return null
+      if (p.notAUser) return null
+      return (
+        <Tabs
+          key="tabs"
+          loadingFollowing={loadingFollowing}
+          loadingFollowers={loadingFollowers}
+          numFollowers={p.followersCount}
+          numFollowing={p.followingCount}
+          onSelectTab={changeTab}
+          selectedTab={selectedTab}
+        />
+      )
+    },
+    [
+      p.notAUser,
+      loadingFollowing,
+      loadingFollowers,
+      p.followersCount,
+      p.followingCount,
+      changeTab,
+      selectedTab,
+    ]
+  )
+
+  const sections: Array<Section> = React.useMemo(
+    () =>
+      [
+        {
+          data: [{type: 'bioTeamProofs'}],
+          renderItem: () => (
+            <BioTeamProofs
+              onAddIdentity={p.onAddIdentity}
+              assertions={p.assertions}
+              backgroundColorType={p.backgroundColorType}
+              bio={p.bio}
+              blocked={p.blocked}
+              followThem={p.followThem}
+              followersCount={p.followersCount}
+              followsYou={p.followsYou}
+              followingCount={p.followingCount}
+              guiID={p.guiID}
+              hidFromFollowers={p.hidFromFollowers}
+              username={p.username}
+              name={p.name}
+              location={p.location}
+              service={p.service}
+              serviceIcon={p.serviceIcon}
+              reason={p.reason}
+              sbsAvatarUrl={p.sbsAvatarUrl}
+              sbsDescription={p.sbsDescription}
+              sharedTeams={p.sharedTeams}
+              suggestions={p.suggestions}
+              onEditAvatar={p.onEditAvatar}
+              notAUser={p.notAUser}
+              onReload={p.onReload}
+              state={p.state}
+              stellarHidden={!!p.stellarHidden}
+              teamShowcase={p.teamShowcase}
+              fullName={p.fullName}
+              title={p.title}
+            />
+          ),
+        } as const,
+        {
+          data: chunks,
+          renderItem: ({item, index}: {item: Item; index: number}) => {
+            if (item.type === 'bioTeamProofs') return null
+            if (item.type === 'friend') {
+              return (
+                <FriendRow
+                  key={'friend' + String(index)}
+                  usernames={item.usernames}
+                  itemWidth={item.itemWidth}
+                />
+              )
+            }
+            return p.notAUser ? null : (
+              <Kb.Box2 direction="horizontal" style={styles.textEmpty} centerChildren={true}>
+                <Kb.Text type="BodySmall">{item.text}</Kb.Text>
+              </Kb.Box2>
+            )
+          },
+        },
+      ] as const,
+    [
+      p.onAddIdentity,
+      p.assertions,
+      p.backgroundColorType,
+      p.bio,
+      p.blocked,
+      p.followThem,
+      p.followersCount,
+      p.followsYou,
+      p.followingCount,
+      p.fullName,
+      p.guiID,
+      p.hidFromFollowers,
+      p.location,
+      p.name,
+      p.notAUser,
+      p.onEditAvatar,
+      p.onReload,
+      p.reason,
+      p.sbsAvatarUrl,
+      p.sbsDescription,
+      p.service,
+      p.serviceIcon,
+      p.state,
+      p.stellarHidden,
+      p.suggestions,
+      p.sharedTeams,
+      p.teamShowcase,
+      p.title,
+      p.username,
+      chunks,
+      styles,
+    ]
+  )
+
+  return (
+    <Kb.Reloadable
+      onReload={p.onReload}
+      waitingKeys={[C.waitingKeyTrackerProfileLoad]}
+      errorFilter={errorFilter}
+      style={styles.reloadable}
+    >
+      <Kb.Box2
+        direction="vertical"
+        fullWidth={true}
+        fullHeight={true}
+        style={Kb.Styles.collapseStyles([containerStyle, colorTypeToStyle(p.backgroundColorType, styles)])}
+        testID={TestIDs.PROFILE_PAGE}
+      >
+        <Kb.Box2 direction="vertical" fullWidth={true} fullHeight={true} ref={wrapperRef}>
+          <Kb.SectionList
+            key={p.username}
+            stickySectionHeadersEnabled={true}
+            renderSectionHeader={renderSectionHeader}
+            sections={sections}
+            style={styles.sectionList}
+            contentContainerStyle={styles.sectionListContentStyle}
+          />
+        </Kb.Box2>
+      </Kb.Box2>
+    </Kb.Reloadable>
+  )
 }
 
-// don't bother to keep this in the store
 const usernameSelectedTab = new Map<string, Tab>()
+
+// module scope outlives sign-out; keyed by username
+registerExternalResetter('profile-user-selected-tab', () => {
+  usernameSelectedTab.clear()
+})
 
 const avatarSize = 128
 
-const styles = Kb.Styles.styleSheetCreate(() => ({
+const useStyles = Kb.Styles.createStyleHook(theme => ({
   addIdentityButton: {
-    marginBottom: Kb.Styles.globalMargins.xsmall,
-    marginTop: Kb.Styles.globalMargins.xsmall,
+    ...Kb.Styles.marginV(Kb.Styles.globalMargins.xsmall),
   },
   addIdentityContainer: Kb.Styles.platformStyles({
     common: {justifyContent: 'center'},
     isElectron: {
-      paddingLeft: Kb.Styles.globalMargins.tiny,
-      paddingRight: Kb.Styles.globalMargins.tiny,
+      ...Kb.Styles.paddingH(Kb.Styles.globalMargins.tiny),
     },
   }),
   backgroundColor: {
@@ -523,25 +607,21 @@ const styles = Kb.Styles.styleSheetCreate(() => ({
     height: avatarSize / 2 + Kb.Styles.globalMargins.tiny,
   },
   bio: Kb.Styles.platformStyles({
-    common: {alignSelf: 'flex-start'},
     isElectron: {marginBottom: Kb.Styles.globalMargins.small, width: 350},
     isMobile: {marginBottom: Kb.Styles.globalMargins.medium, width: '100%'},
   }),
   bioAndProofs: Kb.Styles.platformStyles({
     common: {
-      justifyContent: 'space-around',
       paddingBottom: Kb.Styles.globalMargins.medium,
-      position: 'relative',
     },
     isElectron: {paddingTop: Kb.Styles.globalMargins.tiny},
     isMobile: {paddingBottom: Kb.Styles.globalMargins.small},
   }),
   followTab: Kb.Styles.platformStyles({
     common: {
-      alignItems: 'center',
-      borderBottomColor: Kb.Styles.globalColors.white,
+      ...Kb.Styles.centered(),
+      borderBottomColor: theme.white,
       borderBottomWidth: 2,
-      justifyContent: 'center',
     },
     isElectron: {
       borderBottomStyle: 'solid',
@@ -557,8 +637,8 @@ const styles = Kb.Styles.styleSheetCreate(() => ({
   followTabContainer: Kb.Styles.platformStyles({
     common: {
       alignItems: 'flex-end',
-      backgroundColor: Kb.Styles.globalColors.white,
-      borderBottomColor: Kb.Styles.globalColors.black_10,
+      backgroundColor: theme.white,
+      borderBottomColor: theme.black_10,
       borderBottomWidth: 1,
     },
     isElectron: {
@@ -570,16 +650,10 @@ const styles = Kb.Styles.styleSheetCreate(() => ({
     },
   }),
   followTabSelected: {
-    borderBottomColor: Kb.Styles.globalColors.blue,
+    borderBottomColor: theme.blue,
   },
-  followTabText: Kb.Styles.platformStyles({
-    common: {color: Kb.Styles.globalColors.black_50},
-    isMobile: {backgroundColor: Kb.Styles.globalColors.fastBlank},
-  }),
-  followTabTextSelected: Kb.Styles.platformStyles({
-    common: {color: Kb.Styles.globalColors.black},
-    isMobile: {backgroundColor: Kb.Styles.globalColors.fastBlank},
-  }),
+  followTabText: {color: theme.black_50},
+  followTabTextSelected: {color: theme.black},
   friendRow: Kb.Styles.platformStyles({
     common: {
       maxWidth: '100%',
@@ -589,25 +663,17 @@ const styles = Kb.Styles.styleSheetCreate(() => ({
     isElectron: {justifyContent: 'flex-start'},
     isMobile: {justifyContent: 'center'},
   }),
-  innerContainer: {
-    height: '100%',
-    width: '100%',
-  },
-  noGrow: {flexGrow: 0},
-  profileSearch: {marginTop: Kb.Styles.globalMargins.xtiny},
   progress: {position: 'absolute'},
   proofs: Kb.Styles.platformStyles({
     isElectron: {
       alignSelf: 'flex-start',
-      flexShrink: 0,
       width: 350,
     },
     isMobile: {width: '100%'},
   }),
   proofsArea: Kb.Styles.platformStyles({
     isMobile: {
-      paddingLeft: Kb.Styles.globalMargins.medium,
-      paddingRight: Kb.Styles.globalMargins.medium,
+      ...Kb.Styles.paddingH(Kb.Styles.globalMargins.medium),
     },
   }),
   proveIt: {paddingTop: Kb.Styles.globalMargins.small},
@@ -616,39 +682,24 @@ const styles = Kb.Styles.styleSheetCreate(() => ({
     isMobile: {padding: Kb.Styles.globalMargins.tiny},
   }),
   reloadable: {paddingTop: 60},
-  search: Kb.Styles.platformStyles({
-    common: {
-      backgroundColor: Kb.Styles.globalColors.black_10,
-      borderRadius: Kb.Styles.borderRadius,
-    },
-    isElectron: {
-      minHeight: 24,
-      minWidth: 240,
-    },
-    isMobile: {
-      minHeight: 32,
-      minWidth: 200,
-    },
-  }),
   sectionList: Kb.Styles.platformStyles({
     common: {width: '100%'},
     isElectron: {
-      backgroundColor: Kb.Styles.globalColors.white,
+      backgroundColor: theme.white,
       position: 'relative',
       willChange: 'transform',
     },
   }),
   sectionListContentStyle: Kb.Styles.platformStyles({
-    common: {backgroundColor: Kb.Styles.globalColors.white, paddingBottom: Kb.Styles.globalMargins.xtiny},
+    common: {backgroundColor: theme.white, paddingBottom: Kb.Styles.globalMargins.xtiny},
     isMobile: {minHeight: '100%'},
   }),
   textEmpty: {
-    paddingBottom: Kb.Styles.globalMargins.large,
-    paddingTop: Kb.Styles.globalMargins.large,
+    ...Kb.Styles.paddingV(Kb.Styles.globalMargins.large),
   },
-  typedBackgroundBlue: {backgroundColor: Kb.Styles.globalColors.blue},
-  typedBackgroundGreen: {backgroundColor: Kb.Styles.globalColors.green},
-  typedBackgroundRed: {backgroundColor: Kb.Styles.globalColors.red},
+  typedBackgroundBlue: {backgroundColor: theme.blue},
+  typedBackgroundGreen: {backgroundColor: theme.green},
+  typedBackgroundRed: {backgroundColor: theme.red},
 }))
 
-export default UserWrap
+export default User

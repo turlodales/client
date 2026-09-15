@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"testing"
 
 	"github.com/keybase/client/go/protocol/keybase1"
@@ -9,7 +10,6 @@ import (
 	"github.com/keybase/client/go/chat/types"
 	"github.com/keybase/client/go/protocol/chat1"
 	gregor1 "github.com/keybase/client/go/protocol/gregor1"
-	"golang.org/x/net/context"
 
 	"github.com/keybase/client/go/kbtest"
 	"github.com/keybase/client/go/libkb"
@@ -35,12 +35,12 @@ func (n *reportTestAPIMock) Post(mctx libkb.MetaContext, arg libkb.APIArg) (*lib
 
 func (s *mockConvSource) Pull(ctx context.Context, convID chat1.ConversationID,
 	uid gregor1.UID, reason chat1.GetThreadReason, customRi func() chat1.RemoteInterface,
-	query *chat1.GetThreadQuery, pagination *chat1.Pagination) (thread chat1.ThreadView, err error) {
-
+	query *chat1.GetThreadQuery, pagination *chat1.Pagination,
+) (thread chat1.ThreadView, err error) {
 	s.callsToPull++
 
-	require.Greater(s.t, pagination.Num, 0)
-	require.Len(s.t, pagination.Next, 0)
+	require.Positive(s.t, pagination.Num)
+	require.Empty(s.t, pagination.Next)
 	require.NotNil(s.t, query)
 
 	return chat1.ThreadView{
@@ -86,5 +86,5 @@ func TestPullTranscript(t *testing.T) {
 	require.Equal(t, testConvID, apiMock.args.Args["conv_id"].String())
 	require.Contains(t, apiMock.args.Args, "transcript")
 
-	require.Greater(t, cs.callsToPull, 0)
+	require.Positive(t, cs.callsToPull)
 }

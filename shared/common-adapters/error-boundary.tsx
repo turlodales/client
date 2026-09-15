@@ -1,16 +1,55 @@
 import * as React from 'react'
-import Box from './box'
+import {Box2} from './box'
 import ScrollView from './scroll-view'
 import Text from './text'
 import Icon from './icon'
 import logger from '@/logger'
 import * as Styles from '@/styles'
 
-// Although not mentioned in
-// https://reactjs.org/blog/2017/07/26/error-handling-in-react-16.html ,
-// the info parameter to componentDidCatch looks like this.
-type ErrorInfo = {
-  componentStack: string
+type BareFallbackRenderProps = {
+  error: Error
+  resetErrorBoundary: () => void
+}
+
+type BareProps = {
+  children: React.ReactNode
+  fallback?: React.ReactNode
+  fallbackRender?: (props: BareFallbackRenderProps) => React.ReactNode
+  onError?: (error: Error, info: React.ErrorInfo) => void
+}
+
+type BareState = {
+  error?: Error
+}
+
+export class BareErrorBoundary extends React.Component<BareProps, BareState> {
+  override state: BareState = {}
+
+  static getDerivedStateFromError(error: Error): BareState {
+    return {error}
+  }
+
+  override componentDidCatch(error: Error, info: React.ErrorInfo) {
+    this.props.onError?.(error, info)
+  }
+
+  resetErrorBoundary = () => {
+    this.setState({error: undefined})
+  }
+
+  override render(): React.ReactNode {
+    const {children, fallback, fallbackRender} = this.props
+    const {error} = this.state
+
+    if (error) {
+      if (fallbackRender) {
+        return fallbackRender({error, resetErrorBoundary: this.resetErrorBoundary})
+      }
+      return fallback ?? null
+    }
+
+    return children
+  }
 }
 
 type AllErrorInfo = {
@@ -26,94 +65,66 @@ type FallbackProps = {
   style?: Styles.StylesCrossPlatform
 }
 
-const detailHeaderStyle = {
-  marginBottom: 10,
-  marginTop: 20,
-}
-
 const detailContainerStyle = {
   maxHeight: 100,
   minWidth: '75%',
   padding: 10,
 } as const
 
-const detailStyle = Styles.platformStyles({
-  isElectron: {
-    whiteSpace: 'pre',
-  },
-})
-
 const Fallback = ({closeOnClick, info: {name, message, stack, componentStack}, style}: FallbackProps) => {
+  const styles = useStyles()
+  const theme = Styles.useTheme()
   return (
-    <ScrollView
-      style={Styles.collapseStyles([
-        {
-          height: '100%',
-          padding: Styles.globalMargins.medium,
-          position: 'relative',
-          width: '100%',
-        },
-        style,
-      ])}
-    >
-      <Box
-        style={{
-          ...Styles.globalStyles.flexBoxColumn,
-          alignItems: 'center',
-          flex: 1,
-          justifyContent: 'center',
-        }}
-      >
-        <Text type="Header">Something went wrong...</Text>
-        <Text type="Body" style={{marginBottom: 10, marginTop: 10}}>
-          Please submit a bug report by
-          {Styles.isMobile ? ' going into Settings / Feedback' : ' running this command in your terminal:'}
-        </Text>
-        {!Styles.isMobile && (
-          <Box
-            style={{
-              ...Styles.globalStyles.flexBoxColumn,
-              backgroundColor: Styles.globalColors.blueDarker2,
-              borderRadius: 4,
-              minWidth: 100,
-              padding: 10,
-            }}
-          >
-            <Text type="Terminal" negative={true} selectable={true}>
-              keybase log send
+    <Box2 direction="vertical" fullHeight={true} fullWidth={true} padding="medium" relative={true} style={style}>
+      <ScrollView style={styles.scroll}>
+        <Box2 direction="vertical" gap="small" fullWidth={true}>
+          <Text type="Header">Something went wrong...</Text>
+          <Text type="Body">
+            Please submit a bug report by
+            {isMobile ? ' going into Settings / Feedback' : ' running this command in your terminal:'}
+          </Text>
+          {!isMobile && (
+            <Box2
+              direction="vertical"
+              style={{
+                backgroundColor: theme.blueDarker2,
+                borderRadius: Styles.borderRadius,
+                minWidth: 100,
+                padding: 10,
+              }}
+            >
+              <Text type="Terminal" negative={true} selectable={true}>
+                keybase log send
+              </Text>
+            </Box2>
+          )}
+          <Text type="BodySmall">Error details</Text>
+          <Text type="BodySmall" selectable={true} style={{margin: 10}}>{`${name}: ${message}`}</Text>
+          <Text type="BodySmall" style={{marginTop: 20}}>
+            Stack trace
+          </Text>
+          <ScrollView style={detailContainerStyle}>
+            <Text type="BodySmall" selectable={true} style={styles.detailStyle}>
+              {stack}
             </Text>
-          </Box>
+          </ScrollView>
+          <Text type="BodySmall">Component stack trace</Text>
+          <ScrollView style={detailContainerStyle}>
+            <Text type="BodySmall" selectable={true} style={styles.detailStyle}>
+              {componentStack}
+            </Text>
+          </ScrollView>
+        </Box2>
+        {closeOnClick && (
+          <Icon
+            type="iconfont-close"
+            color={theme.black_20}
+            style={{position: 'absolute', right: Styles.globalMargins.tiny, top: Styles.globalMargins.tiny}}
+            onClick={closeOnClick}
+          />
         )}
-        <Text type="BodySmall" style={detailHeaderStyle}>
-          Error details
-        </Text>
-        <Text type="BodySmall" selectable={true} style={{margin: 10}}>{`${name}: ${message}`}</Text>
-        <Text type="BodySmall" style={{marginTop: 20}}>
-          Stack trace
-        </Text>
-        <ScrollView style={detailContainerStyle}>
-          <Text type="BodySmall" selectable={true} style={detailStyle}>
-            {stack}
-          </Text>
-        </ScrollView>
-
-        <Text type="BodySmall" style={detailHeaderStyle}>
-          Component stack trace
-        </Text>
-        <ScrollView style={detailContainerStyle}>
-          <Text type="BodySmall" selectable={true} style={detailStyle}>
-            {componentStack}
-          </Text>
-        </ScrollView>
-      </Box>
-      {closeOnClick && (
-        <Icon
-          type="iconfont-close"
-          style={{position: 'absolute', right: Styles.globalMargins.tiny, top: Styles.globalMargins.tiny}}
-          onClick={closeOnClick}
-        />
-      )}
-    </ScrollView>
+      </ScrollView>
+    </Box2>
   )
 }
 
@@ -123,37 +134,38 @@ type Props = {
   fallbackStyle?: Styles.StylesCrossPlatform
 }
 
-type State = {
-  info: AllErrorInfo | undefined
-}
+const ErrorBoundary = (p: Props) => {
+  const {children, fallbackStyle, closeOnClick} = p
+  const [componentStack, setComponentStack] = React.useState('')
 
-class ErrorBoundary extends React.PureComponent<Props, State> {
-  state: State = {info: undefined}
-
-  componentDidUpdate(prevProps: Props) {
-    if (this.props.children !== prevProps.children && this.state.info) {
-      this.setState(p => (p.info ? {info: undefined} : null))
-    }
+  const onError = (_error: Error, info: React.ErrorInfo) => {
+    setComponentStack(info.componentStack ?? '')
   }
 
-  componentDidCatch(error: Error, info: ErrorInfo): void {
+  const fallbackRender = (fp: {error: Error; resetErrorBoundary: (...args: unknown[]) => void}) => {
     const allInfo: AllErrorInfo = {
-      componentStack: info.componentStack,
-      message: error.message,
-      name: error.name,
-      stack: error.stack || '',
+      componentStack,
+      message: fp.error.message,
+      name: fp.error.name,
+      stack: fp.error.stack || '',
     }
     logger.error('Got boundary error:', allInfo)
-    this.setState({info: allInfo})
+    return <Fallback info={allInfo} closeOnClick={closeOnClick} style={fallbackStyle} />
   }
 
-  render() {
-    const info = this.state.info
-    if (info) {
-      return <Fallback info={info} closeOnClick={this.props.closeOnClick} style={this.props.fallbackStyle} />
-    }
-    return this.props.children
-  }
+  return (
+    <BareErrorBoundary fallbackRender={fallbackRender} onError={onError}>
+      {children}
+    </BareErrorBoundary>
+  )
 }
+
+const useStyles = Styles.createStyleHook(
+  () =>
+    ({
+      detailStyle: Styles.platformStyles({isElectron: {whiteSpace: 'pre'}}),
+      scroll: {bottom: 24, left: 24, position: 'absolute', right: 24, top: 24},
+    }) as const
+)
 
 export default ErrorBoundary

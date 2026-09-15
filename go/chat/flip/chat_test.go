@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"reflect"
 	"testing"
 	"time"
 
@@ -34,8 +35,10 @@ type chatClient struct {
 	deliver    func(m GameMessageWrappedEncoded)
 }
 
-var _ DealersHelper = (*chatClient)(nil)
-var _ ReplayHelper = (*chatClient)(nil)
+var (
+	_ DealersHelper = (*chatClient)(nil)
+	_ ReplayHelper  = (*chatClient)(nil)
+)
 
 func (c *chatClient) Clock() clockwork.Clock {
 	if c.clock != nil {
@@ -48,13 +51,13 @@ func (c *chatClient) ServerTime(context.Context) (time.Time, error) {
 	return c.Clock().Now(), nil
 }
 
-func testPrintf(fmtString string, args ...interface{}) {
+func testPrintf(fmtString string, args ...any) {
 	if testing.Verbose() {
 		fmt.Printf(fmtString, args...)
 	}
 }
 
-func (c *chatClient) CLogf(ctx context.Context, fmtString string, args ...interface{}) {
+func (c *chatClient) CLogf(ctx context.Context, fmtString string, args ...any) {
 	testPrintf(fmtString+"\n", args...)
 }
 
@@ -63,7 +66,8 @@ func (c *chatClient) Me() UserDevice {
 }
 
 func (c *chatClient) SendChat(ctx context.Context, initiatorUID gregor1.UID, conversationID chat1.ConversationID,
-	gameID chat1.FlipGameID, msg GameMessageEncoded) error {
+	gameID chat1.FlipGameID, msg GameMessageEncoded,
+) error {
 	c.server.inputCh <- GameMessageWrappedEncoded{Body: msg, GameID: gameID, Sender: c.me}
 	return nil
 }
@@ -150,7 +154,7 @@ func (c *chatClient) run(ctx context.Context, ch chat1.ConversationID) {
 }
 
 func (s *chatServer) makeAndRunClients(ctx context.Context, ch chat1.ConversationID, nClients int) []*chatClient {
-	for i := 0; i < nClients; i++ {
+	for range nClients {
 		cli := s.newClient()
 		go cli.run(ctx, ch)
 	}
@@ -164,7 +168,7 @@ func forAllClients(clients []*chatClient, f func(c *chatClient)) {
 }
 
 func nTimes(n int, f func()) {
-	for i := 0; i < n; i++ {
+	for range n {
 		f()
 	}
 }
@@ -177,7 +181,7 @@ func (c *chatClient) consumeCommitment(t *testing.T) {
 func (c *chatClient) consumeCommitmentComplete(t *testing.T, n int) {
 	msg := <-c.dealer.UpdateCh()
 	require.NotNil(t, msg.CommitmentComplete)
-	require.Equal(t, n, len(msg.CommitmentComplete.Players))
+	require.Len(t, msg.CommitmentComplete.Players, n)
 }
 
 func (c *chatClient) consumeReveal(t *testing.T) {
@@ -190,7 +194,7 @@ func (c *chatClient) consumeAbsteneesError(t *testing.T, n int) {
 	require.Error(t, msg.Err)
 	ae, ok := msg.Err.(AbsenteesError)
 	require.True(t, ok)
-	require.Equal(t, n, len(ae.Absentees))
+	require.Len(t, ae.Absentees, n)
 }
 
 func (c *chatClient) consumeResult(t *testing.T, r **big.Int) {
@@ -205,8 +209,8 @@ func (c *chatClient) consumeResult(t *testing.T, r **big.Int) {
 
 func (c *chatClient) consumeError(t *testing.T, e error) {
 	msg := <-c.dealer.UpdateCh()
-	require.NotNil(t, msg.Err)
-	require.IsType(t, e, msg.Err)
+	require.Error(t, msg.Err)
+	require.Equal(t, reflect.TypeOf(e), reflect.TypeOf(msg.Err))
 }
 
 func (c *chatClient) consumeRevealsAndError(t *testing.T, nReveals int) {
@@ -221,15 +225,15 @@ func (c *chatClient) consumeRevealsAndError(t *testing.T, nReveals int) {
 			revealsReceived++
 		case msg.Err != nil:
 			errorsReceived++
-			require.IsType(t, BadRevealError{}, msg.Err)
+			require.ErrorAs(t, msg.Err, new(BadRevealError))
 		default:
-			require.Fail(t, "unexpected msg type received: %+v", msg)
+			require.Failf(t, "", "unexpected msg type received: %+v", msg)
 		}
 	}
-	require.True(t, revealsReceived <= nReveals)
+	require.LessOrEqual(t, revealsReceived, nReveals)
 }
 
-func (c *chatClient) consumeTimeoutError(t *testing.T) {
+func (c *chatClient) consumeTimeoutError(_ *testing.T) {
 	msg := <-c.dealer.UpdateCh()
 	testPrintf("ERR %+v\n", msg)
 }
@@ -445,10 +449,10 @@ func testAbsentees(t *testing.T, nTotal int, nAbsentees int) {
 
 	_, err = Replay(ctx, clients[0], srv.gameHistories[GameIDToKey(gameID)])
 	require.Error(t, err)
-	require.IsType(t, AbsenteesError{}, err)
+	require.ErrorAs(t, err, new(AbsenteesError))
 	ae, ok := err.(AbsenteesError)
 	require.True(t, ok)
-	require.Equal(t, nAbsentees, len(ae.Absentees))
+	require.Len(t, ae.Absentees, nAbsentees)
 }
 
 func corruptBytes(b []byte) {
@@ -543,7 +547,7 @@ func testCorruptions(t *testing.T, nTotal int, nCorruptions int) {
 
 	_, err = Replay(ctx, clients[0], srv.gameHistories[GameIDToKey(gameID)])
 	require.Error(t, err)
-	require.IsType(t, BadRevealError{}, err)
+	require.ErrorAs(t, err, new(BadRevealError))
 }
 
 func testBadLeader(t *testing.T, nTotal int) {
@@ -565,7 +569,6 @@ func testBadLeader(t *testing.T, nTotal int) {
 }
 
 func TestRepeatedGame(t *testing.T) {
-
 	srv := newChatServer()
 	ctx := context.Background()
 	go srv.run(ctx)
@@ -588,7 +591,6 @@ func genConversationID() chat1.ConversationID {
 }
 
 func testLeaderClockSkew(t *testing.T, skew time.Duration) {
-
 	srv := newChatServer()
 	ctx := context.Background()
 	go srv.run(ctx)
@@ -611,7 +613,7 @@ func testLeaderClockSkew(t *testing.T, skew time.Duration) {
 
 	_, err = Replay(ctx, clients[0], srv.gameHistories[GameIDToKey(gameID)])
 	require.Error(t, err)
-	require.IsType(t, BadLeaderClockError{}, err)
+	require.ErrorAs(t, err, new(BadLeaderClockError))
 }
 
 func TestLeaderClockSkewFast(t *testing.T) {

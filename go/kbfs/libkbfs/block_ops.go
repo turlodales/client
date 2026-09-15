@@ -5,6 +5,7 @@
 package libkbfs
 
 import (
+	"context"
 	"time"
 
 	"github.com/keybase/client/go/kbfs/data"
@@ -14,7 +15,6 @@ import (
 	"github.com/keybase/client/go/kbfs/tlf"
 	"github.com/keybase/client/go/protocol/keybase1"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 )
 
 type blockOpsConfig interface {
@@ -50,7 +50,8 @@ var _ BlockOps = (*BlockOpsStandard)(nil)
 func NewBlockOpsStandard(
 	config blockOpsConfig, queueSize, prefetchQueueSize int,
 	throttledPrefetchPeriod time.Duration,
-	appStateUpdater env.AppStateUpdater) *BlockOpsStandard {
+	appStateUpdater env.AppStateUpdater,
+) *BlockOpsStandard {
 	bg := &realBlockGetter{config: config}
 	qConfig := &realBlockRetrievalConfig{
 		blockRetrievalPartialConfig: config,
@@ -70,7 +71,8 @@ func NewBlockOpsStandard(
 // Get implements the BlockOps interface for BlockOpsStandard.
 func (b *BlockOpsStandard) Get(ctx context.Context, kmd libkey.KeyMetadata,
 	blockPtr data.BlockPointer, block data.Block,
-	lifetime data.BlockCacheLifetime, branch data.BranchName) error {
+	lifetime data.BlockCacheLifetime, branch data.BranchName,
+) error {
 	// Check the journal explicitly first, so we don't get stuck in
 	// the block-fetching queue.
 	if journalBServer, ok := b.config.BlockServer().(journalBlockServer); ok {
@@ -107,7 +109,8 @@ func (b *BlockOpsStandard) Get(ctx context.Context, kmd libkey.KeyMetadata,
 func (b *BlockOpsStandard) GetEncodedSizes(
 	ctx context.Context, kmd libkey.KeyMetadata,
 	blockPtrs []data.BlockPointer) (
-	sizes []uint32, statuses []keybase1.BlockStatus, err error) {
+	sizes []uint32, statuses []keybase1.BlockStatus, err error,
+) {
 	// Check the journal explicitly first, so we don't get stuck in
 	// the block-fetching queue.
 
@@ -157,7 +160,8 @@ func (b *BlockOpsStandard) GetEncodedSizes(
 // Ready implements the BlockOps interface for BlockOpsStandard.
 func (b *BlockOpsStandard) Ready(ctx context.Context, kmd libkey.KeyMetadata,
 	block data.Block) (id kbfsblock.ID, plainSize int, readyBlockData data.ReadyBlockData,
-	err error) {
+	err error,
+) {
 	defer func() {
 		if err != nil {
 			id = kbfsblock.ID{}
@@ -211,14 +215,15 @@ func (b *BlockOpsStandard) Ready(ctx context.Context, kmd libkey.KeyMetadata,
 	}
 
 	// Cache the encoded size.
-	block.SetEncodedSize(uint32(encodedSize))
+	block.SetEncodedSize(uint32(encodedSize)) //nolint:gosec // G115: Block sizes are bounded by max block size config
 
 	return
 }
 
 // Delete implements the BlockOps interface for BlockOpsStandard.
 func (b *BlockOpsStandard) Delete(ctx context.Context, tlfID tlf.ID,
-	ptrs []data.BlockPointer) (liveCounts map[kbfsblock.ID]int, err error) {
+	ptrs []data.BlockPointer,
+) (liveCounts map[kbfsblock.ID]int, err error) {
 	contexts := make(kbfsblock.ContextMap)
 	for _, ptr := range ptrs {
 		contexts[ptr.ID] = append(contexts[ptr.ID], ptr.Context)
@@ -228,7 +233,8 @@ func (b *BlockOpsStandard) Delete(ctx context.Context, tlfID tlf.ID,
 
 // Archive implements the BlockOps interface for BlockOpsStandard.
 func (b *BlockOpsStandard) Archive(ctx context.Context, tlfID tlf.ID,
-	ptrs []data.BlockPointer) error {
+	ptrs []data.BlockPointer,
+) error {
 	contexts := make(kbfsblock.ContextMap)
 	for _, ptr := range ptrs {
 		contexts[ptr.ID] = append(contexts[ptr.ID], ptr.Context)
@@ -240,7 +246,8 @@ func (b *BlockOpsStandard) Archive(ctx context.Context, tlfID tlf.ID,
 // GetLiveCount implements the BlockOps interface for BlockOpsStandard.
 func (b *BlockOpsStandard) GetLiveCount(
 	ctx context.Context, tlfID tlf.ID, ptrs []data.BlockPointer) (
-	liveCounts map[kbfsblock.ID]int, err error) {
+	liveCounts map[kbfsblock.ID]int, err error,
+) {
 	contexts := make(kbfsblock.ContextMap)
 	for _, ptr := range ptrs {
 		contexts[ptr.ID] = append(contexts[ptr.ID], ptr.Context)

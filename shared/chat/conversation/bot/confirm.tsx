@@ -1,8 +1,9 @@
-import * as React from 'react'
 import * as Kb from '@/common-adapters'
 import * as C from '@/constants'
-import type * as T from '@/constants/types'
-import {useBotConversationIDKey} from './install'
+import * as T from '@/constants/types'
+import logger from '@/logger'
+import {RPCError} from '@/util/errors'
+import {useBotConversationIDKey, useRefreshBotMembershipOnSuccess} from './install'
 
 type Props = {
   botUsername: string
@@ -10,20 +11,42 @@ type Props = {
   conversationIDKey?: T.Chat.ConversationIDKey
 }
 
-const ConfirmBotRemoveImpl = (props: {botUsername: string}) => {
-  const {botUsername} = props
-  const clearModals = C.useRouterState(s => s.dispatch.clearModals)
-  const removeBotMember = C.useChatContext(s => s.dispatch.removeBotMember)
-  const onClose = React.useCallback(() => {
+const ConfirmBotRemoveImpl = (props: {
+  botUsername: string
+  conversationIDKey: T.Chat.ConversationIDKey
+}) => {
+  const {botUsername, conversationIDKey} = props
+  const clearModals = C.Router2.clearModals
+  const error = C.Waiting.useAnyErrors(C.waitingKeyChatBotRemove)
+  const onClose = () => {
     clearModals()
-  }, [clearModals])
-  const onRemove = React.useCallback(() => {
-    removeBotMember(botUsername)
-  }, [removeBotMember, botUsername])
+  }
+  const onRemove = () => {
+    const f = async () => {
+      try {
+        await T.RPCChat.localRemoveBotMemberRpcPromise(
+          {convID: T.Chat.keyToConversationID(conversationIDKey), username: botUsername},
+          C.waitingKeyChatBotRemove
+        )
+      } catch (error) {
+        if (error instanceof RPCError) {
+          logger.info('removeBotMember: failed to remove bot member: ' + error.message)
+        }
+      }
+    }
+    C.ignorePromise(f())
+  }
+  useRefreshBotMembershipOnSuccess(
+    conversationIDKey,
+    C.waitingKeyChatBotRemove,
+    error,
+    true,
+    clearModals
+  )
   return (
     <Kb.ConfirmModal
       prompt={`Are you sure you want to uninstall ${botUsername}?`}
-      waitingKey={C.Chat.waitingKeyBotRemove}
+      waitingKey={C.waitingKeyChatBotRemove}
       onConfirm={onRemove}
       onCancel={onClose}
       description=""
@@ -36,9 +59,7 @@ const ConfirmBotRemove = (props: Props) => {
   const {teamID, botUsername} = props
   const conversationIDKey = useBotConversationIDKey(props.conversationIDKey, teamID)
   return conversationIDKey ? (
-    <C.ChatProvider id={conversationIDKey}>
-      <ConfirmBotRemoveImpl botUsername={botUsername} />
-    </C.ChatProvider>
+    <ConfirmBotRemoveImpl botUsername={botUsername} conversationIDKey={conversationIDKey} />
   ) : null
 }
 

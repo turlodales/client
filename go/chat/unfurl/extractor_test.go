@@ -3,6 +3,7 @@ package unfurl
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/keybase/client/go/chat/globals"
@@ -29,10 +30,10 @@ func TestExtractor(t *testing.T) {
 		whitelist []string
 		result    []ExtractorHit
 	}
-	var maxCase string
+	var maxCase strings.Builder
 	var maxRes []ExtractorHit
 	for i := 0; i < extractor.maxHits+5; i++ {
-		maxCase += " http://www.wsj.com"
+		maxCase.WriteString(" http://www.wsj.com")
 	}
 	for i := 0; i < extractor.maxHits; i++ {
 		maxRes = append(maxRes, ExtractorHit{
@@ -50,7 +51,7 @@ func TestExtractor(t *testing.T) {
 			mode:    chat1.UnfurlMode_ALWAYS,
 		},
 		{
-			message: maxCase,
+			message: maxCase.String(),
 			mode:    chat1.UnfurlMode_ALWAYS,
 			result:  maxRes,
 		},
@@ -170,41 +171,41 @@ func TestExtractorExemptions(t *testing.T) {
 		NewOneTimeWhitelistExemption(convID, msgID, "amazon.com"))
 	res, err := extractor.Extract(context.TODO(), uid, convID, msgID, "http://amazon.com", settingsMod)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(res))
+	require.Len(t, res, 1)
 	require.Equal(t, ExtractorHitUnfurl, res[0].Typ)
 	extractor.AddWhitelistExemption(context.TODO(), uid,
 		NewOneTimeWhitelistExemption(convID, msgID, "cnn.com"))
 	res, err = extractor.Extract(context.TODO(), uid, convID, msgID, "http://amazon.com", settingsMod)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(res))
+	require.Len(t, res, 1)
 	require.Equal(t, ExtractorHitPrompt, res[0].Typ)
 	res, err = extractor.Extract(context.TODO(), uid, convID, msgID, "http://cnn.com", settingsMod)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(res))
+	require.Len(t, res, 1)
 	require.Equal(t, ExtractorHitUnfurl, res[0].Typ)
 	res, err = extractor.Extract(context.TODO(), uid, convID, msgID, "http://cnn.com", settingsMod)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(res))
+	require.Len(t, res, 1)
 	require.Equal(t, ExtractorHitPrompt, res[0].Typ)
 
 	res, err = extractor.Extract(context.TODO(), uid, convID, msgID, "http://google.com", settingsMod)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(res))
+	require.Len(t, res, 1)
 	require.Equal(t, ExtractorHitPrompt, res[0].Typ)
 	extractor.AddWhitelistExemption(context.TODO(), uid,
 		NewSingleMessageWhitelistExemption(convID, msgID, "google.com"))
 	res, err = extractor.Extract(context.TODO(), uid, convID, msgID, "http://google.com", settingsMod)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(res))
+	require.Len(t, res, 1)
 	require.Equal(t, ExtractorHitUnfurl, res[0].Typ)
 	res, err = extractor.Extract(context.TODO(), uid, convID, msgID, "http://google.com", settingsMod)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(res))
+	require.Len(t, res, 1)
 	require.Equal(t, ExtractorHitUnfurl, res[0].Typ)
 
 	require.NoError(t, settingsMod.Set(context.TODO(), uid, settings))
 	res, err = extractor.Extract(context.TODO(), uid, convID, msgID, "http://amazon.com", settingsMod)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(res))
+	require.Len(t, res, 1)
 	require.Equal(t, ExtractorHitUnfurl, res[0].Typ)
 }

@@ -4,6 +4,7 @@
 package client
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -11,7 +12,6 @@ import (
 	"github.com/keybase/client/go/libcmdline"
 	"github.com/keybase/client/go/libkb"
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
-	"golang.org/x/net/context"
 )
 
 // CmdSimpleFSHistory is the 'fs history' command.
@@ -23,14 +23,16 @@ type CmdSimpleFSHistory struct {
 
 // NewCmdSimpleFSHistory creates a new cli.Command.
 func NewCmdSimpleFSHistory(
-	cl *libcmdline.CommandLine, g *libkb.GlobalContext) cli.Command {
+	cl *libcmdline.CommandLine, g *libkb.GlobalContext,
+) cli.Command {
 	return cli.Command{
 		Name:         "history",
 		ArgumentHelp: "[path-to-folder]",
 		Usage:        "output the edit history for a user or folder",
 		Action: func(c *cli.Context) {
 			cl.ChooseCommand(&CmdSimpleFSHistory{
-				Contextified: libkb.NewContextified(g)}, "history", c)
+				Contextified: libkb.NewContextified(g),
+			}, "history", c)
 			cl.SetNoStandalone()
 		},
 		Flags: []cli.Flag{

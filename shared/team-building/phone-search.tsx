@@ -1,9 +1,12 @@
 import * as C from '@/constants'
+import * as TB from '@/stores/team-building'
 import * as React from 'react'
-import * as Kb from '@/common-adapters/index'
-import * as Constants from '@/constants/team-building'
-import type * as T from 'constants/types'
+import * as Kb from '@/common-adapters'
+import type * as T from '@/constants/types'
 import ContinueButton from './continue-button'
+import {SearchEmptyState} from './common'
+import {searchWaitingKey} from '@/constants/strings'
+import {useDefaultPhoneCountry} from '@/util/phone-numbers'
 
 type PhoneSearchProps = {
   continueLabel: string
@@ -12,28 +15,24 @@ type PhoneSearchProps = {
 }
 
 const PhoneSearch = (props: PhoneSearchProps) => {
-  const {namespace} = props
-  const teamBuildingSearchResults = C.useTBContext(s => s.searchResults)
+  const styles = useStyles()
+  const {namespace, continueLabel, search} = props
+  const teamBuildingSearchResults = TB.useTBContext(s => s.searchResults)
   const [isPhoneValid, setPhoneValidity] = React.useState(false)
   const [phoneNumber, setPhoneNumber] = React.useState('')
   const [phoneInputKey, setPhoneInputKey] = React.useState(0)
-  const waiting = C.Waiting.useAnyWaiting(Constants.searchWaitingKey)
-  const loadDefaultPhoneCountry = C.useSettingsPhoneState(s => s.dispatch.loadDefaultPhoneCountry)
-  // trigger a default phone number country rpc if it's not already loaded
-  const defaultCountry = C.useSettingsPhoneState(s => s.defaultCountry)
-  React.useEffect(() => {
-    !defaultCountry && loadDefaultPhoneCountry()
-  }, [defaultCountry, loadDefaultPhoneCountry])
+  const waiting = C.Waiting.useAnyWaiting(searchWaitingKey)
+  const defaultCountry = useDefaultPhoneCountry()
 
   const onChangeNumberCb = (phoneNumber: string, validity: boolean) => {
     setPhoneValidity(validity)
     setPhoneNumber(phoneNumber)
     if (validity) {
-      props.search(phoneNumber, 'phone')
+      search(phoneNumber, 'phone')
     }
   }
 
-  const addUsersToTeamSoFar = C.useTBContext(s => s.dispatch.addUsersToTeamSoFar)
+  const addUsersToTeamSoFar = TB.useTBContext(s => s.dispatch.addUsersToTeamSoFar)
 
   const user: T.TB.User | undefined = isPhoneValid
     ? teamBuildingSearchResults.get(phoneNumber)?.get('phone')?.[0]
@@ -41,7 +40,7 @@ const PhoneSearch = (props: PhoneSearchProps) => {
 
   const canSubmit = !!user && !waiting && isPhoneValid
 
-  const _onContinue = React.useCallback(() => {
+  const _onContinue = () => {
     if (!canSubmit) {
       return
     }
@@ -50,111 +49,77 @@ const PhoneSearch = (props: PhoneSearchProps) => {
     setPhoneNumber('')
     setPhoneInputKey(old => old + 1)
     setPhoneValidity(false)
-  }, [addUsersToTeamSoFar, user, setPhoneNumber, canSubmit, setPhoneInputKey, setPhoneValidity])
+  }
 
   return (
-    <>
-      <Kb.Box2 direction="vertical" gap="tiny" style={styles.containerStyle} fullWidth={true}>
-        <Kb.Box2 direction="vertical" gap="tiny" fullWidth={true} style={styles.flexGrow}>
-          <Kb.PhoneInput
-            // Supply a key to force reset the PhoneInput state after a user is added
-            key={phoneInputKey}
-            autoFocus={true}
-            defaultCountry={defaultCountry}
-            onChangeNumber={onChangeNumberCb}
-            onEnterKeyDown={_onContinue}
+    <Kb.Box2 direction="vertical" gap="tiny" padding="small" style={styles.containerStyle} fullWidth={true}>
+      <Kb.Box2 direction="vertical" gap="tiny" fullWidth={true} flex={1}>
+        <Kb.PhoneInput
+          // Supply a key to force reset the PhoneInput state after a user is added
+          key={phoneInputKey}
+          autoFocus={true}
+          defaultCountry={defaultCountry}
+          onChangeNumber={onChangeNumberCb}
+          onEnterKeyDown={_onContinue}
+        />
+        {!!user && canSubmit && !!user.serviceMap.keybase ? (
+          <UserMatchMention username={user.serviceMap.keybase} />
+        ) : (
+          <SearchEmptyState
+            icon="iconfont-number-pad"
+            text={
+              namespace === 'chat'
+                ? 'Start a chat with any phone contact, then tell them to install Keybase. Your messages will unlock after they sign up.'
+                : 'Add any phone contact, then tell them to install Keybase. They will automatically join the team after they sign up.'
+            }
           />
-          {!!user && canSubmit && !!user.serviceMap.keybase ? (
-            <UserMatchMention username={user.serviceMap.keybase} />
-          ) : (
-            <Kb.Box2
-              alignSelf="center"
-              centerChildren={!Kb.Styles.isMobile}
-              direction="vertical"
-              fullWidth={true}
-              gap="tiny"
-              style={styles.emptyContainer}
-            >
-              {!Kb.Styles.isMobile && (
-                <Kb.Icon color={Kb.Styles.globalColors.black_20} fontSize={48} type="iconfont-number-pad" />
-              )}
-              {namespace === 'chat2' ? (
-                <Kb.Text type="BodySmall" style={styles.helperText}>
-                  Start a chat with any phone contact, then tell them to install Keybase. Your messages will
-                  unlock after they sign up.
-                </Kb.Text>
-              ) : (
-                <Kb.Text type="BodySmall" style={styles.helperText}>
-                  Add any phone contact, then tell them to install Keybase. They will automatically join the
-                  team after they sign up.
-                </Kb.Text>
-              )}
-            </Kb.Box2>
-          )}
-          {waiting && <Kb.ProgressIndicator type="Small" style={styles.loading} />}
-        </Kb.Box2>
-        <ContinueButton label={props.continueLabel} onClick={_onContinue} disabled={!canSubmit} />
+        )}
+        {waiting && <Kb.ProgressIndicator type="Small" style={styles.loading} />}
       </Kb.Box2>
-    </>
+      <ContinueButton label={continueLabel} onClick={_onContinue} disabled={!canSubmit} />
+    </Kb.Box2>
   )
 }
 
 type UserMatchMentionProps = {
   username: string
 }
-export const UserMatchMention = ({username}: UserMatchMentionProps) => (
-  <Kb.Box2 direction="horizontal" gap="xtiny" style={styles.userMatchMention} centerChildren={true}>
-    <Kb.Icon type="iconfont-check" sizeType="Tiny" color={Kb.Styles.globalColors.greenDark} />
-    <Kb.Text type="BodySmall">
-      Great! That's{' '}
-      <Kb.ConnectedUsernames
-        colorFollowing={true}
-        inline={true}
-        onUsernameClicked="profile"
-        type="BodySmallBold"
-        usernames={username}
-      />{' '}
-      on Keybase.
-    </Kb.Text>
-  </Kb.Box2>
-)
+export const UserMatchMention = ({username}: UserMatchMentionProps) => {
+  const styles = useStyles()
+  const theme = Kb.Styles.useTheme()
+  return (
+    <Kb.Box2 direction="horizontal" gap="xtiny" style={styles.userMatchMention} centerChildren={true}>
+      <Kb.Icon type="iconfont-check" sizeType="Tiny" color={theme.greenDark} />
+      <Kb.Text type="BodySmall">
+        {"Great! That's "}
+        <Kb.ConnectedUsernames
+          colorFollowing={true}
+          inline={true}
+          onUsernameClicked="profile"
+          type="BodySmallBold"
+          usernames={username}
+        />
+        {' on Keybase.'}
+      </Kb.Text>
+    </Kb.Box2>
+  )
+}
 
-const styles = Kb.Styles.styleSheetCreate(
-  () =>
+const useStyles = Kb.Styles.createStyleHook(
+  theme =>
     ({
-      button: {flexGrow: 0},
       containerStyle: Kb.Styles.platformStyles({
         common: {
-          backgroundColor: Kb.Styles.globalColors.blueGrey,
+          backgroundColor: theme.blueGrey,
           flex: 1,
-          padding: Kb.Styles.globalMargins.small,
         },
         isMobile: {
           zIndex: -1,
         },
       }),
-      emptyContainer: Kb.Styles.platformStyles({
-        common: {flex: 1},
-        isElectron: {
-          maxWidth: 290,
-          paddingBottom: 40,
-        },
-        isMobile: {maxWidth: '90%'},
-      }),
-      flexGrow: {
-        flex: 1,
-      },
-      helperText: Kb.Styles.platformStyles({
-        common: {textAlign: 'center'},
-        isMobile: {
-          paddingBottom: Kb.Styles.globalMargins.small,
-          paddingTop: Kb.Styles.globalMargins.small,
-        },
-      }),
       loading: {alignSelf: 'center'},
       userMatchMention: {
         alignSelf: 'flex-start',
-        justifyContent: 'center',
       },
     }) as const
 )

@@ -43,7 +43,7 @@ func TestProgress(t *testing.T) {
 		for _, id := range e.q {
 			delete(m, id)
 		}
-		require.Len(t, m, 0)
+		require.Empty(t, m)
 		require.Equal(t, e.currTlf, currTlf)
 		require.Equal(t, e.overallTotal, overallProg.BytesTotal)
 		require.Equal(t, e.overallSoFar, overallProg.BytesSoFar)
@@ -91,7 +91,7 @@ func TestProgress(t *testing.T) {
 		currTotal:    int64(size1),
 		currSoFar:    10,
 		currEnd:      currEndEstimate,
-		overallTotal: int64(size1 + size2),
+		overallTotal: int64(size1 + size2), //nolint:gosec // G115: Test data with bounded values
 		overallSoFar: 10,
 		overallEnd:   overallEndEstimate,
 	})
@@ -105,7 +105,7 @@ func TestProgress(t *testing.T) {
 		currTotal:    int64(size1),
 		currSoFar:    int64(size1),
 		currEnd:      currEndEstimate,
-		overallTotal: int64(size1 + size2),
+		overallTotal: int64(size1 + size2), //nolint:gosec // G115: Test data with bounded values
 		overallSoFar: int64(size1),
 		overallEnd:   overallEndEstimate,
 	})

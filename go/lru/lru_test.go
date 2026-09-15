@@ -1,11 +1,12 @@
 package lru
 
 import (
+	"context"
 	"fmt"
+	"testing"
+
 	"github.com/keybase/client/go/libkb"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/context"
-	"testing"
 )
 
 type obj struct {
@@ -28,7 +29,7 @@ func TestLRU(t *testing.T) {
 	var objs []obj
 
 	N := 10
-	for i := 0; i < N; i++ {
+	for i := range N {
 		objs = append(objs, obj{i, fmt.Sprintf("%d", i)})
 	}
 
@@ -81,10 +82,10 @@ func TestLRU(t *testing.T) {
 	testStats()
 
 	// All of the following should be disk hits
-	for i := 0; i < N; i++ {
+	for i := range N {
 		testPut(i)
 	}
-	for i := 0; i < N; i++ {
+	for i := range N {
 		testGet(i, false)
 	}
 	testStats()

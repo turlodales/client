@@ -16,7 +16,7 @@ type SizeFlag struct {
 }
 
 // Get for flag interface.
-func (sf SizeFlag) Get() interface{} { return *sf.v }
+func (sf SizeFlag) Get() any { return *sf.v }
 
 // String for flag interface.
 func (sf SizeFlag) String() string {
@@ -48,7 +48,7 @@ func (sf SizeFlag) String() string {
 // Set for flag interface.
 func (sf SizeFlag) Set(raw string) error {
 	i := 0
-	for ; i < len(raw) && raw[i] >= '0' && raw[i] <= '9'; i++ {
+	for ; i < len(raw) && raw[i] >= '0' && raw[i] <= '9'; i++ { //nolint:revive // empty-block: intentionally empty, finding end of numeric prefix
 	}
 	val, err := strconv.ParseInt(raw[:i], 10, 64)
 	if err != nil {

@@ -5,9 +5,8 @@ package libkb
 
 import (
 	"fmt"
-	"runtime"
-
 	"os/exec"
+	"runtime"
 )
 
 func PlatformSpecificUpgradeInstructionsString() (string, error) {
@@ -71,9 +70,10 @@ func linuxUpgradeInstructionsString() (string, error) {
 
 func darwinUpgradeInstructions(g *GlobalContext, upgradeURI string) {
 	packageName := "keybase"
-	if DefaultRunMode == DevelRunMode {
+	switch DefaultRunMode {
+	case DevelRunMode:
 		packageName = "keybase/beta/kbdev"
-	} else if DefaultRunMode == StagingRunMode {
+	case StagingRunMode:
 		packageName = "keybase/beta/kbstage"
 	}
 
@@ -86,9 +86,9 @@ func darwinUpgradeInstructions(g *GlobalContext, upgradeURI string) {
 }
 
 func windowsUpgradeInstructions(g *GlobalContext, upgradeURI string) {
-
 	g.Log.Warning("To upgrade, download the latest Keybase installer from " + upgradeURI)
 }
+
 func printUpgradeCommand(g *GlobalContext, command string) {
 	g.Log.Warning("To upgrade, run the following command:")
 	g.Log.Warning("    " + command)

@@ -3,7 +3,6 @@
 // license that can be found in the LICENSE file.
 
 //go:build windows
-// +build windows
 
 package libdokan
 
@@ -48,8 +47,9 @@ func OpenFile(filename string, mode, perm int) (*os.File, error) {
 }
 
 func Open(filename string) (*os.File, error) {
-	return OpenFile(filename, os.O_RDONLY, 0666)
+	return OpenFile(filename, os.O_RDONLY, 0o666)
 }
+
 func Create(filename string) (*os.File, error) {
-	return OpenFile(filename, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
+	return OpenFile(filename, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o666)
 }

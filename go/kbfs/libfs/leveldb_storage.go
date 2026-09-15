@@ -25,13 +25,11 @@ import (
 	"sync"
 	"time"
 
+	billy "github.com/go-git/go-billy/v5"
 	"github.com/syndtr/goleveldb/leveldb/storage"
-	billy "gopkg.in/src-d/go-billy.v4"
 )
 
-var (
-	errReadOnly = errors.New("leveldb/storage: storage is read-only")
-)
+var errReadOnly = errors.New("leveldb/storage: storage is read-only")
 
 type levelDBStorageLock struct {
 	fs *levelDBStorage
@@ -80,14 +78,15 @@ var _ storage.Storage = (*levelDBStorage)(nil)
 // a file lock, so any subsequent attempt to open the same path will
 // fail.
 func OpenLevelDBStorage(bfs billy.Filesystem, readOnly bool) (
-	s storage.Storage, err error) {
-	flock, err := bfs.OpenFile("LOCK", os.O_CREATE|os.O_TRUNC, 0600)
+	s storage.Storage, err error,
+) {
+	flock, err := bfs.OpenFile("LOCK", os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		return nil, err
 	}
 	defer func() {
 		if err != nil {
-			flock.Close()
+			_ = flock.Close()
 		}
 	}()
 	err = flock.Lock()
@@ -100,13 +99,13 @@ func OpenLevelDBStorage(bfs billy.Filesystem, readOnly bool) (
 		logSize int64
 	)
 	if !readOnly {
-		logw, err = bfs.OpenFile("LOG", os.O_WRONLY|os.O_CREATE, 0644)
+		logw, err = bfs.OpenFile("LOG", os.O_WRONLY|os.O_CREATE, 0o644)
 		if err != nil {
 			return nil, err
 		}
-		logSize, err = logw.Seek(0, os.SEEK_END)
+		logSize, err = logw.Seek(0, io.SeekEnd)
 		if err != nil {
-			logw.Close()
+			_ = logw.Close()
 			return nil, err
 		}
 	}
@@ -123,7 +122,8 @@ func OpenLevelDBStorage(bfs billy.Filesystem, readOnly bool) (
 }
 
 func (fs *levelDBStorage) writeFileSyncedRLocked(
-	filename string, data []byte, perm os.FileMode) error {
+	filename string, data []byte, perm os.FileMode,
+) error {
 	f, err := fs.fs.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm)
 	if err != nil {
 		return err
@@ -158,7 +158,7 @@ func (fs *levelDBStorage) Lock() (storage.Locker, error) {
 }
 
 func itoa(buf []byte, i int, wid int) []byte {
-	u := uint(i)
+	u := uint(i) //nolint:gosec // G115: Small bounded integers for formatting
 	if u == 0 && wid <= 1 {
 		return append(buf, '0')
 	}
@@ -185,7 +185,7 @@ func (fs *levelDBStorage) printDay(t time.Time) {
 func (fs *levelDBStorage) doLogRLocked(t time.Time, str string) {
 	if fs.logSize > logSizeThreshold {
 		// Rotate log file.
-		fs.logw.Close()
+		_ = fs.logw.Close()
 		fs.logw = nil
 		fs.logSize = 0
 		err := fs.fs.Rename("LOG", "LOG.old")
@@ -195,7 +195,7 @@ func (fs *levelDBStorage) doLogRLocked(t time.Time, str string) {
 	}
 	if fs.logw == nil {
 		var err error
-		fs.logw, err = fs.fs.OpenFile("LOG", os.O_WRONLY|os.O_CREATE, 0644)
+		fs.logw, err = fs.fs.OpenFile("LOG", os.O_WRONLY|os.O_CREATE, 0o644)
 		if err != nil {
 			return
 		}
@@ -203,12 +203,12 @@ func (fs *levelDBStorage) doLogRLocked(t time.Time, str string) {
 		fs.day = 0
 	}
 	fs.printDay(t)
-	hour, min, sec := t.Clock()
+	hour, minute, sec := t.Clock()
 	msec := t.Nanosecond() / 1e3
 	// time
 	fs.buf = itoa(fs.buf[:0], hour, 2)
 	fs.buf = append(fs.buf, ':')
-	fs.buf = itoa(fs.buf, min, 2)
+	fs.buf = itoa(fs.buf, minute, 2)
 	fs.buf = append(fs.buf, ':')
 	fs.buf = itoa(fs.buf, sec, 2)
 	fs.buf = append(fs.buf, '.')
@@ -253,7 +253,7 @@ func (fs *levelDBStorage) syncLocked() (err error) {
 	// Force a sync with a lock/unlock cycle, since the billy
 	// interface doesn't have an explicit sync call.
 	const syncLockName = "sync.lock"
-	f, err := fs.fs.OpenFile(syncLockName, os.O_CREATE|os.O_TRUNC, 0600)
+	f, err := fs.fs.OpenFile(syncLockName, os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		return err
 	}
@@ -287,7 +287,7 @@ func (fs *levelDBStorage) setMetaRLocked(fd storage.FileDesc) error {
 		if err != nil {
 			return err
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 		b, err := io.ReadAll(f)
 		if err != nil {
 			fs.logRLocked(fmt.Sprintf("backup CURRENT: %v", err))
@@ -298,7 +298,7 @@ func (fs *levelDBStorage) setMetaRLocked(fd storage.FileDesc) error {
 			return nil
 		}
 		if err := fs.writeFileSyncedRLocked(
-			currentPath+".bak", b, 0644); err != nil {
+			currentPath+".bak", b, 0o644); err != nil {
 			fs.logRLocked(fmt.Sprintf("backup CURRENT: %v", err))
 			return err
 		}
@@ -307,7 +307,7 @@ func (fs *levelDBStorage) setMetaRLocked(fd storage.FileDesc) error {
 	}
 	path := fmt.Sprintf("CURRENT.%d", fd.Num)
 	if err := fs.writeFileSyncedRLocked(
-		path, []byte(content), 0644); err != nil {
+		path, []byte(content), 0o644); err != nil {
 		fs.logRLocked(fmt.Sprintf("create CURRENT.%d: %v", fd.Num, err))
 		return err
 	}
@@ -381,7 +381,7 @@ func (fs *levelDBStorage) GetMeta() (storage.FileDesc, error) {
 			}
 			return nil, err
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 		b, err := io.ReadAll(f)
 		if err != nil {
 			return nil, err
@@ -415,7 +415,7 @@ func (fs *levelDBStorage) GetMeta() (storage.FileDesc, error) {
 			cur, err = tryCurrent(name)
 			if err == nil {
 				break
-			} else if err == os.ErrNotExist {
+			} else if errors.Is(err, os.ErrNotExist) { //nolint:revive // empty-block: intentional fallthrough to next iteration
 				// Fallback to the next file.
 			} else if isCorrupted(err) {
 				lastCerr = err
@@ -458,14 +458,14 @@ func (fs *levelDBStorage) GetMeta() (storage.FileDesc, error) {
 			pendNames[i] = fmt.Sprintf("CURRENT.%d", num)
 		}
 		pendCur, pendErr = tryCurrents(pendNames)
-		if pendErr != nil && pendErr != os.ErrNotExist && !isCorrupted(pendErr) {
+		if pendErr != nil && !errors.Is(pendErr, os.ErrNotExist) && !isCorrupted(pendErr) {
 			return storage.FileDesc{}, pendErr
 		}
 	}
 
 	// Try CURRENT and CURRENT.bak.
 	curCur, curErr := tryCurrents([]string{"CURRENT", "CURRENT.bak"})
-	if curErr != nil && curErr != os.ErrNotExist && !isCorrupted(curErr) {
+	if curErr != nil && !errors.Is(curErr, os.ErrNotExist) && !isCorrupted(curErr) {
 		return storage.FileDesc{}, curErr
 	}
 
@@ -559,7 +559,7 @@ func (fs *levelDBStorage) Create(fd storage.FileDesc) (storage.Writer, error) {
 	if fs.open < 0 {
 		return nil, storage.ErrClosed
 	}
-	of, err := fs.fs.OpenFile(fsGenName(fd), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	of, err := fs.fs.OpenFile(fsGenName(fd), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
 	if err != nil {
 		return nil, err
 	}
@@ -633,7 +633,7 @@ func (fs *levelDBStorage) Close() error {
 	}
 	fs.open = -1
 	if fs.logw != nil {
-		fs.logw.Close()
+		_ = fs.logw.Close()
 	}
 	return fs.flock.Close()
 }

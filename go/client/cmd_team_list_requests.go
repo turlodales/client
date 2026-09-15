@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -10,7 +11,6 @@ import (
 	"github.com/keybase/client/go/libcmdline"
 	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/protocol/keybase1"
-	"golang.org/x/net/context"
 )
 
 type CmdTeamListRequests struct {
@@ -69,7 +69,6 @@ func (c *CmdTeamListRequests) Run() error {
 	}
 
 	return c.outputTerminal(reqs)
-
 }
 
 func (c *CmdTeamListRequests) outputJSON(reqs []keybase1.TeamJoinRequest) error {
@@ -78,7 +77,7 @@ func (c *CmdTeamListRequests) outputJSON(reqs []keybase1.TeamJoinRequest) error 
 		return err
 	}
 	dui := c.G().UI.GetDumbOutputUI()
-	_, err = dui.Printf(string(b) + "\n")
+	_, err = dui.Printf("%s\n", b)
 	return err
 }
 

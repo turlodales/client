@@ -5,10 +5,10 @@
 package libkbfs
 
 import (
+	"context"
 	"sync"
 
 	"github.com/keybase/client/go/logger"
-	"golang.org/x/net/context"
 )
 
 type defaultContextReplacer struct{} // nolint
@@ -22,13 +22,14 @@ type protectedContext struct {
 	ctx context.Context
 	log logger.Logger
 
-	// defaultContextReplacer is embeded here as a helper that includes a no-op
+	// defaultContextReplacer is embedded here as a helper that includes a no-op
 	// maybeReplaceContext, so that we can "override" the method in tests.
 	defaultContextReplacer // nolint
 }
 
 func newProtectedContext(
-	ctx context.Context, log logger.Logger) *protectedContext {
+	ctx context.Context, log logger.Logger,
+) *protectedContext {
 	return &protectedContext{ctx: ctx, log: log}
 }
 

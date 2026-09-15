@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"context"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -20,7 +21,6 @@ import (
 	"github.com/keybase/client/go/protocol/keybase1"
 	"github.com/keybase/client/go/teams"
 	"github.com/keybase/clockwork"
-	context "golang.org/x/net/context"
 )
 
 type BlockingSender struct {
@@ -88,8 +88,8 @@ func (s *BlockingSender) addSenderToMessage(msg chat1.MessagePlaintext) (chat1.M
 }
 
 func (s *BlockingSender) addPrevPointersAndCheckConvID(ctx context.Context, msg chat1.MessagePlaintext,
-	conv chat1.ConversationLocal) (resMsg chat1.MessagePlaintext, err error) {
-
+	conv chat1.ConversationLocal,
+) (resMsg chat1.MessagePlaintext, err error) {
 	// Make sure the caller hasn't already assembled this list. For now, this
 	// should never happen, and we'll return an error just in case we make a
 	// mistake in the future. But if there's some use case in the future where
@@ -162,9 +162,8 @@ func (s *BlockingSender) addPrevPointersAndCheckConvID(ctx context.Context, msg 
 		} else if attempt >= maxAttempts || reachedLast {
 			s.Debug(ctx, "Could not find previous messages for prev pointers (of %v), after %v attempts. Giving up.", len(thread.Messages), attempt)
 			break
-		} else {
-			s.Debug(ctx, "Could not find previous messages for prev pointers (of %v), attempt: %v of %v, retrying", len(thread.Messages), attempt, maxAttempts)
 		}
+		s.Debug(ctx, "Could not find previous messages for prev pointers (of %v), attempt: %v of %v, retrying", len(thread.Messages), attempt, maxAttempts)
 		attempt++
 	}
 
@@ -197,8 +196,8 @@ func (s *BlockingSender) addPrevPointersAndCheckConvID(ctx context.Context, msg 
 // But the header.Conv.{Tlfid,TopicType,TopicID} and the convID to post to may be erroneously set to a different conversation's values.
 // This method checks that all of those fields match. Using `msgReference` as the validated link from {TlfName,TlfPublic} <-> ConvTriple.
 func (s *BlockingSender) checkConvID(ctx context.Context, conv chat1.ConversationLocal,
-	msgToSend chat1.MessagePlaintext, msgReference chat1.MessageUnboxed) error {
-
+	msgToSend chat1.MessagePlaintext, msgReference chat1.MessageUnboxed,
+) error {
 	headerQ := msgToSend.ClientHeader
 	headerRef := msgReference.Valid().ClientHeader
 
@@ -260,8 +259,8 @@ func (s *BlockingSender) checkConvID(ctx context.Context, conv chat1.Conversatio
 // could omit messages. Those messages would then not be signed into the `Deletes` list. And their
 // associated attachment assets would be left undeleted.
 func (s *BlockingSender) getAllDeletedEdits(ctx context.Context, uid gregor1.UID,
-	convID chat1.ConversationID, msg chat1.MessagePlaintext) (chat1.MessagePlaintext, []chat1.Asset, *chat1.ConversationID, error) {
-
+	convID chat1.ConversationID, msg chat1.MessagePlaintext,
+) (chat1.MessagePlaintext, []chat1.Asset, *chat1.ConversationID, error) {
 	var pendingAssetDeletes []chat1.Asset
 	var deleteFlipConvID *chat1.ConversationID
 
@@ -380,7 +379,8 @@ func (s *BlockingSender) getAllDeletedEdits(ctx context.Context, uid gregor1.UID
 }
 
 func (s *BlockingSender) getMessage(ctx context.Context, uid gregor1.UID,
-	convID chat1.ConversationID, msgID chat1.MessageID, resolveSupersedes bool) (mvalid chat1.MessageUnboxedValid, err error) {
+	convID chat1.ConversationID, msgID chat1.MessageID, resolveSupersedes bool,
+) (mvalid chat1.MessageUnboxedValid, err error) {
 	reason := chat1.GetThreadReason_PREPARE
 	messages, err := s.G().ConvSource.GetMessages(ctx, convID, uid, []chat1.MessageID{msgID},
 		&reason, nil, resolveSupersedes)
@@ -401,8 +401,8 @@ func (s *BlockingSender) getMessage(ctx context.Context, uid gregor1.UID,
 // If we are superseding an ephemeral message, we have to set the
 // ephemeralMetadata on this superseder message.
 func (s *BlockingSender) getSupersederEphemeralMetadata(ctx context.Context, uid gregor1.UID,
-	convID chat1.ConversationID, msg chat1.MessagePlaintext) (metadata *chat1.MsgEphemeralMetadata, err error) {
-
+	convID chat1.ConversationID, msg chat1.MessagePlaintext,
+) (metadata *chat1.MsgEphemeralMetadata, err error) {
 	if chat1.IsEphemeralNonSupersederType(msg.ClientHeader.MessageType) {
 		// Leave whatever was previously set
 		return msg.ClientHeader.EphemeralMetadata, nil
@@ -426,7 +426,8 @@ func (s *BlockingSender) getSupersederEphemeralMetadata(ctx context.Context, uid
 // chat1.MessageType_REACTION, which is considered a chat1.MessageType_DELETE
 // and updates the send appropriately.
 func (s *BlockingSender) processReactionMessage(ctx context.Context, uid gregor1.UID,
-	convID chat1.ConversationID, msg chat1.MessagePlaintext) (clientHeader chat1.MessageClientHeader, body chat1.MessageBody, err error) {
+	convID chat1.ConversationID, msg chat1.MessagePlaintext,
+) (clientHeader chat1.MessageClientHeader, body chat1.MessageBody, err error) {
 	if msg.ClientHeader.MessageType != chat1.MessageType_REACTION {
 		// nothing to do here
 		return msg.ClientHeader, msg.MessageBody, nil
@@ -464,7 +465,8 @@ func (s *BlockingSender) processReactionMessage(ctx context.Context, uid gregor1
 }
 
 func (s *BlockingSender) checkTopicNameAndGetState(ctx context.Context, msg chat1.MessagePlaintext,
-	membersType chat1.ConversationMembersType) (topicNameState *chat1.TopicNameState, convIDs []chat1.ConversationID, err error) {
+	membersType chat1.ConversationMembersType,
+) (topicNameState *chat1.TopicNameState, convIDs []chat1.ConversationID, err error) {
 	if msg.ClientHeader.MessageType != chat1.MessageType_METADATA {
 		return topicNameState, convIDs, nil
 	}
@@ -510,7 +512,8 @@ func (s *BlockingSender) checkTopicNameAndGetState(ctx context.Context, msg chat
 }
 
 func (s *BlockingSender) resolveOutboxIDEdit(ctx context.Context, uid gregor1.UID,
-	convID chat1.ConversationID, msg *chat1.MessagePlaintext) error {
+	convID chat1.ConversationID, msg *chat1.MessagePlaintext,
+) error {
 	if msg.SupersedesOutboxID == nil {
 		return nil
 	}
@@ -548,7 +551,8 @@ func (s *BlockingSender) resolveOutboxIDEdit(ctx context.Context, uid gregor1.UI
 }
 
 func (s *BlockingSender) handleReplyTo(ctx context.Context, uid gregor1.UID, convID chat1.ConversationID,
-	msg chat1.MessagePlaintext, replyTo *chat1.MessageID) (chat1.MessagePlaintext, error) {
+	msg chat1.MessagePlaintext, replyTo *chat1.MessageID,
+) (chat1.MessagePlaintext, error) {
 	if replyTo == nil {
 		return msg, nil
 	}
@@ -587,7 +591,8 @@ func (s *BlockingSender) handleReplyTo(ctx context.Context, uid gregor1.UID, con
 }
 
 func (s *BlockingSender) handleEmojis(ctx context.Context, uid gregor1.UID,
-	convID chat1.ConversationID, msg chat1.MessagePlaintext, topicType chat1.TopicType) (chat1.MessagePlaintext, error) {
+	convID chat1.ConversationID, msg chat1.MessagePlaintext, topicType chat1.TopicType,
+) (chat1.MessagePlaintext, error) {
 	if topicType != chat1.TopicType_CHAT {
 		return msg, nil
 	}
@@ -657,8 +662,9 @@ func (s *BlockingSender) handleEmojis(ctx context.Context, uid gregor1.UID,
 	return msg, nil
 }
 
-func (s *BlockingSender) getUsernamesForMentions(ctx context.Context, uid gregor1.UID,
-	conv *chat1.ConversationLocal) (res []string, err error) {
+func (s *BlockingSender) getUsernamesForMentions(ctx context.Context, _ gregor1.UID,
+	conv *chat1.ConversationLocal,
+) (res []string, err error) {
 	if conv == nil {
 		return nil, nil
 	}
@@ -692,8 +698,10 @@ func (s *BlockingSender) getUsernamesForMentions(ctx context.Context, uid gregor
 		return res, nil
 	}
 }
+
 func (s *BlockingSender) handleMentions(ctx context.Context, uid gregor1.UID, msg chat1.MessagePlaintext,
-	conv *chat1.ConversationLocal) (res chat1.MessagePlaintext, atMentions []gregor1.UID, chanMention chat1.ChannelMention, err error) {
+	conv *chat1.ConversationLocal,
+) (res chat1.MessagePlaintext, atMentions []gregor1.UID, chanMention chat1.ChannelMention, err error) {
 	if msg.ClientHeader.Conv.TopicType != chat1.TopicType_CHAT {
 		return msg, atMentions, chanMention, nil
 	}
@@ -815,8 +823,8 @@ func (s *BlockingSender) handleMentions(ctx context.Context, uid gregor1.UID, ms
 // Returns (boxedMessage, pendingAssetDeletes, error)
 func (s *BlockingSender) Prepare(ctx context.Context, plaintext chat1.MessagePlaintext,
 	membersType chat1.ConversationMembersType, conv *chat1.ConversationLocal,
-	inopts *chat1.SenderPrepareOptions) (res types.SenderPrepareResult, err error) {
-
+	inopts *chat1.SenderPrepareOptions,
+) (res types.SenderPrepareResult, err error) {
 	if plaintext.ClientHeader.MessageType == chat1.MessageType_NONE {
 		return res, fmt.Errorf("cannot send message without type")
 	}
@@ -998,7 +1006,8 @@ func (s *BlockingSender) Prepare(ctx context.Context, plaintext chat1.MessagePla
 
 func (s *BlockingSender) applyTeamBotSettings(ctx context.Context, uid gregor1.UID,
 	msg *chat1.MessagePlaintext, convID *chat1.ConversationID, membersType chat1.ConversationMembersType,
-	atMentions []gregor1.UID, opts chat1.SenderPrepareOptions) ([]gregor1.UID, error) {
+	atMentions []gregor1.UID, opts chat1.SenderPrepareOptions,
+) ([]gregor1.UID, error) {
 	// no bots in KBFS convs
 	if membersType == chat1.ConversationMembersType_KBFS {
 		return nil, nil
@@ -1145,9 +1154,10 @@ func (s *BlockingSender) presentUIItem(ctx context.Context, uid gregor1.UID, con
 }
 
 func (s *BlockingSender) Send(ctx context.Context, convID chat1.ConversationID,
-	msg chat1.MessagePlaintext, clientPrev chat1.MessageID,
-	outboxID *chat1.OutboxID, sendOpts *chat1.SenderSendOptions, prepareOpts *chat1.SenderPrepareOptions) (obid chat1.OutboxID, boxed *chat1.MessageBoxed, err error) {
-	defer s.Trace(ctx, &err, fmt.Sprintf("Send(%s)", convID))()
+	msg chat1.MessagePlaintext, _ chat1.MessageID,
+	_ *chat1.OutboxID, sendOpts *chat1.SenderSendOptions, prepareOpts *chat1.SenderPrepareOptions,
+) (obid chat1.OutboxID, boxed *chat1.MessageBoxed, err error) {
+	defer s.Trace(ctx, &err, "Send(%s)", convID)()
 	defer utils.SuspendComponent(ctx, s.G(), s.G().InboxSource)()
 
 	// Get conversation metadata first. If we can't find it, we will just attempt to join
@@ -1191,7 +1201,7 @@ func (s *BlockingSender) Send(ctx context.Context, convID chat1.ConversationID,
 	clearedCache := false
 	// Try this up to 5 times in case we are trying to set the topic name, and the topic name
 	// state is moving around underneath us.
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		// Add a bunch of stuff to the message (like prev pointers, sender info, ...)
 		if prepareRes, err = s.Prepare(ctx, msg, conv.GetMembersType(), &conv, prepareOpts); err != nil {
 			s.Debug(ctx, "Send: error in Prepare: %s", err)
@@ -1372,13 +1382,15 @@ func NewNonblockingSender(g *globals.Context, sender types.Sender) *NonblockingS
 
 func (s *NonblockingSender) Prepare(ctx context.Context, msg chat1.MessagePlaintext,
 	membersType chat1.ConversationMembersType, conv *chat1.ConversationLocal,
-	opts *chat1.SenderPrepareOptions) (types.SenderPrepareResult, error) {
+	opts *chat1.SenderPrepareOptions,
+) (types.SenderPrepareResult, error) {
 	return s.sender.Prepare(ctx, msg, membersType, conv, opts)
 }
 
 func (s *NonblockingSender) Send(ctx context.Context, convID chat1.ConversationID,
 	msg chat1.MessagePlaintext, clientPrev chat1.MessageID, outboxID *chat1.OutboxID,
-	sendOpts *chat1.SenderSendOptions, prepareOpts *chat1.SenderPrepareOptions) (chat1.OutboxID, *chat1.MessageBoxed, error) {
+	sendOpts *chat1.SenderSendOptions, prepareOpts *chat1.SenderPrepareOptions,
+) (chat1.OutboxID, *chat1.MessageBoxed, error) {
 	uid, err := utils.AssertLoggedInUID(ctx, s.G())
 	if err != nil {
 		return nil, nil, err
@@ -1415,7 +1427,8 @@ func (s *NonblockingSender) Send(ctx context.Context, convID chat1.ConversationI
 }
 
 func (s *NonblockingSender) SendUnfurlNonblock(ctx context.Context, convID chat1.ConversationID,
-	msg chat1.MessagePlaintext, clientPrev chat1.MessageID, outboxID chat1.OutboxID) (chat1.OutboxID, error) {
+	msg chat1.MessagePlaintext, clientPrev chat1.MessageID, outboxID chat1.OutboxID,
+) (chat1.OutboxID, error) {
 	res, _, err := s.Send(ctx, convID, msg, clientPrev, &outboxID, nil, nil)
 	return res, err
 }

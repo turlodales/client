@@ -1,6 +1,8 @@
 package systests
 
 import (
+	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -9,7 +11,6 @@ import (
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 	"github.com/keybase/go-framed-msgpack-rpc/rpc"
 	"github.com/stretchr/testify/require"
-	context "golang.org/x/net/context"
 )
 
 func getHome(t *testing.T, u *userPlusDevice, markViewed bool) keybase1.HomeScreen {
@@ -41,16 +42,12 @@ func getBadgeState(t *testing.T, u *userPlusDevice) keybase1.BadgeState {
 func assertTodoPresent(t *testing.T, home keybase1.HomeScreen, wanted keybase1.HomeScreenTodoType, isBadged bool) {
 	for _, item := range home.Items {
 		typ, err := item.Data.T()
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		if typ == keybase1.HomeScreenItemType_TODO {
 			todo := item.Data.Todo()
 			t.Logf("Checking todo item %v", todo)
 			typ, err := todo.T()
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			if typ == wanted {
 				require.Equal(t, item.Badged, isBadged)
 				return
@@ -59,24 +56,18 @@ func assertTodoPresent(t *testing.T, home keybase1.HomeScreen, wanted keybase1.H
 			t.Logf("Non-todo item: %v", typ)
 		}
 	}
-	t.Fatalf("Failed to find type %s in %+v", wanted, home)
+	require.FailNow(t, fmt.Sprintf("Failed to find type %s in %+v", wanted, home))
 }
 
 func assertTodoNotPresent(t *testing.T, home keybase1.HomeScreen, wanted keybase1.HomeScreenTodoType) {
 	for _, item := range home.Items {
 		typ, err := item.Data.T()
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		if typ == keybase1.HomeScreenItemType_TODO {
 			todo := item.Data.Todo()
 			typ, err := todo.T()
-			if err != nil {
-				t.Fatal(err)
-			}
-			if typ == wanted {
-				t.Fatalf("Found type %s in %+v, but didn't want to ", wanted, home)
-			}
+			require.NoError(t, err)
+			require.NotEqual(t, wanted, typ, "Found type %s in %+v, but didn't want to ", wanted, home)
 		}
 	}
 }
@@ -84,17 +75,13 @@ func assertTodoNotPresent(t *testing.T, home keybase1.HomeScreen, wanted keybase
 func findFollowerInHome(t *testing.T, home keybase1.HomeScreen, f string) (present, badged bool) {
 	for _, item := range home.Items {
 		typ, err := item.Data.T()
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		if typ != keybase1.HomeScreenItemType_PEOPLE {
 			continue
 		}
 		people := item.Data.People()
 		ptyp, err := people.T()
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		switch ptyp {
 		case keybase1.HomeScreenPeopleNotificationType_FOLLOWED:
 			follow := people.Followed()
@@ -140,7 +127,7 @@ func pollForTrue(t *testing.T, g *libkb.GlobalContext, poller func(i int) bool) 
 	// Hopefully this is enough for slow CI but you never know.
 	wait := 10 * time.Millisecond * libkb.CITimeMultiplier(g)
 	found := false
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		if poller(i) {
 			found = true
 			break

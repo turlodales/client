@@ -1,20 +1,18 @@
-import URL from 'url-parse'
 import * as Electron from 'electron'
-import * as RemoteGen from '@/actions/remote-gen'
+import * as RemoteGen from '@/constants/remote-actions'
 import * as R from '@/constants/remote'
 import * as fs from 'fs'
 import menuHelper from './menu-helper.desktop'
 import {showDevTools} from '@/local-debug'
-import {guiConfigFilename, isDarwin, isWindows, defaultUseNativeFrame} from '@/constants/platform.desktop'
+import {guiConfigFilename, isDarwin, isWindows, defaultUseNativeFrame} from '@/constants/platform'
 import logger from '@/logger'
 import debounce from 'lodash/debounce'
-import {setupDevToolsExtensions} from './dev-tools.desktop'
-import {assetRoot, htmlPrefix} from './html-root.desktop'
-import KB2 from '@/util/electron.desktop'
+import {htmlURL, preloadPath} from './html-root.desktop'
+import KB2 from '@/util/electron'
 
 const {env} = KB2.constants
 
-let htmlFile = `${htmlPrefix}${assetRoot}main${__FILE_SUFFIX__}.html`
+let htmlFile = htmlURL('main')
 
 const setupDefaultSession = () => {
   const ds = Electron.session.defaultSession
@@ -30,11 +28,19 @@ const setupDefaultSession = () => {
     if (permission === 'fullscreen') {
       return callback(true)
     }
-    const ourURL = new URL(htmlFile)
-    const requestURL = new URL(webContents.getURL())
+
+    let ourPathname: string
+    let requestPathname: string
+    try {
+      ourPathname = new URL(htmlFile).pathname
+      requestPathname = new URL(webContents.getURL()).pathname
+    } catch {
+      return callback(false)
+    }
+
     if (
       permission === 'notifications' &&
-      requestURL.pathname.toLowerCase() === ourURL.pathname.toLowerCase()
+      requestPathname.toLowerCase() === ourPathname.toLowerCase()
     ) {
       // Allow notifications
       return callback(true)
@@ -91,9 +97,10 @@ const setupWindowEvents = (win: Electron.BrowserWindow) => {
 }
 
 const changeDock = (show: boolean) => {
-  const _dock = Electron.app.dock
-  const dock = _dock as typeof _dock | undefined
+  const dock = Electron.app.dock
   if (!dock) return
+  windowState.dockHidden = !show
+  R.remoteDispatch(RemoteGen.createUpdateWindowState({windowState}))
   if (show) {
     dock
       .show()
@@ -102,9 +109,6 @@ const changeDock = (show: boolean) => {
   } else {
     dock.hide()
   }
-
-  windowState.dockHidden = !show
-  R.remoteDispatch(RemoteGen.createUpdateWindowState({windowState}))
 }
 
 export const showDockIcon = () => changeDock(true)
@@ -112,7 +116,6 @@ export const hideDockIcon = () => changeDock(false)
 
 let useNativeFrame = defaultUseNativeFrame
 let isDarkMode = false
-let darkModePreference: undefined | 'system' | 'alwaysDark' | 'alwaysLight'
 let disableSpellCheck = false
 let disableScreenshot = false
 
@@ -146,31 +149,30 @@ const loadWindowState = () => {
 
     if (guiConfig?.ui) {
       const {
-        darkMode,
+        darkMode: _darkMode,
         disableSpellCheck: _disableSpellCheck,
         disableScreenshot: _disableScreenshot,
       } = guiConfig.ui
       disableSpellCheck = typeof _disableSpellCheck === 'boolean' ? _disableSpellCheck : disableSpellCheck
       disableScreenshot = typeof _disableScreenshot === 'boolean' ? _disableScreenshot : disableScreenshot
 
-      if (typeof darkMode === 'string') {
-        switch (darkMode) {
+      if (typeof _darkMode === 'string') {
+        switch (_darkMode) {
           case 'system':
-            darkModePreference = darkMode
             isDarkMode = KB2.constants.startDarkMode
+            Electron.nativeTheme.themeSource = 'system'
             break
           case 'alwaysDark':
-            darkModePreference = darkMode
             isDarkMode = true
+            Electron.nativeTheme.themeSource = 'dark'
             break
           case 'alwaysLight':
-            darkModePreference = darkMode
             isDarkMode = false
+            Electron.nativeTheme.themeSource = 'light'
             break
         }
       }
     } else {
-      darkModePreference = 'system'
       isDarkMode = KB2.constants.startDarkMode
     }
 
@@ -244,26 +246,19 @@ const fixWindowsScalingIssue = (win: Electron.BrowserWindow) => {
 
 const maybeShowWindowOrDock = (win: Electron.BrowserWindow) => {
   const openedAtLogin = Electron.app.getLoginItemSettings().wasOpenedAtLogin
-  // app.getLoginItemSettings().restoreState is Mac only, so consider it always on in Windows
-  const isRestore = !!env.KEYBASE_RESTORE_UI || Electron.app.getLoginItemSettings().restoreState || isWindows
+  // electron 44 removed restoreState/wasOpenedAsHidden with no replacement, so any login launch
+  // counts as a restore and we fall back to the window/dock hidden state we persist ourselves
+  const isRestore = !!env.KEYBASE_RESTORE_UI || isWindows || openedAtLogin
   const hideWindowOnStart = env.KEYBASE_AUTOSTART === '1'
-  const openHidden = Electron.app.getLoginItemSettings().wasOpenedAsHidden
   logger.info('KEYBASE_AUTOSTART =', env.KEYBASE_AUTOSTART)
   logger.info('KEYBASE_START_UI =', env.KEYBASE_START_UI)
   logger.info('Opened at login:', openedAtLogin)
   logger.info('Is restore:', isRestore)
-  logger.info('Open hidden:', openHidden)
 
   // Don't show main window:
-  // - If we are set to open hidden,
-  // - or, if we hide window on start,
+  // - If we hide window on start,
   // - or, if we are restoring and window was hidden
-  // - or, if we were opened from login (but not restoring)
-  const hideMainWindow =
-    openHidden ||
-    hideWindowOnStart ||
-    (isRestore && windowState.windowHidden) ||
-    (openedAtLogin && !isRestore)
+  const hideMainWindow = hideWindowOnStart || (isRestore && windowState.windowHidden)
 
   logger.info('Hide main window:', hideMainWindow)
   if (!hideMainWindow) {
@@ -280,11 +275,8 @@ const maybeShowWindowOrDock = (win: Electron.BrowserWindow) => {
   }
 
   // Don't show dock:
-  // - If we are set to open hidden,
-  // - or, if we are restoring and dock was hidden
-  // - or, if we were opened from login (but not restoring)
-  const shouldHideDockIcon =
-    openHidden || (isRestore && windowState.dockHidden) || (openedAtLogin && !isRestore)
+  // - If we are restoring and dock was hidden
+  const shouldHideDockIcon = isRestore && windowState.dockHidden
   logger.info('Hide dock icon:', shouldHideDockIcon)
   if (shouldHideDockIcon) {
     hideDockIcon()
@@ -312,7 +304,7 @@ const MainWindow = () => {
   loadWindowState()
 
   // pass to main window
-  htmlFile = htmlFile + `?darkModePreference=${darkModePreference || ''}`
+  htmlFile = htmlFile + `?darkMode=${isDarkMode || ''}`
   const win = new Electron.BrowserWindow({
     backgroundColor: isDarkMode ? '#191919' : '#ffffff',
     frame: useNativeFrame,
@@ -326,7 +318,7 @@ const MainWindow = () => {
       devTools: showDevTools,
       nodeIntegration: false,
       nodeIntegrationInWorker: false,
-      preload: `${assetRoot}preload${__FILE_SUFFIX__}.bundle.js`,
+      preload: preloadPath,
       spellcheck: !disableSpellCheck,
     },
     width: windowState.width,
@@ -336,10 +328,6 @@ const MainWindow = () => {
   })
 
   win.setContentProtection(disableScreenshot)
-
-  if (__DEV__ || __PROFILE__) {
-    setupDevToolsExtensions()
-  }
 
   win
     .loadURL(htmlFile)
@@ -357,7 +345,7 @@ const MainWindow = () => {
 
   menuHelper(win)
 
-  if (showDevTools) {
+  if (showDevTools && !process.env['KB_E2E_TEST']) {
     win.webContents.openDevTools({mode: 'detach', title: `${__DEV__ ? 'DEV' : 'Prod'} Keybase Devtools`})
   }
 

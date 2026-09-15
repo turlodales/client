@@ -25,7 +25,7 @@ func TestRotateHiddenSelf(t *testing.T) {
 	secretBefore := team.Data.PerTeamKeySeedsUnverified[team.Generation()].Seed.ToBytes()
 	keys1, err := team.AllApplicationKeys(context.TODO(), keybase1.TeamApplication_CHAT)
 	require.NoError(t, err)
-	require.Equal(t, len(keys1), 1)
+	require.Len(t, keys1, 1)
 	require.Equal(t, keys1[0].KeyGeneration, keybase1.PerTeamKeyGeneration(1))
 
 	err = team.Rotate(context.TODO(), keybase1.RotationType_VISIBLE)
@@ -40,11 +40,11 @@ func TestRotateHiddenSelf(t *testing.T) {
 
 	keys2, err := after.AllApplicationKeys(context.TODO(), keybase1.TeamApplication_CHAT)
 	require.NoError(t, err)
-	require.Equal(t, len(keys2), 2)
+	require.Len(t, keys2, 2)
 	require.Equal(t, keys2[0].KeyGeneration, keybase1.PerTeamKeyGeneration(1))
 	require.Equal(t, keys1[0].Key, keys2[0].Key)
 
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		team, err = GetForTestByStringName(context.TODO(), tc.G, name)
 		require.NoError(t, err)
 		err = team.Rotate(context.TODO(), keybase1.RotationType_HIDDEN)
@@ -59,7 +59,7 @@ func TestRotateHiddenSelf(t *testing.T) {
 	require.NoError(t, err)
 	keys3, err := team.AllApplicationKeys(context.TODO(), keybase1.TeamApplication_CHAT)
 	require.NoError(t, err)
-	require.Equal(t, len(keys3), 8)
+	require.Len(t, keys3, 8)
 	require.Equal(t, keys3[0].KeyGeneration, keybase1.PerTeamKeyGeneration(1))
 	require.Equal(t, keys1[0].Key, keys3[0].Key)
 	require.Equal(t, keys2[1].Key, keys3[1].Key)
@@ -106,7 +106,7 @@ func TestRotateHiddenOther(t *testing.T) {
 		checkForUser(1)
 	}
 
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		rotate(i%2 == 0)
 		check()
 	}
@@ -154,7 +154,7 @@ func TestRotateHiddenOtherFTL(t *testing.T) {
 		}
 		team, err := mctx.G().GetFastTeamLoader().Load(mctx, arg)
 		require.NoError(t, err)
-		require.Equal(t, 1, len(team.ApplicationKeys))
+		require.Len(t, team.ApplicationKeys, 1)
 		require.Equal(t, keyGen, team.ApplicationKeys[0].KeyGeneration)
 	}
 
@@ -163,7 +163,7 @@ func TestRotateHiddenOtherFTL(t *testing.T) {
 		checkForUser(1, true)
 	}
 
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		rotate(i%2 == 0)
 		check()
 	}
@@ -195,7 +195,7 @@ func pollForTrue(t *testing.T, g *libkb.GlobalContext, poller func(i int) bool) 
 	// Hopefully this is enough for slow CI but you never know.
 	wait := 10 * time.Millisecond * libkb.CITimeMultiplier(g)
 	found := false
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		if poller(i) {
 			found = true
 			break
@@ -288,7 +288,6 @@ func TestHiddenNeedRotate(t *testing.T) {
 // Now let's say we FTL load this team first, and then full load it. We'll be slotting in
 // the PTK at generation 2 after we've loaded PTK at generation 3 via the hidden chain.
 func TestHiddenRotateOtherFTLThenSlowLoad(t *testing.T) {
-
 	fus, tcs, cleanup := setupNTests(t, 2)
 	defer cleanup()
 
@@ -339,7 +338,6 @@ func TestHiddenRotateOtherFTLThenSlowLoad(t *testing.T) {
 //   - FTL generations 1,2,4 (leaving a hole at 3)
 //   - Full load the team with hidden_low=1 and low=0
 func TestHiddenFTLHole(t *testing.T) {
-
 	fus, tcs, cleanup := setupNTests(t, 2)
 	defer cleanup()
 
@@ -360,7 +358,7 @@ func TestHiddenFTLHole(t *testing.T) {
 	}
 
 	t.Logf("U0 rotates the team 4x (via hidden)")
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		rot(keybase1.RotationType_HIDDEN)
 	}
 

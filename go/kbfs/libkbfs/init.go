@@ -248,7 +248,8 @@ func DefaultInitParams(ctx Context) InitParams {
 // in once the given FlagSet is parsed.
 func AddFlagsWithDefaults(
 	flags *flag.FlagSet, defaultParams InitParams,
-	defaultLogPath string) *InitParams {
+	defaultLogPath string,
+) *InitParams {
 	var params InitParams
 	flags.BoolVar(&params.Debug, "debug", defaultParams.Debug,
 		"Print debug messages")
@@ -299,8 +300,7 @@ func AddFlagsWithDefaults(
 
 	// No real need to enable setting
 	// params.TLFJournalBackgroundWorkStatus via a flag.
-	params.TLFJournalBackgroundWorkStatus =
-		defaultParams.TLFJournalBackgroundWorkStatus
+	params.TLFJournalBackgroundWorkStatus = defaultParams.TLFJournalBackgroundWorkStatus
 
 	flags.DurationVar(&params.BGFlushPeriod, "sync-batch-period",
 		defaultParams.BGFlushPeriod,
@@ -389,7 +389,8 @@ func parseRootDir(addr string) (string, bool) {
 
 func makeMDServer(kbCtx Context, config Config, mdserverAddr string,
 	rpcLogFactory rpc.LogFactory, log logger.Logger) (
-	MDServer, error) {
+	MDServer, error,
+) {
 	if mdserverAddr == memoryAddr {
 		log.Debug("Using in-memory mdserver")
 		// local in-memory MD server
@@ -419,7 +420,8 @@ func makeMDServer(kbCtx Context, config Config, mdserverAddr string,
 
 func makeKeyServer(
 	config Config, keyserverAddr string, log logger.Logger) (
-	libkey.KeyServer, error) {
+	libkey.KeyServer, error,
+) {
 	keyOpsConfig := keyOpsConfigWrapper{config}
 	if keyserverAddr == memoryAddr {
 		log.Debug("Using in-memory keyserver")
@@ -449,7 +451,8 @@ func makeKeyServer(
 
 func makeBlockServer(kbCtx Context, config Config, bserverAddr string,
 	rpcLogFactory rpc.LogFactory,
-	log logger.Logger) (BlockServer, error) {
+	log logger.Logger,
+) (BlockServer, error) {
 	if bserverAddr == memoryAddr {
 		log.Debug("Using in-memory bserver")
 		bserverLog := config.MakeLogger("BSM")
@@ -482,7 +485,8 @@ func makeBlockServer(kbCtx Context, config Config, bserverAddr string,
 // returned.
 func InitLogWithPrefix(
 	params InitParams, ctx Context, prefix string,
-	defaultLogPath string) (logger.Logger, error) {
+	defaultLogPath string,
+) (logger.Logger, error) {
 	var err error
 
 	// Set log file to default if log-to-file was specified
@@ -533,7 +537,8 @@ func InitLog(params InitParams, ctx Context) (logger.Logger, error) {
 func InitWithLogPrefix(
 	ctx context.Context, kbCtx Context, params InitParams,
 	keybaseServiceCn KeybaseServiceCn, onInterruptFn func() error,
-	log logger.Logger, logPrefix string) (cfg Config, err error) {
+	log logger.Logger, logPrefix string,
+) (cfg Config, err error) {
 	done := make(chan struct{})
 	interruptChan := make(chan os.Signal, 1)
 
@@ -574,10 +579,9 @@ func InitWithLogPrefix(
 				if interruptErr != nil {
 					log.Info("Failed to unmount before exit: %s", interruptErr)
 					os.Exit(1)
-				} else {
-					// Do not return 128 + signal since kbfsfuse is not a shell command
-					os.Exit(0)
 				}
+				// Do not return 128 + signal since kbfsfuse is not a shell command
+				os.Exit(0)
 			}
 		}
 	}()
@@ -618,14 +622,16 @@ func InitWithLogPrefix(
 func Init(
 	ctx context.Context, kbCtx Context, params InitParams,
 	keybaseServiceCn KeybaseServiceCn, onInterruptFn func() error,
-	log logger.Logger) (cfg Config, err error) {
+	log logger.Logger,
+) (cfg Config, err error) {
 	return InitWithLogPrefix(
 		ctx, kbCtx, params, keybaseServiceCn, onInterruptFn, log, "kbfs")
 }
 
 func getInitMode(
 	ctx context.Context, kbCtx Context, params InitParams,
-	log logger.Logger) (InitMode, error) {
+	log logger.Logger,
+) (InitMode, error) {
 	mode := InitDefault
 
 	// Use the KBFS mode from the config file if none is provided on
@@ -672,27 +678,33 @@ func getInitMode(
 
 func getCleanBlockCacheCapacity(
 	ctx context.Context, kbCtx Context, params InitParams,
-	log logger.Logger) uint64 {
-	cap := params.CleanBlockCacheCapacity
+	log logger.Logger,
+) uint64 {
+	capacity := params.CleanBlockCacheCapacity
 
 	// Use the capacity from the config file if none is provided on
 	// the command line.
-	if cap == 0 {
+	if capacity == 0 {
 		config := kbCtx.GetEnv().GetConfig()
 		capInt, ok := config.GetIntAtPath(configBlockCacheMemMaxBytesStr)
 		if ok {
-			log.CDebugf(
-				ctx, "Using block cache capacity from config file: %d", capInt)
-			cap = uint64(capInt)
+			if capInt < 0 {
+				log.CDebugf(ctx, "Ignoring negative block cache capacity from config file: %d", capInt)
+			} else {
+				log.CDebugf(
+					ctx, "Using block cache capacity from config file: %d", capInt)
+				capacity = uint64(capInt)
+			}
 		}
 	}
 
-	return cap
+	return capacity
 }
 
 func getCacheFrac(
 	ctx context.Context, kbCtx Context, param, defaultVal float64,
-	configKey string, log logger.Logger) float64 {
+	configKey string, log logger.Logger,
+) float64 {
 	frac := param
 
 	// Use the fraction from the config file if none is provided on
@@ -718,7 +730,8 @@ func getCacheFrac(
 func doInit(
 	ctx context.Context, kbCtx Context, params InitParams,
 	keybaseServiceCn KeybaseServiceCn, log logger.Logger,
-	logPrefix string) (Config, error) {
+	logPrefix string,
+) (Config, error) {
 	ctx = CtxWithRandomIDReplayable(ctx, CtxInitKey, CtxInitID, log)
 
 	initMode, err := getInitMode(ctx, kbCtx, params, log)
@@ -742,11 +755,11 @@ func doInit(
 		}, params.StorageRoot, params.DiskCacheMode, kbCtx)
 	config.SetVLogLevel(kbCtx.GetVDebugSetting())
 
-	if cap := getCleanBlockCacheCapacity(ctx, kbCtx, params, log); cap > 0 {
+	if capacity := getCleanBlockCacheCapacity(ctx, kbCtx, params, log); capacity > 0 {
 		log.CDebugf(
 			ctx, "Overriding default clean block cache capacity from %d to %d",
-			config.BlockCache().GetCleanBytesCapacity(), cap)
-		config.BlockCache().SetCleanBytesCapacity(cap)
+			config.BlockCache().GetCleanBytesCapacity(), capacity)
+		config.BlockCache().SetCleanBytesCapacity(capacity)
 	}
 
 	workers := config.Mode().BlockWorkers()

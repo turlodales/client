@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sync"
@@ -10,7 +11,6 @@ import (
 	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/protocol/chat1"
 	"github.com/keybase/client/go/protocol/gregor1"
-	context "golang.org/x/net/context"
 )
 
 var ErrConvLockTabDeadlock = errors.New("timeout reading thread")
@@ -143,7 +143,7 @@ func (c *ConversationLockTab) Acquire(ctx context.Context, uid gregor1.UID, conv
 	for i := 0; i < c.maxAcquireRetries; i++ {
 		blocked, err = c.doAcquire(ctx, uid, convID)
 		if err != nil {
-			if err != ErrConvLockTabDeadlock {
+			if !errors.Is(err, ErrConvLockTabDeadlock) {
 				return true, err
 			}
 			c.Debug(ctx, "Acquire: deadlock condition detected, sleeping and trying again: attempt: %d", i)

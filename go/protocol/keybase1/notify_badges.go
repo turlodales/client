@@ -1,13 +1,14 @@
-// Auto-generated to Go types and interfaces using avdl-compiler v1.4.10 (https://github.com/keybase/node-avdl-compiler)
+// Code generated to Go types and interfaces using avdl-compiler v1.4.10 (https://github.com/keybase/node-avdl-compiler). DO NOT EDIT.
 //   Input file: avdl/keybase1/notify_badges.avdl
 
 package keybase1
 
 import (
+	"context"
+	"time"
+
 	gregor1 "github.com/keybase/client/go/protocol/gregor1"
 	"github.com/keybase/go-framed-msgpack-rpc/rpc"
-	context "golang.org/x/net/context"
-	"time"
 )
 
 type ChatConversationID []byte
@@ -77,20 +78,6 @@ func (o ResetState) DeepCopy() ResetState {
 	}
 }
 
-type WotUpdate struct {
-	Voucher string        `codec:"voucher" json:"voucher"`
-	Vouchee string        `codec:"vouchee" json:"vouchee"`
-	Status  WotStatusType `codec:"status" json:"status"`
-}
-
-func (o WotUpdate) DeepCopy() WotUpdate {
-	return WotUpdate{
-		Voucher: o.Voucher,
-		Vouchee: o.Vouchee,
-		Status:  o.Status.DeepCopy(),
-	}
-}
-
 type BadgeState struct {
 	NewTlfs                   int                     `codec:"newTlfs" json:"newTlfs"`
 	RekeysNeeded              int                     `codec:"rekeysNeeded" json:"rekeysNeeded"`
@@ -110,7 +97,6 @@ type BadgeState struct {
 	DeletedTeams              []DeletedTeamInfo       `codec:"deletedTeams" json:"deletedTeams"`
 	TeamsWithResetUsers       []TeamMemberOutReset    `codec:"teamsWithResetUsers" json:"teamsWithResetUsers"`
 	UnreadWalletAccounts      []WalletAccountInfo     `codec:"unreadWalletAccounts" json:"unreadWalletAccounts"`
-	WotUpdates                map[string]WotUpdate    `codec:"wotUpdates" json:"wotUpdates"`
 	ResetState                ResetState              `codec:"resetState" json:"resetState"`
 }
 
@@ -214,18 +200,6 @@ func (o BadgeState) DeepCopy() BadgeState {
 			}
 			return ret
 		})(o.UnreadWalletAccounts),
-		WotUpdates: (func(x map[string]WotUpdate) map[string]WotUpdate {
-			if x == nil {
-				return nil
-			}
-			ret := make(map[string]WotUpdate, len(x))
-			for k, v := range x {
-				kCopy := k
-				vCopy := v.DeepCopy()
-				ret[kCopy] = vCopy
-			}
-			return ret
-		})(o.WotUpdates),
 		ResetState: o.ResetState.DeepCopy(),
 	}
 }
@@ -257,11 +231,11 @@ func NotifyBadgesProtocol(i NotifyBadgesInterface) rpc.Protocol {
 		Name: "keybase.1.NotifyBadges",
 		Methods: map[string]rpc.ServeHandlerDescription{
 			"badgeState": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]BadgeStateArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]BadgeStateArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]BadgeStateArg)(nil), args)
@@ -281,6 +255,6 @@ type NotifyBadgesClient struct {
 
 func (c NotifyBadgesClient) BadgeState(ctx context.Context, badgeState BadgeState) (err error) {
 	__arg := BadgeStateArg{BadgeState: badgeState}
-	err = c.Cli.Notify(ctx, "keybase.1.NotifyBadges.badgeState", []interface{}{__arg}, 0*time.Millisecond)
+	err = c.Cli.Notify(ctx, "keybase.1.NotifyBadges.badgeState", []any{__arg}, 0*time.Millisecond)
 	return
 }

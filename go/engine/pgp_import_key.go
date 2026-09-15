@@ -85,7 +85,6 @@ func (e *PGPKeyImportEngine) generateKey(m libkb.MetaContext) (err error) {
 }
 
 func (e *PGPKeyImportEngine) saveLKS(m libkb.MetaContext) (err error) {
-
 	defer m.Trace("PGPKeyImportEngine::saveLKS", &err)()
 
 	lks := e.arg.Lks
@@ -321,7 +320,6 @@ func (e *PGPKeyImportEngine) unlock(m libkb.MetaContext) (err error) {
 }
 
 func (e *PGPKeyImportEngine) loadDelegator(m libkb.MetaContext) (err error) {
-
 	e.del = &libkb.Delegator{
 		ExistingKey:    e.arg.SigningKey,
 		Me:             e.me,
@@ -407,7 +405,7 @@ func (e *PGPKeyImportEngine) push(m libkb.MetaContext) (err error) {
 
 	m.UIs().LogUI.Info("Generated new PGP key:")
 	d := e.bundle.VerboseDescription()
-	for _, line := range strings.Split(d, "\n") {
+	for line := range strings.SplitSeq(d, "\n") {
 		m.UIs().LogUI.Info("  %s", line)
 	}
 

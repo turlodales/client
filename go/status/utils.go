@@ -11,7 +11,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-
 	"mime/multipart"
 	"os"
 	"os/exec"
@@ -33,17 +32,17 @@ import (
 // MergeStatusJSON merges the given `obj` into the given `status` JSON blob.
 // If any errors occur the original `status` is returned. Otherwise a new JSON
 // blob is created of the form {"status": status, key: obj}
-func MergeStatusJSON(obj interface{}, key, status string) string {
+func MergeStatusJSON(obj any, key, status string) string {
 	if err := jsonw.EnsureMaxDepthBytesDefault([]byte(status)); err != nil {
 		return status
 	}
 
-	var statusObj map[string]interface{}
+	var statusObj map[string]any
 	if err := json.Unmarshal([]byte(status), &statusObj); err != nil {
 		return status
 	}
 
-	statusMap := make(map[string]interface{})
+	statusMap := make(map[string]any)
 	statusMap["status"] = statusObj
 	statusMap[key] = obj
 
@@ -155,7 +154,6 @@ func addGzippedFile(mpart *multipart.Writer, param, filename, data string) error
 // tail the logs that start with the stem `stem`, which are of type `which`.
 // Get the most recent `numBytes` from the concatenation of the files.
 func tail(log logger.Logger, which string, stem string, numBytes int) (ret string) {
-
 	numFiles := 0
 
 	log.Debug("+ tailing %s file with stem %q", which, stem)
@@ -273,7 +271,7 @@ func findFirstNewline(b []byte) []byte {
 	return b[(index + 1):]
 }
 
-func appendError(log logger.Logger, collected []byte, format string, args ...interface{}) []byte {
+func appendError(log logger.Logger, collected []byte, format string, args ...any) []byte {
 	msg := "Error reading logs: " + fmt.Sprintf(format, args...)
 	log.Errorf(msg)
 	return append(collected, []byte("\n"+msg+"\n")...)
@@ -348,7 +346,6 @@ func tailSystemdJournal(log logger.Logger, userUnits []string, numBytes int) (re
 // tailFile takes the last n bytes, but advances to the first newline. Returns the log (as a string)
 // and a bool, indicating if we read the full log, or we had to advance into the log to find the newline.
 func tailFile(log logger.Logger, which string, filename string, numBytes int) (ret string, seeked bool) {
-
 	log.Debug("+ tailing %s log %q (%d bytes)", which, filename, numBytes)
 	defer func() {
 		log.Debug("- scanned %d bytes", len(ret))
@@ -400,7 +397,7 @@ func addFileToTar(tw *tar.Writer, path string) error {
 			Typeflag: tar.TypeReg,
 			Name:     filepath.Base(path),
 			Size:     stat.Size(),
-			Mode:     int64(0600),
+			Mode:     int64(0o600),
 			ModTime:  stat.ModTime(),
 		}
 		if err := tw.WriteHeader(&header); err != nil {
@@ -481,7 +478,7 @@ func DirSize(dirPath string) (size uint64, numFiles int, err error) {
 			return err
 		}
 		if !info.IsDir() {
-			size += uint64(info.Size())
+			size += uint64(info.Size()) //nolint:gosec // G115: File size is non-negative, safe to convert
 			numFiles++
 		}
 		return nil
@@ -504,7 +501,7 @@ func CacheSizeInfo(g *libkb.GlobalContext) (info []keybase1.DirSizeInfo, err err
 			if err != nil {
 				return nil, err
 			}
-			totalSize += uint64(info.Size())
+			totalSize += uint64(info.Size()) //nolint:gosec // G115: File sizes are non-negative, safe to convert
 			continue
 		}
 		dirPath := filepath.Join(cacheDir, file.Name())

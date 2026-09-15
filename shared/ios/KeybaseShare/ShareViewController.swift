@@ -1,0 +1,84 @@
+//
+//  ShareViewController.swift
+//  KeybaseShare
+//
+//  Created by Chris Nojima on 6/12/25.
+//  Copyright © 2025 Keybase. All rights reserved.
+//
+
+import Foundation
+import Intents
+import UIKit
+import MobileCoreServices
+import Keybasego
+import KBCommon
+
+@objc(ShareViewController)
+public class ShareViewController: UIViewController {
+  var iph: ItemProviderHelper?
+  var alert: UIAlertController?
+  var selectedConvID: String?
+  // viewDidAppear fires again when the progress alert is dismissed; only
+  // process the share once.
+  private var didStartProcessing = false
+
+  func openApp() {
+    let path = selectedConvID.map { "keybase://incoming-share/\($0)" } ?? "keybase://incoming-share"
+    guard let url = URL(string: path) else { return }
+    let sel = #selector(UIApplication.open(_:options:completionHandler:))
+    var responder: UIResponder? = self
+    while let r = responder {
+      if r.responds(to: sel) {
+        let imp = r.method(for: sel)
+        typealias Func = @convention(c) (AnyObject, Selector, URL, AnyObject?, ((Bool) -> Void)?) -> Void
+        let f = unsafeBitCast(imp, to: Func.self)
+        f(r, sel, url, nil, nil)
+        return
+      }
+      responder = r.next
+    }
+  }
+
+  func completeRequestAlreadyInMainThread() {
+    alert?.dismiss(animated: true) {
+      DispatchQueue.main.async {
+        self.openApp()
+        self.extensionContext?.completeRequest(returningItems: nil, completionHandler: nil)
+      }
+    }
+  }
+
+  func showProgressView() {
+    let alertController = UIAlertController(title: "Working on it", message: "\n\nPreparing content for sharing into Keybase.", preferredStyle: .alert)
+    alert = alertController
+    let bar = UIProgressView(progressViewStyle: .default)
+    bar.translatesAutoresizingMaskIntoConstraints = false
+    bar.observedProgress = iph?.progress
+    alertController.view.addSubview(bar)
+    NSLayoutConstraint.activate([
+      bar.leadingAnchor.constraint(equalTo: alertController.view.leadingAnchor, constant: 32),
+      bar.trailingAnchor.constraint(equalTo: alertController.view.trailingAnchor, constant: -32),
+      bar.centerYAnchor.constraint(equalTo: alertController.view.centerYAnchor, constant: -8)
+    ])
+    present(alertController, animated: true, completion: nil)
+  }
+
+  public override func viewDidAppear(_ animated: Bool) {
+    super.viewDidAppear(animated)
+    guard !didStartProcessing else { return }
+    didStartProcessing = true
+    if let intent = extensionContext?.intent as? INSendMessageIntent {
+      selectedConvID = intent.conversationIdentifier
+    }
+    let itemArrs = extensionContext?.inputItems.compactMap {
+      ($0 as? NSExtensionItem)?.attachments
+    } ?? []
+
+    iph = ItemProviderHelper(forShare: true, withItems: itemArrs) { [weak self] in
+      guard let self else { return }
+      self.completeRequestAlreadyInMainThread()
+    }
+    showProgressView()
+    iph?.startProcessing()
+  }
+}

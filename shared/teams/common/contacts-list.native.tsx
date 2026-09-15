@@ -1,10 +1,10 @@
 import * as React from 'react'
 import * as Kb from '@/common-adapters'
-import type {Section as _Section} from '@/common-adapters/section-list'
 import useContacts, {type Contact as _Contact} from './use-contacts.native'
 import {mapGetEnsureValue} from '@/util/map'
 
-type Section = _Section<Contact, {title: string}>
+type Item = Contact
+type Section = Kb.SectionType<Item>
 
 const categorize = (contact: Contact): string => {
   if (!contact.name) {
@@ -31,12 +31,11 @@ const filterAndSectionContacts = (contacts: Contact[], search: string): Section[
       const section = mapGetEnsureValue(sectionMap, category, [])
       section.push(contact)
     })
-  const sections: Section[] = []
+  const sections = new Array<Section>()
   for (const letter of 'ABCDEFGHIJKLMNOPQRSTUVWXYZ') {
     if (sectionMap.has(letter)) {
       sections.push({
-        data: sectionMap.get(letter)!,
-        key: letter,
+        data: sectionMap.get(letter) ?? [],
         title: letter,
       })
     }
@@ -44,10 +43,9 @@ const filterAndSectionContacts = (contacts: Contact[], search: string): Section[
   for (const sectionKey of ['0-9', 'Other']) {
     if (sectionMap.has(sectionKey)) {
       sections.push({
-        data: sectionMap.get(sectionKey)!,
-        key: sectionKey,
+        data: sectionMap.get(sectionKey) ?? [],
         title: sectionKey,
-      })
+      } as const)
     }
   }
   return sections
@@ -70,12 +68,19 @@ type ContactRowProps = {
   onSelect: Props['onSelect']
   selected: boolean
 }
-const ContactRow = React.memo(({item, disabled, index, onSelect, selected}: ContactRowProps) => {
+const ContactRow = function ContactRow({
+  item,
+  disabled,
+  index,
+  onSelect,
+  selected,
+}: ContactRowProps) {
+  const styles = useStyles()
   const topText = item.name || item.valueFormatted || item.value
-  const bottomText = item.name ? item.valueFormatted ?? item.value : undefined
+  const bottomText = item.name ? (item.valueFormatted ?? item.value) : undefined
   const onCheck = (check: boolean) => onSelect(item, check)
   const listItem = (
-    <Kb.ListItem2
+    <Kb.ListItem
       type="Small"
       firstItem={index === 0}
       body={
@@ -90,7 +95,7 @@ const ContactRow = React.memo(({item, disabled, index, onSelect, selected}: Cont
       }
       icon={
         item.pictureUri ? (
-          <Kb.Image2 style={styles.thumbnail} src={item.pictureUri} />
+          <Kb.Image style={styles.thumbnail} src={item.pictureUri} />
         ) : (
           <Kb.Avatar size={32} username="" />
         )
@@ -98,17 +103,13 @@ const ContactRow = React.memo(({item, disabled, index, onSelect, selected}: Cont
     />
   )
   return listItem
-})
+}
 
 const ContactsList = (props: Props) => {
   const contactInfo = useContacts()
 
-  const sections = React.useMemo(
-    () => filterAndSectionContacts(contactInfo.contacts, props.search),
-    [contactInfo.contacts, props.search]
-  )
+  const sections = filterAndSectionContacts(contactInfo.contacts, props.search)
   const renderSectionHeader = ({section}: {section: Section}) => <Kb.SectionDivider label={section.title} />
-  const keyExtractor = (item: Contact) => item.id
 
   // need to box this callback or every row will rerender when the selection changes
   const {onSelect} = props
@@ -116,12 +117,9 @@ const ContactsList = (props: Props) => {
   React.useEffect(() => {
     onSelectRef.current = onSelect
   }, [onSelect])
-  const onSelectForRows = React.useCallback<Props['onSelect']>(
-    (...args) => {
+  const onSelectForRows: Props['onSelect'] = (...args) => {
       onSelectRef.current(...args)
-    },
-    [onSelectRef]
-  )
+    }
 
   return (
     <Kb.SectionList
@@ -143,22 +141,19 @@ const ContactsList = (props: Props) => {
           />
         )
       }}
-      keyExtractor={keyExtractor}
       ListHeaderComponent={props.ListHeaderComponent}
     />
   )
 }
 
-const styles = Kb.Styles.styleSheetCreate(() => ({
+const useStyles = Kb.Styles.createStyleHook(() => ({
   checkCircle: {
     marginRight: 24,
   },
   thumbnail: {
     borderRadius: 16,
-    height: 32,
-    marginLeft: 16,
-    marginRight: 16,
-    width: 32,
+    ...Kb.Styles.size(32),
+    ...Kb.Styles.marginH(16),
   },
 }))
 

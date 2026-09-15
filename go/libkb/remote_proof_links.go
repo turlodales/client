@@ -4,6 +4,8 @@
 package libkb
 
 import (
+	"slices"
+
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 	jsonw "github.com/keybase/go-jsonw"
 )
@@ -106,12 +108,7 @@ func (r *RemoteProofLinks) AddProofsToSet(existing *ProofSet, okStates []keybase
 		okStates = []keybase1.ProofState{keybase1.ProofState_OK}
 	}
 	isOkState := func(s1 keybase1.ProofState) bool {
-		for _, s2 := range okStates {
-			if s1 == s2 {
-				return true
-			}
-		}
-		return false
+		return slices.Contains(okStates, s1)
 	}
 	for _, a := range r.active() {
 		if !isOkState(a.state) {
@@ -136,11 +133,10 @@ func (r *RemoteProofLinks) active() []ProofLinkWithState {
 
 	// Loop over all types of services
 	for _, list := range r.links {
-
 		// Loop over all proofs for that type, from most recent,
 		// to oldest.
-		for i := len(list) - 1; i >= 0; i-- {
-			both := list[i]
+		for _, both := range slices.Backward(list) {
+
 			link := both.link
 			id := CanonicalProofName(link)
 

@@ -18,11 +18,12 @@ export const useTimeout = (func: () => void, timing: number): (() => void) => {
     savedCallback.current = func
   }, [func])
 
-  const timeoutIDRef = React.useRef<ReturnType<typeof setTimeout>>()
+  const timingRef = React.useRef(timing)
+  React.useEffect(() => {
+    timingRef.current = timing
+  }, [timing])
 
-  const timerCB = React.useCallback(() => {
-    savedCallback.current()
-  }, [])
+  const timeoutIDRef = React.useRef<ReturnType<typeof setTimeout>>(undefined)
 
   React.useEffect(() => {
     return () => {
@@ -30,13 +31,18 @@ export const useTimeout = (func: () => void, timing: number): (() => void) => {
     }
   }, [])
 
+  // the identity has to stay stable: callers pass this to an effect dep list,
+  // and a new one each render would restart the timer instead of letting it finish
   return React.useCallback(() => {
-    timeoutIDRef.current = setTimeout(timerCB, timing)
-  }, [timerCB, timing])
+    clearTimeout(timeoutIDRef.current)
+    timeoutIDRef.current = setTimeout(() => {
+      savedCallback.current()
+    }, timingRef.current)
+  }, [])
 }
 
 // https://overreacted.io/making-setinterval-declarative-with-react-hooks/
-export const useInterval = (func: () => any, interval?: number) => {
+export const useInterval = (func: () => unknown, interval?: number) => {
   const cb = React.useRef(func)
   React.useEffect(() => {
     cb.current = func
@@ -45,7 +51,10 @@ export const useInterval = (func: () => any, interval?: number) => {
     if (typeof interval !== 'number') {
       return noop
     }
-    const id = setInterval(() => cb.current(), interval)
+    const tick = () => {
+      cb.current()
+    }
+    const id = setInterval(tick, interval)
     return () => clearInterval(id)
   }, [interval])
 }

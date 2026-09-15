@@ -5,7 +5,6 @@ package engine
 
 import (
 	"errors"
-	"fmt"
 
 	"github.com/keybase/client/go/libkb"
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
@@ -25,7 +24,8 @@ type PaperProvisionEngine struct {
 }
 
 func NewPaperProvisionEngine(g *libkb.GlobalContext, username, deviceName,
-	paperKey string) *PaperProvisionEngine {
+	paperKey string,
+) *PaperProvisionEngine {
 	return &PaperProvisionEngine{
 		Contextified: libkb.NewContextified(g),
 		Username:     username,
@@ -96,16 +96,10 @@ func (e *PaperProvisionEngine) Run(m libkb.MetaContext) (err error) {
 
 	keys := bkeng.DeviceWithKeys()
 
-	// Make sure the key matches the logged in user
-	// use the KID to find the uid
-	uid, err := keys.Populate(m)
-	if err != nil {
+	// Resolve the exact KID against the user loaded for this provisioning
+	// attempt.
+	if err := keys.PopulateFromUser(e.User); err != nil {
 		return err
-	}
-
-	if uid.NotEqual(e.User.GetUID()) {
-		e.G().Log.Debug("paper key entered was for a different user")
-		return fmt.Errorf("paper key valid, but for %s, not %s", uid, e.User.GetUID())
 	}
 
 	e.perUserKeyring, err = libkb.NewPerUserKeyring(e.G(), e.User.GetUID())
@@ -126,7 +120,6 @@ func (e *PaperProvisionEngine) Run(m libkb.MetaContext) (err error) {
 
 	e.sendNotification(m)
 	return nil
-
 }
 
 // copied more or less from loginProvision.paper()

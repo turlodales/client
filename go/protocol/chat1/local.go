@@ -1,17 +1,18 @@
-// Auto-generated to Go types and interfaces using avdl-compiler v1.4.10 (https://github.com/keybase/node-avdl-compiler)
+// Code generated to Go types and interfaces using avdl-compiler v1.4.10 (https://github.com/keybase/node-avdl-compiler). DO NOT EDIT.
 //   Input file: avdl/chat1/local.avdl
 
 package chat1
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"time"
+
 	gregor1 "github.com/keybase/client/go/protocol/gregor1"
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 	stellar1 "github.com/keybase/client/go/protocol/stellar1"
 	"github.com/keybase/go-framed-msgpack-rpc/rpc"
-	context "golang.org/x/net/context"
-	"time"
 )
 
 type VersionKind string
@@ -39,11 +40,11 @@ var TextPaymentResultTypRevMap = map[TextPaymentResultTyp]string{
 	1: "ERROR",
 }
 
-func (e TextPaymentResultTyp) String() string {
-	if v, ok := TextPaymentResultTypRevMap[e]; ok {
+func (o TextPaymentResultTyp) String() string {
+	if v, ok := TextPaymentResultTypRevMap[o]; ok {
 		return v
 	}
-	return fmt.Sprintf("%v", int(e))
+	return fmt.Sprintf("%v", int(o))
 }
 
 type TextPaymentResult struct {
@@ -116,7 +117,7 @@ func (o TextPaymentResult) DeepCopy() TextPaymentResult {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Sent__),
 	}
@@ -225,14 +226,14 @@ func (o MessageText) DeepCopy() MessageText {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.ReplyTo),
 		ReplyToUID: (func(x *gregor1.UID) *gregor1.UID {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.ReplyToUID),
 		UserMentions: (func(x []KnownUserMention) []KnownUserMention {
@@ -261,7 +262,7 @@ func (o MessageText) DeepCopy() MessageText {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.LiveLocation),
 		Emojis: (func(x map[string]HarvestedEmoji) map[string]HarvestedEmoji {
@@ -472,11 +473,11 @@ var MessageSystemTypeRevMap = map[MessageSystemType]string{
 	9: "NEWCHANNEL",
 }
 
-func (e MessageSystemType) String() string {
-	if v, ok := MessageSystemTypeRevMap[e]; ok {
+func (o MessageSystemType) String() string {
+	if v, ok := MessageSystemTypeRevMap[o]; ok {
 		return v
 	}
-	return fmt.Sprintf("%v", int(e))
+	return fmt.Sprintf("%v", int(o))
 }
 
 type MessageSystemAddedToTeam struct {
@@ -918,70 +919,70 @@ func (o MessageSystem) DeepCopy() MessageSystem {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Addedtoteam__),
 		Inviteaddedtoteam__: (func(x *MessageSystemInviteAddedToTeam) *MessageSystemInviteAddedToTeam {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Inviteaddedtoteam__),
 		Complexteam__: (func(x *MessageSystemComplexTeam) *MessageSystemComplexTeam {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Complexteam__),
 		Createteam__: (func(x *MessageSystemCreateTeam) *MessageSystemCreateTeam {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Createteam__),
 		Gitpush__: (func(x *MessageSystemGitPush) *MessageSystemGitPush {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Gitpush__),
 		Changeavatar__: (func(x *MessageSystemChangeAvatar) *MessageSystemChangeAvatar {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Changeavatar__),
 		Changeretention__: (func(x *MessageSystemChangeRetention) *MessageSystemChangeRetention {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Changeretention__),
 		Bulkaddtoconv__: (func(x *MessageSystemBulkAddToConv) *MessageSystemBulkAddToConv {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Bulkaddtoconv__),
 		Sbsresolve__: (func(x *MessageSystemSbsResolve) *MessageSystemSbsResolve {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Sbsresolve__),
 		Newchannel__: (func(x *MessageSystemNewChannel) *MessageSystemNewChannel {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Newchannel__),
 	}
@@ -1015,7 +1016,7 @@ func (o MessageAttachment) DeepCopy() MessageAttachment {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Preview),
 		Previews: (func(x []Asset) []Asset {
@@ -1158,7 +1159,7 @@ func (o MessageReaction) DeepCopy() MessageReaction {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.TargetUID),
 		Emojis: (func(x map[string]HarvestedEmoji) map[string]HarvestedEmoji {
@@ -1618,119 +1619,119 @@ func (o MessageBody) DeepCopy() MessageBody {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Text__),
 		Attachment__: (func(x *MessageAttachment) *MessageAttachment {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Attachment__),
 		Edit__: (func(x *MessageEdit) *MessageEdit {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Edit__),
 		Delete__: (func(x *MessageDelete) *MessageDelete {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Delete__),
 		Metadata__: (func(x *MessageConversationMetadata) *MessageConversationMetadata {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Metadata__),
 		Headline__: (func(x *MessageHeadline) *MessageHeadline {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Headline__),
 		Attachmentuploaded__: (func(x *MessageAttachmentUploaded) *MessageAttachmentUploaded {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Attachmentuploaded__),
 		Join__: (func(x *MessageJoin) *MessageJoin {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Join__),
 		Leave__: (func(x *MessageLeave) *MessageLeave {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Leave__),
 		System__: (func(x *MessageSystem) *MessageSystem {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.System__),
 		Deletehistory__: (func(x *MessageDeleteHistory) *MessageDeleteHistory {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Deletehistory__),
 		Reaction__: (func(x *MessageReaction) *MessageReaction {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Reaction__),
 		Sendpayment__: (func(x *MessageSendPayment) *MessageSendPayment {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Sendpayment__),
 		Requestpayment__: (func(x *MessageRequestPayment) *MessageRequestPayment {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Requestpayment__),
 		Unfurl__: (func(x *MessageUnfurl) *MessageUnfurl {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Unfurl__),
 		Flip__: (func(x *MessageFlip) *MessageFlip {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Flip__),
 		Pin__: (func(x *MessagePin) *MessagePin {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Pin__),
 	}
@@ -1748,7 +1749,7 @@ func (o SenderPrepareOptions) DeepCopy() SenderPrepareOptions {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.ReplyTo),
 	}
@@ -1764,7 +1765,7 @@ func (o SenderSendOptions) DeepCopy() SenderSendOptions {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.JoinMentionsAs),
 	}
@@ -1789,11 +1790,11 @@ var OutboxStateTypeRevMap = map[OutboxStateType]string{
 	1: "ERROR",
 }
 
-func (e OutboxStateType) String() string {
-	if v, ok := OutboxStateTypeRevMap[e]; ok {
+func (o OutboxStateType) String() string {
+	if v, ok := OutboxStateTypeRevMap[o]; ok {
 		return v
 	}
-	return fmt.Sprintf("%v", int(e))
+	return fmt.Sprintf("%v", int(o))
 }
 
 type OutboxErrorType int
@@ -1842,11 +1843,11 @@ var OutboxErrorTypeRevMap = map[OutboxErrorType]string{
 	10: "MINWRITER",
 }
 
-func (e OutboxErrorType) String() string {
-	if v, ok := OutboxErrorTypeRevMap[e]; ok {
+func (o OutboxErrorType) String() string {
+	if v, ok := OutboxErrorTypeRevMap[o]; ok {
 		return v
 	}
-	return fmt.Sprintf("%v", int(e))
+	return fmt.Sprintf("%v", int(o))
 }
 
 type OutboxStateError struct {
@@ -1931,7 +1932,7 @@ func (o OutboxState) DeepCopy() OutboxState {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Error__),
 	}
@@ -1963,14 +1964,14 @@ func (o OutboxRecord) DeepCopy() OutboxRecord {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.PrepareOpts),
 		SendOpts: (func(x *SenderSendOptions) *SenderSendOptions {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.SendOpts),
 		Ordinal: o.Ordinal,
@@ -1978,14 +1979,14 @@ func (o OutboxRecord) DeepCopy() OutboxRecord {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Preview),
 		ReplyTo: (func(x *MessageUnboxed) *MessageUnboxed {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.ReplyTo),
 	}
@@ -2034,11 +2035,11 @@ var HeaderPlaintextVersionRevMap = map[HeaderPlaintextVersion]string{
 	10: "V10",
 }
 
-func (e HeaderPlaintextVersion) String() string {
-	if v, ok := HeaderPlaintextVersionRevMap[e]; ok {
+func (o HeaderPlaintextVersion) String() string {
+	if v, ok := HeaderPlaintextVersionRevMap[o]; ok {
 		return v
 	}
-	return fmt.Sprintf("%v", int(e))
+	return fmt.Sprintf("%v", int(o))
 }
 
 type HeaderPlaintextMetaInfo struct {
@@ -2110,42 +2111,42 @@ func (o HeaderPlaintextV1) DeepCopy() HeaderPlaintextV1 {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.OutboxInfo),
 		OutboxID: (func(x *OutboxID) *OutboxID {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.OutboxID),
 		HeaderSignature: (func(x *SignatureInfo) *SignatureInfo {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.HeaderSignature),
 		MerkleRoot: (func(x *MerkleRoot) *MerkleRoot {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.MerkleRoot),
 		EphemeralMetadata: (func(x *MsgEphemeralMetadata) *MsgEphemeralMetadata {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.EphemeralMetadata),
 		BotUID: (func(x *gregor1.UID) *gregor1.UID {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.BotUID),
 	}
@@ -2398,70 +2399,70 @@ func (o HeaderPlaintext) DeepCopy() HeaderPlaintext {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.V1__),
 		V2__: (func(x *HeaderPlaintextUnsupported) *HeaderPlaintextUnsupported {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.V2__),
 		V3__: (func(x *HeaderPlaintextUnsupported) *HeaderPlaintextUnsupported {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.V3__),
 		V4__: (func(x *HeaderPlaintextUnsupported) *HeaderPlaintextUnsupported {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.V4__),
 		V5__: (func(x *HeaderPlaintextUnsupported) *HeaderPlaintextUnsupported {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.V5__),
 		V6__: (func(x *HeaderPlaintextUnsupported) *HeaderPlaintextUnsupported {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.V6__),
 		V7__: (func(x *HeaderPlaintextUnsupported) *HeaderPlaintextUnsupported {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.V7__),
 		V8__: (func(x *HeaderPlaintextUnsupported) *HeaderPlaintextUnsupported {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.V8__),
 		V9__: (func(x *HeaderPlaintextUnsupported) *HeaderPlaintextUnsupported {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.V9__),
 		V10__: (func(x *HeaderPlaintextUnsupported) *HeaderPlaintextUnsupported {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.V10__),
 	}
@@ -2510,11 +2511,11 @@ var BodyPlaintextVersionRevMap = map[BodyPlaintextVersion]string{
 	10: "V10",
 }
 
-func (e BodyPlaintextVersion) String() string {
-	if v, ok := BodyPlaintextVersionRevMap[e]; ok {
+func (o BodyPlaintextVersion) String() string {
+	if v, ok := BodyPlaintextVersionRevMap[o]; ok {
 		return v
 	}
-	return fmt.Sprintf("%v", int(e))
+	return fmt.Sprintf("%v", int(o))
 }
 
 type BodyPlaintextMetaInfo struct {
@@ -2806,70 +2807,70 @@ func (o BodyPlaintext) DeepCopy() BodyPlaintext {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.V1__),
 		V2__: (func(x *BodyPlaintextV2) *BodyPlaintextV2 {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.V2__),
 		V3__: (func(x *BodyPlaintextUnsupported) *BodyPlaintextUnsupported {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.V3__),
 		V4__: (func(x *BodyPlaintextUnsupported) *BodyPlaintextUnsupported {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.V4__),
 		V5__: (func(x *BodyPlaintextUnsupported) *BodyPlaintextUnsupported {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.V5__),
 		V6__: (func(x *BodyPlaintextUnsupported) *BodyPlaintextUnsupported {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.V6__),
 		V7__: (func(x *BodyPlaintextUnsupported) *BodyPlaintextUnsupported {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.V7__),
 		V8__: (func(x *BodyPlaintextUnsupported) *BodyPlaintextUnsupported {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.V8__),
 		V9__: (func(x *BodyPlaintextUnsupported) *BodyPlaintextUnsupported {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.V9__),
 		V10__: (func(x *BodyPlaintextUnsupported) *BodyPlaintextUnsupported {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.V10__),
 	}
@@ -2890,7 +2891,7 @@ func (o MessagePlaintext) DeepCopy() MessagePlaintext {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.SupersedesOutboxID),
 		Emojis: (func(x []HarvestedEmoji) []HarvestedEmoji {
@@ -2945,7 +2946,7 @@ func (o MessageUnboxedValid) DeepCopy() MessageUnboxedValid {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.HeaderSignature),
 		VerificationKey: (func(x *[]byte) *[]byte {
@@ -2964,7 +2965,7 @@ func (o MessageUnboxedValid) DeepCopy() MessageUnboxedValid {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.SenderDeviceRevokedAt),
 		AtMentionUsernames: (func(x []string) []string {
@@ -3040,7 +3041,7 @@ func (o MessageUnboxedValid) DeepCopy() MessageUnboxedValid {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.ReplyTo),
 		BotUsername: o.BotUsername,
@@ -3078,11 +3079,11 @@ var MessageUnboxedErrorTypeRevMap = map[MessageUnboxedErrorType]string{
 	5: "PAIRWISE_MISSING",
 }
 
-func (e MessageUnboxedErrorType) String() string {
-	if v, ok := MessageUnboxedErrorTypeRevMap[e]; ok {
+func (o MessageUnboxedErrorType) String() string {
+	if v, ok := MessageUnboxedErrorTypeRevMap[o]; ok {
 		return v
 	}
-	return fmt.Sprintf("%v", int(e))
+	return fmt.Sprintf("%v", int(o))
 }
 
 type MessageUnboxedError struct {
@@ -3180,11 +3181,11 @@ var JourneycardTypeRevMap = map[JourneycardType]string{
 	7: "MSG_NO_ANSWER",
 }
 
-func (e JourneycardType) String() string {
-	if v, ok := JourneycardTypeRevMap[e]; ok {
+func (o JourneycardType) String() string {
+	if v, ok := JourneycardTypeRevMap[o]; ok {
 		return v
 	}
-	return fmt.Sprintf("%v", int(e))
+	return fmt.Sprintf("%v", int(o))
 }
 
 type MessageUnboxedJourneycard struct {
@@ -3337,35 +3338,35 @@ func (o MessageUnboxed) DeepCopy() MessageUnboxed {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Valid__),
 		Error__: (func(x *MessageUnboxedError) *MessageUnboxedError {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Error__),
 		Outbox__: (func(x *OutboxRecord) *OutboxRecord {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Outbox__),
 		Placeholder__: (func(x *MessageUnboxedPlaceholder) *MessageUnboxedPlaceholder {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Placeholder__),
 		Journeycard__: (func(x *MessageUnboxedJourneycard) *MessageUnboxedJourneycard {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Journeycard__),
 	}
@@ -3471,14 +3472,14 @@ func (o ConversationInfoLocal) DeepCopy() ConversationInfoLocal {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.SnippetMsg),
 		PinnedMsg: (func(x *ConversationPinnedMessage) *ConversationPinnedMessage {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.PinnedMsg),
 		Draft: (func(x *string) *string {
@@ -3512,7 +3513,7 @@ func (o ConversationInfoLocal) DeepCopy() ConversationInfoLocal {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.FinalizeInfo),
 		ResetNames: (func(x []string) []string {
@@ -3563,11 +3564,11 @@ var ConversationErrorTypeRevMap = map[ConversationErrorType]string{
 	6: "NONE",
 }
 
-func (e ConversationErrorType) String() string {
-	if v, ok := ConversationErrorTypeRevMap[e]; ok {
+func (o ConversationErrorType) String() string {
+	if v, ok := ConversationErrorTypeRevMap[o]; ok {
 		return v
 	}
-	return fmt.Sprintf("%v", int(e))
+	return fmt.Sprintf("%v", int(o))
 }
 
 type ConversationErrorLocal struct {
@@ -3588,7 +3589,7 @@ func (o ConversationErrorLocal) DeepCopy() ConversationErrorLocal {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.RekeyInfo),
 	}
@@ -3666,7 +3667,7 @@ func (o ConversationSettingsLocal) DeepCopy() ConversationSettingsLocal {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.MinWriterRoleInfo),
 	}
@@ -3698,7 +3699,7 @@ func (o ConversationLocal) DeepCopy() ConversationLocal {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Error),
 		Info:       o.Info.DeepCopy(),
@@ -3707,14 +3708,14 @@ func (o ConversationLocal) DeepCopy() ConversationLocal {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.CreatorInfo),
 		Notifications: (func(x *ConversationNotificationInfo) *ConversationNotificationInfo {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Notifications),
 		Supersedes: (func(x []ConversationMetadata) []ConversationMetadata {
@@ -3767,21 +3768,21 @@ func (o ConversationLocal) DeepCopy() ConversationLocal {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.ConvRetention),
 		TeamRetention: (func(x *RetentionPolicy) *RetentionPolicy {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.TeamRetention),
 		ConvSettings: (func(x *ConversationSettingsLocal) *ConversationSettingsLocal {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.ConvSettings),
 		Commands:    o.Commands.DeepCopy(),
@@ -3857,7 +3858,7 @@ func (o ThreadView) DeepCopy() ThreadView {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Pagination),
 	}
@@ -3888,11 +3889,11 @@ var MessageIDControlModeRevMap = map[MessageIDControlMode]string{
 	3: "UNREADLINE",
 }
 
-func (e MessageIDControlMode) String() string {
-	if v, ok := MessageIDControlModeRevMap[e]; ok {
+func (o MessageIDControlMode) String() string {
+	if v, ok := MessageIDControlModeRevMap[o]; ok {
 		return v
 	}
-	return fmt.Sprintf("%v", int(e))
+	return fmt.Sprintf("%v", int(o))
 }
 
 type MessageIDControl struct {
@@ -3907,7 +3908,7 @@ func (o MessageIDControl) DeepCopy() MessageIDControl {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Pivot),
 		Mode: o.Mode.DeepCopy(),
@@ -3947,21 +3948,21 @@ func (o GetThreadQuery) DeepCopy() GetThreadQuery {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Before),
 		After: (func(x *gregor1.Time) *gregor1.Time {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.After),
 		MessageIDControl: (func(x *MessageIDControl) *MessageIDControl {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.MessageIDControl),
 	}
@@ -4022,11 +4023,11 @@ var GetThreadNonblockCbModeRevMap = map[GetThreadNonblockCbMode]string{
 	1: "INCREMENTAL",
 }
 
-func (e GetThreadNonblockCbMode) String() string {
-	if v, ok := GetThreadNonblockCbModeRevMap[e]; ok {
+func (o GetThreadNonblockCbMode) String() string {
+	if v, ok := GetThreadNonblockCbModeRevMap[o]; ok {
 		return v
 	}
-	return fmt.Sprintf("%v", int(e))
+	return fmt.Sprintf("%v", int(o))
 }
 
 type GetThreadNonblockPgMode int
@@ -4048,11 +4049,11 @@ var GetThreadNonblockPgModeRevMap = map[GetThreadNonblockPgMode]string{
 	1: "SERVER",
 }
 
-func (e GetThreadNonblockPgMode) String() string {
-	if v, ok := GetThreadNonblockPgModeRevMap[e]; ok {
+func (o GetThreadNonblockPgMode) String() string {
+	if v, ok := GetThreadNonblockPgModeRevMap[o]; ok {
 		return v
 	}
-	return fmt.Sprintf("%v", int(e))
+	return fmt.Sprintf("%v", int(o))
 }
 
 type UnreadlineRes struct {
@@ -4091,7 +4092,7 @@ func (o UnreadlineRes) DeepCopy() UnreadlineRes {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.UnreadlineID),
 	}
@@ -4110,7 +4111,7 @@ func (o NameQuery) DeepCopy() NameQuery {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.TlfID),
 		MembersType: o.MembersType.DeepCopy(),
@@ -4139,7 +4140,7 @@ func (o GetInboxLocalQuery) DeepCopy() GetInboxLocalQuery {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Name),
 		TopicName: (func(x *string) *string {
@@ -4164,28 +4165,28 @@ func (o GetInboxLocalQuery) DeepCopy() GetInboxLocalQuery {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.TopicType),
 		TlfVisibility: (func(x *keybase1.TLFVisibility) *keybase1.TLFVisibility {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.TlfVisibility),
 		Before: (func(x *gregor1.Time) *gregor1.Time {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Before),
 		After: (func(x *gregor1.Time) *gregor1.Time {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.After),
 		OneChatTypePerTLF: (func(x *bool) *bool {
@@ -4334,11 +4335,11 @@ var InboxLayoutReselectModeRevMap = map[InboxLayoutReselectMode]string{
 	1: "FORCE",
 }
 
-func (e InboxLayoutReselectMode) String() string {
-	if v, ok := InboxLayoutReselectModeRevMap[e]; ok {
+func (o InboxLayoutReselectMode) String() string {
+	if v, ok := InboxLayoutReselectModeRevMap[o]; ok {
 		return v
 	}
-	return fmt.Sprintf("%v", int(e))
+	return fmt.Sprintf("%v", int(o))
 }
 
 type PostLocalRes struct {
@@ -4420,14 +4421,14 @@ func (o EditTarget) DeepCopy() EditTarget {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.MessageID),
 		OutboxID: (func(x *OutboxID) *OutboxID {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.OutboxID),
 	}
@@ -4520,7 +4521,7 @@ func (o NewConversationsLocalResult) DeepCopy() NewConversationsLocalResult {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Result),
 		Err: (func(x *string) *string {
@@ -4820,21 +4821,21 @@ func (o PostFileAttachmentArg) DeepCopy() PostFileAttachmentArg {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.CallerPreview),
 		OutboxID: (func(x *OutboxID) *OutboxID {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.OutboxID),
 		EphemeralLifetime: (func(x *gregor1.DurationSec) *gregor1.DurationSec {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.EphemeralLifetime),
 	}
@@ -4853,7 +4854,7 @@ func (o GetNextAttachmentMessageLocalRes) DeepCopy() GetNextAttachmentMessageLoc
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Message),
 		Offline: o.Offline,
@@ -4970,11 +4971,11 @@ var PreviewLocationTypRevMap = map[PreviewLocationTyp]string{
 	2: "BYTES",
 }
 
-func (e PreviewLocationTyp) String() string {
-	if v, ok := PreviewLocationTypRevMap[e]; ok {
+func (o PreviewLocationTyp) String() string {
+	if v, ok := PreviewLocationTypRevMap[o]; ok {
 		return v
 	}
-	return fmt.Sprintf("%v", int(e))
+	return fmt.Sprintf("%v", int(o))
 }
 
 type PreviewLocation struct {
@@ -5110,21 +5111,21 @@ func (o MakePreviewRes) DeepCopy() MakePreviewRes {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Location),
 		Metadata: (func(x *AssetMetadata) *AssetMetadata {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Metadata),
 		BaseMetadata: (func(x *AssetMetadata) *AssetMetadata {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.BaseMetadata),
 	}
@@ -5354,6 +5355,18 @@ func (o GetTLFConversationsLocalRes) DeepCopy() GetTLFConversationsLocalRes {
 	}
 }
 
+type SharedTeam struct {
+	TeamID keybase1.TeamID `codec:"teamID" json:"teamID"`
+	Name   string          `codec:"name" json:"name"`
+}
+
+func (o SharedTeam) DeepCopy() SharedTeam {
+	return SharedTeam{
+		TeamID: o.TeamID.DeepCopy(),
+		Name:   o.Name,
+	}
+}
+
 type GetChannelMembershipsLocalRes struct {
 	Channels   []ChannelNameMention `codec:"channels" json:"channels"`
 	Offline    bool                 `codec:"offline" json:"offline"`
@@ -5389,24 +5402,24 @@ func (o GetChannelMembershipsLocalRes) DeepCopy() GetChannelMembershipsLocalRes 
 }
 
 type GetMutualTeamsLocalRes struct {
-	TeamIDs    []keybase1.TeamID `codec:"teamIDs" json:"teamIDs"`
-	Offline    bool              `codec:"offline" json:"offline"`
-	RateLimits []RateLimit       `codec:"rateLimits" json:"rateLimits"`
+	Teams      []SharedTeam `codec:"teams" json:"teams"`
+	Offline    bool         `codec:"offline" json:"offline"`
+	RateLimits []RateLimit  `codec:"rateLimits" json:"rateLimits"`
 }
 
 func (o GetMutualTeamsLocalRes) DeepCopy() GetMutualTeamsLocalRes {
 	return GetMutualTeamsLocalRes{
-		TeamIDs: (func(x []keybase1.TeamID) []keybase1.TeamID {
+		Teams: (func(x []SharedTeam) []SharedTeam {
 			if x == nil {
 				return nil
 			}
-			ret := make([]keybase1.TeamID, len(x))
+			ret := make([]SharedTeam, len(x))
 			for i, v := range x {
 				vCopy := v.DeepCopy()
 				ret[i] = vCopy
 			}
 			return ret
-		})(o.TeamIDs),
+		})(o.Teams),
 		Offline: o.Offline,
 		RateLimits: (func(x []RateLimit) []RateLimit {
 			if x == nil {
@@ -5564,7 +5577,7 @@ func (o SearchInboxRes) DeepCopy() SearchInboxRes {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Res),
 		RateLimits: (func(x []RateLimit) []RateLimit {
@@ -5730,11 +5743,11 @@ var UnfurlPromptActionRevMap = map[UnfurlPromptAction]string{
 	4: "ONETIME",
 }
 
-func (e UnfurlPromptAction) String() string {
-	if v, ok := UnfurlPromptActionRevMap[e]; ok {
+func (o UnfurlPromptAction) String() string {
+	if v, ok := UnfurlPromptActionRevMap[o]; ok {
 		return v
 	}
-	return fmt.Sprintf("%v", int(e))
+	return fmt.Sprintf("%v", int(o))
 }
 
 type UnfurlPromptResult struct {
@@ -5853,11 +5866,11 @@ var GalleryItemTypRevMap = map[GalleryItemTyp]string{
 	2: "DOC",
 }
 
-func (e GalleryItemTyp) String() string {
-	if v, ok := GalleryItemTypRevMap[e]; ok {
+func (o GalleryItemTyp) String() string {
+	if v, ok := GalleryItemTypRevMap[o]; ok {
 		return v
 	}
-	return fmt.Sprintf("%v", int(e))
+	return fmt.Sprintf("%v", int(o))
 }
 
 type LoadGalleryRes struct {
@@ -5971,7 +5984,7 @@ func (o UserBotCommandOutput) DeepCopy() UserBotCommandOutput {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.ExtendedDescription),
 		Username: o.Username,
@@ -5994,7 +6007,7 @@ func (o UserBotCommandInput) DeepCopy() UserBotCommandInput {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.ExtendedDescription),
 	}
@@ -6032,7 +6045,7 @@ func (o AdvertiseCommandsParam) DeepCopy() AdvertiseCommandsParam {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.ConvID),
 	}
@@ -6110,7 +6123,7 @@ func (o ClearBotCommandsFilter) DeepCopy() ClearBotCommandsFilter {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.ConvID),
 	}
@@ -6243,11 +6256,11 @@ var SnippetDecorationRevMap = map[SnippetDecoration]string{
 	11: "PINNED_MESSAGE",
 }
 
-func (e SnippetDecoration) String() string {
-	if v, ok := SnippetDecorationRevMap[e]; ok {
+func (o SnippetDecoration) String() string {
+	if v, ok := SnippetDecorationRevMap[o]; ok {
 		return v
 	}
-	return fmt.Sprintf("%v", int(e))
+	return fmt.Sprintf("%v", int(o))
 }
 
 type WelcomeMessageDisplay struct {
@@ -6298,7 +6311,7 @@ func (o GetDefaultTeamChannelsLocalRes) DeepCopy() GetDefaultTeamChannelsLocalRe
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.RateLimit),
 	}
@@ -6314,7 +6327,7 @@ func (o SetDefaultTeamChannelsLocalRes) DeepCopy() SetDefaultTeamChannelsLocalRe
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.RateLimit),
 	}
@@ -6411,14 +6424,14 @@ func (o AddEmojiRes) DeepCopy() AddEmojiRes {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.RateLimit),
 		Error: (func(x *EmojiError) *EmojiError {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Error),
 	}
@@ -6436,7 +6449,7 @@ func (o AddEmojisRes) DeepCopy() AddEmojisRes {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.RateLimit),
 		SuccessFilenames: (func(x []string) []string {
@@ -6476,14 +6489,14 @@ func (o AddEmojiAliasRes) DeepCopy() AddEmojiAliasRes {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.RateLimit),
 		Error: (func(x *EmojiError) *EmojiError {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Error),
 	}
@@ -6499,7 +6512,7 @@ func (o RemoveEmojiRes) DeepCopy() RemoveEmojiRes {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.RateLimit),
 	}
@@ -6517,7 +6530,7 @@ func (o UserEmojiRes) DeepCopy() UserEmojiRes {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.RateLimit),
 	}
@@ -6560,7 +6573,7 @@ func (o ArchiveChatJobRequest) DeepCopy() ArchiveChatJobRequest {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Query),
 		Compress:         o.Compress,
@@ -6675,11 +6688,11 @@ var ArchiveChatJobStatusRevMap = map[ArchiveChatJobStatus]string{
 	4: "COMPLETE",
 }
 
-func (e ArchiveChatJobStatus) String() string {
-	if v, ok := ArchiveChatJobStatusRevMap[e]; ok {
+func (o ArchiveChatJobStatus) String() string {
+	if v, ok := ArchiveChatJobStatusRevMap[o]; ok {
 		return v
 	}
-	return fmt.Sprintf("%v", int(e))
+	return fmt.Sprintf("%v", int(o))
 }
 
 type ArchiveChatListRes struct {
@@ -7140,8 +7153,6 @@ type UnboxMobilePushNotificationArg struct {
 	Payload     string                  `codec:"payload" json:"payload"`
 	ConvID      string                  `codec:"convID" json:"convID"`
 	MembersType ConversationMembersType `codec:"membersType" json:"membersType"`
-	PushIDs     []string                `codec:"pushIDs" json:"pushIDs"`
-	ShouldAck   bool                    `codec:"shouldAck" json:"shouldAck"`
 }
 
 type AddTeamMemberAfterResetArg struct {
@@ -7597,11 +7608,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 		Name: "chat.1.local",
 		Methods: map[string]rpc.ServeHandlerDescription{
 			"getThreadLocal": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]GetThreadLocalArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]GetThreadLocalArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]GetThreadLocalArg)(nil), args)
@@ -7612,11 +7623,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"getThreadNonblock": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]GetThreadNonblockArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]GetThreadNonblockArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]GetThreadNonblockArg)(nil), args)
@@ -7627,11 +7638,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"getUnreadline": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]GetUnreadlineArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]GetUnreadlineArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]GetUnreadlineArg)(nil), args)
@@ -7642,11 +7653,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"getInboxAndUnboxLocal": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]GetInboxAndUnboxLocalArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]GetInboxAndUnboxLocalArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]GetInboxAndUnboxLocalArg)(nil), args)
@@ -7657,11 +7668,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"getInboxAndUnboxUILocal": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]GetInboxAndUnboxUILocalArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]GetInboxAndUnboxUILocalArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]GetInboxAndUnboxUILocalArg)(nil), args)
@@ -7672,11 +7683,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"requestInboxLayout": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]RequestInboxLayoutArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]RequestInboxLayoutArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]RequestInboxLayoutArg)(nil), args)
@@ -7687,11 +7698,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"requestInboxUnbox": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]RequestInboxUnboxArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]RequestInboxUnboxArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]RequestInboxUnboxArg)(nil), args)
@@ -7702,31 +7713,31 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"requestInboxSmallIncrease": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]RequestInboxSmallIncreaseArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					err = i.RequestInboxSmallIncrease(ctx)
 					return
 				},
 			},
 			"requestInboxSmallReset": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]RequestInboxSmallResetArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					err = i.RequestInboxSmallReset(ctx)
 					return
 				},
 			},
 			"getInboxNonblockLocal": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]GetInboxNonblockLocalArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]GetInboxNonblockLocalArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]GetInboxNonblockLocalArg)(nil), args)
@@ -7737,11 +7748,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"postLocal": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]PostLocalArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]PostLocalArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]PostLocalArg)(nil), args)
@@ -7752,21 +7763,21 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"generateOutboxID": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]GenerateOutboxIDArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					ret, err = i.GenerateOutboxID(ctx)
 					return
 				},
 			},
 			"postLocalNonblock": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]PostLocalNonblockArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]PostLocalNonblockArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]PostLocalNonblockArg)(nil), args)
@@ -7777,11 +7788,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"forwardMessage": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]ForwardMessageArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]ForwardMessageArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]ForwardMessageArg)(nil), args)
@@ -7792,11 +7803,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"forwardMessageNonblock": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]ForwardMessageNonblockArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]ForwardMessageNonblockArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]ForwardMessageNonblockArg)(nil), args)
@@ -7807,11 +7818,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"postTextNonblock": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]PostTextNonblockArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]PostTextNonblockArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]PostTextNonblockArg)(nil), args)
@@ -7822,11 +7833,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"postDeleteNonblock": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]PostDeleteNonblockArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]PostDeleteNonblockArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]PostDeleteNonblockArg)(nil), args)
@@ -7837,11 +7848,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"postEditNonblock": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]PostEditNonblockArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]PostEditNonblockArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]PostEditNonblockArg)(nil), args)
@@ -7852,11 +7863,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"postReactionNonblock": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]PostReactionNonblockArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]PostReactionNonblockArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]PostReactionNonblockArg)(nil), args)
@@ -7867,11 +7878,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"postHeadlineNonblock": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]PostHeadlineNonblockArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]PostHeadlineNonblockArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]PostHeadlineNonblockArg)(nil), args)
@@ -7882,11 +7893,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"postHeadline": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]PostHeadlineArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]PostHeadlineArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]PostHeadlineArg)(nil), args)
@@ -7897,11 +7908,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"postMetadataNonblock": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]PostMetadataNonblockArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]PostMetadataNonblockArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]PostMetadataNonblockArg)(nil), args)
@@ -7912,11 +7923,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"postMetadata": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]PostMetadataArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]PostMetadataArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]PostMetadataArg)(nil), args)
@@ -7927,11 +7938,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"postDeleteHistoryUpto": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]PostDeleteHistoryUptoArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]PostDeleteHistoryUptoArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]PostDeleteHistoryUptoArg)(nil), args)
@@ -7942,11 +7953,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"postDeleteHistoryThrough": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]PostDeleteHistoryThroughArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]PostDeleteHistoryThroughArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]PostDeleteHistoryThroughArg)(nil), args)
@@ -7957,11 +7968,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"postDeleteHistoryByAge": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]PostDeleteHistoryByAgeArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]PostDeleteHistoryByAgeArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]PostDeleteHistoryByAgeArg)(nil), args)
@@ -7972,11 +7983,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"SetConversationStatusLocal": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]SetConversationStatusLocalArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]SetConversationStatusLocalArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]SetConversationStatusLocalArg)(nil), args)
@@ -7987,11 +7998,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"newConversationsLocal": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]NewConversationsLocalArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]NewConversationsLocalArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]NewConversationsLocalArg)(nil), args)
@@ -8002,11 +8013,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"newConversationLocal": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]NewConversationLocalArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]NewConversationLocalArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]NewConversationLocalArg)(nil), args)
@@ -8017,11 +8028,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"getInboxSummaryForCLILocal": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]GetInboxSummaryForCLILocalArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]GetInboxSummaryForCLILocalArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]GetInboxSummaryForCLILocalArg)(nil), args)
@@ -8032,11 +8043,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"getConversationForCLILocal": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]GetConversationForCLILocalArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]GetConversationForCLILocalArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]GetConversationForCLILocalArg)(nil), args)
@@ -8047,11 +8058,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"GetMessagesLocal": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]GetMessagesLocalArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]GetMessagesLocalArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]GetMessagesLocalArg)(nil), args)
@@ -8062,11 +8073,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"postFileAttachmentLocal": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]PostFileAttachmentLocalArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]PostFileAttachmentLocalArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]PostFileAttachmentLocalArg)(nil), args)
@@ -8077,11 +8088,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"postFileAttachmentLocalNonblock": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]PostFileAttachmentLocalNonblockArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]PostFileAttachmentLocalNonblockArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]PostFileAttachmentLocalNonblockArg)(nil), args)
@@ -8092,11 +8103,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"getNextAttachmentMessageLocal": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]GetNextAttachmentMessageLocalArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]GetNextAttachmentMessageLocalArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]GetNextAttachmentMessageLocalArg)(nil), args)
@@ -8107,11 +8118,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"DownloadAttachmentLocal": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]DownloadAttachmentLocalArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]DownloadAttachmentLocalArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]DownloadAttachmentLocalArg)(nil), args)
@@ -8122,11 +8133,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"DownloadFileAttachmentLocal": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]DownloadFileAttachmentLocalArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]DownloadFileAttachmentLocalArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]DownloadFileAttachmentLocalArg)(nil), args)
@@ -8137,11 +8148,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"ConfigureFileAttachmentDownloadLocal": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]ConfigureFileAttachmentDownloadLocalArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]ConfigureFileAttachmentDownloadLocalArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]ConfigureFileAttachmentDownloadLocalArg)(nil), args)
@@ -8152,11 +8163,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"makePreview": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]MakePreviewArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]MakePreviewArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]MakePreviewArg)(nil), args)
@@ -8167,11 +8178,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"makeAudioPreview": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]MakeAudioPreviewArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]MakeAudioPreviewArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]MakeAudioPreviewArg)(nil), args)
@@ -8182,11 +8193,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"getUploadTempFile": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]GetUploadTempFileArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]GetUploadTempFileArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]GetUploadTempFileArg)(nil), args)
@@ -8197,11 +8208,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"makeUploadTempFile": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]MakeUploadTempFileArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]MakeUploadTempFileArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]MakeUploadTempFileArg)(nil), args)
@@ -8212,11 +8223,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"cancelUploadTempFile": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]CancelUploadTempFileArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]CancelUploadTempFileArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]CancelUploadTempFileArg)(nil), args)
@@ -8227,11 +8238,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"CancelPost": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]CancelPostArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]CancelPostArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]CancelPostArg)(nil), args)
@@ -8242,11 +8253,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"RetryPost": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]RetryPostArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]RetryPostArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]RetryPostArg)(nil), args)
@@ -8257,11 +8268,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"markAsReadLocal": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]MarkAsReadLocalArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]MarkAsReadLocalArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]MarkAsReadLocalArg)(nil), args)
@@ -8272,11 +8283,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"markTLFAsReadLocal": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]MarkTLFAsReadLocalArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]MarkTLFAsReadLocalArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]MarkTLFAsReadLocalArg)(nil), args)
@@ -8287,11 +8298,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"findConversationsLocal": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]FindConversationsLocalArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]FindConversationsLocalArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]FindConversationsLocalArg)(nil), args)
@@ -8302,11 +8313,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"findGeneralConvFromTeamID": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]FindGeneralConvFromTeamIDArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]FindGeneralConvFromTeamIDArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]FindGeneralConvFromTeamIDArg)(nil), args)
@@ -8317,11 +8328,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"updateTyping": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]UpdateTypingArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]UpdateTypingArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]UpdateTypingArg)(nil), args)
@@ -8332,11 +8343,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"updateUnsentText": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]UpdateUnsentTextArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]UpdateUnsentTextArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]UpdateUnsentTextArg)(nil), args)
@@ -8347,11 +8358,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"joinConversationLocal": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]JoinConversationLocalArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]JoinConversationLocalArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]JoinConversationLocalArg)(nil), args)
@@ -8362,11 +8373,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"joinConversationByIDLocal": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]JoinConversationByIDLocalArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]JoinConversationByIDLocalArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]JoinConversationByIDLocalArg)(nil), args)
@@ -8377,11 +8388,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"leaveConversationLocal": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]LeaveConversationLocalArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]LeaveConversationLocalArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]LeaveConversationLocalArg)(nil), args)
@@ -8392,11 +8403,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"previewConversationByIDLocal": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]PreviewConversationByIDLocalArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]PreviewConversationByIDLocalArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]PreviewConversationByIDLocalArg)(nil), args)
@@ -8407,11 +8418,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"deleteConversationLocal": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]DeleteConversationLocalArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]DeleteConversationLocalArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]DeleteConversationLocalArg)(nil), args)
@@ -8422,11 +8433,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"removeFromConversationLocal": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]RemoveFromConversationLocalArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]RemoveFromConversationLocalArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]RemoveFromConversationLocalArg)(nil), args)
@@ -8437,11 +8448,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"getTLFConversationsLocal": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]GetTLFConversationsLocalArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]GetTLFConversationsLocalArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]GetTLFConversationsLocalArg)(nil), args)
@@ -8452,11 +8463,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"getChannelMembershipsLocal": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]GetChannelMembershipsLocalArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]GetChannelMembershipsLocalArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]GetChannelMembershipsLocalArg)(nil), args)
@@ -8467,11 +8478,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"getMutualTeamsLocal": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]GetMutualTeamsLocalArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]GetMutualTeamsLocalArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]GetMutualTeamsLocalArg)(nil), args)
@@ -8482,11 +8493,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"setAppNotificationSettingsLocal": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]SetAppNotificationSettingsLocalArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]SetAppNotificationSettingsLocalArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]SetAppNotificationSettingsLocalArg)(nil), args)
@@ -8497,11 +8508,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"setGlobalAppNotificationSettingsLocal": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]SetGlobalAppNotificationSettingsLocalArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]SetGlobalAppNotificationSettingsLocalArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]SetGlobalAppNotificationSettingsLocalArg)(nil), args)
@@ -8512,21 +8523,21 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"getGlobalAppNotificationSettingsLocal": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]GetGlobalAppNotificationSettingsLocalArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					ret, err = i.GetGlobalAppNotificationSettingsLocal(ctx)
 					return
 				},
 			},
 			"unboxMobilePushNotification": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]UnboxMobilePushNotificationArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]UnboxMobilePushNotificationArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]UnboxMobilePushNotificationArg)(nil), args)
@@ -8537,11 +8548,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"addTeamMemberAfterReset": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]AddTeamMemberAfterResetArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]AddTeamMemberAfterResetArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]AddTeamMemberAfterResetArg)(nil), args)
@@ -8552,21 +8563,21 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"getAllResetConvMembers": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]GetAllResetConvMembersArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					ret, err = i.GetAllResetConvMembers(ctx)
 					return
 				},
 			},
 			"setConvRetentionLocal": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]SetConvRetentionLocalArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]SetConvRetentionLocalArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]SetConvRetentionLocalArg)(nil), args)
@@ -8577,11 +8588,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"setTeamRetentionLocal": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]SetTeamRetentionLocalArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]SetTeamRetentionLocalArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]SetTeamRetentionLocalArg)(nil), args)
@@ -8592,11 +8603,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"getTeamRetentionLocal": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]GetTeamRetentionLocalArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]GetTeamRetentionLocalArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]GetTeamRetentionLocalArg)(nil), args)
@@ -8607,11 +8618,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"setConvMinWriterRoleLocal": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]SetConvMinWriterRoleLocalArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]SetConvMinWriterRoleLocalArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]SetConvMinWriterRoleLocalArg)(nil), args)
@@ -8622,11 +8633,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"upgradeKBFSConversationToImpteam": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]UpgradeKBFSConversationToImpteamArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]UpgradeKBFSConversationToImpteamArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]UpgradeKBFSConversationToImpteamArg)(nil), args)
@@ -8637,11 +8648,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"searchRegexp": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]SearchRegexpArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]SearchRegexpArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]SearchRegexpArg)(nil), args)
@@ -8652,21 +8663,21 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"cancelActiveInboxSearch": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]CancelActiveInboxSearchArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					err = i.CancelActiveInboxSearch(ctx)
 					return
 				},
 			},
 			"searchInbox": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]SearchInboxArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]SearchInboxArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]SearchInboxArg)(nil), args)
@@ -8677,11 +8688,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"simpleSearchInboxConvNames": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]SimpleSearchInboxConvNamesArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]SimpleSearchInboxConvNamesArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]SimpleSearchInboxConvNamesArg)(nil), args)
@@ -8692,21 +8703,21 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"cancelActiveSearch": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]CancelActiveSearchArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					err = i.CancelActiveSearch(ctx)
 					return
 				},
 			},
 			"profileChatSearch": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]ProfileChatSearchArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]ProfileChatSearchArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]ProfileChatSearchArg)(nil), args)
@@ -8717,21 +8728,21 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"getStaticConfig": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]GetStaticConfigArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					ret, err = i.GetStaticConfig(ctx)
 					return
 				},
 			},
 			"resolveUnfurlPrompt": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]ResolveUnfurlPromptArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]ResolveUnfurlPromptArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]ResolveUnfurlPromptArg)(nil), args)
@@ -8742,21 +8753,21 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"getUnfurlSettings": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]GetUnfurlSettingsArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					ret, err = i.GetUnfurlSettings(ctx)
 					return
 				},
 			},
 			"saveUnfurlSettings": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]SaveUnfurlSettingsArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]SaveUnfurlSettingsArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]SaveUnfurlSettingsArg)(nil), args)
@@ -8767,11 +8778,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"toggleMessageCollapse": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]ToggleMessageCollapseArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]ToggleMessageCollapseArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]ToggleMessageCollapseArg)(nil), args)
@@ -8782,11 +8793,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"bulkAddToConv": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]BulkAddToConvArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]BulkAddToConvArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]BulkAddToConvArg)(nil), args)
@@ -8797,11 +8808,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"bulkAddToManyConvs": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]BulkAddToManyConvsArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]BulkAddToManyConvsArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]BulkAddToManyConvsArg)(nil), args)
@@ -8812,11 +8823,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"putReacjiSkinTone": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]PutReacjiSkinToneArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]PutReacjiSkinToneArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]PutReacjiSkinToneArg)(nil), args)
@@ -8827,11 +8838,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"resolveMaybeMention": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]ResolveMaybeMentionArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]ResolveMaybeMentionArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]ResolveMaybeMentionArg)(nil), args)
@@ -8842,11 +8853,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"loadGallery": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]LoadGalleryArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]LoadGalleryArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]LoadGalleryArg)(nil), args)
@@ -8857,11 +8868,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"loadFlip": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]LoadFlipArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]LoadFlipArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]LoadFlipArg)(nil), args)
@@ -8872,11 +8883,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"locationUpdate": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]LocationUpdateArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]LocationUpdateArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]LocationUpdateArg)(nil), args)
@@ -8887,11 +8898,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"advertiseBotCommandsLocal": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]AdvertiseBotCommandsLocalArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]AdvertiseBotCommandsLocalArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]AdvertiseBotCommandsLocalArg)(nil), args)
@@ -8902,11 +8913,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"listBotCommandsLocal": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]ListBotCommandsLocalArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]ListBotCommandsLocalArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]ListBotCommandsLocalArg)(nil), args)
@@ -8917,11 +8928,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"listPublicBotCommandsLocal": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]ListPublicBotCommandsLocalArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]ListPublicBotCommandsLocalArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]ListPublicBotCommandsLocalArg)(nil), args)
@@ -8932,11 +8943,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"clearBotCommandsLocal": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]ClearBotCommandsLocalArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]ClearBotCommandsLocalArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]ClearBotCommandsLocalArg)(nil), args)
@@ -8947,11 +8958,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"pinMessage": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]PinMessageArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]PinMessageArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]PinMessageArg)(nil), args)
@@ -8962,11 +8973,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"unpinMessage": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]UnpinMessageArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]UnpinMessageArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]UnpinMessageArg)(nil), args)
@@ -8977,11 +8988,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"ignorePinnedMessage": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]IgnorePinnedMessageArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]IgnorePinnedMessageArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]IgnorePinnedMessageArg)(nil), args)
@@ -8992,11 +9003,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"addBotMember": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]AddBotMemberArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]AddBotMemberArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]AddBotMemberArg)(nil), args)
@@ -9007,11 +9018,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"editBotMember": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]EditBotMemberArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]EditBotMemberArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]EditBotMemberArg)(nil), args)
@@ -9022,11 +9033,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"removeBotMember": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]RemoveBotMemberArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]RemoveBotMemberArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]RemoveBotMemberArg)(nil), args)
@@ -9037,11 +9048,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"setBotMemberSettings": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]SetBotMemberSettingsArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]SetBotMemberSettingsArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]SetBotMemberSettingsArg)(nil), args)
@@ -9052,11 +9063,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"getBotMemberSettings": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]GetBotMemberSettingsArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]GetBotMemberSettingsArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]GetBotMemberSettingsArg)(nil), args)
@@ -9067,11 +9078,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"getTeamRoleInConversation": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]GetTeamRoleInConversationArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]GetTeamRoleInConversationArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]GetTeamRoleInConversationArg)(nil), args)
@@ -9082,11 +9093,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"addBotConvSearch": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]AddBotConvSearchArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]AddBotConvSearchArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]AddBotConvSearchArg)(nil), args)
@@ -9097,11 +9108,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"forwardMessageConvSearch": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]ForwardMessageConvSearchArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]ForwardMessageConvSearchArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]ForwardMessageConvSearchArg)(nil), args)
@@ -9112,11 +9123,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"teamIDFromTLFName": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]TeamIDFromTLFNameArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]TeamIDFromTLFNameArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]TeamIDFromTLFNameArg)(nil), args)
@@ -9127,11 +9138,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"dismissJourneycard": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]DismissJourneycardArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]DismissJourneycardArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]DismissJourneycardArg)(nil), args)
@@ -9142,11 +9153,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"setWelcomeMessage": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]SetWelcomeMessageArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]SetWelcomeMessageArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]SetWelcomeMessageArg)(nil), args)
@@ -9157,11 +9168,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"getWelcomeMessage": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]GetWelcomeMessageArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]GetWelcomeMessageArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]GetWelcomeMessageArg)(nil), args)
@@ -9172,11 +9183,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"getDefaultTeamChannelsLocal": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]GetDefaultTeamChannelsLocalArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]GetDefaultTeamChannelsLocalArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]GetDefaultTeamChannelsLocalArg)(nil), args)
@@ -9187,11 +9198,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"setDefaultTeamChannelsLocal": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]SetDefaultTeamChannelsLocalArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]SetDefaultTeamChannelsLocalArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]SetDefaultTeamChannelsLocalArg)(nil), args)
@@ -9202,11 +9213,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"getLastActiveForTLF": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]GetLastActiveForTLFArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]GetLastActiveForTLFArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]GetLastActiveForTLFArg)(nil), args)
@@ -9217,21 +9228,21 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"getLastActiveForTeams": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]GetLastActiveForTeamsArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					ret, err = i.GetLastActiveForTeams(ctx)
 					return
 				},
 			},
 			"getRecentJoinsLocal": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]GetRecentJoinsLocalArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]GetRecentJoinsLocalArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]GetRecentJoinsLocalArg)(nil), args)
@@ -9242,11 +9253,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"refreshParticipants": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]RefreshParticipantsArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]RefreshParticipantsArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]RefreshParticipantsArg)(nil), args)
@@ -9257,11 +9268,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"getLastActiveAtLocal": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]GetLastActiveAtLocalArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]GetLastActiveAtLocalArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]GetLastActiveAtLocalArg)(nil), args)
@@ -9272,11 +9283,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"getLastActiveAtMultiLocal": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]GetLastActiveAtMultiLocalArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]GetLastActiveAtMultiLocalArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]GetLastActiveAtMultiLocalArg)(nil), args)
@@ -9287,11 +9298,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"getParticipants": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]GetParticipantsArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]GetParticipantsArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]GetParticipantsArg)(nil), args)
@@ -9302,11 +9313,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"addEmoji": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]AddEmojiArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]AddEmojiArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]AddEmojiArg)(nil), args)
@@ -9317,11 +9328,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"addEmojis": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]AddEmojisArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]AddEmojisArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]AddEmojisArg)(nil), args)
@@ -9332,11 +9343,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"addEmojiAlias": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]AddEmojiAliasArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]AddEmojiAliasArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]AddEmojiAliasArg)(nil), args)
@@ -9347,11 +9358,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"removeEmoji": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]RemoveEmojiArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]RemoveEmojiArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]RemoveEmojiArg)(nil), args)
@@ -9362,11 +9373,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"userEmojis": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]UserEmojisArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]UserEmojisArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]UserEmojisArg)(nil), args)
@@ -9377,11 +9388,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"toggleEmojiAnimations": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]ToggleEmojiAnimationsArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]ToggleEmojiAnimationsArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]ToggleEmojiAnimationsArg)(nil), args)
@@ -9392,11 +9403,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"trackGiphySelect": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]TrackGiphySelectArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]TrackGiphySelectArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]TrackGiphySelectArg)(nil), args)
@@ -9407,11 +9418,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"archiveChat": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]ArchiveChatArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]ArchiveChatArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]ArchiveChatArg)(nil), args)
@@ -9422,11 +9433,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"archiveChatList": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]ArchiveChatListArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]ArchiveChatListArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]ArchiveChatListArg)(nil), args)
@@ -9437,11 +9448,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"archiveChatDelete": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]ArchiveChatDeleteArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]ArchiveChatDeleteArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]ArchiveChatDeleteArg)(nil), args)
@@ -9452,11 +9463,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"archiveChatPause": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]ArchiveChatPauseArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]ArchiveChatPauseArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]ArchiveChatPauseArg)(nil), args)
@@ -9467,11 +9478,11 @@ func LocalProtocol(i LocalInterface) rpc.Protocol {
 				},
 			},
 			"archiveChatResume": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]ArchiveChatResumeArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]ArchiveChatResumeArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]ArchiveChatResumeArg)(nil), args)
@@ -9490,681 +9501,681 @@ type LocalClient struct {
 }
 
 func (c LocalClient) GetThreadLocal(ctx context.Context, __arg GetThreadLocalArg) (res GetThreadLocalRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.getThreadLocal", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.getThreadLocal", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) GetThreadNonblock(ctx context.Context, __arg GetThreadNonblockArg) (res NonblockFetchRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.getThreadNonblock", []interface{}{__arg}, &res, 30000*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.getThreadNonblock", []any{__arg}, &res, 30000*time.Millisecond)
 	return
 }
 
 func (c LocalClient) GetUnreadline(ctx context.Context, __arg GetUnreadlineArg) (res UnreadlineRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.getUnreadline", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.getUnreadline", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) GetInboxAndUnboxLocal(ctx context.Context, __arg GetInboxAndUnboxLocalArg) (res GetInboxAndUnboxLocalRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.getInboxAndUnboxLocal", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.getInboxAndUnboxLocal", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) GetInboxAndUnboxUILocal(ctx context.Context, __arg GetInboxAndUnboxUILocalArg) (res GetInboxAndUnboxUILocalRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.getInboxAndUnboxUILocal", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.getInboxAndUnboxUILocal", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) RequestInboxLayout(ctx context.Context, reselectMode InboxLayoutReselectMode) (err error) {
 	__arg := RequestInboxLayoutArg{ReselectMode: reselectMode}
-	err = c.Cli.Call(ctx, "chat.1.local.requestInboxLayout", []interface{}{__arg}, nil, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.requestInboxLayout", []any{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) RequestInboxUnbox(ctx context.Context, convIDs []ConversationID) (err error) {
 	__arg := RequestInboxUnboxArg{ConvIDs: convIDs}
-	err = c.Cli.Call(ctx, "chat.1.local.requestInboxUnbox", []interface{}{__arg}, nil, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.requestInboxUnbox", []any{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) RequestInboxSmallIncrease(ctx context.Context) (err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.requestInboxSmallIncrease", []interface{}{RequestInboxSmallIncreaseArg{}}, nil, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.requestInboxSmallIncrease", []any{RequestInboxSmallIncreaseArg{}}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) RequestInboxSmallReset(ctx context.Context) (err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.requestInboxSmallReset", []interface{}{RequestInboxSmallResetArg{}}, nil, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.requestInboxSmallReset", []any{RequestInboxSmallResetArg{}}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) GetInboxNonblockLocal(ctx context.Context, __arg GetInboxNonblockLocalArg) (res NonblockFetchRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.getInboxNonblockLocal", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.getInboxNonblockLocal", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) PostLocal(ctx context.Context, __arg PostLocalArg) (res PostLocalRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.postLocal", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.postLocal", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) GenerateOutboxID(ctx context.Context) (res OutboxID, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.generateOutboxID", []interface{}{GenerateOutboxIDArg{}}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.generateOutboxID", []any{GenerateOutboxIDArg{}}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) PostLocalNonblock(ctx context.Context, __arg PostLocalNonblockArg) (res PostLocalNonblockRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.postLocalNonblock", []interface{}{__arg}, &res, 30000*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.postLocalNonblock", []any{__arg}, &res, 30000*time.Millisecond)
 	return
 }
 
 func (c LocalClient) ForwardMessage(ctx context.Context, __arg ForwardMessageArg) (res PostLocalRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.forwardMessage", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.forwardMessage", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) ForwardMessageNonblock(ctx context.Context, __arg ForwardMessageNonblockArg) (res PostLocalNonblockRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.forwardMessageNonblock", []interface{}{__arg}, &res, 30000*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.forwardMessageNonblock", []any{__arg}, &res, 30000*time.Millisecond)
 	return
 }
 
 func (c LocalClient) PostTextNonblock(ctx context.Context, __arg PostTextNonblockArg) (res PostLocalNonblockRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.postTextNonblock", []interface{}{__arg}, &res, 30000*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.postTextNonblock", []any{__arg}, &res, 30000*time.Millisecond)
 	return
 }
 
 func (c LocalClient) PostDeleteNonblock(ctx context.Context, __arg PostDeleteNonblockArg) (res PostLocalNonblockRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.postDeleteNonblock", []interface{}{__arg}, &res, 30000*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.postDeleteNonblock", []any{__arg}, &res, 30000*time.Millisecond)
 	return
 }
 
 func (c LocalClient) PostEditNonblock(ctx context.Context, __arg PostEditNonblockArg) (res PostLocalNonblockRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.postEditNonblock", []interface{}{__arg}, &res, 30000*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.postEditNonblock", []any{__arg}, &res, 30000*time.Millisecond)
 	return
 }
 
 func (c LocalClient) PostReactionNonblock(ctx context.Context, __arg PostReactionNonblockArg) (res PostLocalNonblockRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.postReactionNonblock", []interface{}{__arg}, &res, 30000*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.postReactionNonblock", []any{__arg}, &res, 30000*time.Millisecond)
 	return
 }
 
 func (c LocalClient) PostHeadlineNonblock(ctx context.Context, __arg PostHeadlineNonblockArg) (res PostLocalNonblockRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.postHeadlineNonblock", []interface{}{__arg}, &res, 30000*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.postHeadlineNonblock", []any{__arg}, &res, 30000*time.Millisecond)
 	return
 }
 
 func (c LocalClient) PostHeadline(ctx context.Context, __arg PostHeadlineArg) (res PostLocalRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.postHeadline", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.postHeadline", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) PostMetadataNonblock(ctx context.Context, __arg PostMetadataNonblockArg) (res PostLocalNonblockRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.postMetadataNonblock", []interface{}{__arg}, &res, 30000*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.postMetadataNonblock", []any{__arg}, &res, 30000*time.Millisecond)
 	return
 }
 
 func (c LocalClient) PostMetadata(ctx context.Context, __arg PostMetadataArg) (res PostLocalRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.postMetadata", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.postMetadata", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) PostDeleteHistoryUpto(ctx context.Context, __arg PostDeleteHistoryUptoArg) (res PostLocalRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.postDeleteHistoryUpto", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.postDeleteHistoryUpto", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) PostDeleteHistoryThrough(ctx context.Context, __arg PostDeleteHistoryThroughArg) (res PostLocalRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.postDeleteHistoryThrough", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.postDeleteHistoryThrough", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) PostDeleteHistoryByAge(ctx context.Context, __arg PostDeleteHistoryByAgeArg) (res PostLocalRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.postDeleteHistoryByAge", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.postDeleteHistoryByAge", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) SetConversationStatusLocal(ctx context.Context, __arg SetConversationStatusLocalArg) (res SetConversationStatusLocalRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.SetConversationStatusLocal", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.SetConversationStatusLocal", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) NewConversationsLocal(ctx context.Context, __arg NewConversationsLocalArg) (res NewConversationsLocalRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.newConversationsLocal", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.newConversationsLocal", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) NewConversationLocal(ctx context.Context, __arg NewConversationLocalArg) (res NewConversationLocalRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.newConversationLocal", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.newConversationLocal", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) GetInboxSummaryForCLILocal(ctx context.Context, query GetInboxSummaryForCLILocalQuery) (res GetInboxSummaryForCLILocalRes, err error) {
 	__arg := GetInboxSummaryForCLILocalArg{Query: query}
-	err = c.Cli.Call(ctx, "chat.1.local.getInboxSummaryForCLILocal", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.getInboxSummaryForCLILocal", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) GetConversationForCLILocal(ctx context.Context, query GetConversationForCLILocalQuery) (res GetConversationForCLILocalRes, err error) {
 	__arg := GetConversationForCLILocalArg{Query: query}
-	err = c.Cli.Call(ctx, "chat.1.local.getConversationForCLILocal", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.getConversationForCLILocal", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) GetMessagesLocal(ctx context.Context, __arg GetMessagesLocalArg) (res GetMessagesLocalRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.GetMessagesLocal", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.GetMessagesLocal", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) PostFileAttachmentLocal(ctx context.Context, __arg PostFileAttachmentLocalArg) (res PostLocalRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.postFileAttachmentLocal", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.postFileAttachmentLocal", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) PostFileAttachmentLocalNonblock(ctx context.Context, __arg PostFileAttachmentLocalNonblockArg) (res PostLocalNonblockRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.postFileAttachmentLocalNonblock", []interface{}{__arg}, &res, 30000*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.postFileAttachmentLocalNonblock", []any{__arg}, &res, 30000*time.Millisecond)
 	return
 }
 
 func (c LocalClient) GetNextAttachmentMessageLocal(ctx context.Context, __arg GetNextAttachmentMessageLocalArg) (res GetNextAttachmentMessageLocalRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.getNextAttachmentMessageLocal", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.getNextAttachmentMessageLocal", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) DownloadAttachmentLocal(ctx context.Context, __arg DownloadAttachmentLocalArg) (res DownloadAttachmentLocalRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.DownloadAttachmentLocal", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.DownloadAttachmentLocal", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) DownloadFileAttachmentLocal(ctx context.Context, __arg DownloadFileAttachmentLocalArg) (res DownloadFileAttachmentLocalRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.DownloadFileAttachmentLocal", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.DownloadFileAttachmentLocal", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) ConfigureFileAttachmentDownloadLocal(ctx context.Context, __arg ConfigureFileAttachmentDownloadLocalArg) (err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.ConfigureFileAttachmentDownloadLocal", []interface{}{__arg}, nil, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.ConfigureFileAttachmentDownloadLocal", []any{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) MakePreview(ctx context.Context, __arg MakePreviewArg) (res MakePreviewRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.makePreview", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.makePreview", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) MakeAudioPreview(ctx context.Context, __arg MakeAudioPreviewArg) (res MakePreviewRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.makeAudioPreview", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.makeAudioPreview", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) GetUploadTempFile(ctx context.Context, __arg GetUploadTempFileArg) (res string, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.getUploadTempFile", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.getUploadTempFile", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) MakeUploadTempFile(ctx context.Context, __arg MakeUploadTempFileArg) (res string, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.makeUploadTempFile", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.makeUploadTempFile", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) CancelUploadTempFile(ctx context.Context, outboxID OutboxID) (err error) {
 	__arg := CancelUploadTempFileArg{OutboxID: outboxID}
-	err = c.Cli.Call(ctx, "chat.1.local.cancelUploadTempFile", []interface{}{__arg}, nil, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.cancelUploadTempFile", []any{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) CancelPost(ctx context.Context, outboxID OutboxID) (err error) {
 	__arg := CancelPostArg{OutboxID: outboxID}
-	err = c.Cli.Call(ctx, "chat.1.local.CancelPost", []interface{}{__arg}, nil, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.CancelPost", []any{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) RetryPost(ctx context.Context, __arg RetryPostArg) (err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.RetryPost", []interface{}{__arg}, nil, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.RetryPost", []any{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) MarkAsReadLocal(ctx context.Context, __arg MarkAsReadLocalArg) (res MarkAsReadLocalRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.markAsReadLocal", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.markAsReadLocal", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) MarkTLFAsReadLocal(ctx context.Context, __arg MarkTLFAsReadLocalArg) (res MarkTLFAsReadLocalRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.markTLFAsReadLocal", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.markTLFAsReadLocal", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) FindConversationsLocal(ctx context.Context, __arg FindConversationsLocalArg) (res FindConversationsLocalRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.findConversationsLocal", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.findConversationsLocal", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) FindGeneralConvFromTeamID(ctx context.Context, teamID keybase1.TeamID) (res InboxUIItem, err error) {
 	__arg := FindGeneralConvFromTeamIDArg{TeamID: teamID}
-	err = c.Cli.Call(ctx, "chat.1.local.findGeneralConvFromTeamID", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.findGeneralConvFromTeamID", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) UpdateTyping(ctx context.Context, __arg UpdateTypingArg) (err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.updateTyping", []interface{}{__arg}, nil, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.updateTyping", []any{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) UpdateUnsentText(ctx context.Context, __arg UpdateUnsentTextArg) (err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.updateUnsentText", []interface{}{__arg}, nil, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.updateUnsentText", []any{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) JoinConversationLocal(ctx context.Context, __arg JoinConversationLocalArg) (res JoinLeaveConversationLocalRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.joinConversationLocal", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.joinConversationLocal", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) JoinConversationByIDLocal(ctx context.Context, convID ConversationID) (res JoinLeaveConversationLocalRes, err error) {
 	__arg := JoinConversationByIDLocalArg{ConvID: convID}
-	err = c.Cli.Call(ctx, "chat.1.local.joinConversationByIDLocal", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.joinConversationByIDLocal", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) LeaveConversationLocal(ctx context.Context, convID ConversationID) (res JoinLeaveConversationLocalRes, err error) {
 	__arg := LeaveConversationLocalArg{ConvID: convID}
-	err = c.Cli.Call(ctx, "chat.1.local.leaveConversationLocal", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.leaveConversationLocal", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) PreviewConversationByIDLocal(ctx context.Context, convID ConversationID) (res PreviewConversationLocalRes, err error) {
 	__arg := PreviewConversationByIDLocalArg{ConvID: convID}
-	err = c.Cli.Call(ctx, "chat.1.local.previewConversationByIDLocal", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.previewConversationByIDLocal", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) DeleteConversationLocal(ctx context.Context, __arg DeleteConversationLocalArg) (res DeleteConversationLocalRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.deleteConversationLocal", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.deleteConversationLocal", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) RemoveFromConversationLocal(ctx context.Context, __arg RemoveFromConversationLocalArg) (res RemoveFromConversationLocalRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.removeFromConversationLocal", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.removeFromConversationLocal", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) GetTLFConversationsLocal(ctx context.Context, __arg GetTLFConversationsLocalArg) (res GetTLFConversationsLocalRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.getTLFConversationsLocal", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.getTLFConversationsLocal", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) GetChannelMembershipsLocal(ctx context.Context, __arg GetChannelMembershipsLocalArg) (res GetChannelMembershipsLocalRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.getChannelMembershipsLocal", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.getChannelMembershipsLocal", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) GetMutualTeamsLocal(ctx context.Context, usernames []string) (res GetMutualTeamsLocalRes, err error) {
 	__arg := GetMutualTeamsLocalArg{Usernames: usernames}
-	err = c.Cli.Call(ctx, "chat.1.local.getMutualTeamsLocal", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.getMutualTeamsLocal", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) SetAppNotificationSettingsLocal(ctx context.Context, __arg SetAppNotificationSettingsLocalArg) (res SetAppNotificationSettingsLocalRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.setAppNotificationSettingsLocal", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.setAppNotificationSettingsLocal", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) SetGlobalAppNotificationSettingsLocal(ctx context.Context, settings map[string]bool) (err error) {
 	__arg := SetGlobalAppNotificationSettingsLocalArg{Settings: settings}
-	err = c.Cli.Call(ctx, "chat.1.local.setGlobalAppNotificationSettingsLocal", []interface{}{__arg}, nil, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.setGlobalAppNotificationSettingsLocal", []any{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) GetGlobalAppNotificationSettingsLocal(ctx context.Context) (res GlobalAppNotificationSettings, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.getGlobalAppNotificationSettingsLocal", []interface{}{GetGlobalAppNotificationSettingsLocalArg{}}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.getGlobalAppNotificationSettingsLocal", []any{GetGlobalAppNotificationSettingsLocalArg{}}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) UnboxMobilePushNotification(ctx context.Context, __arg UnboxMobilePushNotificationArg) (res string, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.unboxMobilePushNotification", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.unboxMobilePushNotification", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) AddTeamMemberAfterReset(ctx context.Context, __arg AddTeamMemberAfterResetArg) (err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.addTeamMemberAfterReset", []interface{}{__arg}, nil, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.addTeamMemberAfterReset", []any{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) GetAllResetConvMembers(ctx context.Context) (res GetAllResetConvMembersRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.getAllResetConvMembers", []interface{}{GetAllResetConvMembersArg{}}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.getAllResetConvMembers", []any{GetAllResetConvMembersArg{}}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) SetConvRetentionLocal(ctx context.Context, __arg SetConvRetentionLocalArg) (err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.setConvRetentionLocal", []interface{}{__arg}, nil, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.setConvRetentionLocal", []any{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) SetTeamRetentionLocal(ctx context.Context, __arg SetTeamRetentionLocalArg) (err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.setTeamRetentionLocal", []interface{}{__arg}, nil, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.setTeamRetentionLocal", []any{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) GetTeamRetentionLocal(ctx context.Context, teamID keybase1.TeamID) (res *RetentionPolicy, err error) {
 	__arg := GetTeamRetentionLocalArg{TeamID: teamID}
-	err = c.Cli.Call(ctx, "chat.1.local.getTeamRetentionLocal", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.getTeamRetentionLocal", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) SetConvMinWriterRoleLocal(ctx context.Context, __arg SetConvMinWriterRoleLocalArg) (err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.setConvMinWriterRoleLocal", []interface{}{__arg}, nil, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.setConvMinWriterRoleLocal", []any{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) UpgradeKBFSConversationToImpteam(ctx context.Context, convID ConversationID) (err error) {
 	__arg := UpgradeKBFSConversationToImpteamArg{ConvID: convID}
-	err = c.Cli.Call(ctx, "chat.1.local.upgradeKBFSConversationToImpteam", []interface{}{__arg}, nil, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.upgradeKBFSConversationToImpteam", []any{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) SearchRegexp(ctx context.Context, __arg SearchRegexpArg) (res SearchRegexpRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.searchRegexp", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.searchRegexp", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) CancelActiveInboxSearch(ctx context.Context) (err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.cancelActiveInboxSearch", []interface{}{CancelActiveInboxSearchArg{}}, nil, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.cancelActiveInboxSearch", []any{CancelActiveInboxSearchArg{}}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) SearchInbox(ctx context.Context, __arg SearchInboxArg) (res SearchInboxRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.searchInbox", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.searchInbox", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) SimpleSearchInboxConvNames(ctx context.Context, query string) (res []SimpleSearchInboxConvNamesHit, err error) {
 	__arg := SimpleSearchInboxConvNamesArg{Query: query}
-	err = c.Cli.Call(ctx, "chat.1.local.simpleSearchInboxConvNames", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.simpleSearchInboxConvNames", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) CancelActiveSearch(ctx context.Context) (err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.cancelActiveSearch", []interface{}{CancelActiveSearchArg{}}, nil, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.cancelActiveSearch", []any{CancelActiveSearchArg{}}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) ProfileChatSearch(ctx context.Context, identifyBehavior keybase1.TLFIdentifyBehavior) (res map[ConvIDStr]ProfileSearchConvStats, err error) {
 	__arg := ProfileChatSearchArg{IdentifyBehavior: identifyBehavior}
-	err = c.Cli.Call(ctx, "chat.1.local.profileChatSearch", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.profileChatSearch", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) GetStaticConfig(ctx context.Context) (res StaticConfig, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.getStaticConfig", []interface{}{GetStaticConfigArg{}}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.getStaticConfig", []any{GetStaticConfigArg{}}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) ResolveUnfurlPrompt(ctx context.Context, __arg ResolveUnfurlPromptArg) (err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.resolveUnfurlPrompt", []interface{}{__arg}, nil, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.resolveUnfurlPrompt", []any{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) GetUnfurlSettings(ctx context.Context) (res UnfurlSettingsDisplay, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.getUnfurlSettings", []interface{}{GetUnfurlSettingsArg{}}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.getUnfurlSettings", []any{GetUnfurlSettingsArg{}}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) SaveUnfurlSettings(ctx context.Context, __arg SaveUnfurlSettingsArg) (err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.saveUnfurlSettings", []interface{}{__arg}, nil, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.saveUnfurlSettings", []any{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) ToggleMessageCollapse(ctx context.Context, __arg ToggleMessageCollapseArg) (err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.toggleMessageCollapse", []interface{}{__arg}, nil, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.toggleMessageCollapse", []any{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) BulkAddToConv(ctx context.Context, __arg BulkAddToConvArg) (err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.bulkAddToConv", []interface{}{__arg}, nil, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.bulkAddToConv", []any{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) BulkAddToManyConvs(ctx context.Context, __arg BulkAddToManyConvsArg) (err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.bulkAddToManyConvs", []interface{}{__arg}, nil, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.bulkAddToManyConvs", []any{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) PutReacjiSkinTone(ctx context.Context, skinTone keybase1.ReacjiSkinTone) (res keybase1.UserReacjis, err error) {
 	__arg := PutReacjiSkinToneArg{SkinTone: skinTone}
-	err = c.Cli.Call(ctx, "chat.1.local.putReacjiSkinTone", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.putReacjiSkinTone", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) ResolveMaybeMention(ctx context.Context, mention MaybeMention) (err error) {
 	__arg := ResolveMaybeMentionArg{Mention: mention}
-	err = c.Cli.Call(ctx, "chat.1.local.resolveMaybeMention", []interface{}{__arg}, nil, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.resolveMaybeMention", []any{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) LoadGallery(ctx context.Context, __arg LoadGalleryArg) (res LoadGalleryRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.loadGallery", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.loadGallery", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) LoadFlip(ctx context.Context, __arg LoadFlipArg) (res LoadFlipRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.loadFlip", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.loadFlip", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) LocationUpdate(ctx context.Context, coord Coordinate) (err error) {
 	__arg := LocationUpdateArg{Coord: coord}
-	err = c.Cli.Call(ctx, "chat.1.local.locationUpdate", []interface{}{__arg}, nil, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.locationUpdate", []any{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) AdvertiseBotCommandsLocal(ctx context.Context, __arg AdvertiseBotCommandsLocalArg) (res AdvertiseBotCommandsLocalRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.advertiseBotCommandsLocal", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.advertiseBotCommandsLocal", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) ListBotCommandsLocal(ctx context.Context, convID ConversationID) (res ListBotCommandsLocalRes, err error) {
 	__arg := ListBotCommandsLocalArg{ConvID: convID}
-	err = c.Cli.Call(ctx, "chat.1.local.listBotCommandsLocal", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.listBotCommandsLocal", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) ListPublicBotCommandsLocal(ctx context.Context, username string) (res ListBotCommandsLocalRes, err error) {
 	__arg := ListPublicBotCommandsLocalArg{Username: username}
-	err = c.Cli.Call(ctx, "chat.1.local.listPublicBotCommandsLocal", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.listPublicBotCommandsLocal", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) ClearBotCommandsLocal(ctx context.Context, filter *ClearBotCommandsFilter) (res ClearBotCommandsLocalRes, err error) {
 	__arg := ClearBotCommandsLocalArg{Filter: filter}
-	err = c.Cli.Call(ctx, "chat.1.local.clearBotCommandsLocal", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.clearBotCommandsLocal", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) PinMessage(ctx context.Context, __arg PinMessageArg) (res PinMessageRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.pinMessage", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.pinMessage", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) UnpinMessage(ctx context.Context, convID ConversationID) (res PinMessageRes, err error) {
 	__arg := UnpinMessageArg{ConvID: convID}
-	err = c.Cli.Call(ctx, "chat.1.local.unpinMessage", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.unpinMessage", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) IgnorePinnedMessage(ctx context.Context, convID ConversationID) (err error) {
 	__arg := IgnorePinnedMessageArg{ConvID: convID}
-	err = c.Cli.Call(ctx, "chat.1.local.ignorePinnedMessage", []interface{}{__arg}, nil, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.ignorePinnedMessage", []any{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) AddBotMember(ctx context.Context, __arg AddBotMemberArg) (err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.addBotMember", []interface{}{__arg}, nil, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.addBotMember", []any{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) EditBotMember(ctx context.Context, __arg EditBotMemberArg) (err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.editBotMember", []interface{}{__arg}, nil, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.editBotMember", []any{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) RemoveBotMember(ctx context.Context, __arg RemoveBotMemberArg) (err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.removeBotMember", []interface{}{__arg}, nil, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.removeBotMember", []any{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) SetBotMemberSettings(ctx context.Context, __arg SetBotMemberSettingsArg) (err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.setBotMemberSettings", []interface{}{__arg}, nil, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.setBotMemberSettings", []any{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) GetBotMemberSettings(ctx context.Context, __arg GetBotMemberSettingsArg) (res keybase1.TeamBotSettings, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.getBotMemberSettings", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.getBotMemberSettings", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) GetTeamRoleInConversation(ctx context.Context, __arg GetTeamRoleInConversationArg) (res keybase1.TeamRole, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.getTeamRoleInConversation", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.getTeamRoleInConversation", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) AddBotConvSearch(ctx context.Context, term string) (res []ConvSearchHit, err error) {
 	__arg := AddBotConvSearchArg{Term: term}
-	err = c.Cli.Call(ctx, "chat.1.local.addBotConvSearch", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.addBotConvSearch", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) ForwardMessageConvSearch(ctx context.Context, term string) (res []ConvSearchHit, err error) {
 	__arg := ForwardMessageConvSearchArg{Term: term}
-	err = c.Cli.Call(ctx, "chat.1.local.forwardMessageConvSearch", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.forwardMessageConvSearch", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) TeamIDFromTLFName(ctx context.Context, __arg TeamIDFromTLFNameArg) (res keybase1.TeamID, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.teamIDFromTLFName", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.teamIDFromTLFName", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) DismissJourneycard(ctx context.Context, __arg DismissJourneycardArg) (err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.dismissJourneycard", []interface{}{__arg}, nil, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.dismissJourneycard", []any{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) SetWelcomeMessage(ctx context.Context, __arg SetWelcomeMessageArg) (err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.setWelcomeMessage", []interface{}{__arg}, nil, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.setWelcomeMessage", []any{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) GetWelcomeMessage(ctx context.Context, teamID keybase1.TeamID) (res WelcomeMessageDisplay, err error) {
 	__arg := GetWelcomeMessageArg{TeamID: teamID}
-	err = c.Cli.Call(ctx, "chat.1.local.getWelcomeMessage", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.getWelcomeMessage", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) GetDefaultTeamChannelsLocal(ctx context.Context, teamID keybase1.TeamID) (res GetDefaultTeamChannelsLocalRes, err error) {
 	__arg := GetDefaultTeamChannelsLocalArg{TeamID: teamID}
-	err = c.Cli.Call(ctx, "chat.1.local.getDefaultTeamChannelsLocal", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.getDefaultTeamChannelsLocal", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) SetDefaultTeamChannelsLocal(ctx context.Context, __arg SetDefaultTeamChannelsLocalArg) (res SetDefaultTeamChannelsLocalRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.setDefaultTeamChannelsLocal", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.setDefaultTeamChannelsLocal", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) GetLastActiveForTLF(ctx context.Context, tlfID TLFIDStr) (res LastActiveStatus, err error) {
 	__arg := GetLastActiveForTLFArg{TlfID: tlfID}
-	err = c.Cli.Call(ctx, "chat.1.local.getLastActiveForTLF", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.getLastActiveForTLF", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) GetLastActiveForTeams(ctx context.Context) (res LastActiveStatusAll, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.getLastActiveForTeams", []interface{}{GetLastActiveForTeamsArg{}}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.getLastActiveForTeams", []any{GetLastActiveForTeamsArg{}}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) GetRecentJoinsLocal(ctx context.Context, convID ConversationID) (res int, err error) {
 	__arg := GetRecentJoinsLocalArg{ConvID: convID}
-	err = c.Cli.Call(ctx, "chat.1.local.getRecentJoinsLocal", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.getRecentJoinsLocal", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) RefreshParticipants(ctx context.Context, convID ConversationID) (err error) {
 	__arg := RefreshParticipantsArg{ConvID: convID}
-	err = c.Cli.Call(ctx, "chat.1.local.refreshParticipants", []interface{}{__arg}, nil, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.refreshParticipants", []any{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) GetLastActiveAtLocal(ctx context.Context, __arg GetLastActiveAtLocalArg) (res gregor1.Time, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.getLastActiveAtLocal", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.getLastActiveAtLocal", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) GetLastActiveAtMultiLocal(ctx context.Context, __arg GetLastActiveAtMultiLocalArg) (res map[keybase1.TeamID]gregor1.Time, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.getLastActiveAtMultiLocal", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.getLastActiveAtMultiLocal", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) GetParticipants(ctx context.Context, convID ConversationID) (res []ConversationLocalParticipant, err error) {
 	__arg := GetParticipantsArg{ConvID: convID}
-	err = c.Cli.Call(ctx, "chat.1.local.getParticipants", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.getParticipants", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) AddEmoji(ctx context.Context, __arg AddEmojiArg) (res AddEmojiRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.addEmoji", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.addEmoji", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) AddEmojis(ctx context.Context, __arg AddEmojisArg) (res AddEmojisRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.addEmojis", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.addEmojis", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) AddEmojiAlias(ctx context.Context, __arg AddEmojiAliasArg) (res AddEmojiAliasRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.addEmojiAlias", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.addEmojiAlias", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) RemoveEmoji(ctx context.Context, __arg RemoveEmojiArg) (res RemoveEmojiRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.removeEmoji", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.removeEmoji", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) UserEmojis(ctx context.Context, __arg UserEmojisArg) (res UserEmojiRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.userEmojis", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.userEmojis", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) ToggleEmojiAnimations(ctx context.Context, enabled bool) (err error) {
 	__arg := ToggleEmojiAnimationsArg{Enabled: enabled}
-	err = c.Cli.Call(ctx, "chat.1.local.toggleEmojiAnimations", []interface{}{__arg}, nil, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.toggleEmojiAnimations", []any{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) TrackGiphySelect(ctx context.Context, __arg TrackGiphySelectArg) (res TrackGiphySelectRes, err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.trackGiphySelect", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.trackGiphySelect", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) ArchiveChat(ctx context.Context, req ArchiveChatJobRequest) (res ArchiveChatRes, err error) {
 	__arg := ArchiveChatArg{Req: req}
-	err = c.Cli.Call(ctx, "chat.1.local.archiveChat", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.archiveChat", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) ArchiveChatList(ctx context.Context, identifyBehavior keybase1.TLFIdentifyBehavior) (res ArchiveChatListRes, err error) {
 	__arg := ArchiveChatListArg{IdentifyBehavior: identifyBehavior}
-	err = c.Cli.Call(ctx, "chat.1.local.archiveChatList", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.archiveChatList", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) ArchiveChatDelete(ctx context.Context, __arg ArchiveChatDeleteArg) (err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.archiveChatDelete", []interface{}{__arg}, nil, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.archiveChatDelete", []any{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) ArchiveChatPause(ctx context.Context, __arg ArchiveChatPauseArg) (err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.archiveChatPause", []interface{}{__arg}, nil, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.archiveChatPause", []any{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c LocalClient) ArchiveChatResume(ctx context.Context, __arg ArchiveChatResumeArg) (err error) {
-	err = c.Cli.Call(ctx, "chat.1.local.archiveChatResume", []interface{}{__arg}, nil, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "chat.1.local.archiveChatResume", []any{__arg}, nil, 0*time.Millisecond)
 	return
 }

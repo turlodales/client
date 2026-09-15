@@ -1,34 +1,31 @@
 package engine
 
 import (
+	"context"
+	"crypto/ed25519"
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
-
-	"github.com/keybase/go-crypto/ed25519"
 
 	libkb "github.com/keybase/client/go/libkb"
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 	clockwork "github.com/keybase/clockwork"
 	jsonw "github.com/keybase/go-jsonw"
 	require "github.com/stretchr/testify/require"
-	"golang.org/x/net/context"
 )
 
 func importTrackingLink(t *testing.T, g *libkb.GlobalContext) *libkb.TrackChainLink {
 	cl, err := libkb.ImportLinkFromServer(libkb.NewMetaContextBackground(g), nil, []byte(trackingServerReply), trackingUID)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	gl := libkb.GenericChainLink{ChainLink: cl}
 	tcl, err := libkb.ParseTrackChainLink(gl)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	return tcl
 }
 
@@ -36,9 +33,8 @@ func TestIdentify2WithUIDImportTrackingLink(t *testing.T) {
 	tc := libkb.SetupTest(t, "TestIdentify2WithUIDImportTrackingLink", 0)
 	defer tc.Cleanup()
 	link := importTrackingLink(t, tc.G)
-	if link == nil {
-		t.Fatalf("link import failed")
-	}
+	require.NotNil(t, link,
+		"link import failed")
 }
 
 type cacheStats struct {
@@ -86,12 +82,14 @@ func (i *Identify2WithUIDTester) ListProofCheckers(libkb.MetaContext) []string {
 func (i *Identify2WithUIDTester) ListServicesThatAcceptNewProofs(libkb.MetaContext) []string {
 	return nil
 }
+
 func (i *Identify2WithUIDTester) ListDisplayConfigs(libkb.MetaContext) []keybase1.ServiceDisplayConfig {
 	return nil
 }
 func (i *Identify2WithUIDTester) SuggestionFoldPriority(libkb.MetaContext) int { return 0 }
 func (i *Identify2WithUIDTester) Key() string                                  { return i.GetTypeName() }
-func (i *Identify2WithUIDTester) CheckProofText(text string, id keybase1.SigID, sig string) error {
+
+func (i *Identify2WithUIDTester) CheckProofText(_ string, _ keybase1.SigID, _ string) error {
 	return nil
 }
 func (i *Identify2WithUIDTester) DisplayName() string  { return "Identify2WithUIDTester" }
@@ -101,21 +99,24 @@ func (i *Identify2WithUIDTester) GetTypeName() string  { return "" }
 func (i *Identify2WithUIDTester) NormalizeRemoteName(_ libkb.MetaContext, name string) (string, error) {
 	return name, nil
 }
-func (i *Identify2WithUIDTester) NormalizeUsername(name string) (string, error)    { return name, nil }
-func (i *Identify2WithUIDTester) PostInstructions(remotename string) *libkb.Markup { return nil }
-func (i *Identify2WithUIDTester) RecheckProofPosting(tryNumber int, status keybase1.ProofStatus, remotename string) (*libkb.Markup, error) {
+func (i *Identify2WithUIDTester) NormalizeUsername(name string) (string, error) { return name, nil }
+func (i *Identify2WithUIDTester) PostInstructions(_ string) *libkb.Markup       { return nil }
+func (i *Identify2WithUIDTester) RecheckProofPosting(_ int, _ keybase1.ProofStatus, _ string) (*libkb.Markup, error) {
 	return nil, nil
 }
-func (i *Identify2WithUIDTester) ToServiceJSON(remotename string) *jsonw.Wrapper { return nil }
+func (i *Identify2WithUIDTester) ToServiceJSON(_ string) *jsonw.Wrapper { return nil }
 
 func (i *Identify2WithUIDTester) MakeProofChecker(_ libkb.RemoteProofChainLink) libkb.ProofChecker {
 	return i
 }
+
 func (i *Identify2WithUIDTester) GetServiceType(context.Context, string) libkb.ServiceType { return i }
-func (i *Identify2WithUIDTester) PickerSubtext() string                                    { return "" }
+
+func (i *Identify2WithUIDTester) PickerSubtext() string { return "" }
 
 func (i *Identify2WithUIDTester) CheckStatus(m libkb.MetaContext, h libkb.SigHint,
-	pcm libkb.ProofCheckerMode, _ keybase1.MerkleStoreEntry) (*libkb.SigHint, libkb.ProofError) {
+	pcm libkb.ProofCheckerMode, _ keybase1.MerkleStoreEntry,
+) (*libkb.SigHint, libkb.ProofError) {
 	if i.checkStatusHook != nil {
 		return nil, i.checkStatusHook(h, pcm)
 	}
@@ -130,36 +131,47 @@ func (i *Identify2WithUIDTester) GetTorError() libkb.ProofError {
 func (i *Identify2WithUIDTester) FinishSocialProofCheck(libkb.MetaContext, keybase1.RemoteProof, keybase1.LinkCheckResult) error {
 	return nil
 }
+
 func (i *Identify2WithUIDTester) Confirm(libkb.MetaContext, *keybase1.IdentifyOutcome) (res keybase1.ConfirmResult, err error) {
 	return
 }
+
 func (i *Identify2WithUIDTester) FinishWebProofCheck(libkb.MetaContext, keybase1.RemoteProof, keybase1.LinkCheckResult) error {
 	return nil
 }
+
 func (i *Identify2WithUIDTester) DisplayCryptocurrency(libkb.MetaContext, keybase1.Cryptocurrency) error {
 	return nil
 }
+
 func (i *Identify2WithUIDTester) DisplayStellarAccount(libkb.MetaContext, keybase1.StellarAccount) error {
 	return nil
 }
+
 func (i *Identify2WithUIDTester) DisplayKey(libkb.MetaContext, keybase1.IdentifyKey) error {
 	return nil
 }
+
 func (i *Identify2WithUIDTester) ReportLastTrack(libkb.MetaContext, *keybase1.TrackSummary) error {
 	return nil
 }
+
 func (i *Identify2WithUIDTester) LaunchNetworkChecks(libkb.MetaContext, *keybase1.Identity, *keybase1.User) error {
 	return nil
 }
+
 func (i *Identify2WithUIDTester) DisplayTrackStatement(libkb.MetaContext, string) error {
 	return nil
 }
+
 func (i *Identify2WithUIDTester) ReportTrackToken(libkb.MetaContext, keybase1.TrackToken) (err error) {
 	return nil
 }
+
 func (i *Identify2WithUIDTester) SetStrict(b bool) error {
 	return nil
 }
+
 func (i *Identify2WithUIDTester) DisplayUserCard(_ libkb.MetaContext, card keybase1.UserCard) error {
 	i.Lock()
 	defer i.Unlock()
@@ -230,16 +242,18 @@ func (i *Identify2WithUIDTester) Insert(up *keybase1.Identify2ResUPK2) error {
 	i.Lock()
 	defer i.Unlock()
 	tmp := *up
-	copy := &tmp
-	copy.Upk.Uvv.CachedAt = keybase1.ToTime(i.now)
-	i.cache[up.Upk.GetUID()] = copy
+	cp := &tmp
+	cp.Upk.Uvv.CachedAt = keybase1.ToTime(i.now)
+	i.cache[up.Upk.GetUID()] = cp
 	return nil
 }
+
 func (i *Identify2WithUIDTester) DidFullUserLoad(uid keybase1.UID) {
 	i.Lock()
 	defer i.Unlock()
 	i.userLoads[uid]++
 }
+
 func (i *Identify2WithUIDTester) UseDiskCache() bool {
 	i.Lock()
 	defer i.Unlock()
@@ -272,9 +286,7 @@ func TestIdentify2WithUIDWithoutTrack(t *testing.T) {
 	}
 	eng := NewIdentify2WithUID(tc.G, arg)
 	err := eng.Run(identify2MetaContext(tc, i))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	<-i.finishCh
 }
 
@@ -290,9 +302,7 @@ func launchWaiter(t *testing.T, ch chan struct{}) func() {
 	}()
 	return func() {
 		err := <-waitCh
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 	}
 }
 
@@ -314,9 +324,7 @@ func TestIdentify2WithUIDWithTrack(t *testing.T) {
 
 	waiter := launchWaiter(t, i.finishCh)
 	err := eng.Run(identify2MetaContext(tc, i))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	waiter()
 }
@@ -339,19 +347,17 @@ func TestIdentify2WithUIDWithTrackAndSuppress(t *testing.T) {
 	}
 
 	err := eng.Run(identify2MetaContext(tc, i))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	select {
 	case <-i.startCh:
-		t.Fatalf("did not expect the identify to start")
+		require.FailNow(t, "did not expect the identify to start")
 	default:
 	}
 
 	select {
 	case <-i.finishCh:
-		t.Fatalf("did not expect the identify to end")
+		require.FailNow(t, "did not expect the identify to end")
 	default:
 	}
 }
@@ -388,9 +394,8 @@ func testIdentify2WithUIDWithBrokenTrack(t *testing.T, suppress bool) {
 	}
 	waiter, err := identify2WithUIDWithBrokenTrackMakeEngine(t, arg)
 
-	if err == nil {
-		t.Fatal("expected an ID2 error since twitter proof failed")
-	}
+	require.Error(t, err,
+		"expected an ID2 error since twitter proof failed")
 	waiter()
 }
 
@@ -410,7 +415,6 @@ func TestIdentify2WithUIDWithUntrackedFastPath(t *testing.T) {
 	fu := CreateAndSignupFakeUser(tc, "track")
 
 	runID2 := func(expectFastPath bool) {
-
 		tester := newIdentify2WithUIDTester(tc.G)
 		tester.noDiskCache = true
 
@@ -431,7 +435,6 @@ func TestIdentify2WithUIDWithUntrackedFastPath(t *testing.T) {
 }
 
 func TestIdentify2WithUIDWithBrokenTrackFromChatGUI(t *testing.T) {
-
 	tc := SetupEngineTest(t, "TestIdentify2WithUIDWithBrokenTrackFromChatGUI")
 	defer tc.Cleanup()
 	tester := newIdentify2WithUIDTester(tc.G)
@@ -447,24 +450,14 @@ func TestIdentify2WithUIDWithBrokenTrackFromChatGUI(t *testing.T) {
 	origUI := tester
 
 	checkBrokenRes := func(res *keybase1.Identify2ResUPK2) {
-		if !res.Upk.GetUID().Equal(tracyUID) {
-			t.Fatal("bad UID for t_tracy")
-		}
-		if res.Upk.GetName() != "t_tracy" {
-			t.Fatal("bad username for t_tracy")
-		}
-		if len(res.Upk.Current.DeviceKeys) != 4 {
-			t.Fatal("wrong # of device keys for tracy")
-		}
-		if res.TrackBreaks == nil || len(res.TrackBreaks.Proofs) != 1 {
-			t.Fatal("Expected to get back 1 broken proof")
-		}
-		if res.TrackBreaks.Proofs[0].RemoteProof.Key != "twitter" {
-			t.Fatal("Expected a twitter proof type")
-		}
-		if res.TrackBreaks.Proofs[0].Lcr.RemoteDiff.Type != keybase1.TrackDiffType_REMOTE_FAIL {
-			t.Fatal("wrong remote failure type")
-		}
+		require.True(t, res.Upk.GetUID().Equal(tracyUID),
+			"bad UID for t_tracy")
+		require.Equal(t, "t_tracy", res.Upk.GetName(), "bad username for t_tracy")
+		require.Len(t, res.Upk.Current.DeviceKeys, 4, "wrong # of device keys for tracy")
+		require.False(t, res.TrackBreaks == nil || len(res.TrackBreaks.Proofs) != 1,
+			"Expected to get back 1 broken proof")
+		require.Equal(t, "twitter", res.TrackBreaks.Proofs[0].RemoteProof.Key, "Expected a twitter proof type")
+		require.Equal(t, keybase1.TrackDiffType_REMOTE_FAIL, res.TrackBreaks.Proofs[0].Lcr.RemoteDiff.Type, "wrong remote failure type")
 	}
 
 	runChatGUI := func() {
@@ -486,16 +479,14 @@ func TestIdentify2WithUIDWithBrokenTrackFromChatGUI(t *testing.T) {
 		// otherwise the waiter() will block indefinitely.
 		_ = origUI.Finish(m)
 		waiter()
-		if err != nil {
-			t.Fatalf("expected no ID2 error; got %v", err)
-		}
+		require.NoError(t, err,
+			"expected no ID2 error; got %v", err)
 		res, err := eng.Result(m)
-		if err != nil {
-			t.Fatalf("unexpected export error: %s", err)
-		}
+		require.NoError(t, err,
+			"unexpected export error: %s", err)
 		checkBrokenRes(res)
 		if n := eng.testArgs.stats.untrackedFastPaths; n > 0 {
-			t.Fatalf("Didn't expect any untracked fast paths, but got %d", n)
+			require.FailNow(t, fmt.Sprintf("Didn't expect any untracked fast paths, but got %d", n))
 		}
 	}
 
@@ -513,65 +504,57 @@ func TestIdentify2WithUIDWithBrokenTrackFromChatGUI(t *testing.T) {
 		waiter := launchWaiter(t, tester.finishCh)
 		err := eng.Run(identify2MetaContext(tc, tester))
 		waiter()
-		if err == nil {
-			t.Fatalf("Expected a break with running ID2 in standard mode")
-		}
+		require.Error(t, err,
+			"Expected a break with running ID2 in standard mode")
 	}
 
 	runChatGUI()
 
 	// First time through, we should miss both caches
-	if !tester.fastStats.eq(0, 0, 1, 0, 0) || !tester.slowStats.eq(0, 0, 1, 0, 0) {
-		t.Fatalf("bad cache stats: %+v, %+v", tester.fastStats, tester.slowStats)
-	}
+	require.False(t, !tester.fastStats.eq(0, 0, 1, 0, 0) || !tester.slowStats.eq(0, 0, 1, 0, 0),
+		"bad cache stats: %+v, %+v", tester.fastStats, tester.slowStats)
 
 	runStandard()
 
 	// If we run without the chat GUI, we should hit the cache, but have it be
 	// disqualified because the cached copy has broken tracker statements.
-	if !tester.fastStats.eq(0, 0, 1, 0, 1) || !tester.slowStats.eq(0, 0, 1, 0, 1) {
-		t.Fatalf("bad cache stats: %+v, %+v", tester.fastStats, tester.slowStats)
-	}
+	require.False(t, !tester.fastStats.eq(0, 0, 1, 0, 1) || !tester.slowStats.eq(0, 0, 1, 0, 1),
+		"bad cache stats: %+v, %+v", tester.fastStats, tester.slowStats)
 
 	runChatGUI()
 
 	// The next time we run with the chat GUI, we won't hit the slow or fast
 	// cache, since the failure in standard mode cleared out the cache for this
 	// user.
-	if !tester.fastStats.eq(0, 0, 2, 0, 1) || !tester.slowStats.eq(0, 0, 2, 0, 1) {
-		t.Fatalf("bad cache stats: %+v, %+v", tester.fastStats, tester.slowStats)
-	}
+	require.False(t, !tester.fastStats.eq(0, 0, 2, 0, 1) || !tester.slowStats.eq(0, 0, 2, 0, 1),
+		"bad cache stats: %+v, %+v", tester.fastStats, tester.slowStats)
 
 	tester.incNow(time.Second)
 	runChatGUI()
 
 	// Now we should get a fast cache hit
-	if !tester.fastStats.eq(1, 0, 2, 0, 1) || !tester.slowStats.eq(0, 0, 2, 0, 1) {
-		t.Fatalf("bad cache stats: %+v, %+v", tester.fastStats, tester.slowStats)
-	}
+	require.False(t, !tester.fastStats.eq(1, 0, 2, 0, 1) || !tester.slowStats.eq(0, 0, 2, 0, 1),
+		"bad cache stats: %+v, %+v", tester.fastStats, tester.slowStats)
 
 	tester.incNow(time.Second + libkb.Identify2CacheShortTimeout)
 	runChatGUI()
 
 	// A fast cache timeout and a slow cache hit!
-	if !tester.fastStats.eq(1, 1, 2, 0, 1) || !tester.slowStats.eq(1, 0, 2, 0, 1) {
-		t.Fatalf("bad cache stats: %+v, %+v", tester.fastStats, tester.slowStats)
-	}
+	require.False(t, !tester.fastStats.eq(1, 1, 2, 0, 1) || !tester.slowStats.eq(1, 0, 2, 0, 1),
+		"bad cache stats: %+v, %+v", tester.fastStats, tester.slowStats)
 
 	// The fast cached should have been primed with the slow cache, so we expected
 	// a fast cache hit
 	runChatGUI()
-	if !tester.fastStats.eq(2, 1, 2, 0, 1) || !tester.slowStats.eq(1, 0, 2, 0, 1) {
-		t.Fatalf("bad cache stats: %+v, %+v", tester.fastStats, tester.slowStats)
-	}
+	require.False(t, !tester.fastStats.eq(2, 1, 2, 0, 1) || !tester.slowStats.eq(1, 0, 2, 0, 1),
+		"bad cache stats: %+v, %+v", tester.fastStats, tester.slowStats)
 
 	tester.incNow(time.Second + libkb.Identify2CacheBrokenTimeout)
 	runChatGUI()
 
 	// After the broken timeout passes, we should get timeouts on both caches
-	if !tester.fastStats.eq(2, 2, 2, 0, 1) || !tester.slowStats.eq(1, 1, 2, 0, 1) {
-		t.Fatalf("bad cache stats: %+v, %+v", tester.fastStats, tester.slowStats)
-	}
+	require.False(t, !tester.fastStats.eq(2, 2, 2, 0, 1) || !tester.slowStats.eq(1, 1, 2, 0, 1),
+		"bad cache stats: %+v, %+v", tester.fastStats, tester.slowStats)
 }
 
 func TestIdentify2WithUIDWithAssertion(t *testing.T) {
@@ -591,9 +574,7 @@ func TestIdentify2WithUIDWithAssertion(t *testing.T) {
 	}
 
 	err := eng.Run(identify2MetaContext(tc, i))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	<-i.finishCh
 }
@@ -615,9 +596,7 @@ func TestIdentify2WithUIDWithAssertions(t *testing.T) {
 	}
 
 	err := eng.Run(identify2MetaContext(tc, i))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	<-i.finishCh
 }
@@ -650,15 +629,13 @@ func TestIdentify2WithUIDWithNonExistentAssertion(t *testing.T) {
 	}()
 
 	err := eng.Run(identify2MetaContext(tc, i))
-	if err == nil {
-		t.Fatal(err)
-	}
+	require.Error(t, err)
 	if _, ok := err.(libkb.UnmetAssertionError); !ok {
-		t.Fatalf("Wanted an error of type %T; got %T", libkb.UnmetAssertionError{}, err)
+		require.True(t, ok,
+			"Wanted an error of type %T; got %T", libkb.UnmetAssertionError{}, err)
 	}
-	if starts > 0 {
-		t.Fatalf("Didn't expect the identify UI to start in this case")
-	}
+	require.LessOrEqual(t, starts, 0,
+		"Didn't expect the identify UI to start in this case")
 
 	done <- true
 }
@@ -681,14 +658,12 @@ func TestIdentify2WithUIDWithFailedAssertion(t *testing.T) {
 
 	starts := 0
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
+	wg.Go(func() {
 		tc.G.Log.Debug("In BG: waiting for UI notification on startCh")
 		<-i.startCh
 		starts++
 		tc.G.Log.Debug("In BG: waited for UI notification on startCh")
-		wg.Done()
-	}()
+	})
 
 	i.checkStatusHook = func(l libkb.SigHint, _ libkb.ProofCheckerMode) libkb.ProofError {
 		if strings.Contains(l.GetHumanURL(), "twitter") {
@@ -700,16 +675,13 @@ func TestIdentify2WithUIDWithFailedAssertion(t *testing.T) {
 
 	err := eng.Run(identify2MetaContext(tc, i))
 
-	if err == nil {
-		t.Fatal(err)
-	}
+	require.Error(t, err)
 	if _, ok := err.(libkb.ProofError); !ok {
-		t.Fatalf("Wanted an error of type libkb.ProofError; got %T", err)
+		require.True(t, ok,
+			"Wanted an error of type libkb.ProofError; got %T", err)
 	}
 	wg.Wait()
-	if starts != 1 {
-		t.Fatalf("Expected the UI to have started")
-	}
+	require.Equal(t, 1, starts, "Expected the UI to have started")
 	<-i.finishCh
 }
 
@@ -750,10 +722,7 @@ func TestIdentify2WithUIDWithFailedAncillaryAssertion(t *testing.T) {
 	}
 
 	err := eng.Run(identify2MetaContext(tc, i))
-
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	<-i.startCh
 	<-i.finishCh
 }
@@ -780,9 +749,7 @@ func TestIdentify2WithUIDCache(t *testing.T) {
 			clock: func() time.Time { return i.now },
 		}
 		err := eng.Run(identify2MetaContext(tc, i))
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 	}
 
 	// First time we'll cause an ID, so we need to finish
@@ -790,25 +757,22 @@ func TestIdentify2WithUIDCache(t *testing.T) {
 	<-i.startCh
 	<-i.finishCh
 
-	if !i.fastStats.eq(0, 0, 1, 0, 0) || !i.slowStats.eq(0, 0, 1, 0, 0) {
-		t.Fatalf("bad cache stats %+v %+v", i.fastStats, i.slowStats)
-	}
+	require.False(t, !i.fastStats.eq(0, 0, 1, 0, 0) || !i.slowStats.eq(0, 0, 1, 0, 0),
+		"bad cache stats %+v %+v", i.fastStats, i.slowStats)
 
 	i.incNow(time.Second)
 	run()
 
 	// A new fast-path hit
-	if !i.fastStats.eq(1, 0, 1, 0, 0) || !i.slowStats.eq(0, 0, 1, 0, 0) {
-		t.Fatalf("bad cache stats %+v %+v", i.fastStats, i.slowStats)
-	}
+	require.False(t, !i.fastStats.eq(1, 0, 1, 0, 0) || !i.slowStats.eq(0, 0, 1, 0, 0),
+		"bad cache stats %+v %+v", i.fastStats, i.slowStats)
 
 	i.incNow(time.Second + libkb.Identify2CacheShortTimeout)
 	run()
 
 	// A new fast-path timeout and a new slow-path hit
-	if !i.fastStats.eq(1, 1, 1, 0, 0) || !i.slowStats.eq(1, 0, 1, 0, 0) {
-		t.Fatalf("bad cache stats %+v %+v", i.fastStats, i.slowStats)
-	}
+	require.False(t, !i.fastStats.eq(1, 1, 1, 0, 0) || !i.slowStats.eq(1, 0, 1, 0, 0),
+		"bad cache stats %+v %+v", i.fastStats, i.slowStats)
 
 	i.incNow(time.Second + libkb.Identify2CacheLongTimeout)
 	run()
@@ -816,24 +780,21 @@ func TestIdentify2WithUIDCache(t *testing.T) {
 	<-i.finishCh
 
 	// A new fast-path timeout and a new slow-path timeout
-	if !i.fastStats.eq(1, 2, 1, 0, 0) || !i.slowStats.eq(1, 1, 1, 0, 0) {
-		t.Fatalf("bad cache stats %+v %+v", i.fastStats, i.slowStats)
-	}
+	require.False(t, !i.fastStats.eq(1, 2, 1, 0, 0) || !i.slowStats.eq(1, 1, 1, 0, 0),
+		"bad cache stats %+v %+v", i.fastStats, i.slowStats)
 
 	i.incNow(time.Second)
 	run()
 	// A new fast-path hit
-	if !i.fastStats.eq(2, 2, 1, 0, 0) || !i.slowStats.eq(1, 1, 1, 0, 0) {
-		t.Fatalf("bad cache stats %+v %+v", i.fastStats, i.slowStats)
-	}
+	require.False(t, !i.fastStats.eq(2, 2, 1, 0, 0) || !i.slowStats.eq(1, 1, 1, 0, 0),
+		"bad cache stats %+v %+v", i.fastStats, i.slowStats)
 
 	arg.UserAssertion = "tacovontaco@twitter"
 	i.incNow(time.Second)
 	run()
 	// A new slow-path hit; we have to use the slow path with assertions
-	if !i.fastStats.eq(2, 2, 1, 0, 0) || !i.slowStats.eq(2, 1, 1, 0, 0) {
-		t.Fatalf("bad cache stats %+v %+v", i.fastStats, i.slowStats)
-	}
+	require.False(t, !i.fastStats.eq(2, 2, 1, 0, 0) || !i.slowStats.eq(2, 1, 1, 0, 0),
+		"bad cache stats %+v %+v", i.fastStats, i.slowStats)
 }
 
 func TestIdentify2WithUIDLocalAssertions(t *testing.T) {
@@ -854,9 +815,7 @@ func TestIdentify2WithUIDLocalAssertions(t *testing.T) {
 		eng := NewIdentify2WithUID(tc.G, arg)
 		eng.testArgs = testArgs
 		err := eng.Run(identify2MetaContext(tc, i))
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 	}
 
 	numTracyLoads := func() int {
@@ -868,34 +827,31 @@ func TestIdentify2WithUIDLocalAssertions(t *testing.T) {
 	arg.UserAssertion = "4ff50d580914427227bb14c821029e2c7cf0d488@" + libkb.PGPAssertionKey
 	run()
 	if n := numTracyLoads(); n != 1 {
-		t.Fatalf("expected 1 full user load; got %d", n)
+		require.FailNow(t, fmt.Sprintf("expected 1 full user load; got %d", n))
 	}
 	<-i.startCh
 	<-i.finishCh
 
 	// Don't attempt to hit fast cache, since we're using local assertions.
-	if !i.fastStats.eq(0, 0, 0, 0, 0) || !i.slowStats.eq(0, 0, 1, 0, 0) {
-		t.Fatalf("bad cache stats %+v %+v", i.fastStats, i.slowStats)
-	}
+	require.False(t, !i.fastStats.eq(0, 0, 0, 0, 0) || !i.slowStats.eq(0, 0, 1, 0, 0),
+		"bad cache stats %+v %+v", i.fastStats, i.slowStats)
 
 	i.incNow(time.Second)
 	run()
 	// A new slow-path hit
-	if !i.fastStats.eq(0, 0, 0, 0, 0) || !i.slowStats.eq(1, 0, 1, 0, 0) {
-		t.Fatalf("bad cache stats %+v %+v", i.fastStats, i.slowStats)
-	}
+	require.False(t, !i.fastStats.eq(0, 0, 0, 0, 0) || !i.slowStats.eq(1, 0, 1, 0, 0),
+		"bad cache stats %+v %+v", i.fastStats, i.slowStats)
 	if n := numTracyLoads(); n != 1 {
-		t.Fatalf("expected 1 full user load; got %d", n)
+		require.FailNow(t, fmt.Sprintf("expected 1 full user load; got %d", n))
 	}
 	arg.UserAssertion += "+tacovontaco@twitter"
 	i.incNow(time.Second)
 	run()
 	// A new slow-path hit
-	if !i.fastStats.eq(0, 0, 0, 0, 0) || !i.slowStats.eq(2, 0, 1, 0, 0) {
-		t.Fatalf("bad cache stats %+v %+v", i.fastStats, i.slowStats)
-	}
+	require.False(t, !i.fastStats.eq(0, 0, 0, 0, 0) || !i.slowStats.eq(2, 0, 1, 0, 0),
+		"bad cache stats %+v %+v", i.fastStats, i.slowStats)
 	if n := numTracyLoads(); n != 2 {
-		t.Fatalf("expected 2 full user load; got %d", n)
+		require.FailNow(t, fmt.Sprintf("expected 2 full user load; got %d", n))
 	}
 
 	i.incNow(libkb.Identify2CacheLongTimeout)
@@ -903,16 +859,14 @@ func TestIdentify2WithUIDLocalAssertions(t *testing.T) {
 	<-i.startCh
 	<-i.finishCh
 	// A new slow-path timeout
-	if !i.fastStats.eq(0, 0, 0, 0, 0) || !i.slowStats.eq(2, 1, 1, 0, 0) {
-		t.Fatalf("bad cache stats %+v %+v", i.fastStats, i.slowStats)
-	}
+	require.False(t, !i.fastStats.eq(0, 0, 0, 0, 0) || !i.slowStats.eq(2, 1, 1, 0, 0),
+		"bad cache stats %+v %+v", i.fastStats, i.slowStats)
 
 	i.incNow(time.Second)
 	run()
 	// A new slow-path hit
-	if !i.fastStats.eq(0, 0, 0, 0, 0) || !i.slowStats.eq(3, 1, 1, 0, 0) {
-		t.Fatalf("bad cache stats %+v %+v", i.fastStats, i.slowStats)
-	}
+	require.False(t, !i.fastStats.eq(0, 0, 0, 0, 0) || !i.slowStats.eq(3, 1, 1, 0, 0),
+		"bad cache stats %+v %+v", i.fastStats, i.slowStats)
 }
 
 func TestResolveAndIdentify2WithUIDWithAssertions(t *testing.T) {
@@ -929,9 +883,7 @@ func TestResolveAndIdentify2WithUIDWithAssertions(t *testing.T) {
 		noMe: true,
 	}
 	err := eng.Run(identify2MetaContext(tc, i))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	<-i.startCh
 	<-i.finishCh
 }
@@ -952,21 +904,18 @@ func TestIdentify2NoSigchain(t *testing.T) {
 	eng := NewResolveThenIdentify2(tc.G, arg)
 	m := identify2MetaContext(tc, i)
 	err := eng.Run(m)
-	if err != nil {
-		t.Fatalf("identify2 failed on user with no keys: %s", err)
-	}
+	require.NoError(t, err,
+		"identify2 failed on user with no keys: %s", err)
 
 	// kbfs would like to have some info about the user
 	result, err := eng.Result(m)
-	if err != nil {
-		t.Fatalf("unexpeted export error: %s", err)
-	}
+	require.NoError(t, err,
+		"unexpeted export error: %s", err)
 	if result == nil {
-		t.Fatal("no result on id2 w/ no sigchain")
+		require.FailNow(t, "no result on id2 w/ no sigchain")
+		return
 	}
-	if result.Upk.GetName() != u {
-		t.Errorf("result username: %q, expected %q", result.Upk.GetName(), u)
-	}
+	require.Equal(t, u, result.Upk.GetName(), "result username: %q, expected %q", result.Upk.GetName(), u)
 }
 
 // See CORE-4310
@@ -980,7 +929,6 @@ func TestIdentifyAfterDbNuke(t *testing.T) {
 	defer untrackAlice(tc, fu, sigVersion)
 
 	runIDAlice := func() {
-
 		i := newIdentify2WithUIDTester(tc.G)
 		arg := &keybase1.Identify2Arg{
 			Uid:              aliceUID,
@@ -992,7 +940,7 @@ func TestIdentifyAfterDbNuke(t *testing.T) {
 		}
 		waiter := launchWaiter(t, i.finishCh)
 		if err := eng.Run(identify2MetaContext(tc, i)); err != nil {
-			t.Fatal(err)
+			require.NoError(t, err)
 		}
 		waiter()
 	}
@@ -1000,10 +948,10 @@ func TestIdentifyAfterDbNuke(t *testing.T) {
 	tc.G.Log.Debug("------------ ID Alice Iteration 0 ---------------")
 	runIDAlice()
 	if _, err := tc.G.LocalDb.Nuke(); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 	if err := tc.G.ConfigureCaches(); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 	tc.G.Log.Debug("------------ ID Alice Iteration 1 ---------------")
 	runIDAlice()
@@ -1023,16 +971,14 @@ func TestNoSelfHostedIdentifyInPassiveMode(t *testing.T) {
 	alice := CreateAndSignupFakeUser(tc, "a")
 
 	runTest := func(identifyBehavior keybase1.TLFIdentifyBehavior, returnUnchecked bool, shouldCheck bool, wantedMode libkb.ProofCheckerMode) {
-
 		i := newIdentify2WithUIDTester(tc.G)
 		checked := false
 		i.checkStatusHook = func(l libkb.SigHint, pcm libkb.ProofCheckerMode) libkb.ProofError {
 			checked = true
 			if strings.Contains(l.GetHumanURL(), "rooter") {
-				if !shouldCheck {
-					t.Fatalf("should not have gotten a check; should have hit cache")
-				}
-				require.Equal(t, pcm, wantedMode, "we get a passive ID in GUI mode")
+				require.True(t, shouldCheck,
+					"should not have gotten a check; should have hit cache")
+				require.Equal(t, wantedMode, pcm, "we get a passive ID in GUI mode")
 				if returnUnchecked {
 					return libkb.ProofErrorUnchecked
 				}
@@ -1085,6 +1031,111 @@ func TestNoSelfHostedIdentifyInPassiveMode(t *testing.T) {
 	runTest(keybase1.TLFIdentifyBehavior_CHAT_GUI, true, true, libkb.ProofCheckerModeActive)
 }
 
+func testForcedIdentifyReusesProofCheckedAfterRequest(t *testing.T, checkErr libkb.ProofError) {
+	tc := SetupEngineTest(t, "id")
+	defer tc.Cleanup()
+
+	eve := CreateAndSignupFakeUser(tc, "e")
+	_, _, err := proveRooter(tc.G, eve, libkb.GetDefaultSigVersion(tc.G))
+	require.NoError(t, err)
+	Logout(tc)
+	_ = CreateAndSignupFakeUser(tc, "a")
+
+	tc.G.ProofCache.DisableDisk()
+	require.NoError(t, tc.G.ProofCache.Reset())
+
+	// Use a fake clock to avoid system clock granularity issues on Windows
+	// where time.Now() can have ~15ms resolution, causing T1 == T2.
+	fakeClock := clockwork.NewFakeClock()
+	tc.G.SetClock(fakeClock)
+
+	tester := newIdentify2WithUIDTester(tc.G)
+	tc.G.SetProofServices(tester)
+
+	var checks atomic.Int64
+	firstCheckStarted := make(chan struct{})
+	releaseFirstCheck := make(chan struct{})
+	tester.checkStatusHook = func(libkb.SigHint, libkb.ProofCheckerMode) libkb.ProofError {
+		if checks.Add(1) == 1 {
+			close(firstCheckStarted)
+			<-releaseFirstCheck
+		}
+		// Advance clock when check completes to ensure cache timestamp > requestedAt
+		fakeClock.Advance(time.Millisecond)
+		return checkErr
+	}
+
+	newEngine := func() *Identify2WithUID {
+		return NewIdentify2WithUID(tc.G, &keybase1.Identify2Arg{
+			Uid:              eve.UID(),
+			ForceRemoteCheck: true,
+			IdentifyBehavior: keybase1.TLFIdentifyBehavior_CLI,
+			NeedProofSet:     true,
+		})
+	}
+	run := func(eng *Identify2WithUID) <-chan error {
+		resultCh := make(chan error, 1)
+		go func() {
+			resultCh <- eng.runReturnError(identify2MetaContext(tc, &FakeIdentifyUI{}))
+		}()
+		return resultCh
+	}
+
+	first := newEngine()
+	first.requestedAt = tc.G.Clock().Now()
+	firstResult := run(first)
+	select {
+	case <-firstCheckStarted:
+	case <-time.After(10 * time.Second):
+		close(releaseFirstCheck)
+		t.Fatal("first proof check did not start")
+	}
+
+	// The second request arrives while the first owns the per-UID identify lock.
+	// Its proof check will run only after the first identify completes.
+	fakeClock.Advance(time.Millisecond)
+	second := newEngine()
+	second.requestedAt = tc.G.Clock().Now()
+	secondResult := run(second)
+	close(releaseFirstCheck)
+
+	require.NoError(t, <-firstResult)
+	require.NoError(t, <-secondResult)
+	require.Equal(t, int64(1), checks.Load())
+
+	// A request made after the shared result was produced still forces a new
+	// remote check.
+	fakeClock.Advance(time.Millisecond)
+	third := newEngine()
+	third.requestedAt = tc.G.Clock().Now()
+	require.NoError(t, <-run(third))
+	require.Equal(t, int64(2), checks.Load())
+}
+
+func TestForcedIdentifyReusesProofCheckedAfterRequest(t *testing.T) {
+	testForcedIdentifyReusesProofCheckedAfterRequest(t, nil)
+}
+
+func TestForcedIdentifyReusesSoftFailureCheckedAfterRequest(t *testing.T) {
+	testForcedIdentifyReusesProofCheckedAfterRequest(
+		t, libkb.NewProofError(keybase1.ProofStatus_HTTP_500, "temporary failure"),
+	)
+}
+
+func TestResolveThenIdentify2RecordsRequestBeforeResolution(t *testing.T) {
+	tc := SetupEngineTest(t, "id")
+	defer tc.Cleanup()
+
+	requestedAt := time.Date(2026, time.July, 28, 12, 0, 0, 0, time.UTC)
+	tc.G.SetClock(clockwork.NewFakeClockAt(requestedAt))
+	arg := keybase1.Identify2Arg{UserAssertion: "("}
+	eng := NewResolveThenIdentify2(tc.G, &arg)
+
+	require.Error(t, eng.Run(NewMetaContextForTest(tc)))
+	require.NotNil(t, eng.i2eng)
+	require.Equal(t, requestedAt, eng.i2eng.requestedAt)
+}
+
 func TestSkipExternalChecks(t *testing.T) {
 	arg := &keybase1.Identify2Arg{
 		Uid:           tracyUID,
@@ -1126,7 +1177,7 @@ func TestResolveAndCheck(t *testing.T) {
 	goodResolver := tc.G.Resolver.(*libkb.ResolverImpl)
 	evilResolver := evilResolver{goodResolver, "t_alice", tracyUID}
 
-	var tests = []struct {
+	tests := []struct {
 		s       string
 		e       error
 		useEvil bool
@@ -1150,10 +1201,10 @@ func TestResolveAndCheck(t *testing.T) {
 			tc.G.Resolver = &evilResolver
 		}
 		upk, err := ResolveAndCheck(m, test.s, true /*useTracking*/)
-		require.IsType(t, test.e, err)
+		require.Equal(t, reflect.TypeOf(test.e), reflect.TypeOf(err))
 		if err == nil {
 			require.True(t, upk.GetUID().Equal(tracyUID))
-			require.Equal(t, upk.GetName(), "t_tracy")
+			require.Equal(t, "t_tracy", upk.GetName())
 		}
 	}
 
@@ -1246,16 +1297,18 @@ func TestTrackResetReuseKey(t *testing.T) {
 
 	// Bob should be able to ID Alice without any issues
 	idUI := &FakeIdentifyUI{}
-	require.NoError(t, RunEngine2(
-		NewMetaContextForTest(tcY).WithUIs(libkb.UIs{
-			LogUI:      tcY.G.UI.GetLogUI(),
-			IdentifyUI: &FakeIdentifyUI{},
-		}),
-		NewResolveThenIdentify2(tcY.G, &keybase1.Identify2Arg{
-			UserAssertion:    fuX.Username,
-			ForceDisplay:     true,
-			IdentifyBehavior: keybase1.TLFIdentifyBehavior_CLI,
-		})),
+	require.NoError(
+		t, RunEngine2(
+			NewMetaContextForTest(tcY).WithUIs(libkb.UIs{
+				LogUI:      tcY.G.UI.GetLogUI(),
+				IdentifyUI: &FakeIdentifyUI{},
+			}),
+			NewResolveThenIdentify2(tcY.G, &keybase1.Identify2Arg{
+				UserAssertion:    fuX.Username,
+				ForceDisplay:     true,
+				IdentifyBehavior: keybase1.TLFIdentifyBehavior_CLI,
+			}),
+		),
 	)
 	require.False(t, idUI.BrokenTracking)
 	require.Empty(t, idUI.DisplayKeyDiffs)
@@ -1270,7 +1323,8 @@ func TestTrackResetReuseKey(t *testing.T) {
 	// Alice logs in (and provisions) again
 	loginEng := NewLogin(tcX.G, keybase1.DeviceTypeV2_DESKTOP, fuX.Username, keybase1.ClientType_CLI)
 	loginEng.naclSigningKeyPair = pairX
-	require.NoError(t,
+	require.NoError(
+		t,
 		RunEngine2(
 			NewMetaContextForTest(tcX).WithUIs(libkb.UIs{
 				ProvisionUI: newTestProvisionUI(),
@@ -1312,22 +1366,26 @@ func TestTrackResetReuseKey(t *testing.T) {
 
 	// Which should fix the identification
 	idUI = &FakeIdentifyUI{}
-	require.NoError(t, RunEngine2(
-		NewMetaContextForTest(tcY).WithUIs(libkb.UIs{
-			LogUI:      tcY.G.UI.GetLogUI(),
-			IdentifyUI: idUI,
-		}),
-		NewResolveThenIdentify2(tcY.G, &keybase1.Identify2Arg{
-			UserAssertion:    fuX.Username,
-			ForceDisplay:     true,
-			IdentifyBehavior: keybase1.TLFIdentifyBehavior_CLI,
-		})),
+	require.NoError(
+		t, RunEngine2(
+			NewMetaContextForTest(tcY).WithUIs(libkb.UIs{
+				LogUI:      tcY.G.UI.GetLogUI(),
+				IdentifyUI: idUI,
+			}),
+			NewResolveThenIdentify2(tcY.G, &keybase1.Identify2Arg{
+				UserAssertion:    fuX.Username,
+				ForceDisplay:     true,
+				IdentifyBehavior: keybase1.TLFIdentifyBehavior_CLI,
+			}),
+		),
 	)
 	require.False(t, idUI.BrokenTracking)
 	require.Empty(t, idUI.DisplayKeyDiffs)
 }
 
-var aliceUID = keybase1.UID("295a7eea607af32040647123732bc819")
-var tracyUID = keybase1.UID("eb72f49f2dde6429e5d78003dae0c919")
-var trackingUID = keybase1.UID("92b3b3dbe457059f28c9f74e8e6b9419")
-var trackingServerReply = `{"seqno":3,"payload_hash":"c3ffe390e9c9dabdd5f7253b81e0a38fad2c17589a9c7fcd967958418055140a","sig_id":"4ec10665ad163d0aa419ce4eab8ff661429c9a3a32cd4978fdb8c6b5c6d047620f","sig_id_short":"TsEGZa0WPQqkGc5Oq4_2YUKcmjoyzUl4_bjG","kid":"0101f3b2f0e8c9d1f099db64cac366c6a9c1da63da624127b2f66a056acfa36834fe0a","sig":"-----BEGIN PGP MESSAGE-----\nVersion: Keybase OpenPGP v2.0.49\nComment: https://keybase.io/crypto\n\n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\nHzt0Q3P9OxPLmqeOPX3RVSPpG2YdtWQ=\n=h5Bq\n-----END PGP MESSAGE-----","payload_json":"{\"body\":{\"client\":{\"name\":\"keybase.io web\"},\"key\":{\"eldest_kid\":\"0101f3b2f0e8c9d1f099db64cac366c6a9c1da63da624127b2f66a056acfa36834fe0a\",\"fingerprint\":\"a889587e1ce7bd7edbe3eeb8ef8fd8f7b31c4a2f\",\"host\":\"keybase.io\",\"key_id\":\"ef8fd8f7b31c4a2f\",\"kid\":\"0101f3b2f0e8c9d1f099db64cac366c6a9c1da63da624127b2f66a056acfa36834fe0a\",\"uid\":\"92b3b3dbe457059f28c9f74e8e6b9419\",\"username\":\"tracy_friend1\"},\"track\":{\"basics\":{\"id_version\":14,\"last_id_change\":1449514728,\"username\":\"t_tracy\"},\"id\":\"eb72f49f2dde6429e5d78003dae0c919\",\"key\":{\"key_fingerprint\":\"\",\"kid\":\"01209bd2e255235529cf45877767ad8687d85200518adc74595d058750e2f7ab7b000a\"},\"pgp_keys\":[{\"key_fingerprint\":\"4ff50d580914427227bb14c821029e2c7cf0d488\",\"kid\":\"0101ee69b1566428109eb7548d9a9d7267d48933daa4614fa743cedbeac618ab66dd0a\"}],\"remote_proofs\":[{\"ctime\":1449512840,\"curr\":\"f09c84ccadf8817aea944526638e9a4c034c9200dd68b5a3292c7f69d980390d\",\"etime\":1954088840,\"prev\":\"909f6aa65b050ec5582515cad43aeb1f9279ee21db955cff309abe4692b7e11a\",\"remote_key_proof\":{\"check_data_json\":{\"name\":\"twitter\",\"username\":\"tacovontaco\"},\"proof_type\":2,\"state\":1},\"seqno\":5,\"sig_id\":\"67570e971c5b8881cf07179d1872a83042be4285ba897a8f12dc3e419cade80b0f\",\"sig_type\":2},{\"ctime\":1449512883,\"curr\":\"8ad8ce94c9d23d260750294905877ef92adf4e7736198909fcbe7e27d6dfb463\",\"etime\":1954088883,\"prev\":\"f09c84ccadf8817aea944526638e9a4c034c9200dd68b5a3292c7f69d980390d\",\"remote_key_proof\":{\"check_data_json\":{\"name\":\"github\",\"username\":\"tacoplusplus\"},\"proof_type\":3,\"state\":1},\"seqno\":6,\"sig_id\":\"bfe76a25acf046f7477350291cdd178e1f0026a49f85733d97c122ba4e4a000f0f\",\"sig_type\":2},{\"ctime\":1449512914,\"curr\":\"ea5bee1701e7ec7c8dfd71421bd2ab6fb0fa2af473412c664fa49d35c34078ea\",\"etime\":1954088914,\"prev\":\"8ad8ce94c9d23d260750294905877ef92adf4e7736198909fcbe7e27d6dfb463\",\"remote_key_proof\":{\"check_data_json\":{\"name\":\"rooter\",\"username\":\"t_tracy\"},\"proof_type\":100001,\"state\":1},\"seqno\":7,\"sig_id\":\"0c467de321795b777aa10916eb9aa8153bffa5163b5079600db7d50ca00a77410f\",\"sig_type\":2},{\"ctime\":1449514687,\"curr\":\"bfd3462a2193fa7946f7f31e5074cfc4ac95400680273deb520078a6a4f5cbf5\",\"etime\":1954090687,\"prev\":\"9ae84f56c0c62dc91206363b9f5609245f94199d58a4a3c0bee7d4bb91c47de7\",\"remote_key_proof\":{\"check_data_json\":{\"hostname\":\"keybase.io\",\"protocol\":\"https:\"},\"proof_type\":1000,\"state\":1},\"seqno\":9,\"sig_id\":\"92eeea3db99cb519409765c17ea32a82ce8b86bbacd8f366e8e8930f1faea20b0f\",\"sig_type\":2}],\"seq_tail\":{\"payload_hash\":\"bfd3462a2193fa7946f7f31e5074cfc4ac95400680273deb520078a6a4f5cbf5\",\"seqno\":9,\"sig_id\":\"92eeea3db99cb519409765c17ea32a82ce8b86bbacd8f366e8e8930f1faea20b0f\"}},\"type\":\"track\",\"version\":1},\"ctime\":1449514785,\"expire_in\":157680000,\"prev\":\"a4f76660341a087d69238f5a25e98d8b3d038224457107bad91ffdfbd82d84d9\",\"seqno\":3,\"tag\":\"signature\"}","sig_type":3,"ctime":1449514785,"etime":1607194785,"rtime":null,"sig_status":0,"prev":"a4f76660341a087d69238f5a25e98d8b3d038224457107bad91ffdfbd82d84d9","proof_id":null,"proof_type":null,"proof_text_check":null,"proof_text_full":null,"check_data_json":null,"remote_id":null,"api_url":null,"human_url":null,"proof_state":null,"proof_status":null,"retry_count":null,"hard_fail_count":null,"last_check":null,"last_success":null,"version":null,"fingerprint":"a889587e1ce7bd7edbe3eeb8ef8fd8f7b31c4a2f","sig_version":1}`
+var (
+	aliceUID            = keybase1.UID("295a7eea607af32040647123732bc819")
+	tracyUID            = keybase1.UID("eb72f49f2dde6429e5d78003dae0c919")
+	trackingUID         = keybase1.UID("92b3b3dbe457059f28c9f74e8e6b9419")
+	trackingServerReply = `{"seqno":3,"payload_hash":"c3ffe390e9c9dabdd5f7253b81e0a38fad2c17589a9c7fcd967958418055140a","sig_id":"4ec10665ad163d0aa419ce4eab8ff661429c9a3a32cd4978fdb8c6b5c6d047620f","sig_id_short":"TsEGZa0WPQqkGc5Oq4_2YUKcmjoyzUl4_bjG","kid":"0101f3b2f0e8c9d1f099db64cac366c6a9c1da63da624127b2f66a056acfa36834fe0a","sig":"-----BEGIN PGP MESSAGE-----\nVersion: Keybase OpenPGP v2.0.49\nComment: https://keybase.io/crypto\n\n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\nHzt0Q3P9OxPLmqeOPX3RVSPpG2YdtWQ=\n=h5Bq\n-----END PGP MESSAGE-----","payload_json":"{\"body\":{\"client\":{\"name\":\"keybase.io web\"},\"key\":{\"eldest_kid\":\"0101f3b2f0e8c9d1f099db64cac366c6a9c1da63da624127b2f66a056acfa36834fe0a\",\"fingerprint\":\"a889587e1ce7bd7edbe3eeb8ef8fd8f7b31c4a2f\",\"host\":\"keybase.io\",\"key_id\":\"ef8fd8f7b31c4a2f\",\"kid\":\"0101f3b2f0e8c9d1f099db64cac366c6a9c1da63da624127b2f66a056acfa36834fe0a\",\"uid\":\"92b3b3dbe457059f28c9f74e8e6b9419\",\"username\":\"tracy_friend1\"},\"track\":{\"basics\":{\"id_version\":14,\"last_id_change\":1449514728,\"username\":\"t_tracy\"},\"id\":\"eb72f49f2dde6429e5d78003dae0c919\",\"key\":{\"key_fingerprint\":\"\",\"kid\":\"01209bd2e255235529cf45877767ad8687d85200518adc74595d058750e2f7ab7b000a\"},\"pgp_keys\":[{\"key_fingerprint\":\"4ff50d580914427227bb14c821029e2c7cf0d488\",\"kid\":\"0101ee69b1566428109eb7548d9a9d7267d48933daa4614fa743cedbeac618ab66dd0a\"}],\"remote_proofs\":[{\"ctime\":1449512840,\"curr\":\"f09c84ccadf8817aea944526638e9a4c034c9200dd68b5a3292c7f69d980390d\",\"etime\":1954088840,\"prev\":\"909f6aa65b050ec5582515cad43aeb1f9279ee21db955cff309abe4692b7e11a\",\"remote_key_proof\":{\"check_data_json\":{\"name\":\"twitter\",\"username\":\"tacovontaco\"},\"proof_type\":2,\"state\":1},\"seqno\":5,\"sig_id\":\"67570e971c5b8881cf07179d1872a83042be4285ba897a8f12dc3e419cade80b0f\",\"sig_type\":2},{\"ctime\":1449512883,\"curr\":\"8ad8ce94c9d23d260750294905877ef92adf4e7736198909fcbe7e27d6dfb463\",\"etime\":1954088883,\"prev\":\"f09c84ccadf8817aea944526638e9a4c034c9200dd68b5a3292c7f69d980390d\",\"remote_key_proof\":{\"check_data_json\":{\"name\":\"github\",\"username\":\"tacoplusplus\"},\"proof_type\":3,\"state\":1},\"seqno\":6,\"sig_id\":\"bfe76a25acf046f7477350291cdd178e1f0026a49f85733d97c122ba4e4a000f0f\",\"sig_type\":2},{\"ctime\":1449512914,\"curr\":\"ea5bee1701e7ec7c8dfd71421bd2ab6fb0fa2af473412c664fa49d35c34078ea\",\"etime\":1954088914,\"prev\":\"8ad8ce94c9d23d260750294905877ef92adf4e7736198909fcbe7e27d6dfb463\",\"remote_key_proof\":{\"check_data_json\":{\"name\":\"rooter\",\"username\":\"t_tracy\"},\"proof_type\":100001,\"state\":1},\"seqno\":7,\"sig_id\":\"0c467de321795b777aa10916eb9aa8153bffa5163b5079600db7d50ca00a77410f\",\"sig_type\":2},{\"ctime\":1449514687,\"curr\":\"bfd3462a2193fa7946f7f31e5074cfc4ac95400680273deb520078a6a4f5cbf5\",\"etime\":1954090687,\"prev\":\"9ae84f56c0c62dc91206363b9f5609245f94199d58a4a3c0bee7d4bb91c47de7\",\"remote_key_proof\":{\"check_data_json\":{\"hostname\":\"keybase.io\",\"protocol\":\"https:\"},\"proof_type\":1000,\"state\":1},\"seqno\":9,\"sig_id\":\"92eeea3db99cb519409765c17ea32a82ce8b86bbacd8f366e8e8930f1faea20b0f\",\"sig_type\":2}],\"seq_tail\":{\"payload_hash\":\"bfd3462a2193fa7946f7f31e5074cfc4ac95400680273deb520078a6a4f5cbf5\",\"seqno\":9,\"sig_id\":\"92eeea3db99cb519409765c17ea32a82ce8b86bbacd8f366e8e8930f1faea20b0f\"}},\"type\":\"track\",\"version\":1},\"ctime\":1449514785,\"expire_in\":157680000,\"prev\":\"a4f76660341a087d69238f5a25e98d8b3d038224457107bad91ffdfbd82d84d9\",\"seqno\":3,\"tag\":\"signature\"}","sig_type":3,"ctime":1449514785,"etime":1607194785,"rtime":null,"sig_status":0,"prev":"a4f76660341a087d69238f5a25e98d8b3d038224457107bad91ffdfbd82d84d9","proof_id":null,"proof_type":null,"proof_text_check":null,"proof_text_full":null,"check_data_json":null,"remote_id":null,"api_url":null,"human_url":null,"proof_state":null,"proof_status":null,"retry_count":null,"hard_fail_count":null,"last_check":null,"last_success":null,"version":null,"fingerprint":"a889587e1ce7bd7edbe3eeb8ef8fd8f7b31c4a2f","sig_version":1}` //nolint:gosec // G101: Test data containing mock server response with Twitter OAuth signature, not real credentials
+)

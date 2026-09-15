@@ -14,13 +14,13 @@ import (
 )
 
 func TestDeobfuscate(t *testing.T) {
-	os.Setenv("KEYBASE_TEST_OBFUSCATE_LOGS", "true")
+	require.NoError(t, os.Setenv("KEYBASE_TEST_OBFUSCATE_LOGS", "true"))
 	ctx, _, fs := makeFS(t, "")
 	defer libkbfs.CheckConfigAndShutdown(ctx, t, fs.config)
 
 	t.Log("Check basic obfuscate->deobfuscate path")
 	p := "a/b"
-	err := fs.MkdirAll(p, os.FileMode(0600))
+	err := fs.MkdirAll(p, os.FileMode(0o600))
 	require.NoError(t, err)
 	obsPath := fs.PathForLogging(p)
 	require.NotEqual(t, p, obsPath)
@@ -39,7 +39,8 @@ func TestDeobfuscate(t *testing.T) {
 	file := "a/foo.txt"
 	f, err := fs.Create(file)
 	require.NoError(t, err)
-	f.Close()
+	err = f.Close()
+	require.NoError(t, err)
 	obsPathFile := fs.PathForLogging(file)
 	require.NotEqual(t, p, obsPathFile)
 	res, err = Deobfuscate(ctx, fs, obsPathFile)

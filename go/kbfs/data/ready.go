@@ -6,6 +6,8 @@ package data
 
 import (
 	"context"
+	"fmt"
+	"math"
 
 	"github.com/keybase/client/go/kbfs/kbfsblock"
 	"github.com/keybase/client/go/kbfs/libkey"
@@ -18,7 +20,8 @@ func ReadyBlock(
 	ctx context.Context, bcache BlockCache, rp ReadyProvider,
 	kmd libkey.KeyMetadata, block Block, chargedTo keybase1.UserOrTeamID,
 	bType keybase1.BlockType, hashBehavior BlockCacheHashBehavior) (
-	info BlockInfo, plainSize int, readyBlockData ReadyBlockData, err error) {
+	info BlockInfo, plainSize int, readyBlockData ReadyBlockData, err error,
+) {
 	var ptr BlockPointer
 	directType := DirectBlock
 	if block.IsIndirect() {
@@ -57,9 +60,13 @@ func ReadyBlock(
 		}
 	}
 
+	encodedSize := readyBlockData.GetEncodedSize()
+	if encodedSize < 0 || uint64(encodedSize) > math.MaxUint32 {
+		return BlockInfo{}, 0, ReadyBlockData{}, fmt.Errorf("encoded size %d out of range for uint32", encodedSize)
+	}
 	info = BlockInfo{
 		BlockPointer: ptr,
-		EncodedSize:  uint32(readyBlockData.GetEncodedSize()),
+		EncodedSize:  uint32(encodedSize), // #nosec G115 -- validated range check above
 	}
 	return info, plainSize, readyBlockData, nil
 }

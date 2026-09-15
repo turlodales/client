@@ -6,12 +6,11 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
 	"github.com/keybase/client/go/protocol/keybase1"
-
-	"golang.org/x/net/context"
 
 	"github.com/keybase/client/go/gregor"
 	"github.com/keybase/client/go/libkb"
@@ -33,7 +32,8 @@ func newKBFSFavoritesHandler(g *libkb.GlobalContext) *kbfsFavoritesHandler {
 }
 
 func (r *kbfsFavoritesHandler) Create(ctx context.Context, cli gregor1.IncomingInterface,
-	category string, item gregor.Item) (bool, error) {
+	category string, item gregor.Item,
+) (bool, error) {
 	switch category {
 	case "kbfs.favorites":
 		return true, r.favoritesChanged(ctx, cli, item)
@@ -59,7 +59,8 @@ func (r *kbfsFavoritesHandler) Name() string {
 
 func (r *kbfsFavoritesHandler) favoritesChanged(ctx context.Context,
 	cli gregor1.IncomingInterface,
-	item gregor.Item) error {
+	item gregor.Item,
+) error {
 	r.G().Log.CDebugf(ctx, "kbfsFavoritesHandler: kbfs."+
 		"favorites received")
 
@@ -70,6 +71,6 @@ func (r *kbfsFavoritesHandler) favoritesChanged(ctx context.Context,
 	}
 
 	kbUID := keybase1.UID(item.Metadata().UID().String())
-	r.Contextified.G().NotifyRouter.HandleFavoritesChanged(kbUID)
+	r.G().NotifyRouter.HandleFavoritesChanged(kbUID)
 	return nil
 }

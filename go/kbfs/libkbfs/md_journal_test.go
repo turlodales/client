@@ -5,6 +5,7 @@
 package libkbfs
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -26,7 +27,6 @@ import (
 	"github.com/keybase/client/go/protocol/keybase1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/context"
 )
 
 type singleEncryptionKeyGetter struct {
@@ -34,26 +34,30 @@ type singleEncryptionKeyGetter struct {
 }
 
 func (g singleEncryptionKeyGetter) GetTLFCryptKeyForEncryption(
-	ctx context.Context, kmd libkey.KeyMetadata) (kbfscrypto.TLFCryptKey, error) {
+	ctx context.Context, kmd libkey.KeyMetadata,
+) (kbfscrypto.TLFCryptKey, error) {
 	return g.k, nil
 }
 
 func (g singleEncryptionKeyGetter) GetTLFCryptKeyForMDDecryption(
 	ctx context.Context, kmdToDecrypt, kmdWithKeys libkey.KeyMetadata) (
-	kbfscrypto.TLFCryptKey, error) {
+	kbfscrypto.TLFCryptKey, error,
+) {
 	return g.k, nil
 }
 
 func (g singleEncryptionKeyGetter) GetFirstTLFCryptKey(
 	ctx context.Context, kmd libkey.KeyMetadata) (
-	kbfscrypto.TLFCryptKey, error) {
+	kbfscrypto.TLFCryptKey, error,
+) {
 	return g.k, nil
 }
 
 func setupMDJournalTest(t testing.TB, ver kbfsmd.MetadataVer) (
 	codec kbfscodec.Codec, crypto CryptoCommon, tlfID tlf.ID,
 	signer kbfscrypto.Signer, ekg singleEncryptionKeyGetter,
-	bsplit data.BlockSplitter, tempdir string, j *mdJournal) {
+	bsplit data.BlockSplitter, tempdir string, j *mdJournal,
+) {
 	codec = kbfscodec.NewMsgpack()
 	crypto = MakeCryptoCommon(codec, makeBlockCryptV1())
 
@@ -87,7 +91,7 @@ func setupMDJournalTest(t testing.TB, ver kbfsmd.MetadataVer) (
 	require.NoError(t, err)
 
 	bsplit, err = data.NewBlockSplitterSimpleExact(
-		64*1024, int(64*1024/data.BPSize), 8*1024)
+		64*1024, int(64*1024/data.BPSize), 8*1024) //nolint:gosec // G115: Test config with bounded values
 	require.NoError(t, err)
 
 	return codec, crypto, tlfID, signer, ekg, bsplit, tempdir, j
@@ -100,7 +104,8 @@ func teardownMDJournalTest(t testing.TB, tempdir string) {
 
 func makeMDForTest(t testing.TB, ver kbfsmd.MetadataVer, tlfID tlf.ID,
 	revision kbfsmd.Revision, uid keybase1.UID,
-	signer kbfscrypto.Signer, prevRoot kbfsmd.ID) *RootMetadata {
+	signer kbfscrypto.Signer, prevRoot kbfsmd.ID,
+) *RootMetadata {
 	nug := idutiltest.NormalizedUsernameGetter{
 		uid.AsUserOrTeam(): "fake_username",
 	}
@@ -125,12 +130,14 @@ type constMerkleRootGetter struct{}
 var _ idutil.MerkleRootGetter = constMerkleRootGetter{}
 
 func (cmrg constMerkleRootGetter) GetCurrentMerkleRoot(
-	ctx context.Context) (keybase1.MerkleRootV2, time.Time, error) {
+	ctx context.Context,
+) (keybase1.MerkleRootV2, time.Time, error) {
 	return keybase1.MerkleRootV2{}, time.Time{}, nil
 }
 
 func (cmrg constMerkleRootGetter) VerifyMerkleRoot(
-	_ context.Context, _ keybase1.MerkleRootV2, _ keybase1.KBFSRoot) error {
+	_ context.Context, _ keybase1.MerkleRootV2, _ keybase1.KBFSRoot,
+) error {
 	return nil
 }
 
@@ -138,8 +145,9 @@ func putMDRangeHelper(t testing.TB, ver kbfsmd.MetadataVer, tlfID tlf.ID,
 	signer kbfscrypto.Signer, firstRevision kbfsmd.Revision,
 	firstPrevRoot kbfsmd.ID, mdCount int, uid keybase1.UID,
 	putMD func(context.Context, *RootMetadata) (kbfsmd.ID, error)) (
-	[]*RootMetadata, kbfsmd.ID) {
-	require.True(t, mdCount > 0)
+	[]*RootMetadata, kbfsmd.ID,
+) {
+	require.Positive(t, mdCount)
 	ctx := context.Background()
 	var mds []*RootMetadata
 	md := makeMDForTest(
@@ -164,7 +172,8 @@ func putMDRangeHelper(t testing.TB, ver kbfsmd.MetadataVer, tlfID tlf.ID,
 func putMDRange(t testing.TB, ver kbfsmd.MetadataVer, tlfID tlf.ID,
 	signer kbfscrypto.Signer, ekg encryptionKeyGetter,
 	bsplit data.BlockSplitter, firstRevision kbfsmd.Revision,
-	firstPrevRoot kbfsmd.ID, mdCount int, j *mdJournal) ([]*RootMetadata, kbfsmd.ID) {
+	firstPrevRoot kbfsmd.ID, mdCount int, j *mdJournal,
+) ([]*RootMetadata, kbfsmd.ID) {
 	return putMDRangeHelper(t, ver, tlfID, signer, firstRevision,
 		firstPrevRoot, mdCount, j.uid,
 		func(ctx context.Context, md *RootMetadata) (kbfsmd.ID, error) {
@@ -177,7 +186,8 @@ func checkBRMD(t *testing.T, uid keybase1.UID, key kbfscrypto.VerifyingKey,
 	codec kbfscodec.Codec, brmd kbfsmd.RootMetadata,
 	extra kbfsmd.ExtraMetadata, expectedRevision kbfsmd.Revision,
 	expectedPrevRoot kbfsmd.ID, expectedMergeStatus kbfsmd.MergeStatus,
-	expectedBranchID kbfsmd.BranchID) {
+	expectedBranchID kbfsmd.BranchID,
+) {
 	require.Equal(t, expectedRevision, brmd.RevisionNumber())
 	require.Equal(t, expectedPrevRoot, brmd.GetPrevRoot())
 	require.Equal(t, expectedMergeStatus, brmd.MergedStatus())
@@ -196,7 +206,8 @@ func checkBRMD(t *testing.T, uid keybase1.UID, key kbfscrypto.VerifyingKey,
 func checkIBRMDRange(t *testing.T, uid keybase1.UID,
 	key kbfscrypto.VerifyingKey, codec kbfscodec.Codec,
 	ibrmds []ImmutableBareRootMetadata, firstRevision kbfsmd.Revision,
-	firstPrevRoot kbfsmd.ID, mStatus kbfsmd.MergeStatus, bid kbfsmd.BranchID) {
+	firstPrevRoot kbfsmd.ID, mStatus kbfsmd.MergeStatus, bid kbfsmd.BranchID,
+) {
 	checkBRMD(t, uid, key, codec, ibrmds[0], ibrmds[0].extra,
 		firstRevision, firstPrevRoot, mStatus, bid)
 
@@ -216,9 +227,9 @@ type noLogTB struct {
 	testing.TB
 }
 
-func (tb noLogTB) Log(args ...interface{}) {}
+func (tb noLogTB) Log(args ...any) {}
 
-func (tb noLogTB) Logf(format string, args ...interface{}) {}
+func (tb noLogTB) Logf(format string, args ...any) {}
 
 func BenchmarkMDJournalBasic(b *testing.B) {
 	runBenchmarkOverMetadataVers(b, benchmarkMDJournalBasic)
@@ -227,8 +238,7 @@ func BenchmarkMDJournalBasic(b *testing.B) {
 func benchmarkMDJournalBasicBody(b *testing.B, ver kbfsmd.MetadataVer, mdCount int) {
 	b.StopTimer()
 
-	_, _, id, signer, ekg, bsplit, tempdir, j :=
-		setupMDJournalTest(noLogTB{b}, ver)
+	_, _, id, signer, ekg, bsplit, tempdir, j := setupMDJournalTest(noLogTB{b}, ver)
 	defer teardownMDJournalTest(b, tempdir)
 
 	putMDRangeHelper(b, ver, id, signer, kbfsmd.Revision(10),
@@ -243,7 +253,6 @@ func benchmarkMDJournalBasicBody(b *testing.B, ver kbfsmd.MetadataVer, mdCount i
 
 func benchmarkMDJournalBasic(b *testing.B, ver kbfsmd.MetadataVer) {
 	for _, mdCount := range []int{1, 10, 100, 1000, 10000} {
-		mdCount := mdCount // capture range variable.
 		name := fmt.Sprintf("mdCount=%d", mdCount)
 		b.Run(name, func(b *testing.B) {
 			b.StopTimer()
@@ -256,8 +265,7 @@ func benchmarkMDJournalBasic(b *testing.B, ver kbfsmd.MetadataVer) {
 }
 
 func testMDJournalBasic(t *testing.T, ver kbfsmd.MetadataVer) {
-	codec, _, id, signer, ekg, bsplit, tempdir, j :=
-		setupMDJournalTest(t, ver)
+	codec, _, id, signer, ekg, bsplit, tempdir, j := setupMDJournalTest(t, ver)
 	defer teardownMDJournalTest(t, tempdir)
 
 	// Should start off as empty.
@@ -276,14 +284,14 @@ func testMDJournalBasic(t *testing.T, ver kbfsmd.MetadataVer) {
 	mds, _ := putMDRange(t, ver, id, signer, ekg, bsplit,
 		firstRevision, firstPrevRoot, mdCount, j)
 
-	require.Equal(t, mdCount, len(mds))
-	require.Equal(t, uint64(mdCount), j.length())
+	require.Len(t, mds, mdCount)
+	require.Equal(t, uint64(mdCount), j.length()) //nolint:gosec // G115: Test data with bounded values
 
 	// Should now be non-empty.
 	ibrmds, err := j.getRange(
 		ctx, kbfsmd.NullBranchID, 1, firstRevision+kbfsmd.Revision(2*mdCount))
 	require.NoError(t, err)
-	require.Equal(t, mdCount, len(ibrmds))
+	require.Len(t, ibrmds, mdCount)
 
 	checkIBRMDRange(t, j.uid, j.key, codec,
 		ibrmds, firstRevision, firstPrevRoot, kbfsmd.Merged, kbfsmd.NullBranchID)
@@ -292,7 +300,7 @@ func testMDJournalBasic(t *testing.T, ver kbfsmd.MetadataVer) {
 	require.NoError(t, err)
 	require.Equal(t, ibrmds[len(ibrmds)-1], head)
 
-	for i := 0; i < mdCount; i++ {
+	for i := range mdCount {
 		require.Equal(t, mds[i].bareMd, ibrmds[i].RootMetadata, "i=%d", i)
 		require.Equal(t, mds[i].extra, ibrmds[i].extra, "i=%d", i)
 	}
@@ -572,7 +580,8 @@ func testMDJournalGCd(t *testing.T, j *mdJournal) {
 }
 
 func flushAllMDs(
-	ctx context.Context, t *testing.T, signer kbfscrypto.Signer, j *mdJournal) {
+	ctx context.Context, t *testing.T, signer kbfscrypto.Signer, j *mdJournal,
+) {
 	end, err := j.end()
 	require.NoError(t, err)
 	for {
@@ -624,7 +633,7 @@ func testMDJournalFlushAll(t *testing.T, ver kbfsmd.MetadataVer) {
 	names := listDir(t, j.dir)
 	require.Equal(t, getMDJournalNames(ver), names)
 
-	err := ioutil.WriteFile(filepath.Join(j.dir, "extra_file"), nil, 0600)
+	err := ioutil.WriteFile(filepath.Join(j.dir, "extra_file"), nil, 0o600)
 	require.NoError(t, err)
 
 	flushAllMDs(ctx, t, signer, j)
@@ -635,8 +644,7 @@ func testMDJournalFlushAll(t *testing.T, ver kbfsmd.MetadataVer) {
 }
 
 func testMDJournalBranchConversion(t *testing.T, ver kbfsmd.MetadataVer) {
-	codec, _, id, signer, ekg, bsplit, tempdir, j :=
-		setupMDJournalTest(t, ver)
+	codec, _, id, signer, ekg, bsplit, tempdir, j := setupMDJournalTest(t, ver)
 	defer teardownMDJournalTest(t, tempdir)
 
 	firstRevision := kbfsmd.Revision(10)
@@ -671,7 +679,7 @@ func testMDJournalBranchConversion(t *testing.T, ver kbfsmd.MetadataVer) {
 	ibrmds, err := j.getRange(
 		ctx, bid, 1, firstRevision+kbfsmd.Revision(2*mdCount))
 	require.NoError(t, err)
-	require.Equal(t, mdCount, len(ibrmds))
+	require.Len(t, ibrmds, mdCount)
 
 	checkIBRMDRange(t, j.uid, j.key, codec,
 		ibrmds, firstRevision, firstPrevRoot, kbfsmd.Unmerged, ibrmds[0].BID())
@@ -688,14 +696,13 @@ func testMDJournalBranchConversion(t *testing.T, ver kbfsmd.MetadataVer) {
 	newlyCachedMd, err := mdcache.Get(id, firstRevision, bid)
 	require.NoError(t, err)
 	require.Equal(t, newlyCachedMd.BID(), bid)
-	require.Equal(t, newlyCachedMd.MergedStatus(), kbfsmd.Unmerged)
+	require.Equal(t, kbfsmd.Unmerged, newlyCachedMd.MergedStatus())
 	_, err = mdcache.Get(id, firstRevision, kbfsmd.NullBranchID)
 	require.Error(t, err)
 }
 
 func testMDJournalResolveAndClear(t *testing.T, ver kbfsmd.MetadataVer, bid kbfsmd.BranchID) {
-	_, _, id, signer, ekg, bsplit, tempdir, j :=
-		setupMDJournalTest(t, ver)
+	_, _, id, signer, ekg, bsplit, tempdir, j := setupMDJournalTest(t, ver)
 	defer teardownMDJournalTest(t, tempdir)
 
 	firstRevision := kbfsmd.Revision(10)
@@ -747,7 +754,7 @@ func testMDJournalResolveAndClear(t *testing.T, ver kbfsmd.MetadataVer, bid kbfs
 	_, resolveJournalID2, err := j.resolveAndClear(
 		ctx, signer, ekg, bsplit, mdcache, bid, md)
 	require.NoError(t, err)
-	require.Equal(t, uint64(numExpectedMDs), j.length())
+	require.Equal(t, uint64(numExpectedMDs), j.length()) //nolint:gosec // G115: Test data
 	head, err = j.getHead(ctx, kbfsmd.NullBranchID)
 	require.NoError(t, err)
 	require.Equal(t, md.Revision(), head.RevisionNumber())
@@ -774,7 +781,8 @@ type limitedCryptoSigner struct {
 }
 
 func (s *limitedCryptoSigner) Sign(ctx context.Context, msg []byte) (
-	kbfscrypto.SignatureInfo, error) {
+	kbfscrypto.SignatureInfo, error,
+) {
 	if s.remaining <= 0 {
 		return kbfscrypto.SignatureInfo{}, errors.New("No more Sign calls left")
 	}
@@ -787,8 +795,7 @@ func TestMDJournalBranchConversionAtomic(t *testing.T) {
 	// version doesn't actually do any signing.
 	ver := kbfsmd.InitialExtraMetadataVer
 
-	codec, _, id, signer, ekg, bsplit, tempdir, j :=
-		setupMDJournalTest(t, ver)
+	codec, _, id, signer, ekg, bsplit, tempdir, j := setupMDJournalTest(t, ver)
 	defer teardownMDJournalTest(t, tempdir)
 
 	firstRevision := kbfsmd.Revision(10)
@@ -804,7 +811,7 @@ func TestMDJournalBranchConversionAtomic(t *testing.T) {
 	err := j.convertToBranch(
 		ctx, kbfsmd.PendingLocalSquashBranchID, &limitedSigner,
 		kbfscodec.NewMsgpack(), id, NewMDCacheStandard(10))
-	require.NotNil(t, err)
+	require.Error(t, err)
 
 	// All entries should remain unchanged, since the conversion
 	// encountered an error.
@@ -812,7 +819,7 @@ func TestMDJournalBranchConversionAtomic(t *testing.T) {
 	ibrmds, err := j.getRange(
 		ctx, kbfsmd.NullBranchID, 1, firstRevision+kbfsmd.Revision(2*mdCount))
 	require.NoError(t, err)
-	require.Equal(t, mdCount, len(ibrmds))
+	require.Len(t, ibrmds, mdCount)
 
 	checkIBRMDRange(t, j.uid, j.key, codec,
 		ibrmds, firstRevision, firstPrevRoot, kbfsmd.Merged, kbfsmd.NullBranchID)
@@ -842,7 +849,7 @@ func testMDJournalBranchConversionPreservesUnknownFields(t *testing.T, ver kbfsm
 	mdCount := 5
 	prevRoot := kbfsmd.FakeID(1)
 	ctx := context.Background()
-	for i := 0; i < mdCount; i++ {
+	for i := range mdCount {
 		revision := firstRevision + kbfsmd.Revision(i)
 		md := makeMDForTest(t, ver, id, revision, j.uid, signer, prevRoot)
 		mdID, _, err := j.put(ctx, signer, ekg, bsplit, md, false)
@@ -1000,7 +1007,7 @@ func testMDJournalClearPendingWithMaster(t *testing.T, ver kbfsmd.MetadataVer) {
 	require.NoError(t, err)
 	require.Equal(t, kbfsmd.NullBranchID, j.branchID)
 
-	require.Equal(t, uint64(mdCount), j.length())
+	require.Equal(t, uint64(mdCount), j.length()) //nolint:gosec // G115: Test data with bounded values
 
 	head, err := j.getHead(ctx, bid)
 	require.NoError(t, err)
@@ -1034,12 +1041,12 @@ func testMDJournalRestart(t *testing.T, ver kbfsmd.MetadataVer) {
 		j.overrideTlfID)
 	require.NoError(t, err)
 
-	require.Equal(t, uint64(mdCount), j.length())
+	require.Equal(t, uint64(mdCount), j.length()) //nolint:gosec // G115: Test data with bounded values
 
 	ibrmds, err := j.getRange(
 		ctx, kbfsmd.NullBranchID, 1, firstRevision+kbfsmd.Revision(2*mdCount))
 	require.NoError(t, err)
-	require.Equal(t, mdCount, len(ibrmds))
+	require.Len(t, ibrmds, mdCount)
 
 	checkIBRMDRange(t, j.uid, j.key, codec,
 		ibrmds, firstRevision, firstPrevRoot, kbfsmd.Merged, kbfsmd.NullBranchID)
@@ -1048,8 +1055,7 @@ func testMDJournalRestart(t *testing.T, ver kbfsmd.MetadataVer) {
 }
 
 func testMDJournalRestartAfterBranchConversion(t *testing.T, ver kbfsmd.MetadataVer) {
-	codec, crypto, id, signer, ekg, bsplit, tempdir, j :=
-		setupMDJournalTest(t, ver)
+	codec, crypto, id, signer, ekg, bsplit, tempdir, j := setupMDJournalTest(t, ver)
 	defer teardownMDJournalTest(t, tempdir)
 
 	// Push some new metadata blocks.
@@ -1077,12 +1083,12 @@ func testMDJournalRestartAfterBranchConversion(t *testing.T, ver kbfsmd.Metadata
 		j.overrideTlfID)
 	require.NoError(t, err)
 
-	require.Equal(t, uint64(mdCount), j.length())
+	require.Equal(t, uint64(mdCount), j.length()) //nolint:gosec // G115: Test data with bounded values
 
 	ibrmds, err := j.getRange(
 		ctx, bid, 1, firstRevision+kbfsmd.Revision(2*mdCount))
 	require.NoError(t, err)
-	require.Equal(t, mdCount, len(ibrmds))
+	require.Len(t, ibrmds, mdCount)
 
 	checkIBRMDRange(t, j.uid, j.key, codec,
 		ibrmds, firstRevision, firstPrevRoot, kbfsmd.Unmerged, ibrmds[0].BID())

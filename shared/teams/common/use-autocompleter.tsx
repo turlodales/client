@@ -1,6 +1,5 @@
 import * as React from 'react'
 import * as Kb from '@/common-adapters'
-import * as Container from '@/util/container'
 
 const positionFallbacks = ['bottom center'] as const
 
@@ -9,27 +8,27 @@ function useAutocompleter<U>(
   onSelect: (value: U) => void,
   filter: string
 ) {
+  const styles = useStyles()
   const [selected, setSelected] = React.useState(0)
   const filterLCase = filter.trim().toLowerCase()
-  const prevFilterLCase = Container.usePrevious(filterLCase)
+  const prevFilterLCaseRef = React.useRef(filterLCase)
   React.useEffect(() => {
-    if (prevFilterLCase !== filterLCase) {
+    if (prevFilterLCaseRef.current !== filterLCase) {
       setSelected(0)
     }
-  }, [setSelected, prevFilterLCase, filterLCase])
-  const itemsFiltered = React.useMemo(() => {
-    let itemsFiltered = filterLCase
-      ? items.filter(item => item.label.toLowerCase().includes(filterLCase))
-      : items
-    itemsFiltered = itemsFiltered.slice(0, 5)
-    return itemsFiltered
-  }, [items, filterLCase])
+  }, [setSelected, filterLCase])
+  React.useEffect(() => {
+    prevFilterLCaseRef.current = filterLCase
+  }, [filterLCase])
+  const itemsFiltered = (filterLCase
+    ? items.filter(item => item.label.toLowerCase().includes(filterLCase))
+    : items
+  ).slice(0, 5)
 
-  const makePopup = React.useCallback(
-    (p: Kb.Popup2Parms) => {
+  const makePopup = (p: Kb.Popup2Parms) => {
       const {attachTo, hidePopup} = p
       return (
-        <Kb.Overlay
+        <Kb.Popup
           attachTo={attachTo}
           onHidden={hidePopup}
           matchDimension={true}
@@ -41,31 +40,24 @@ function useAutocompleter<U>(
               key={item.label}
               onMouseDown={() => onSelect(item.value)}
               onMouseOver={() => setSelected(idx)}
-              style={styles.optionOuter}
+              direction="horizontal"
+              fullWidth={true}
+              style={Kb.Styles.collapseStyles([styles.optionOuter, styles.option, selected === idx && styles.optionSelected])}
             >
-              <Kb.Box2
-                direction="horizontal"
-                fullWidth={true}
-                style={Kb.Styles.collapseStyles([styles.option, selected === idx && styles.optionSelected])}
-              >
-                <Kb.Text type="BodySemibold" lineClamp={1}>
-                  {item.label}
-                </Kb.Text>
-              </Kb.Box2>
+              <Kb.Text type="BodySemibold" lineClamp={1}>
+                {item.label}
+              </Kb.Text>
             </Kb.ClickableBox>
           ))}
-        </Kb.Overlay>
+        </Kb.Popup>
       )
-    },
-    [onSelect, selected, itemsFiltered]
-  )
+    }
 
   const {popup, popupAnchor, showPopup, hidePopup} = Kb.usePopup2(makePopup)
 
   const numItems = itemsFiltered.length
   const selectedItem = itemsFiltered[selected]
-  const onKeyDown = React.useCallback(
-    (evt: {key: string}) => {
+  const onKeyDown = (evt: {key: string}) => {
       let diff = 0
       switch (evt.key) {
         case 'ArrowDown':
@@ -76,7 +68,9 @@ function useAutocompleter<U>(
           break
         case 'Enter':
           setSelected(0)
-          selectedItem?.value && onSelect(selectedItem.value)
+          if (selectedItem?.value) {
+            onSelect(selectedItem.value)
+          }
           return
       }
       let newSelected = selected + diff
@@ -88,18 +82,16 @@ function useAutocompleter<U>(
       if (newSelected !== selected) {
         setSelected(newSelected)
       }
-    },
-    [selected, setSelected, numItems, onSelect, selectedItem]
-  )
+    }
 
   return {hidePopup, onKeyDown, popup, popupAnchor, showPopup}
 }
 
-const styles = Kb.Styles.styleSheetCreate(() => ({
-  option: {...Kb.Styles.padding(4, 10, 2), backgroundColor: Kb.Styles.globalColors.white},
-  optionOuter: {backgroundColor: Kb.Styles.globalColors.white}, // because blueLighter2 is transparent in dark mode
+const useStyles = Kb.Styles.createStyleHook(theme => ({
+  option: {...Kb.Styles.padding(4, 10, 2), backgroundColor: theme.white},
+  optionOuter: {backgroundColor: theme.white}, // because blueLighter2 is transparent in dark mode
   optionSelected: {
-    backgroundColor: Kb.Styles.globalColors.blueLighter2,
+    backgroundColor: theme.blueLighter2,
   },
 }))
 

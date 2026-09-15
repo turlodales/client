@@ -2,6 +2,8 @@ package attachments
 
 import (
 	"bytes"
+	"context"
+	"crypto/ed25519"
 	"crypto/hmac"
 	"crypto/sha256"
 	"errors"
@@ -17,7 +19,6 @@ import (
 	"github.com/keybase/client/go/chat/types"
 	"github.com/keybase/client/go/kbcrypto"
 	"github.com/keybase/client/go/libkb"
-	"github.com/keybase/go-crypto/ed25519"
 	"github.com/keybase/go-framed-msgpack-rpc/rpc"
 
 	lru "github.com/hashicorp/golang-lru"
@@ -26,7 +27,6 @@ import (
 	"github.com/keybase/client/go/chat/utils"
 	"github.com/keybase/client/go/protocol/chat1"
 	"github.com/keybase/client/go/protocol/gregor1"
-	"golang.org/x/net/context"
 )
 
 type ReadResetter interface {
@@ -144,11 +144,11 @@ func (a *S3Store) UploadAsset(ctx context.Context, task *UploadTask, encryptedOu
 
 	// encrypt the stream
 	enc := NewSignEncrypter()
-	len := enc.EncryptedLen(task.FileSize)
+	size := enc.EncryptedLen(task.FileSize)
 
 	// check for previous interrupted upload attempt
 	var previous *AttachmentInfo
-	resumable := len > minMultiSize // can only resume multi uploads
+	resumable := size > minMultiSize // can only resume multi uploads
 	if resumable {
 		previous = a.previousUpload(ctx, task)
 	}
@@ -156,7 +156,7 @@ func (a *S3Store) UploadAsset(ctx context.Context, task *UploadTask, encryptedOu
 	res, err = a.uploadAsset(ctx, task, enc, previous, resumable, encryptedOut)
 
 	// if the upload is aborted, reset the stream and start over to get new keys
-	if err == ErrAbortOnPartMismatch && previous != nil {
+	if errors.Is(err, ErrAbortOnPartMismatch) && previous != nil {
 		a.Debug(ctx, "UploadAsset: resume call aborted, resetting stream and starting from scratch")
 		a.aborts++
 		err := task.Plaintext.Reset()
@@ -171,7 +171,8 @@ func (a *S3Store) UploadAsset(ctx context.Context, task *UploadTask, encryptedOu
 }
 
 func (a *S3Store) uploadAsset(ctx context.Context, task *UploadTask, enc *SignEncrypter,
-	previous *AttachmentInfo, resumable bool, encryptedOut io.Writer) (asset chat1.Asset, err error) {
+	previous *AttachmentInfo, resumable bool, encryptedOut io.Writer,
+) (asset chat1.Asset, err error) {
 	defer a.Trace(ctx, &err, "uploadAsset")()
 	var encReader io.Reader
 	var ptHash hash.Hash
@@ -210,7 +211,7 @@ func (a *S3Store) uploadAsset(ctx context.Context, task *UploadTask, enc *SignEn
 	defer func() { _ = record.RecordAndFinish(ctx, length) }()
 	upRes, err := a.PutS3(ctx, tee, length, task, previous)
 	if err != nil {
-		if err == ErrAbortOnPartMismatch && previous != nil {
+		if errors.Is(err, ErrAbortOnPartMismatch) && previous != nil {
 			// erase information about previous upload attempt
 			a.finishUpload(ctx, task)
 		}
@@ -250,13 +251,15 @@ func (a *S3Store) getAssetBucket(asset chat1.Asset, params chat1.S3Params, signe
 }
 
 func (a *S3Store) GetAssetReader(ctx context.Context, params chat1.S3Params, asset chat1.Asset,
-	signer s3.Signer) (io.ReadCloser, error) {
+	signer s3.Signer,
+) (io.ReadCloser, error) {
 	b := a.getAssetBucket(asset, params, signer)
 	return b.GetReader(ctx, asset.Path)
 }
 
 func (a *S3Store) DecryptAsset(ctx context.Context, w io.Writer, body io.Reader, asset chat1.Asset,
-	progressReporter types.ProgressReporter) error {
+	progressReporter types.ProgressReporter,
+) error {
 	// compute hash
 	hash := sha256.New()
 	verify := io.TeeReader(body, hash)
@@ -300,7 +303,8 @@ func (a *S3Store) DecryptAsset(ctx context.Context, w io.Writer, body io.Reader,
 
 // DownloadAsset gets an object from S3 as described in asset.
 func (a *S3Store) DownloadAsset(ctx context.Context, params chat1.S3Params, asset chat1.Asset,
-	w io.Writer, signer s3.Signer, progress types.ProgressReporter) error {
+	w io.Writer, signer s3.Signer, progress types.ProgressReporter,
+) error {
 	if asset.Key == nil || asset.VerifyKey == nil || asset.EncHash == nil {
 		return fmt.Errorf("unencrypted attachments not supported: asset: %#v", asset)
 	}
@@ -339,30 +343,51 @@ func (s *s3Seeker) Read(b []byte) (n int, err error) {
 	if s.offset >= s.asset.Size {
 		return 0, io.EOF
 	}
-	rc, err := s.bucket.GetReaderWithRange(s.ctx, s.asset.Path, s.offset, s.offset+int64(len(b)))
+	if len(b) == 0 {
+		return 0, nil
+	}
+	end := s.offset + int64(len(b))
+	if end < s.offset {
+		return 0, errors.New("attachment read size overflow")
+	}
+	if end > s.asset.Size {
+		end = s.asset.Size
+	}
+	rc, err := s.bucket.GetReaderWithRange(s.ctx, s.asset.Path, s.offset, end)
 	if err != nil {
 		return 0, err
 	}
 	defer rc.Close()
 	var buf bytes.Buffer
-	if _, err := io.Copy(&buf, rc); err != nil {
+	if _, err := io.Copy(&buf, io.LimitReader(rc, end-s.offset)); err != nil {
 		return 0, err
 	}
-	copy(b, buf.Bytes())
-	return len(b), nil
+	n = copy(b, buf.Bytes())
+	s.offset += int64(n)
+	if n == 0 {
+		return 0, io.EOF
+	}
+	return n, nil
 }
 
 func (s *s3Seeker) Seek(offset int64, whence int) (res int64, err error) {
 	defer s.Trace(s.ctx, &err, "Seek(%v,%v)", s.offset, whence)()
+	var next int64
 	switch whence {
 	case io.SeekStart:
-		s.offset = offset
+		next = offset
 	case io.SeekCurrent:
-		s.offset += offset
+		next = s.offset + offset
 	case io.SeekEnd:
-		s.offset = s.asset.Size - offset
+		next = s.asset.Size + offset
+	default:
+		return s.offset, errors.New("invalid seek whence")
 	}
-	return s.offset, nil
+	if next < 0 {
+		return s.offset, errors.New("invalid negative seek offset")
+	}
+	s.offset = next
+	return next, nil
 }
 
 func (a *S3Store) getStreamerCache(asset chat1.Asset) *lru.Cache {
@@ -380,7 +405,8 @@ func (a *S3Store) getStreamerCache(asset chat1.Asset) *lru.Cache {
 }
 
 func (a *S3Store) StreamAsset(ctx context.Context, params chat1.S3Params, asset chat1.Asset,
-	signer s3.Signer) (io.ReadSeeker, error) {
+	signer s3.Signer,
+) (io.ReadSeeker, error) {
 	if asset.Key == nil || asset.VerifyKey == nil || asset.EncHash == nil {
 		return nil, fmt.Errorf("unencrypted attachments not supported: asset: %#v", asset)
 	}
@@ -454,7 +480,6 @@ func (a *S3Store) s3Conn(signer s3.Signer, region s3.Region, accessKey string, s
 }
 
 func (a *S3Store) DeleteAssets(ctx context.Context, params chat1.S3Params, signer s3.Signer, assets []chat1.Asset) error {
-
 	epick := libkb.FirstErrorPicker{}
 	for _, asset := range assets {
 		if err := a.DeleteAsset(ctx, params, signer, asset); err != nil {

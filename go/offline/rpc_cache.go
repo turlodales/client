@@ -1,6 +1,7 @@
 package offline
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -11,7 +12,6 @@ import (
 	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/msgpack"
 	"github.com/keybase/client/go/protocol/keybase1"
-	"golang.org/x/net/context"
 )
 
 type RPCCache struct {
@@ -47,10 +47,10 @@ func NewRPCCache(g *libkb.GlobalContext) *RPCCache {
 type hashStruct struct {
 	UID     keybase1.UID
 	RPCName string
-	Arg     interface{}
+	Arg     any
 }
 
-func hash(rpcName string, uid keybase1.UID, arg interface{}) ([]byte, error) {
+func hash(rpcName string, uid keybase1.UID, arg any) ([]byte, error) {
 	h := sha256.New()
 	raw, err := msgpack.Encode(hashStruct{uid, rpcName, arg})
 	if err != nil {
@@ -63,8 +63,9 @@ func hash(rpcName string, uid keybase1.UID, arg interface{}) ([]byte, error) {
 	return h.Sum(nil), nil
 }
 
-func dbKey(rpcName string, uid keybase1.UID, arg interface{}) (libkb.DbKey,
-	error) {
+func dbKey(rpcName string, uid keybase1.UID, arg any) (libkb.DbKey,
+	error,
+) {
 	raw, err := hash(rpcName, uid, arg)
 	if err != nil {
 		return libkb.DbKey{}, err
@@ -73,7 +74,6 @@ func dbKey(rpcName string, uid keybase1.UID, arg interface{}) (libkb.DbKey,
 		Typ: libkb.DBOfflineRPC,
 		Key: hex.EncodeToString(raw[0:16]),
 	}, nil
-
 }
 
 type Version int
@@ -83,7 +83,7 @@ type Value struct {
 	Data    []byte
 }
 
-func (c *RPCCache) get(mctx libkb.MetaContext, version Version, rpcName string, encrypted bool, arg interface{}, res interface{}) (found bool, err error) {
+func (c *RPCCache) get(mctx libkb.MetaContext, version Version, rpcName string, encrypted bool, arg any, res any) (found bool, err error) {
 	defer mctx.Trace(fmt.Sprintf("RPCCache#get(%d, %s, %v, %+v)", version, rpcName, encrypted, arg), &err)()
 	c.Lock()
 	defer c.Unlock()
@@ -116,7 +116,7 @@ func (c *RPCCache) get(mctx libkb.MetaContext, version Version, rpcName string, 
 	return true, nil
 }
 
-func (c *RPCCache) put(mctx libkb.MetaContext, version Version, rpcName string, encrypted bool, arg interface{}, res interface{}) (err error) {
+func (c *RPCCache) put(mctx libkb.MetaContext, version Version, rpcName string, encrypted bool, arg any, res any) (err error) {
 	defer mctx.Trace(fmt.Sprintf("RPCCache#put(%d, %s, %v, %+v)", version, rpcName, encrypted, arg), &err)()
 	c.Lock()
 	defer c.Unlock()
@@ -156,9 +156,9 @@ func (c *RPCCache) put(mctx libkb.MetaContext, version Version, rpcName string, 
 // If this function doesn't return an error, and the returned `res` is
 // nil, then `resPtr` will have been filled in already by the cache.
 // Otherwise, `res` should be used by the caller as the response.
-func (c *RPCCache) Serve(mctx libkb.MetaContext, oa keybase1.OfflineAvailability, version Version, rpcName string, encrypted bool, arg interface{}, resPtr interface{},
-	handler func(mctx libkb.MetaContext) (interface{}, error)) (res interface{}, err error) {
-
+func (c *RPCCache) Serve(mctx libkb.MetaContext, oa keybase1.OfflineAvailability, version Version, rpcName string, encrypted bool, arg any, resPtr any,
+	handler func(mctx libkb.MetaContext) (any, error),
+) (res any, err error) {
 	if oa != keybase1.OfflineAvailability_BEST_EFFORT {
 		return handler(mctx)
 	}
@@ -181,7 +181,7 @@ func (c *RPCCache) Serve(mctx libkb.MetaContext, oa keybase1.OfflineAvailability
 	}
 
 	type handlerRes struct {
-		res interface{}
+		res any
 		err error
 	}
 	resCh := make(chan handlerRes, 1)

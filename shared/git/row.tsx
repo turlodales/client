@@ -2,329 +2,397 @@ import * as C from '@/constants'
 import * as T from '@/constants/types'
 import * as Kb from '@/common-adapters'
 import * as React from 'react'
-import openURL from '@/util/open-url'
-
-export const NewContext = React.createContext<ReadonlySet<string>>(new Set())
+import * as TestIDs from '@/tests/e2e/shared/test-ids'
+import {openURL} from '@/util/misc'
+import * as FS from '@/constants/fs'
+import {useCurrentUserState} from '@/stores/current-user'
+import {navToProfile} from '@/constants/router'
+import {useTeamsListNameToIDMap} from '@/teams/use-teams-list'
+import {useIsNew} from '@/util/use-local-badging'
+import {useRPCLoad} from '@/util/use-rpc-load'
 
 type OwnProps = {
-  id: string
   expanded: boolean
-  onShowDelete: (id: string) => void
+  git: T.Git.GitInfo
+  onShowDelete: (git: T.Git.GitInfo) => void
   onToggleExpand: (id: string) => void
-}
-
-const noGit = C.Git.makeGitInfo()
-const ConnectedRow = (ownProps: OwnProps) => {
-  const {id, expanded} = ownProps
-  const git = C.useGitState(s => s.idToInfo.get(id) || noGit)
-  const teamID = C.useTeamsState(s => (git.teamname ? C.Teams.getTeamID(s, git.teamname) : undefined))
-  const isNew = React.useContext(NewContext).has(id)
-  const you = C.useCurrentUserState(s => s.username)
-  const setTeamRepoSettings = C.useGitState(s => s.dispatch.setTeamRepoSettings)
-  const _onBrowseGitRepo = (path: T.FS.Path) => {
-    C.FS.makeActionForOpenPathInFilesTab(path)
-  }
-  const _onArchiveGitRepo = (gitURL: string) => {
-    C.featureFlags.archive &&
-      gitURL &&
-      navigateAppend({
-        props: {gitURL, type: 'git'} as const,
-        selected: 'archiveModal',
-      })
-  }
-
-  const navigateAppend = C.useRouterState(s => s.dispatch.navigateAppend)
-  const _onOpenChannelSelection = () => {
-    teamID &&
-      navigateAppend({
-        props: {repoID: git.repoID, selected: git.channelName || 'general', teamID},
-        selected: 'gitSelectChannel',
-      })
-  }
-  const _setDisableChat = (disabled: boolean, repoID: string, teamname: string) => {
-    setTeamRepoSettings('', teamname, repoID, disabled)
-  }
-  const copyToClipboard = C.useConfigState(s => s.dispatch.dynamic.copyToClipboard)
-  const showUser = C.useTrackerState(s => s.dispatch.showUser)
-  const openUserTracker = (username: string) => {
-    showUser(username, true)
-  }
-
-  const chatDisabled = git.chatDisabled
-
-  const props = {
-    _onOpenChannelSelection,
-    canDelete: git.canDelete,
-    canEdit: git.canDelete && !!git.teamname,
-    channelName: git.channelName,
-    chatDisabled,
-    devicename: git.devicename,
-    expanded,
-    isNew,
-    lastEditTime: git.lastEditTime,
-    lastEditUser: git.lastEditUser,
-    name: git.name,
-    onArchiveGitRepo: () => _onArchiveGitRepo(git.url),
-    onBrowseGitRepo: () =>
-      _onBrowseGitRepo(
-        T.FS.stringToPath(
-          git.url.replace(/keybase:\/\/((private|public|team)\/[^/]*)\/(.*)/, '/keybase/$1/.kbfs_autogit/$3')
-        )
-      ),
-    onChannelClick: (e: React.BaseSyntheticEvent) => {
-      if (!chatDisabled) {
-        e.preventDefault()
-        _onOpenChannelSelection()
-      }
-    },
-    onClickDevice: () => {
-      git.lastEditUser && openURL(`https://keybase.io/${git.lastEditUser}/devices`)
-    },
-    onCopy: () => copyToClipboard(git.url),
-    onShowDelete: () => ownProps.onShowDelete(git.id),
-    onToggleChatEnabled: () => git.teamname && _setDisableChat(!git.chatDisabled, git.repoID, git.teamname),
-    onToggleExpand: () => ownProps.onToggleExpand(git.id),
-    openUserTracker,
-    teamname: git.teamname,
-    url: git.url,
-    you,
-  }
-  return <Row {...props} />
-}
-
-export default ConnectedRow
-
-type Props = {
-  canDelete: boolean
-  canEdit: boolean
-  channelName?: string
-  chatDisabled: boolean
-  devicename: string
-  expanded: boolean
-  lastEditTime: string
-  lastEditUser: string
-  name: string
-  you?: string
-  teamname?: string
-  url: string
-  isNew: boolean
-  onBrowseGitRepo: () => void
-  onArchiveGitRepo: () => void
-  onCopy: () => void
-  onClickDevice: () => void
-  onShowDelete: () => void
-  onChannelClick: (syntheticEvent: React.BaseSyntheticEvent) => void
-  onToggleChatEnabled: () => void
-  onToggleExpand: () => void
-  openUserTracker: (username: string) => void
-  _onOpenChannelSelection: () => void
+  reload: () => void
+  refreshToken: number
+  setError: (error?: Error) => void
 }
 
 const channelNameToString = (channelName?: string) => (channelName ? `#${channelName}` : '#general')
 
-// TODO use ListItem2
-const Row = (props: Props) => (
-  <Kb.Box style={styles.container}>
-    <Kb.Box style={styles.containerMobile}>
-      <Kb.Box
-        style={{
-          ...styles.rowStyle,
-          ...(props.expanded
-            ? {
-                backgroundColor: Kb.Styles.globalColors.white,
-              }
-            : {}),
-        }}
+const CloneRow = (p: {url: string}) => {
+  const styles = useStyles()
+  return (
+    <Kb.Box2 direction="horizontal" fullWidth={true} alignItems="center" relative={true} style={styles.cloneRow}>
+      <Kb.Text type="Body">Clone:</Kb.Text>
+      <Kb.CopyText text={p.url} containerStyle={styles.copyTextContainer} />
+    </Kb.Box2>
+  )
+}
+
+const LastPushRow = (p: {
+  devicename: string
+  lastEditTime: string
+  lastEditUser: string
+  teamname?: string
+  onClickDevice: () => void
+}) => {
+  const styles = useStyles()
+  const {devicename, lastEditTime, lastEditUser, teamname, onClickDevice} = p
+  return (
+    <Kb.Box2
+      direction="horizontal"
+      fullWidth={true}
+      alignItems="center"
+      alignSelf="flex-start"
+      style={styles.lastPushRow}
+    >
+      <Kb.Text type="BodySmall">
+        {`Last push ${lastEditTime}${!!teamname && !!lastEditUser ? ' by ' : ''}`}
+      </Kb.Text>
+      {!!teamname && !!lastEditUser && (
+        <Kb.Avatar
+          username={lastEditUser}
+          size={16}
+          style={styles.lastEditAvatar}
+        />
+      )}
+      {!!teamname && !!lastEditUser && (
+        <Kb.ConnectedUsernames
+          type="BodySmallBold"
+          underline={true}
+          colorFollowing={true}
+          usernames={lastEditUser}
+          onUsernameClicked={() => navToProfile(lastEditUser)}
+          containerStyle={styles.usernameContainer}
+        />
+      )}
+      {isMobile && <Kb.Text type="BodySmall">. </Kb.Text>}
+      <Kb.Text type="BodySmall">
+        <Kb.Text type="BodySmall">
+          {isMobile
+            ? 'Signed and encrypted using device'
+            : ', signed and encrypted using device'}
+        </Kb.Text>
+        <Kb.Text type="BodySmall" style={styles.device} onClick={onClickDevice}>
+          {' '}
+          {devicename}
+        </Kb.Text>
+        <Kb.Text type="BodySmall">.</Kb.Text>
+      </Kb.Text>
+    </Kb.Box2>
+  )
+}
+
+const ChatRow = (p: {
+  canEdit: boolean
+  channelLoading: boolean
+  channelName?: string
+  chatDisabled: boolean
+  teamname: string
+  onChannelClick: (e: React.BaseSyntheticEvent) => void
+  onToggleChatEnabled: () => void
+}) => {
+  const {canEdit, channelLoading, channelName, chatDisabled, teamname, onChannelClick, onToggleChatEnabled} = p
+  return (
+    <Kb.Box2 direction="horizontal" fullWidth={true} alignItems="center" alignSelf="flex-start">
+      {canEdit && (
+        <Kb.Checkbox
+          checked={!chatDisabled}
+          onCheck={onToggleChatEnabled}
+          label=""
+          labelComponent={
+            channelLoading ? (
+              <Kb.Box2 direction="horizontal" alignItems="center" gap="xtiny">
+                <Kb.Text type="BodySmall">Announce pushes in</Kb.Text>
+                <Kb.ProgressIndicator type="Small" />
+              </Kb.Box2>
+            ) : (
+              <Kb.Text type="BodySmall">
+                Announce pushes in{' '}
+                <Kb.Text
+                  type={chatDisabled ? 'BodySmall' : 'BodySmallPrimaryLink'}
+                  onClick={onChannelClick}
+                >
+                  {channelNameToString(channelName)}
+                </Kb.Text>
+              </Kb.Text>
+            )
+          }
+        />
+      )}
+      {!canEdit &&
+        (channelLoading ? (
+          <Kb.Box2 direction="horizontal" alignItems="center" gap="xtiny">
+            <Kb.Text type="BodySmall">{`Pushes are announced in ${teamname}`}</Kb.Text>
+            <Kb.ProgressIndicator type="Small" />
+          </Kb.Box2>
+        ) : (
+          <Kb.Text type="BodySmall">
+            {chatDisabled
+              ? 'Pushes are not announced'
+              : `Pushes are announced in ${teamname}${channelNameToString(channelName)}`}
+          </Kb.Text>
+        ))}
+    </Kb.Box2>
+  )
+}
+
+const ActionsRow = (p: {
+  canDelete: boolean
+  onArchiveGitRepo: () => void
+  onBrowseGitRepo: () => void
+  onShowDelete: () => void
+}) => {
+  const styles = useStyles()
+  const theme = Kb.Styles.useTheme()
+  const {canDelete, onArchiveGitRepo, onBrowseGitRepo, onShowDelete} = p
+  return (
+    <Kb.Box2 direction="horizontal" fullWidth={true} style={styles.actionRow} gap="tiny">
+      <Kb.Button
+        type="Dim"
+        mode="Secondary"
+        small={true}
+        label={isMobile ? 'View' : 'View files'}
+        onClick={onBrowseGitRepo}
       >
-        <Kb.ClickableBox
-          onClick={props.onToggleExpand}
-          style={props.expanded ? styles.rowClickExpanded : styles.rowClick}
-          hoverColor={Kb.Styles.isMobile ? undefined : Kb.Styles.globalColors.transparent}
-          underlayColor={Kb.Styles.globalColors.transparent}
+        {!isMobile && (
+          <Kb.Icon
+            type="iconfont-file"
+            sizeType="Small"
+            color={theme.black_50}
+            style={styles.iconXtiny}
+          />
+        )}
+      </Kb.Button>
+      <Kb.Button
+        type="Dim"
+        mode="Secondary"
+        small={true}
+        label="Archive"
+        onClick={onArchiveGitRepo}
+      >
+        {!isMobile && (
+          <Kb.Icon
+            type="iconfont-mailbox"
+            sizeType="Small"
+            color={theme.black_50}
+            style={styles.iconXtiny}
+          />
+        )}
+      </Kb.Button>
+      {canDelete && (
+        <Kb.Button
+          type="Danger"
+          mode="Secondary"
+          small={true}
+          label={isMobile ? 'Delete' : 'Delete repo'}
+          onClick={onShowDelete}
+        />
+      )}
+    </Kb.Box2>
+  )
+}
+
+function ConnectedRow(ownProps: OwnProps) {
+  const styles = useStyles()
+  const theme = Kb.Styles.useTheme()
+  const {expanded, git, onShowDelete: onShowDelete_, onToggleExpand: onToggleExpand_, reload, setError} = ownProps
+  const {refreshToken} = ownProps
+  const {id} = git
+  const teamNameToID = useTeamsListNameToIDMap()
+  const teamID = git.teamname ? teamNameToID.get(git.teamname) : undefined
+  const isNew = useIsNew(id)
+  const you = useCurrentUserState(s => s.username)
+  const setTeamRepoSettings = C.useRPC(T.RPCGen.gitSetTeamRepoSettingsRpcPromise)
+  const _onBrowseGitRepo = FS.navToPath
+  const navigateAppend = C.Router2.navigateAppend
+
+  const {url: gitURL, repoID, teamname, chatDisabled} = git
+  const {canDelete, devicename, lastEditTime, lastEditUser, name} = git
+
+  // The channel name is resolved lazily (it requires a per-repo chat lookup on
+  // the service), so we only fetch it once the row is expanded and chat is
+  // enabled. getAllGitMetadata no longer returns it. `loaded` stays true
+  // across background refetches so we only show the spinner on the first load,
+  // not on every reload.
+  const {
+    data: channelName,
+    loaded: channelLoaded,
+    reload: loadChannel,
+  } = useRPCLoad(
+    T.RPCGen.gitGetTeamRepoSettingsRpcPromise,
+    [{folder: {created: false, folderType: T.RPCGen.FolderType.team, name: teamname ?? ''}, repoID}],
+    {map: res => res.channelName ?? undefined, when: 'manual'}
+  )
+  React.useEffect(() => {
+    if (!expanded || !teamname || chatDisabled) {
+      return
+    }
+    loadChannel()
+  }, [loadChannel, expanded, teamname, chatDisabled, repoID, refreshToken])
+  const channelLoading = !!teamname && !chatDisabled && expanded && !channelLoaded
+
+  const onArchiveGitRepo = () => {
+    if (gitURL) {
+      navigateAppend({
+        name: 'archiveModal',
+        params: {gitURL, type: 'git' as const},
+      })
+    }
+  }
+
+  const _onOpenChannelSelection = () => {
+    if (teamID) {
+      navigateAppend({
+        name: 'gitSelectChannel',
+        params: {repoID, selected: channelName || 'general', teamID, teamname: teamname ?? ''},
+      })
+    }
+  }
+
+  const onToggleChatEnabled = () => {
+    if (!teamname) {
+      return
+    }
+    setTeamRepoSettings(
+      [
+        {
+          channelName: '',
+          chatDisabled: !chatDisabled,
+          folder: {
+            created: false,
+            folderType: T.RPCGen.FolderType.team,
+            name: teamname,
+          },
+          repoID,
+        },
+      ],
+      () => {
+        setError(undefined)
+        reload()
+      },
+      err => {
+        setError(err)
+      }
+    )
+  }
+
+  const onBrowseGitRepo = () =>
+    _onBrowseGitRepo(
+      T.FS.stringToPath(
+        gitURL.replace(/keybase:\/\/((private|public|team)\/[^/]*)\/(.*)/, '/keybase/$1/.kbfs_autogit/$3')
+      )
+    )
+
+  const onShowDelete = () => onShowDelete_(git)
+  const onToggleExpand = () => onToggleExpand_(id)
+
+  const onClickDevice = () => {
+    if (lastEditUser) {
+      void openURL(`https://keybase.io/${lastEditUser}/devices`)
+    }
+  }
+
+  const onChannelClick = (e: React.BaseSyntheticEvent) => {
+    if (!chatDisabled) {
+      e.preventDefault()
+      _onOpenChannelSelection()
+    }
+  }
+
+  const canEdit = canDelete && !!teamname
+  return (
+    <>
+      <Kb.Box2 direction="vertical" fullWidth={true} style={styles.containerMobile} testID={TestIDs.GIT_REPO_ROW}>
+        <Kb.Box2
+          direction="vertical"
+          fullWidth={true}
+          alignItems="flex-start"
+          noShrink={true}
+          style={Kb.Styles.collapseStyles([
+            styles.rowStyle,
+            expanded && {backgroundColor: theme.white},
+          ])}
         >
-          <Kb.Box style={styles.rowTop}>
+          <Kb.ClickableBox
+            onClick={onToggleExpand}
+            direction="horizontal"
+            fullWidth={true}
+            alignItems="center"
+            gap="tiny"
+            style={Kb.Styles.collapseStyles([
+              expanded ? styles.rowClickExpanded : styles.rowClick,
+              styles.rowTop,
+            ])}
+          >
             <Kb.Icon
-              type={props.expanded ? 'iconfont-caret-down' : 'iconfont-caret-right'}
+              type={expanded ? 'iconfont-caret-down' : 'iconfont-caret-right'}
               style={styles.iconCaret}
               sizeType="Tiny"
             />
             <Kb.Avatar
-              size={Kb.Styles.isMobile ? 48 : 32}
-              isTeam={!!props.teamname}
-              teamname={props.teamname}
-              username={props.teamname ? undefined : props.you}
-              style={{marginRight: Kb.Styles.globalMargins.tiny}}
+              size={isMobile ? 48 : 32}
+              isTeam={!!teamname}
+              teamname={teamname}
+              username={teamname ? undefined : you}
             />
-            <Kb.Text lineClamp={1} type="BodySemibold" style={{color: Kb.Styles.globalColors.black}}>
-              {props.teamname ? `${props.teamname}/${props.name}` : props.name}
+            <Kb.Text lineClamp={1} type="BodySemibold" style={styles.repoName}>
+              {teamname ? `${teamname}/${name}` : name}
             </Kb.Text>
-            {props.isNew && (
-              <Kb.Meta title="new" style={styles.meta} backgroundColor={Kb.Styles.globalColors.orange} />
-            )}
-          </Kb.Box>
-        </Kb.ClickableBox>
-        {props.expanded && (
-          <Kb.Box style={styles.rowBottom}>
-            <Kb.Box
-              style={{
-                ...Kb.Styles.globalStyles.flexBoxRow,
-                alignItems: 'center',
-                maxWidth: '100%',
-                position: 'relative',
-              }}
-            >
-              <Kb.Text type="Body">Clone:</Kb.Text>
-              <Kb.Box2 direction="horizontal" style={styles.copyTextContainer}>
-                <Kb.CopyText text={props.url} containerStyle={{width: '100%'}} />
-              </Kb.Box2>
-            </Kb.Box>
-            <Kb.Box
-              style={{
-                ...Kb.Styles.globalStyles.flexBoxRow,
-                alignItems: 'center',
-                alignSelf: 'flex-start',
-                flexWrap: 'wrap',
-                marginTop: Kb.Styles.globalMargins.tiny,
-              }}
-            >
-              <Kb.Text type="BodySmall">
-                {`Last push ${props.lastEditTime}${!!props.teamname && !!props.lastEditUser ? ' by ' : ''}`}
-              </Kb.Text>
-              {!!props.teamname && !!props.lastEditUser && (
-                <Kb.Avatar
-                  username={props.lastEditUser}
-                  size={16}
-                  style={{marginLeft: Kb.Styles.isMobile ? 0 : 4}}
+            {isNew && <Kb.Meta variant="new" />}
+          </Kb.ClickableBox>
+          {expanded && (
+            <Kb.Box2 direction="vertical" fullWidth={true} style={styles.rowBottom}>
+              <CloneRow url={gitURL} />
+              <LastPushRow
+                devicename={devicename}
+                lastEditTime={lastEditTime}
+                lastEditUser={lastEditUser}
+                teamname={teamname}
+                onClickDevice={onClickDevice}
+              />
+              {!!teamname && (
+                <ChatRow
+                  canEdit={canEdit}
+                  channelLoading={channelLoading}
+                  channelName={channelName}
+                  chatDisabled={chatDisabled}
+                  teamname={teamname}
+                  onChannelClick={onChannelClick}
+                  onToggleChatEnabled={onToggleChatEnabled}
                 />
               )}
-              {!!props.teamname && !!props.lastEditUser && (
-                <Kb.Box style={{marginLeft: 2}}>
-                  <Kb.ConnectedUsernames
-                    type="BodySmallBold"
-                    underline={true}
-                    colorFollowing={true}
-                    usernames={props.lastEditUser}
-                    onUsernameClicked={() => props.openUserTracker(props.lastEditUser)}
-                  />
-                </Kb.Box>
-              )}
-              {Kb.Styles.isMobile && <Kb.Text type="BodySmall">. </Kb.Text>}
-              <Kb.Text type="BodySmall">
-                <Kb.Text type="BodySmall">
-                  {Kb.Styles.isMobile
-                    ? 'Signed and encrypted using device'
-                    : ', signed and encrypted using device'}
-                </Kb.Text>
-                <Kb.Text type="BodySmall" style={styles.device} onClick={props.onClickDevice}>
-                  {' '}
-                  {props.devicename}
-                </Kb.Text>
-                <Kb.Text type="BodySmall">.</Kb.Text>
-              </Kb.Text>
-            </Kb.Box>
-            {!!props.teamname && (
-              <Kb.Box style={{...Kb.Styles.globalStyles.flexBoxRow, alignItems: 'center'}}>
-                {props.canEdit && (
-                  <Kb.Checkbox
-                    checked={!props.chatDisabled}
-                    onCheck={props.onToggleChatEnabled}
-                    label=""
-                    labelComponent={
-                      <Kb.Text type="BodySmall">
-                        Announce pushes in{' '}
-                        <Kb.Text
-                          type={props.chatDisabled ? 'BodySmall' : 'BodySmallPrimaryLink'}
-                          onClick={props.onChannelClick}
-                        >
-                          {channelNameToString(props.channelName)}
-                        </Kb.Text>
-                      </Kb.Text>
-                    }
-                  />
-                )}
-                {!props.canEdit && (
-                  <Kb.Text type="BodySmall">
-                    {props.chatDisabled
-                      ? 'Pushes are not announced'
-                      : `Pushes are announced in ${props.teamname}${channelNameToString(props.channelName)}`}
-                  </Kb.Text>
-                )}
-              </Kb.Box>
-            )}
-            <Kb.Box2
-              direction="horizontal"
-              fullWidth={true}
-              style={{marginTop: Kb.Styles.globalMargins.tiny}}
-              gap="tiny"
-            >
-              <Kb.Button
-                type="Dim"
-                mode="Secondary"
-                small={true}
-                label="View files"
-                onClick={props.onBrowseGitRepo}
-              >
-                <Kb.Icon
-                  type="iconfont-file"
-                  sizeType="Small"
-                  color={Kb.Styles.globalColors.black_50}
-                  style={{marginRight: Kb.Styles.globalMargins.xtiny}}
-                />
-              </Kb.Button>
-              <Kb.Button
-                type="Dim"
-                mode="Secondary"
-                small={true}
-                label="Archive"
-                onClick={props.onArchiveGitRepo}
-              >
-                <Kb.Icon
-                  type="iconfont-mailbox"
-                  sizeType="Small"
-                  color={Kb.Styles.globalColors.black_50}
-                  style={{marginRight: Kb.Styles.globalMargins.xtiny}}
-                />
-              </Kb.Button>
-              {props.canDelete && (
-                <Kb.Button
-                  type="Danger"
-                  mode="Secondary"
-                  small={true}
-                  label="Delete repo"
-                  onClick={props.onShowDelete}
-                />
-              )}
+              <ActionsRow
+                canDelete={canDelete}
+                onArchiveGitRepo={onArchiveGitRepo}
+                onBrowseGitRepo={onBrowseGitRepo}
+                onShowDelete={onShowDelete}
+              />
             </Kb.Box2>
-          </Kb.Box>
-        )}
-      </Kb.Box>
-    </Kb.Box>
-    <Kb.Box
-      style={{
-        ...(props.expanded
-          ? {
-              backgroundColor: Kb.Styles.globalColors.blueLighter3,
-              height: 6,
-            }
-          : {}),
-      }}
-    />
-  </Kb.Box>
-)
+          )}
+        </Kb.Box2>
+      </Kb.Box2>
+      <Kb.Box2
+        direction="vertical"
+        fullWidth={true}
+        style={expanded ? styles.expandedSpacer : undefined}
+      />
+    </>
+  )
+}
 
-const styles = Kb.Styles.styleSheetCreate(
-  () =>
+const useStyles = Kb.Styles.createStyleHook(
+  theme =>
     ({
-      container: {
-        width: '100%',
-      },
+      actionRow: {marginTop: Kb.Styles.globalMargins.tiny},
+      cloneRow: {maxWidth: '100%'},
       containerMobile: Kb.Styles.platformStyles({
-        common: {
-          width: '100%',
-        },
         isMobile: {
-          paddingLeft: Kb.Styles.globalMargins.small,
-          paddingRight: Kb.Styles.globalMargins.small,
+          ...Kb.Styles.paddingH(Kb.Styles.globalMargins.small),
         },
       }),
       copyTextContainer: {
@@ -334,67 +402,55 @@ const styles = Kb.Styles.styleSheetCreate(
         maxWidth: 460,
         width: '100%',
       },
-
       device: {
         ...Kb.Styles.globalStyles.fontSemibold,
         ...Kb.Styles.globalStyles.italic,
-        color: Kb.Styles.globalColors.black_50,
+        color: theme.black_50,
       },
-
+      expandedSpacer: {
+        backgroundColor: theme.blueLighter3,
+        height: 6,
+      },
+      lastEditAvatar: Kb.Styles.platformStyles({
+        isElectron: {marginLeft: 4},
+      }),
+      lastPushRow: {
+        flexWrap: 'wrap',
+        marginTop: Kb.Styles.globalMargins.tiny,
+      },
+      repoName: {color: theme.black},
       iconCaret: Kb.Styles.platformStyles({
         common: {
           marginBottom: 2,
           marginRight: Kb.Styles.globalMargins.tiny,
         },
-        isElectron: {
-          display: 'inline-block',
-        },
+        isElectron: {display: 'inline-block'},
       }),
-
-      meta: {
-        alignSelf: 'center',
-        marginLeft: 6,
-      },
-
+      iconXtiny: {marginRight: Kb.Styles.globalMargins.xtiny},
       rowBottom: {
-        ...Kb.Styles.globalStyles.flexBoxColumn,
         paddingBottom: Kb.Styles.globalMargins.tiny,
         paddingLeft: Kb.Styles.globalMargins.medium,
-        width: '100%',
       },
-
       rowClick: {
-        ...Kb.Styles.globalStyles.flexBoxColumn,
-        paddingBottom: Kb.Styles.globalMargins.tiny,
-        paddingTop: Kb.Styles.globalMargins.tiny,
-        width: '100%',
+        ...Kb.Styles.paddingV(Kb.Styles.globalMargins.tiny),
       },
-
       rowClickExpanded: {
-        ...Kb.Styles.globalStyles.flexBoxColumn,
         paddingBottom: 0,
         paddingTop: Kb.Styles.globalMargins.tiny,
-        width: '100%',
       },
 
+      usernameContainer: {marginLeft: 2},
       rowStyle: {
-        ...Kb.Styles.globalStyles.flexBoxColumn,
-        alignItems: 'flex-start',
-        flexShrink: 0,
         minHeight: Kb.Styles.globalMargins.large,
         paddingLeft: 0,
-        width: '100%',
       },
       rowTop: Kb.Styles.platformStyles({
         common: {
-          ...Kb.Styles.globalStyles.flexBoxRow,
-          alignItems: 'center',
           marginBottom: Kb.Styles.globalMargins.xtiny,
-          width: '100%',
         },
-        isElectron: {
-          paddingLeft: Kb.Styles.globalMargins.tiny,
-        },
+        isElectron: {paddingLeft: Kb.Styles.globalMargins.tiny},
       }),
     }) as const
 )
+
+export default ConnectedRow

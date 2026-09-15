@@ -1,34 +1,44 @@
-import * as C from '@/constants'
-import * as Container from '@/util/container'
+import * as Teams from '@/constants/teams'
 import * as Kb from '@/common-adapters'
 import * as React from 'react'
 import * as T from '@/constants/types'
-import {ModalTitle} from '@/teams/common'
 import {pluralize} from '@/util/string'
-import {useTeamDetailsSubscribe} from '@/teams/subscriber'
+import {useCurrentUserState} from '@/stores/current-user'
+import * as C from '@/constants'
+import {newTeamWizardToAddMembersWizard, type NewTeamWizard} from './state'
+import {useNavigation} from '@react-navigation/native'
+import {useLoadedTeam} from '@/teams/team/use-loaded-team'
 
-const AddSubteamMembers = () => {
-  const nav = Container.useSafeNavigation()
+type Props = {
+  wizard: NewTeamWizard
+}
+
+const AddSubteamMembers = ({wizard: wizardState}: Props) => {
+  const styles = useStyles()
+  const navigation = useNavigation('teamWizardSubteamMembers')
   const [selectedMembers, setSelectedMembers] = React.useState(new Set<string>())
   const [filter, setFilter] = React.useState('')
   const filterL = filter.toLowerCase()
-  const onBack = () => nav.safeNavigateUp()
-  const setTeamWizardSubteamMembers = C.useTeamsState(s => s.dispatch.setTeamWizardSubteamMembers)
-  const startAddMembersWizard = C.useTeamsState(s => s.dispatch.startAddMembersWizard)
-  const onContinue = () =>
-    selectedMembers.size
-      ? setTeamWizardSubteamMembers([...selectedMembers])
-      : startAddMembersWizard(T.Teams.newTeamWizardTeamID)
+  const navigateAppend = C.Router2.navigateAppend
+  const onContinue = React.useCallback(() => {
+    const wizard = newTeamWizardToAddMembersWizard(wizardState, {
+      addingMembers: [...selectedMembers].map(assertion => ({assertion, role: 'writer'})),
+    })
+    navigation.setParams({wizard: wizardState})
+    navigateAppend({
+      name: selectedMembers.size ? 'teamAddToTeamConfirm' : 'teamAddToTeamFromWhere',
+      params: {wizard},
+    })
+  }, [navigateAppend, navigation, selectedMembers, wizardState])
 
-  const yourUsername = C.useCurrentUserState(s => s.username)
-  const parentTeamID = C.useTeamsState(s => s.newTeamWizard.parentTeamID ?? T.Teams.noTeamID)
-  useTeamDetailsSubscribe(parentTeamID)
-  const parentTeamName = C.useTeamsState(s => C.Teams.getTeamMeta(s, parentTeamID).teamname)
-  const parentMembersMap = C.useTeamsState(
-    s => (s.teamDetails.get(parentTeamID) ?? C.Teams.emptyTeamDetails).members
-  )
+  const yourUsername = useCurrentUserState(s => s.username)
+  const parentTeamID = wizardState.parentTeamID ?? T.Teams.noTeamID
+  const {
+    teamDetails: {members: parentMembersMap},
+    teamMeta: {teamname: parentTeamName},
+  } = useLoadedTeam(parentTeamID)
   const parentMembers = [...parentMembersMap.values()].filter(
-    m => !C.Teams.isBot(m.type) && m.username !== yourUsername
+    m => !Teams.isBot(m.type) && m.username !== yourUsername
   )
   const filteredMembers = filter
     ? parentMembers.filter(
@@ -48,12 +58,16 @@ const AddSubteamMembers = () => {
     const selected = selectedMembers.has(m.username)
     const onSelect = () => {
       // TODO: ensure performance (see Y2K-1666)
-      !selected ? selectedMembers.add(m.username) : selectedMembers.delete(m.username)
+      if (!selected) {
+        selectedMembers.add(m.username)
+      } else {
+        selectedMembers.delete(m.username)
+      }
       setSelectedMembers(new Set([...selectedMembers]))
     }
 
     return (
-      <Kb.ListItem2
+      <Kb.ListItem
         type="Small"
         icon={<Kb.Avatar username={m.username} size={32} />}
         body={
@@ -71,31 +85,22 @@ const AddSubteamMembers = () => {
       />
     )
   }
+
+  Kb.useModalHeaderAction({
+    label: doneLabel,
+    onAction: onContinue,
+    title: doneLabel,
+  })
+
+  const desktopFooter = !isMobile ? (
+    <Kb.ModalFooter>
+      <Kb.Button label={continueLabel} onClick={onContinue} fullWidth={true} />
+    </Kb.ModalFooter>
+  ) : null
+
   return (
-    <Kb.Modal
-      allowOverflow={true}
-      mode="DefaultFullHeight"
-      header={{
-        leftButton: <Kb.Icon type="iconfont-arrow-left" onClick={onBack} />,
-        rightButton: Kb.Styles.isMobile ? (
-          <Kb.Box2 direction="horizontal" style={styles.noWrap}>
-            <Kb.Text type="BodyBigLink" onClick={onContinue}>
-              {doneLabel}
-            </Kb.Text>
-          </Kb.Box2>
-        ) : undefined,
-        title: <ModalTitle teamID={T.Teams.newTeamWizardTeamID} title="Add members" />,
-      }}
-      footer={
-        Kb.Styles.isMobile
-          ? undefined
-          : {
-              content: <Kb.Button label={continueLabel} onClick={onContinue} fullWidth={true} />,
-            }
-      }
-      noScrollView={true}
-    >
-      <Kb.Box2 direction="vertical" fullWidth={true} fullHeight={true} style={styles.hideOverflow}>
+    <>
+      <Kb.Box2 direction="vertical" fullWidth={true} fullHeight={true} overflow="hidden">
         <Kb.Box2 direction="horizontal" fullWidth={true} style={styles.searchContainer}>
           <Kb.SearchFilter
             size="full-width"
@@ -107,7 +112,7 @@ const AddSubteamMembers = () => {
           />
         </Kb.Box2>
         {/* TODO: once it's easier to make a single different-height header, make this part of the list2 */}
-        <Kb.Box2 direction="horizontal" style={styles.header} fullWidth={true}>
+        <Kb.Box2 direction="horizontal" style={styles.header} fullWidth={true} alignItems="center" justifyContent="space-between">
           <Kb.Text type="BodySmallSemibold" lineClamp={1} style={styles.flexShrink}>
             Members of {parentTeamName}
           </Kb.Text>
@@ -116,34 +121,29 @@ const AddSubteamMembers = () => {
           </Kb.Text>
         </Kb.Box2>
         <Kb.BoxGrow>
-          <Kb.List2
+          <Kb.List
+            keyProperty="username"
             items={filteredMembers}
             renderItem={renderItem}
-            itemHeight={{sizeType: 'Small', type: 'fixedListItem2Auto'}}
+            itemHeight={{sizeType: 'Small', type: 'fixedListItemAuto'}}
           />
         </Kb.BoxGrow>
       </Kb.Box2>
-    </Kb.Modal>
+      {desktopFooter}
+    </>
   )
 }
 
-const styles = Kb.Styles.styleSheetCreate(() => ({
+const useStyles = Kb.Styles.createStyleHook(theme => ({
   flexShrink: {flexShrink: 1},
   header: {
-    alignItems: 'center',
-    backgroundColor: Kb.Styles.globalColors.blueGrey,
+    backgroundColor: theme.blueGrey,
     height: Kb.Styles.globalMargins.mediumLarge,
-    justifyContent: 'space-between',
     paddingLeft: Kb.Styles.globalMargins.tiny,
     paddingRight: Kb.Styles.globalMargins.small,
   },
-  hideOverflow: {overflow: 'hidden'},
-  noWrap: {
-    justifyContent: 'flex-end',
-    width: 48, // wide enough for "Done" or "Skip" to fit. workaround modal2 header measurement onmount
-  },
   search: {
-    borderRadius: 4,
+    borderRadius: Kb.Styles.borderRadius,
   },
   searchContainer: Kb.Styles.padding(Kb.Styles.globalMargins.tiny, Kb.Styles.globalMargins.xsmall),
 }))

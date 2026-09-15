@@ -1,151 +1,126 @@
 import * as C from '@/constants'
-import * as Constants from '@/constants/devices'
+import {useConfigState} from '@/stores/config'
 import * as Kb from '@/common-adapters'
 import * as React from 'react'
 import * as T from '@/constants/types'
+import {settingsDevicesTab} from '@/constants/settings'
+import {useCurrentUserState} from '@/stores/current-user'
+import {rpcDeviceDetailToDevice} from './common'
+import {getDeviceRevokeIconType} from './device-icon'
+import {useRPCLoad} from '@/util/use-rpc-load'
 
-type OwnProps = {deviceID: string}
+type DeviceRevokeProps = {device?: T.Devices.Device; deviceID?: T.Devices.DeviceID}
 
-class EndangeredTLFList extends React.Component<{endangeredTLFs: Array<string>}> {
-  _renderTLFEntry = (index: number, tlf: string) => (
-    <Kb.Box2 direction="horizontal" key={index} gap="tiny" fullWidth={true} style={styles.row}>
-      <Kb.Text type="BodySemibold">•</Kb.Text>
-      <Kb.Text type="BodySemibold" selectable={true} style={styles.tlf}>
-        {tlf}
-      </Kb.Text>
-    </Kb.Box2>
-  )
-  render() {
-    if (!this.props.endangeredTLFs.length) return null
-    return (
-      <>
-        <Kb.Text center={true} type="Body">
-          You may lose access to these folders forever:
-        </Kb.Text>
-        <Kb.Box2 direction="vertical" style={styles.listContainer}>
-          <Kb.List items={this.props.endangeredTLFs} renderItem={this._renderTLFEntry} indexAsKey={true} />
-        </Kb.Box2>
-      </>
-    )
-  }
-}
-
-const ActionButtons = ({onCancel, onSubmit}: {onCancel: () => void; onSubmit: () => void}) => (
-  <Kb.Box2
-    direction={Kb.Styles.isMobile ? 'vertical' : 'horizontalReverse'}
-    fullWidth={Kb.Styles.isMobile}
-    gap="tiny"
-  >
-    <Kb.WaitingButton
-      fullWidth={Kb.Styles.isMobile}
-      type="Danger"
-      label="Yes, delete it"
-      waitingKey={C.Devices.waitingKey}
-      onClick={onSubmit}
-    />
-    <Kb.Button fullWidth={Kb.Styles.isMobile} type="Dim" onClick={onCancel} label="Cancel" />
+const renderTLFEntry = (index: number, tlf: string, styles: ReturnType<typeof useStyles>) => (
+  <Kb.Box2 direction="horizontal" key={index} gap="tiny" fullWidth={true} style={styles.row}>
+    <Kb.Text type="BodySemibold">•</Kb.Text>
+    <Kb.Text type="BodySemibold" selectable={true} style={styles.tlf}>
+      {tlf}
+    </Kb.Text>
   </Kb.Box2>
 )
-
-const getIcon = (deviceType: T.Devices.DeviceType, iconNumber: T.Devices.IconNumber) => {
-  let iconType: Kb.IconType
-  const size = Kb.Styles.isMobile ? 64 : 48
-  switch (deviceType) {
-    case 'backup':
-      iconType = `icon-paper-key-revoke-${size}`
-      break
-    case 'mobile':
-      iconType = `icon-phone-revoke-background-${iconNumber}-${size}`
-      break
-    case 'desktop':
-      iconType = `icon-computer-revoke-background-${iconNumber}-${size}`
-      break
-  }
-  if (Kb.isValidIconType(iconType)) {
-    return iconType
-  }
-  return Kb.Styles.isMobile ? 'icon-computer-revoke-64' : 'icon-computer-revoke-48'
+const EndangeredTLFList = (props: {endangeredTLFs?: ReadonlyArray<string>}) => {
+  const styles = useStyles()
+  if (!props.endangeredTLFs?.length) return null
+  return (
+    <>
+      <Kb.Text center={true} type="Body">
+        You may lose access to these folders forever:
+      </Kb.Text>
+      <Kb.ScrollView style={styles.listContainer}>
+        {props.endangeredTLFs.map((tlf, index) => renderTLFEntry(index, tlf, styles))}
+      </Kb.ScrollView>
+    </>
+  )
 }
 
-const loadEndangeredTLF = async (actingDevice: string, targetDevice: string) => {
-  if (!actingDevice || !targetDevice) {
-    return []
+const revokeDevice = async (
+  username: string,
+  wasCurrentDevice: boolean,
+  deviceID: T.Devices.DeviceID,
+  deviceName: string
+) => {
+  if (wasCurrentDevice) {
+    try {
+      await T.RPCGen.loginDeprovisionRpcPromise({doRevoke: true, username}, C.waitingKeyDevices)
+      useConfigState.getState().dispatch.revoke(deviceName, wasCurrentDevice)
+    } catch {}
+  } else {
+    try {
+      await T.RPCGen.revokeRevokeDeviceRpcPromise(
+        {deviceID, forceLast: false, forceSelf: false},
+        C.waitingKeyDevices
+      )
+      useConfigState.getState().dispatch.revoke(deviceName, wasCurrentDevice)
+      C.Router2.clearModals()
+      C.Router2.navUpToScreen(isMobile ? settingsDevicesTab : 'devicesRoot')
+    } catch {}
   }
-  try {
-    const tlfs = await T.RPCGen.rekeyGetRevokeWarningRpcPromise(
-      {actingDevice, targetDevice},
-      C.Devices.waitingKey
-    )
-    return tlfs.endangeredTLFs?.map(t => t.name) ?? []
-  } catch (e) {
-    console.error(e)
-  }
-  return []
 }
 
-const useRevoke = (deviceID = '') => {
-  const d = C.useDevicesState(s => s.deviceMap.get(deviceID))
-  const load = C.useDevicesState(s => s.dispatch.load)
-  const username = C.useCurrentUserState(s => s.username)
-  const wasCurrentDevice = d?.currentDevice ?? false
-  const navUpToScreen = C.useRouterState(s => s.dispatch.navUpToScreen)
-  const deviceName = d?.name ?? ''
-  return React.useCallback(() => {
-    const f = async () => {
-      if (wasCurrentDevice) {
-        try {
-          await T.RPCGen.loginDeprovisionRpcPromise({doRevoke: true, username}, C.Devices.waitingKey)
-          load()
-          C.useConfigState.getState().dispatch.revoke(deviceName)
-        } catch {}
-      } else {
-        try {
-          await T.RPCGen.revokeRevokeDeviceRpcPromise(
-            {deviceID, forceLast: false, forceSelf: false},
-            C.Devices.waitingKey
-          )
-          load()
-          C.useConfigState.getState().dispatch.revoke(deviceName)
-          navUpToScreen(
-            C.isMobile ? (C.isTablet ? C.Tabs.settingsTab : C.Settings.settingsDevicesTab) : C.Tabs.devicesTab
-          )
-        } catch {}
-      }
+const useRevoke = (device: T.Devices.Device) => {
+  const username = useCurrentUserState(s => s.username)
+  const wasCurrentDevice = device.currentDevice
+  const deviceID = device.deviceID
+  const deviceName = device.name
+  return () => {
+    C.ignorePromise(revokeDevice(username, wasCurrentDevice, deviceID, deviceName))
+  }
+}
+
+const DeviceRevoke = (ownProps: DeviceRevokeProps) => {
+  const styles = useStyles()
+  const navigateUp = C.Router2.navigateUp
+  const selectedDeviceID = ownProps.device?.deviceID ?? ownProps.deviceID ?? T.Devices.stringToDeviceID('')
+  const {data: loadedDevice, loaded} = useRPCLoad(
+    T.RPCGen.deviceDeviceHistoryListRpcPromise,
+    [undefined, C.waitingKeyDevices],
+    {
+      enabled: !ownProps.device && !!selectedDeviceID,
+      map: results => results?.map(rpcDeviceDetailToDevice).find(c => c.deviceID === selectedDeviceID),
     }
-    C.ignorePromise(f())
-  }, [navUpToScreen, deviceID, deviceName, load, username, wasCurrentDevice])
-}
-
-const DeviceRevoke = (ownProps: OwnProps) => {
-  const selectedDeviceID = ownProps.deviceID
-  const [endangeredTLFs, setEndangeredTLFs] = React.useState(new Array<string>())
-  const device = C.useDevicesState(s => s.deviceMap.get(selectedDeviceID))
-  const deviceID = device?.deviceID
-  const deviceName = device?.name ?? ''
-  const type = device?.type ?? 'desktop'
-  const iconNumber = Constants.useDeviceIconNumber(selectedDeviceID)
-  const waiting = C.Waiting.useAnyWaiting(C.Devices.waitingKey)
-  const onSubmit = useRevoke(deviceID)
-  const navigateUp = C.useRouterState(s => s.dispatch.navigateUp)
+  )
+  const device = ownProps.device ?? loadedDevice
+  const waiting = C.Waiting.useAnyWaiting(C.waitingKeyDevices)
   const onCancel = navigateUp
 
-  const actingDevice = C.useCurrentUserState(s => s.deviceID)
-  C.useOnMountOnce(() => {
-    const f = async () => {
-      const tlfs = await loadEndangeredTLF(actingDevice, selectedDeviceID)
-      setEndangeredTLFs(tlfs)
+  // nothing to revoke: no id given, load failed, or device no longer exists
+  const missing = !device && (!selectedDeviceID || (loaded && !loadedDevice))
+  React.useEffect(() => {
+    if (missing) {
+      navigateUp()
     }
-    C.ignorePromise(f())
-  })
+  }, [missing, navigateUp])
 
-  const props = {
-    device,
-    endangeredTLFs,
-    iconNumber,
-    onCancel,
-    onSubmit,
-    waiting,
+  const onSubmit = useRevoke(
+    device ?? {
+      created: 0,
+      currentDevice: false,
+      deviceID: selectedDeviceID,
+      deviceNumberOfType: 0,
+      lastUsed: 0,
+      name: '',
+      type: 'desktop',
+    }
+  )
+
+  const actingDevice = useCurrentUserState(s => s.deviceID)
+  const {data: endangeredTLFs} = useRPCLoad(
+    T.RPCGen.rekeyGetRevokeWarningRpcPromise,
+    [{actingDevice, targetDevice: selectedDeviceID}, C.waitingKeyDevices],
+    {
+      enabled: !!actingDevice && !!selectedDeviceID,
+      map: tlfs => tlfs.endangeredTLFs?.map(t => t.name) ?? [],
+    }
+  )
+
+  if (!device) {
+    return <Kb.LoadingScreen />
   }
+
+  const type = device.type
+  const iconNumber = T.Devices.deviceNumberToIconNumber(device.deviceNumberOfType)
+
   return (
     <Kb.Box2
       direction="vertical"
@@ -153,30 +128,36 @@ const DeviceRevoke = (ownProps: OwnProps) => {
       fullWidth={true}
       gap="small"
       gapEnd={true}
-      style={styles.container}
+      padding="small"
     >
       <Kb.NameWithIcon
-        icon={getIcon(type, props.iconNumber)}
-        title={deviceName}
+        icon={getDeviceRevokeIconType(type, iconNumber)}
+        title={device.name}
         titleStyle={styles.headerName}
         size="small"
       />
       <Kb.Text center={true} type="Header">
         Are you sure you want to revoke{' '}
-        {device?.currentDevice ? (
+        {device.currentDevice ? (
           'your current device'
         ) : (
           <Kb.Text type="Header" style={styles.italicName}>
-            {deviceName}
+            {device.name}
           </Kb.Text>
         )}
         ?
       </Kb.Text>
-      <Kb.Box2 direction="vertical" style={styles.endangeredTLFContainer} fullWidth={Kb.Styles.isMobile}>
-        {!props.waiting && <EndangeredTLFList endangeredTLFs={props.endangeredTLFs} />}
+      <Kb.Box2 direction="vertical" style={styles.endangeredTLFContainer} fullWidth={isMobile}>
+        {!waiting && <EndangeredTLFList endangeredTLFs={endangeredTLFs} />}
       </Kb.Box2>
-      <ActionButtons onCancel={props.onCancel} onSubmit={props.onSubmit} />
-      {props.waiting && (
+      <Kb.ConfirmButtons
+        waitingKey={C.waitingKeyDevices}
+        onCancel={onCancel}
+        onConfirm={onSubmit}
+        confirmLabel="Yes, delete it"
+        confirmType="Danger"
+      />
+      {waiting && (
         <Kb.Text center={true} type="BodySmallItalic">
           Calculating any side effects...
         </Kb.Text>
@@ -185,38 +166,29 @@ const DeviceRevoke = (ownProps: OwnProps) => {
   )
 }
 
-const styles = Kb.Styles.styleSheetCreate(
-  () =>
+const useStyles = Kb.Styles.createStyleHook(
+  theme =>
     ({
-      container: {padding: Kb.Styles.globalMargins.small},
       endangeredTLFContainer: Kb.Styles.platformStyles({
         isElectron: {alignSelf: 'center'},
-        isMobile: {flexGrow: 1},
+        isMobile: {...Kb.Styles.globalStyles.flexGrow},
       }),
       headerName: {
-        color: Kb.Styles.globalColors.redDark,
+        color: theme.redDark,
         textDecorationLine: 'line-through',
       },
       italicName: {...Kb.Styles.globalStyles.italic},
       listContainer: Kb.Styles.platformStyles({
         common: {
-          ...Kb.Styles.globalStyles.flexBoxColumn,
-          alignContent: 'center',
-          borderColor: Kb.Styles.globalColors.black_10,
-          borderRadius: 4,
-          borderStyle: 'solid',
-          borderWidth: 1,
+          ...Kb.Styles.border(theme.black_10, 1, Kb.Styles.borderRadius),
           flexGrow: 1,
-          marginBottom: Kb.Styles.globalMargins.small,
-          marginTop: Kb.Styles.globalMargins.small,
-          width: '100%',
+          ...Kb.Styles.marginV(Kb.Styles.globalMargins.small),
         },
         isElectron: {height: 162, width: 440},
       }),
       row: {
-        paddingBottom: Kb.Styles.globalMargins.xxtiny,
+        ...Kb.Styles.paddingV(Kb.Styles.globalMargins.xxtiny),
         paddingLeft: Kb.Styles.globalMargins.xtiny,
-        paddingTop: Kb.Styles.globalMargins.xxtiny,
       },
       tlf: Kb.Styles.platformStyles({
         isElectron: {wordBreak: 'break-word'} as const,

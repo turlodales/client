@@ -118,7 +118,7 @@ func ForkServer(g *libkb.GlobalContext, cl libkb.CommandLine, forkType keybase1.
 
 func pingLoop(g *libkb.GlobalContext) error {
 	var err error
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		_, err = getSocketWithRetry(g)
 		if err == nil {
 			g.Log.Debug("Connected (%d)", i)
@@ -131,7 +131,8 @@ func pingLoop(g *libkb.GlobalContext) error {
 }
 
 func makeServerCommandLine(g *libkb.GlobalContext, cl libkb.CommandLine,
-	forkType keybase1.ForkType) (arg0 string, args []string, err error) {
+	forkType keybase1.ForkType,
+) (arg0 string, args []string, err error) {
 	// ForkExec requires an absolute path to the binary. LookPath() gets this
 	// for us, or correctly leaves arg0 alone if it's already a path.
 	arg0, err = exec.LookPath(os.Args[0])
@@ -207,11 +208,12 @@ func makeServerCommandLine(g *libkb.GlobalContext, cl libkb.CommandLine,
 	g.Log.Debug("| Setting run directory for keybase service to %s", chdir)
 	args = append(args, "--chdir", chdir)
 
-	if forkType == keybase1.ForkType_AUTO {
+	switch forkType {
+	case keybase1.ForkType_AUTO:
 		args = append(args, "--auto-forked")
-	} else if forkType == keybase1.ForkType_WATCHDOG {
+	case keybase1.ForkType_WATCHDOG:
 		args = append(args, "--watchdog-forked")
-	} else if forkType == keybase1.ForkType_LAUNCHD {
+	case keybase1.ForkType_LAUNCHD:
 		args = append(args, "--launchd-forked")
 	}
 

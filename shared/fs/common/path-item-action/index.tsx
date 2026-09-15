@@ -1,13 +1,13 @@
 import * as React from 'react'
 import type * as T from '@/constants/types'
-import * as C from '@/constants'
 import * as Kb from '@/common-adapters'
 import ChooseView from './choose-view'
 import type {SizeType} from '@/common-adapters/icon'
+import * as FS from '@/constants/fs'
 
 export type ClickableProps = {
   onClick: () => void
-  mref: React.RefObject<Kb.MeasureRef>
+  mref: React.RefObject<Kb.MeasureRef | null>
 }
 
 type ClickableComponent = {
@@ -28,75 +28,104 @@ export type Props = {
   mode: 'row' | 'screen'
   path: T.FS.Path
   initView: T.FS.PathItemActionMenuView
+  // Render no trigger, only the popup. The menu is opened imperatively through
+  // the ref handle instead (used by the iOS native header overflow menu).
+  hideTrigger?: boolean
 }
 
+export type PathItemActionHandle = {open: () => void}
+
 type ICProps = {
-  measureRef: React.RefObject<Kb.MeasureRef>
+  measureRef: React.RefObject<Kb.MeasureRef | null>
   onClick: () => void
   sizeType: SizeType
   actionIconWhite?: boolean | undefined
 }
-const IconClickable = React.memo(function IconClickable(props: ICProps) {
+function IconClickable(props: ICProps) {
+  const theme = Kb.Styles.useTheme()
+  const {measureRef, actionIconWhite, sizeType, onClick} = props
   return (
     <Kb.WithTooltip tooltip="More actions">
-      <Kb.Icon
-        fixOverdraw={false}
-        type="iconfont-ellipsis"
-        color={
-          props.actionIconWhite ? Kb.Styles.globalColors.whiteOrBlueDark : Kb.Styles.globalColors.black_50
-        }
-        hoverColor={props.actionIconWhite ? undefined : Kb.Styles.globalColors.black}
-        padding="tiny"
-        sizeType={props.sizeType}
-        onClick={props.onClick}
-        ref={props.measureRef}
-      />
+      <Kb.Box2 direction="vertical" ref={measureRef}>
+        <Kb.Icon
+          type="iconfont-ellipsis"
+          color={actionIconWhite ? theme.whiteOrBlueDark : theme.black_50}
+          hoverColor={actionIconWhite ? undefined : theme.black}
+          padding="tiny"
+          sizeType={sizeType}
+          onClick={onClick}
+        />
+      </Kb.Box2>
     </Kb.WithTooltip>
   )
-})
+}
 
-const PathItemAction = (props: Props) => {
-  const {initView, path, mode} = props
-  const setPathItemActionMenuDownload = C.useFSState(s => s.dispatch.setPathItemActionMenuDownload)
-  const setPathItemActionMenuView = C.useFSState(s => s.dispatch.setPathItemActionMenuView)
+const PathItemAction = React.forwardRef<PathItemActionHandle, Props>((props, ref) => {
+  const styles = useStyles()
+  const {initView, path, mode, hideTrigger} = props
+  const [previousView, setPreviousView] = React.useState(initView)
+  const [view, setViewState] = React.useState(initView)
+  const [downloadState, setDownloadState] = React.useState<{
+    downloadID?: string
+    downloadIntent?: T.FS.DownloadIntent
+  }>({})
 
-  const makePopup = React.useCallback(
-    (p: Kb.Popup2Parms) => {
-      const {attachTo, hidePopup} = p
+  const setView = (nextView: T.FS.PathItemActionMenuView) => {
+    setPreviousView(view)
+    setViewState(nextView)
+  }
+  const onDownloadStarted = (downloadID: string, downloadIntent?: T.FS.DownloadIntent) => {
+    setDownloadState({downloadID, downloadIntent})
+  }
 
-      const hide = () => {
-        hidePopup()
-        setPathItemActionMenuDownload()
-      }
+  const makePopup = (p: Kb.Popup2Parms) => {
+    const {attachTo, hidePopup} = p
 
-      return (
-        <ChooseView
-          path={path}
-          mode={mode}
-          floatingMenuProps={{
-            attachTo,
-            containerStyle: styles.floatingContainer,
-            hide,
-            visible: true,
-          }}
-        />
-      )
-    },
-    [setPathItemActionMenuDownload, path, mode]
-  )
+    const hide = () => {
+      hidePopup()
+      setPreviousView(initView)
+      setViewState(initView)
+      setDownloadState({})
+    }
+
+    return (
+      <ChooseView
+        downloadID={downloadState.downloadID}
+        downloadIntent={downloadState.downloadIntent}
+        onDownloadStarted={onDownloadStarted}
+        path={path}
+        mode={mode}
+        previousView={previousView}
+        setView={setView}
+        view={view}
+        floatingMenuProps={{
+          attachTo,
+          containerStyle: styles.floatingContainer,
+          hide,
+          visible: true,
+        }}
+      />
+    )
+  }
   const {showPopup, showingPopup, popup, popupAnchor} = Kb.usePopup2(makePopup)
 
-  const onClick = React.useCallback(() => {
-    setPathItemActionMenuView(initView)
+  const onClick = () => {
+    setPreviousView(initView)
+    setViewState(initView)
+    setDownloadState({})
     showPopup()
-  }, [initView, setPathItemActionMenuView, showPopup])
+  }
 
-  if (props.path === C.FS.defaultPath) {
+  React.useImperativeHandle(ref, () => ({open: onClick}))
+
+  if (props.path === FS.defaultPath) {
     return null
   }
 
-  // TODO: should probably React.memo this as it's on every row. Would need to
-  // do something about the `clickable` prop though, perhaps flattening it.
+  if (hideTrigger) {
+    return <>{showingPopup && popup}</>
+  }
+
   return (
     <>
       {props.clickable.type === 'component' && (
@@ -113,9 +142,9 @@ const PathItemAction = (props: Props) => {
       {showingPopup && popup}
     </>
   )
-}
+})
 
-const styles = Kb.Styles.styleSheetCreate(
+const useStyles = Kb.Styles.createStyleHook(
   () =>
     ({
       floatingContainer: Kb.Styles.platformStyles({
@@ -131,5 +160,7 @@ const styles = Kb.Styles.styleSheetCreate(
       }),
     }) as const
 )
+
+PathItemAction.displayName = 'PathItemAction'
 
 export default PathItemAction

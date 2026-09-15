@@ -1,27 +1,42 @@
-import * as C from '@/constants'
+import * as React from 'react'
 import * as T from '@/constants/types'
-import {rowStyles, StillCommon, type StillCommonProps} from './common'
+import {useOpen} from '@/fs/common/use-open'
+import * as FS from '@/constants/fs'
+import {useRowStyles, StillCommon} from './common'
 import * as Kb from '@/common-adapters'
+import * as TestIDs from '@/tests/e2e/shared/test-ids'
 
-type TlfTypeProps = StillCommonProps
+type OwnProps = {
+  destinationPickerSource?: T.FS.MoveOrCopySource | T.FS.IncomingShareSource
+  name: T.FS.TlfType
+}
 
-const TlfType = (props: TlfTypeProps) => (
-  <StillCommon
-    path={props.path}
-    onOpen={props.onOpen}
-    inDestinationPicker={props.inDestinationPicker}
-    writingToJournal={false}
-    content={
-      <Kb.Text
-        fixOverdraw={true}
-        type={C.FS.pathTypeToTextType(T.FS.PathType.Folder)}
-        style={rowStyles.rowText}
-        lineClamp={Kb.Styles.isMobile ? 1 : undefined}
-      >
-        {T.FS.getPathName(props.path)}
-      </Kb.Text>
-    }
-  />
-)
+const TLFTypeContainer = (p: OwnProps) => {
+  const rowStyles = useRowStyles()
+  const {destinationPickerSource, name} = p
+  const path = T.FS.stringToPath(`/keybase/${name}`)
+  const onOpen = useOpen({destinationPickerSource, path})
 
-export default TlfType
+  return (
+    <StillCommon
+      testID={TestIDs.FILES_TLF_ROW}
+      path={path}
+      inDestinationPicker={!!destinationPickerSource}
+      onOpen={onOpen}
+      writingToJournal={false}
+      content={
+        <Kb.Text
+          type={FS.pathTypeToTextType(T.FS.PathType.Folder)}
+          style={rowStyles.rowText}
+          lineClamp={isMobile ? 1 : undefined}
+        >
+          {T.FS.getPathName(path)}
+        </Kb.Text>
+      }
+    />
+  )
+}
+
+// memo: fs root rebuilds section data on every FsDataContext write; props are
+// primitives so rows bail
+export default React.memo(TLFTypeContainer)

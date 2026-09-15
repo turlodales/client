@@ -81,8 +81,8 @@ func LookupSenderSeed(mctx libkb.MetaContext) (stellar1.AccountID, stellarnet.Se
 	return senderEntry.AccountID, senderSeed, nil
 }
 
-func isAmountLessThanMin(amount, min string) bool {
-	cmp, err := stellarnet.CompareStellarAmounts(amount, min)
+func isAmountLessThanMin(amount, minV string) bool {
+	cmp, err := stellarnet.CompareStellarAmounts(amount, minV)
 	if err == nil && cmp == -1 {
 		return true
 	}
@@ -101,11 +101,11 @@ func EmptyAmountStack(mctx libkb.MetaContext) {
 func cancelOnMobileBackground(mctx libkb.MetaContext) (libkb.MetaContext, context.CancelFunc) {
 	mctx, cancel := mctx.WithContextCancel()
 	go func() {
+		const foreground = keybase1.MobileAppState_FOREGROUND
 		for {
-			foreground := keybase1.MobileAppState_FOREGROUND
 			select {
-			case state := <-mctx.G().MobileAppState.NextUpdate(&foreground):
-				if state != foreground {
+			case <-mctx.G().MobileAppState.NextUpdate(foreground):
+				if mctx.G().MobileAppState.State() != foreground {
 					cancel()
 					return
 				}

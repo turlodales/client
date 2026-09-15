@@ -38,7 +38,7 @@ func TestParticipantsSource(t *testing.T) {
 	select {
 	case pres := <-ch:
 		require.NoError(t, pres.Err)
-		require.Equal(t, 2, len(pres.Uids))
+		require.Len(t, pres.Uids, 2)
 	case <-time.After(timeout):
 		require.Fail(t, "no uids")
 	}
@@ -52,7 +52,7 @@ func TestParticipantsSource(t *testing.T) {
 	select {
 	case pres := <-ch:
 		require.NoError(t, pres.Err)
-		require.Equal(t, 2, len(pres.Uids))
+		require.Len(t, pres.Uids, 2)
 	case <-time.After(timeout):
 		require.Fail(t, "no uids")
 	}
@@ -69,14 +69,14 @@ func TestParticipantsSource(t *testing.T) {
 	select {
 	case pres := <-ch:
 		require.NoError(t, pres.Err)
-		require.Equal(t, 2, len(pres.Uids))
+		require.Len(t, pres.Uids, 2)
 	case <-time.After(timeout):
 		require.Fail(t, "no uids")
 	}
 	select {
 	case pres := <-ch:
 		require.NoError(t, pres.Err)
-		require.Equal(t, 3, len(pres.Uids))
+		require.Len(t, pres.Uids, 3)
 	case <-time.After(timeout):
 		require.Fail(t, "no uids")
 	}
@@ -87,11 +87,27 @@ func TestParticipantsSource(t *testing.T) {
 	select {
 	case pres := <-ch:
 		require.NoError(t, pres.Err)
-		require.Equal(t, 3, len(pres.Uids))
+		require.Len(t, pres.Uids, 3)
 	case <-time.After(timeout):
 		require.Fail(t, "no uids")
 	}
 	time.Sleep(time.Millisecond * 200)
 	_, ok = <-ch
 	require.False(t, ok)
+}
+
+func TestParticipantsSourceGetPropagatesErrors(t *testing.T) {
+	useRemoteMock = false
+	defer func() { useRemoteMock = true }()
+	ctc := makeChatTestContext(t, "TestParticipantsSourceGetPropagatesErrors", 1)
+	defer ctc.cleanup()
+
+	users := ctc.users()
+	tc := ctc.world.Tcs[users[0].Username]
+	ctx := ctc.as(t, users[0]).startCtx
+	uid := gregor1.UID(users[0].GetUID().ToBytes())
+
+	_, err := tc.Context().ParticipantsSource.Get(ctx, uid, chat1.ConversationID([]byte("missing")),
+		types.InboxSourceDataSourceAll)
+	require.Error(t, err)
 }

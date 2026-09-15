@@ -39,7 +39,7 @@ func (c *teamMembersRenderer) outputJSON(t keybase1.TeamDetails) error {
 		return err
 	}
 	dui := c.G().UI.GetDumbOutputUI()
-	_, err = dui.Printf(string(b) + "\n")
+	_, err = dui.Printf("%s\n", b)
 	return err
 }
 
@@ -125,7 +125,6 @@ func (c *teamMembersRenderer) outputInvites(annotatedInvites []keybase1.Annotate
 }
 
 func (c *teamMembersRenderer) outputTeams(list keybase1.AnnotatedTeamList, showAll bool) error {
-
 	sort.Slice(list.Teams, func(i, j int) bool {
 		if list.Teams[i].FqName == list.Teams[j].FqName {
 			return list.Teams[i].Username < list.Teams[j].Username

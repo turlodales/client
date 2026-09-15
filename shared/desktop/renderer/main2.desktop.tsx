@@ -1,65 +1,83 @@
+/// <reference types="vite/client" />
 // Entry point to the chrome part of the app
-import Main from '@/app/main.desktop'
+import Main from '@/app/main'
 // order of the above must NOT change. needed for patching / hot loading to be correct
 import * as C from '@/constants'
 import * as React from 'react'
 import * as ReactDOM from 'react-dom/client'
-import type * as RemoteGen from '@/actions/remote-gen'
-import Root from './container.desktop'
+import type * as RemoteGen from '@/constants/remote-actions'
+import {GlobalKeyEventHandler} from '@/common-adapters/key-event-handler.desktop'
 import {makeEngine} from '@/engine'
 import {disableDragDrop} from '@/util/drag-drop.desktop'
-import {dumpLogs} from '@/constants/platform-specific/index.desktop'
-import {initDesktopStyles} from '@/styles/index.desktop'
+import {initDesktopStyles} from '@/styles'
 import {isWindows} from '@/constants/platform'
-import KB2 from '@/util/electron.desktop'
-import {debugWarning} from '@/util/debug-warning'
-
-import type {default as NewMainType} from '../../app/main.desktop'
-
+import KB2 from '@/util/electron'
+import {useConfigState} from '@/stores/config'
+import {useShellState} from '@/stores/shell'
 import {setServiceDecoration} from '@/common-adapters/markdown/react'
 import ServiceDecoration from '@/common-adapters/markdown/service-decoration'
+import {useDarkModeState} from '@/stores/darkmode'
+import {initPlatformListener, onEngineIncoming} from '@/constants/init/index'
+import {eventFromRemoteWindows} from './remote-event-handler.desktop'
+import type {default as NewMainType} from '../../app/main'
+import {dumpLogs} from '@/util/storeless-actions'
 setServiceDecoration(ServiceDecoration)
 
 const {ipcRendererOn, requestWindowsStartService, appStartedUp} = KB2.functions
 
 // node side plumbs through initial pref so we avoid flashes
-const darkModeFromNode = window.location.search.match(/darkModePreference=(alwaysLight|alwaysDark|system)/)
-const {setDarkModePreference} = C.useDarkModeState.getState().dispatch
+const darkModeFromNode = window.location.search.match(/darkMode=(light|dark)/)
+const setSystemDarkMode = useDarkModeState.getState().dispatch.setSystemDarkMode
 
 if (darkModeFromNode) {
   const dm = darkModeFromNode[1]
   switch (dm) {
-    case 'alwaysLight':
-    case 'alwaysDark':
-    case 'system':
-      setDarkModePreference(dm, false)
+    case 'light':
+      setSystemDarkMode(false)
+      break
+    case 'dark':
+      setSystemDarkMode(true)
       break
     default:
   }
 }
 
 // Top level HMR accept
-if (module.hot) {
-  module.hot.accept()
+if (import.meta.hot) {
+  import.meta.hot.accept()
 }
 
-const setupApp = () => {
+const setupApp = async () => {
   disableDragDrop()
 
   const {batch} = C.useWaitingState.getState().dispatch
-  const eng = makeEngine(batch, () => {
-    // do nothing we wait for the remote version from node
-  })
-  C.initListeners()
-  eng.listenersAreReady()
+  const eng = makeEngine(
+    batch,
+    () => {
+      // do nothing we wait for the remote version from node
+    },
+    onEngineIncoming
+  )
 
   ipcRendererOn?.('KBdispatchAction', (_: unknown, action: unknown) => {
     setTimeout(() => {
       try {
-        C.useConfigState.getState().dispatch.eventFromRemoteWindows(action as RemoteGen.Actions)
+        eventFromRemoteWindows(action as RemoteGen.Actions)
       } catch {}
     }, 0)
   })
+
+  initPlatformListener()
+
+  // Let the main process reset its transport before startup effects begin
+  // issuing RPCs on a renderer reload.
+  await appStartedUp?.()
+
+  useShellState.getState().dispatch.initNotifySound()
+  useShellState.getState().dispatch.initForceSmallNav()
+  useShellState.getState().dispatch.initOpenAtLogin()
+  useConfigState.getState().dispatch.initAppUpdateLoop()
+  eng.listenersAreReady()
 
   // See if we're connected, and try starting keybase if not
   if (isWindows) {
@@ -70,111 +88,124 @@ const setupApp = () => {
 
   // After a delay dump logs in case some startup stuff happened
   setTimeout(() => {
-    dumpLogs()
+    dumpLogs('startup')
       .then(() => {})
       .catch(() => {})
   }, 5 * 1000)
-
-  appStartedUp?.()
 }
 
-const FontLoader = () => (
-  <div style={{height: 0, overflow: 'hidden', width: 0}}>
-    <p style={{fontFamily: 'kb'}}>kb</p>
-    <p style={{fontFamily: 'Source Code Pro', fontWeight: 500}}>source code pro 500</p>
-    <p style={{fontFamily: 'Source Code Pro', fontWeight: 600}}>source code pro 600</p>
-    <p style={{fontFamily: 'Keybase', fontWeight: 400}}>keybase 400</p>
-    <p style={{fontFamily: 'Keybase', fontStyle: 'italic', fontWeight: 400}}>keybase 400 i</p>
-    <p style={{fontFamily: 'Keybase', fontWeight: 600}}>keybase 600</p>
-    <p style={{fontFamily: 'Keybase', fontStyle: 'italic', fontWeight: 600}}>keybase 600 i</p>
-    <p style={{fontFamily: 'Keybase', fontWeight: 700}}>keybase 700</p>
-    <p style={{fontFamily: 'Keybase', fontStyle: 'italic', fontWeight: 700}}>keybase 700 i</p>
-  </div>
-)
-
-const DarkCSSInjector = () => {
-  const isDark = C.useDarkModeState(s => s.isDarkMode())
-  const [lastIsDark, setLastIsDark] = React.useState<boolean | undefined>()
-  if (lastIsDark !== isDark) {
-    setLastIsDark(isDark)
-    // inject it in body so modals get darkMode also
-    if (isDark) {
-      document.body.classList.add('darkMode')
-      document.body.classList.remove('lightMode')
-    } else {
-      document.body.classList.remove('darkMode')
-      document.body.classList.add('lightMode')
+const useDarkHookup = () => {
+  const initedRef = React.useRef(false)
+  const setSystemDarkMode = useDarkModeState(s => s.dispatch.setSystemDarkMode)
+  React.useEffect(() => {
+    const m = window.matchMedia('(prefers-color-scheme: dark)')
+    if (!initedRef.current) {
+      initedRef.current = true
+      setSystemDarkMode(m.matches)
     }
-  }
-  return null
+
+    const handler = (e: MediaQueryListEvent) => {
+      setSystemDarkMode(e.matches)
+    }
+    m.addEventListener('change', handler)
+    return () => {
+      m.removeEventListener('change', handler)
+    }
+  }, [setSystemDarkMode])
 }
+
+const Root = ({children}: {children: React.ReactNode}) => {
+  useDarkHookup()
+  return (
+    <GlobalKeyEventHandler>
+      {children}
+    </GlobalKeyEventHandler>
+  )
+}
+
+// awaited before first render so text (and canvas measurements of it) always uses real fonts
+const preloadFonts = async () => {
+  await Promise.all(
+    [
+      '400 16px "kb"',
+      '500 16px "Source Code Pro"',
+      '600 16px "Source Code Pro"',
+      '400 16px "Keybase"',
+      'italic 400 16px "Keybase"',
+      '600 16px "Keybase"',
+      'italic 600 16px "Keybase"',
+      '700 16px "Keybase"',
+      'italic 700 16px "Keybase"',
+    ].map(async f => document.fonts.load(f).catch(() => {}))
+  )
+}
+
+// Cache React root across HMR to avoid remounting the entire tree
+// eslint-disable-next-line
+const _rootRef: {current?: ReactDOM.Root} = (globalThis as any).__hmr_reactRoot ??= {}
 
 const render = (Component = Main) => {
-  const root = document.getElementById('root')
-  if (!root) {
+  const rootEl = document.getElementById('root')
+  if (!rootEl) {
     throw new Error('No root element?')
   }
 
-  // Wrap Root here if you want the app to be strict, it currently doesn't work with react-native-web
-  // until 0.19.1+ lands. I tried this when it just did but there's other issues so we have to keep it off
-  // else all nav stuff is broken
-  // <React.StrictMode>
-  // </React.StrictMode>
-  ReactDOM.createRoot(root).render(
-    <Root>
-      <DarkCSSInjector />
-      <FontLoader />
-      <div style={{display: 'flex', flex: 1}}>
-        <Component />
-      </div>
-    </Root>
+  if (!_rootRef.current) {
+    _rootRef.current = ReactDOM.createRoot(rootEl)
+  }
+
+  _rootRef.current.render(
+    <React.StrictMode>
+      <Root>
+        <div style={{display: 'flex', flex: 1}}>
+          <Component />
+        </div>
+      </Root>
+    </React.StrictMode>
   )
 }
 
 const setupHMR = () => {
-  if (!module.hot?.accept) {
+  if (!import.meta.hot) {
     return
   }
 
-  const refreshMain = () => {
-    try {
-      const {default: NewMain} = require('../../app/main.desktop') as {default: typeof NewMainType}
-      render(NewMain)
-    } catch {}
-  }
-
-  module.hot.accept(['../../app/main.desktop'], refreshMain)
-  module.hot.accept(['../../common-adapters/index'], () => {})
+  // Re-render with the new Main on hot update. Component-level edits are handled
+  // by react-refresh (@vitejs/plugin-react); this covers a full Main swap.
+  import.meta.hot.accept('@/app/main', newModule => {
+    const NewMain = (newModule as {default?: typeof NewMainType} | undefined)?.default
+    if (NewMain) {
+      try {
+        render(NewMain)
+      } catch {}
+    }
+  })
 }
 
-const load = () => {
+const load = async () => {
   if (global.DEBUGLoaded) {
-    // only load once
-    console.log('Bail on load() on HMR')
+    // HMR detected — keep the existing engine/transport and rebind it to the
+    // new module instance so incoming RPCs hit the current handlers.
+    console.log('HMR: rebinding engine and reinitializing store subscriptions')
+    const {batch} = C.useWaitingState.getState().dispatch
+    const eng = makeEngine(
+      batch,
+      () => {
+        // do nothing we wait for the remote version from node
+      },
+      onEngineIncoming
+    )
+    initPlatformListener()
+    eng.listenersAreReady()
     return
   }
   global.DEBUGLoaded = true
   initDesktopStyles()
-  setupApp()
+  const fontsLoaded = preloadFonts()
+  await setupApp()
+  await fontsLoaded
   setupHMR()
-
-  if (__DEV__) {
-    // let us load devtools first
-    const DEBUG_DEFER = false as boolean
-    if (DEBUG_DEFER) {
-      debugWarning('DEBUG_DEFER on!!!')
-      const e = <div>temp</div>
-      const root = document.getElementById('root')
-      root && ReactDOM.createRoot(root).render(e)
-      setTimeout(() => {
-        render()
-      }, 5000)
-    } else {
-      render()
-    }
-  } else {
-    render()
-  }
+  render()
 }
 
-load()
+void load()

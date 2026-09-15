@@ -1,4 +1,4 @@
-import Box from './box'
+import {Box2} from './box'
 import * as Styles from '@/styles'
 
 type Props = {
@@ -10,6 +10,7 @@ type Props = {
 }
 
 const ProgressBar = ({ratio, style, fillStyle, flatLeft, flatRight}: Props) => {
+  const styles = useStyles()
   const animatedStyles = {
     ...styles.inner,
     ...fillStyle,
@@ -18,7 +19,8 @@ const ProgressBar = ({ratio, style, fillStyle, flatLeft, flatRight}: Props) => {
     width: `${Math.max(0, Math.min(1, ratio)) * 100}%`,
   } as const
   return (
-    <Box
+    <Box2
+      direction="vertical"
       style={Styles.collapseStyles([
         styles.outer,
         style,
@@ -26,28 +28,29 @@ const ProgressBar = ({ratio, style, fillStyle, flatLeft, flatRight}: Props) => {
         flatRight ? styles.flatRight : {},
       ])}
     >
-      <Box style={animatedStyles} />
-    </Box>
+      <Box2 direction="vertical" style={animatedStyles} />
+    </Box2>
   )
 }
 
-const styles = Styles.styleSheetCreate(() => ({
+const useStyles = Styles.createStyleHook(theme => ({
   flatLeft: {borderBottomLeftRadius: 0, borderTopLeftRadius: 0},
   flatRight: {borderBottomRightRadius: 0, borderTopRightRadius: 0},
   inner: {
-    backgroundColor: Styles.globalColors.blue,
-    borderRadius: 3,
+    alignSelf: 'flex-start',
+    backgroundColor: theme.blue,
+    ...Styles.globalStyles.rounded,
     height: 4,
   },
   outer: Styles.platformStyles({
     common: {
-      backgroundColor: Styles.globalColors.greyLight,
-      borderRadius: 3,
+      backgroundColor: theme.greyLight,
+      ...Styles.globalStyles.rounded,
       height: 4,
       width: 64,
     },
     isElectron: {
-      boxShadow: `inset 0 1px 0 0 ${Styles.globalColors.black_05}`,
+      boxShadow: `inset 0 1px 0 0 ${theme.black_05}`,
     },
   }),
 }))

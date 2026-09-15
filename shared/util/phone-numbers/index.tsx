@@ -1,12 +1,17 @@
-import {isMobile} from '@/constants/platform'
+import * as React from 'react'
+import * as T from '@/constants/types'
+import {emojiIndexByChar} from '@/common-adapters/markdown/emoji-gen'
 import libphonenumber from 'google-libphonenumber'
+import countriesRaw from './country-data/countries.json'
+import supportedCodesRaw from './sms-support/data.json'
 
 const PNF = libphonenumber.PhoneNumberFormat
-export const PhoneNumberFormat = PNF
 
-export const phoneUtil = libphonenumber.PhoneNumberUtil.getInstance()
-export const ValidationResult = libphonenumber.PhoneNumberUtil.ValidationResult
+const phoneUtil = libphonenumber.PhoneNumberUtil.getInstance()
+const ValidationResult = libphonenumber.PhoneNumberUtil.ValidationResult
 const supported = phoneUtil.getSupportedRegions()
+let _defaultPhoneCountry: string | undefined
+let _defaultPhoneCountryPromise: Promise<string | undefined> | undefined
 
 export type CountryData = {
   alpha2: string
@@ -26,17 +31,14 @@ const load = () => {
   if (_countryDataLoaded) return
   _countryDataLoaded = true
 
-  const countries = require('./country-data/countries.json') as Array<{
+  const countries = countriesRaw as Array<{
     alpha2: string
     status: string
     emoji: string
     name: string
     countryCallingCodes: Array<string>
   }>
-  const {emojiIndexByChar} = require('@/common-adapters/markdown/emoji-gen') as {
-    emojiIndexByChar: {[key: string | number]: string}
-  }
-  const supportedCodes = require('./sms-support/data.json') as {[key: string]: boolean}
+  const supportedCodes = supportedCodesRaw as {[key: string]: boolean}
 
   countries.forEach(curr => {
     if (
@@ -187,4 +189,56 @@ export const formatPhoneNumberInternational = (rawNumber: string): string | unde
   } catch {
     return undefined
   }
+}
+
+// Get phone number in e.164, or null if we can't parse it.
+export const getE164 = (phoneNumber: string, countryCode?: string) => {
+  try {
+    const parsed = countryCode ? phoneUtil.parse(phoneNumber, countryCode) : phoneUtil.parse(phoneNumber)
+    const reason = phoneUtil.isPossibleNumberWithReason(parsed)
+    if (reason !== ValidationResult.IS_POSSIBLE) {
+      return null
+    }
+    return phoneUtil.format(parsed, PNF.E164)
+  } catch {
+    return null
+  }
+}
+
+const loadDefaultPhoneCountry = async () => {
+  if (_defaultPhoneCountry) {
+    return _defaultPhoneCountry
+  }
+  if (!_defaultPhoneCountryPromise) {
+    _defaultPhoneCountryPromise = T.RPCGen.accountGuessCurrentLocationRpcPromise({
+      defaultCountry: 'US',
+    })
+      .then(country => {
+        _defaultPhoneCountry = country
+        return country
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        _defaultPhoneCountryPromise = undefined
+      })
+  }
+  return _defaultPhoneCountryPromise
+}
+
+export const useDefaultPhoneCountry = () => {
+  const [defaultCountry, setDefaultCountry] = React.useState(_defaultPhoneCountry)
+
+  React.useEffect(() => {
+    let canceled = false
+    void loadDefaultPhoneCountry().then(country => {
+      if (!canceled) {
+        setDefaultCountry(country)
+      }
+    })
+    return () => {
+      canceled = true
+    }
+  }, [])
+
+  return defaultCountry
 }

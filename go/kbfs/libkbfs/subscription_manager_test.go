@@ -5,6 +5,7 @@
 package libkbfs
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"testing"
@@ -17,19 +18,19 @@ import (
 	"github.com/keybase/client/go/kbfs/tlf"
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/context"
 )
 
 func waitForCall(t *testing.T, timeout time.Duration) (
-	waiter func(), done func(args ...interface{})) {
+	waiter func(), done func(args ...any),
+) {
 	ch := make(chan struct{})
 	return func() {
 			select {
 			case <-time.After(timeout):
-				t.Fatalf("waiting on lastMockDone timeout")
+				require.FailNow(t, "waiting on lastMockDone timeout")
 			case <-ch:
 			}
-		}, func(args ...interface{}) {
+		}, func(args ...any) {
 			ch <- struct{}{}
 		}
 }
@@ -38,7 +39,8 @@ const testSubscriptionManagerClientID SubscriptionManagerClientID = "test"
 
 func initSubscriptionManagerTest(t *testing.T) (config Config,
 	sm SubscriptionManager, notifier *MockSubscriptionNotifier,
-	finish func()) {
+	finish func(),
+) {
 	ctl := gomock.NewController(t)
 	config = MakeTestConfigOrBust(t, "jdoe")
 	notifier = NewMockSubscriptionNotifier(ctl)
@@ -52,10 +54,10 @@ func initSubscriptionManagerTest(t *testing.T) (config Config,
 }
 
 type sliceMatcherNoOrder struct {
-	x interface{}
+	x any
 }
 
-func (e sliceMatcherNoOrder) Matches(x interface{}) bool {
+func (e sliceMatcherNoOrder) Matches(x any) bool {
 	vExpected := reflect.ValueOf(e.x)
 	vGot := reflect.ValueOf(x)
 	if vExpected.Kind() != reflect.Slice || vGot.Kind() != reflect.Slice {
@@ -84,8 +86,7 @@ func TestSubscriptionManagerSubscribePath(t *testing.T) {
 	config, sm, notifier, finish := initSubscriptionManagerTest(t)
 	defer finish()
 
-	ctx, cancelFn := context.WithCancel(context.Background())
-	defer cancelFn()
+	ctx := t.Context()
 	ctx, err := libcontext.NewContextWithCancellationDelayer(
 		libcontext.NewContextReplayable(
 			ctx, func(c context.Context) context.Context {
@@ -138,7 +139,8 @@ func TestSubscriptionManagerSubscribePath(t *testing.T) {
 			keybase1.PathSubscriptionTopic_CHILDREN,
 		}}).Do(func(
 		clientID SubscriptionManagerClientID, subscriptionIDs []SubscriptionID,
-		path string, topics []keybase1.PathSubscriptionTopic) {
+		path string, topics []keybase1.PathSubscriptionTopic,
+	) {
 		done0()
 		done1()
 	})
@@ -159,7 +161,8 @@ func TestSubscriptionManagerSubscribePath(t *testing.T) {
 		[]SubscriptionID{sid2}, "/keybase/private/jdoe",
 		[]keybase1.PathSubscriptionTopic{keybase1.PathSubscriptionTopic_STAT}).Do(func(
 		clientID SubscriptionManagerClientID, subscriptionIDs []SubscriptionID,
-		path string, topics []keybase1.PathSubscriptionTopic) {
+		path string, topics []keybase1.PathSubscriptionTopic,
+	) {
 		done2()
 	})
 
@@ -180,7 +183,8 @@ func TestSubscriptionManagerSubscribePath(t *testing.T) {
 		[]SubscriptionID{sid1}, "/keybase/private/jdoe/dir1/../file",
 		[]keybase1.PathSubscriptionTopic{keybase1.PathSubscriptionTopic_STAT}).Do(func(
 		clientID SubscriptionManagerClientID, subscriptionIDs []SubscriptionID,
-		path string, topics []keybase1.PathSubscriptionTopic) {
+		path string, topics []keybase1.PathSubscriptionTopic,
+	) {
 		done3()
 	})
 	err = config.KBFSOps().Write(ctx, fileNode, []byte("hello"), 0)
@@ -207,7 +211,8 @@ func TestSubscriptionManagerFavoritesChange(t *testing.T) {
 		[]SubscriptionID{sid1}, keybase1.SubscriptionTopic_FAVORITES).Do(
 		func(
 			clientID SubscriptionManagerClientID, subscriptionIDs []SubscriptionID,
-			topic keybase1.SubscriptionTopic) {
+			topic keybase1.SubscriptionTopic,
+		) {
 			done1()
 		})
 	err = config.KBFSOps().AddFavorite(ctx,
@@ -227,8 +232,7 @@ func TestSubscriptionManagerSubscribePathNoFolderBranch(t *testing.T) {
 	config, sm, notifier, finish := initSubscriptionManagerTest(t)
 	defer finish()
 
-	ctx, cancelFn := context.WithCancel(context.Background())
-	defer cancelFn()
+	ctx := t.Context()
 	ctx, err := libcontext.NewContextWithCancellationDelayer(
 		libcontext.NewContextReplayable(
 			ctx, func(c context.Context) context.Context {
@@ -249,7 +253,8 @@ func TestSubscriptionManagerSubscribePathNoFolderBranch(t *testing.T) {
 		[]keybase1.PathSubscriptionTopic{keybase1.PathSubscriptionTopic_CHILDREN}).AnyTimes().Do(
 		func(
 			clientID SubscriptionManagerClientID, subscriptionIDs []SubscriptionID,
-			path string, topics []keybase1.PathSubscriptionTopic) {
+			path string, topics []keybase1.PathSubscriptionTopic,
+		) {
 			done0()
 		})
 

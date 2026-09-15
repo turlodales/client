@@ -5,6 +5,8 @@
 package libkbfs
 
 import (
+	"context"
+	"fmt"
 	"io"
 	"testing"
 	"time"
@@ -21,7 +23,6 @@ import (
 	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/protocol/keybase1"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/context"
 )
 
 type testBlockRetrievalConfig struct {
@@ -40,7 +41,8 @@ type testBlockRetrievalConfig struct {
 }
 
 func newTestBlockRetrievalConfig(t *testing.T, bg blockGetter,
-	dbc DiskBlockCache) *testBlockRetrievalConfig {
+	dbc DiskBlockCache,
+) *testBlockRetrievalConfig {
 	clock := clocktest.NewTestClockNow()
 	ctlr := gomock.NewController(t)
 	mockPublisher := NewMockSubscriptionManagerPublisher(ctlr)
@@ -91,7 +93,8 @@ func (c testBlockRetrievalConfig) GetSettingsDB() *SettingsDB {
 
 func (c testBlockRetrievalConfig) SubscriptionManager(
 	_ SubscriptionManagerClientID, _ bool,
-	_ SubscriptionNotifier) SubscriptionManager {
+	_ SubscriptionNotifier,
+) SubscriptionManager {
 	return c.subscriptionManager
 }
 
@@ -133,7 +136,7 @@ func endBlockRetrievalQueueTest(t *testing.T, q *blockRetrievalQueue) {
 	select {
 	case <-q.Shutdown():
 	case <-time.After(5 * time.Second):
-		t.Fatal("Waited too long for block retrieval queue to shutdown")
+		require.FailNow(t, "Waited too long for block retrieval queue to shutdown")
 	}
 }
 
@@ -267,7 +270,7 @@ func TestBlockRetrievalQueueMultipleRequestsSameBlock(t *testing.T) {
 	require.Equal(t, defaultOnDemandRequestPriority, br.priority)
 	require.Equal(t, uint64(0), br.insertionOrder)
 	require.Len(t, br.requests, 2)
-	require.Len(t, *q.heap, 0)
+	require.Empty(t, *q.heap)
 	require.Equal(t, block, br.requests[0].block)
 	require.Equal(t, block, br.requests[1].block)
 }
@@ -405,7 +408,7 @@ func TestBlockRetrievalQueueThrottling(t *testing.T) {
 		time.Sleep(1 * time.Millisecond)
 		select {
 		case <-ctx.Done():
-			t.Fatal(ctx.Err())
+			require.FailNow(t, fmt.Sprint(ctx.Err()))
 		default:
 		}
 	}

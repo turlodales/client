@@ -1,83 +1,74 @@
 import * as React from 'react'
 import * as Kb from '@/common-adapters'
-import * as C from '@/constants'
 import TabBar from './tab-bar.desktop'
+import './router.css'
 import {useNavigationBuilder, TabRouter, createNavigatorFactory} from '@react-navigation/core'
+import type {TypedNavigator, NavigatorTypeBagBase} from '@react-navigation/native'
+import type * as Tabs from '@/constants/tabs'
+import {useRouterState} from '@/stores/router'
+import {getModalStack} from '@/constants/router'
 
 type BackBehavior = Parameters<typeof TabRouter>[0]['backBehavior']
 type Props = Parameters<typeof useNavigationBuilder>[1] & {backBehavior: BackBehavior}
-type Desc = ReturnType<typeof useNavigationBuilder>['descriptors'][0]
-
-// not memo as it changes every time
-const RouteBox = (p: {desc?: Desc; selected: boolean}) => {
-  const {desc, selected} = p
-  return (
-    <Kb.Box2
-      direction="vertical"
-      fullHeight={true}
-      fullWidth={true}
-      style={selected ? undefined : styles.hidden}
-    >
-      {desc?.render()}
-    </Kb.Box2>
-  )
-}
-
-const LeftTabNavigator = React.memo(function LeftTabNavigator({
+function LeftTabNavigator({
   backBehavior,
   initialRouteName,
   children,
   screenOptions,
 }: Props) {
-  const {state, navigation, descriptors, NavigationContent} = useNavigationBuilder(TabRouter, {
+  const styles = useStyles()
+  const {state, navigation, descriptors, render} = useNavigationBuilder(TabRouter, {
     backBehavior,
     children,
     initialRouteName,
     screenOptions,
   })
 
-  const renderedRef = React.useRef<{[key: string]: boolean}>({})
-  // render if its been rendered before
-  const shouldRender = React.useCallback((key: string, selected: boolean) => {
-    if (renderedRef.current[key]) {
-      return true
-    }
-    if (selected) {
-      renderedRef.current[key] = true
-      return true
-    }
-    return false
-  }, [])
+  const hasModals = useRouterState(() => getModalStack().length > 0)
 
-  const hasModals = C.useRouterState(s => C.Router2.getModalStack(s.navState).length > 0)
-
-  return (
-    <NavigationContent>
-      <Kb.Box2 direction="horizontal" fullHeight={true} fullWidth={true} style={styles.box}>
-        <TabBar state={state} navigation={navigation as any} />
-        <Kb.BoxGrow>
-          {state.routes.map((route, i) => {
-            const routeKey = route.key
-            const desc = descriptors[routeKey]
-            const selected = i === state.index
-            const needDesc = desc ? shouldRender(routeKey, selected) : false
-            return <RouteBox key={route.name} selected={selected} desc={needDesc ? desc : undefined} />
-          })}
-        </Kb.BoxGrow>
-        <ModalBackdrop hasModals={hasModals} />
-      </Kb.Box2>
-    </NavigationContent>
+  return render(
+    <Kb.Box2 direction="horizontal" fullHeight={true} fullWidth={true} style={styles.box}>
+      <TabBar
+        state={state}
+        navigation={
+          // eslint-disable-next-line
+          navigation as any
+        }
+      />
+      <Kb.BoxGrow style={styles.content}>
+        {state.routes.map((route, i) => {
+          const selected = i === state.index
+          const desc = descriptors[route.key]
+          return (
+            <React.Activity key={route.name} mode={selected ? 'visible' : 'hidden'}>
+              <Kb.Box2 direction="vertical" fullHeight={true} fullWidth={true}>
+                {desc?.render()}
+              </Kb.Box2>
+            </React.Activity>
+          )
+        })}
+      </Kb.BoxGrow>
+      <ModalBackdrop hasModals={hasModals} />
+    </Kb.Box2>
   )
-})
+}
 
-const ModalBackdrop = React.memo(function ModalBackdrop(p: {hasModals: boolean}) {
+function ModalBackdrop(p: {hasModals: boolean}) {
   const {hasModals} = p
   return <div className={Kb.Styles.classNames({'has-modals': hasModals, 'modal-backdrop': true})} />
-})
+}
 
-const styles = Kb.Styles.styleSheetCreate(() => ({
-  box: {backgroundColor: Kb.Styles.globalColors.white},
-  hidden: {display: 'none'},
+const useStyles = Kb.Styles.createStyleHook(theme => ({
+  // clip + min-width 0 so a misbehaving screen can never widen past the window and shove
+  // the tab bar off screen
+  box: {backgroundColor: theme.white, overflow: 'hidden'},
+  content: {minWidth: 0, overflow: 'hidden'},
 }))
 
-export const createLeftTabNavigator = createNavigatorFactory(LeftTabNavigator)
+type NavType = NavigatorTypeBagBase & {
+  ParamList: {
+    [key in (typeof Tabs.desktopTabs)[number]]: undefined
+  }
+}
+
+export const createLeftTabNavigator = createNavigatorFactory(LeftTabNavigator) as unknown as () => TypedNavigator<NavType>

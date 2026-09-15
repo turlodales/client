@@ -1,24 +1,21 @@
-import * as C from '@/constants'
 import * as Kb from '@/common-adapters'
 import * as React from 'react'
-import {OrdinalContext, HighlightedContext} from '../ids-context'
+import {zoomImage} from '@/constants/chat/helpers'
+import {useIsHighlighted} from '../ids-context'
+import {ZoomedImage} from '../../common'
 import type * as T from '@/constants/types'
 
-export const useReply = (ordinal: T.Chat.Ordinal) => {
-  const showReplyTo = C.useChatContext(s => {
-    const m = s.messageMap.get(ordinal)
-    return m?.type === 'text' ? !!m.replyTo : false
-  })
-  return showReplyTo ? <Reply /> : null
+export const useReply = (replyTo?: T.Chat.MessageReplyTo, onClick?: () => void) => {
+  return replyTo ? <Reply replyTo={replyTo} onClick={onClick} /> : null
 }
 
-const emptyMessage = C.Chat.makeMessageText()
-
-const ReplyToContext = React.createContext<T.Chat.MessageReplyTo>(emptyMessage)
+const ReplyToContext = React.createContext<T.Chat.MessageReplyTo>(null!)
+ReplyToContext.displayName = 'ReplyToContext'
 
 const AvatarHolder = () => {
+  const styles = useStyles()
   const {author} = React.useContext(ReplyToContext)
-  const showCenteredHighlight = React.useContext(HighlightedContext)
+  const showCenteredHighlight = useIsHighlighted()
   return (
     <Kb.Box2 direction="horizontal" gap="xtiny" fullWidth={true}>
       <Kb.Avatar username={author} size={16} />
@@ -44,19 +41,14 @@ const ReplyImage = () => {
   if (!imageURL) return null
   const imageHeight = replyTo.previewHeight
   const imageWidth = replyTo.previewWidth
-  const sizing = imageWidth && imageHeight ? C.Chat.zoomImage(imageWidth, imageHeight, 80) : undefined
-  return (
-    <Kb.Box2 direction="vertical" style={styles.replyImageContainer}>
-      <Kb.Box style={sizing?.margins}>
-        <Kb.Image2 src={imageURL} style={sizing?.dims} />
-      </Kb.Box>
-    </Kb.Box2>
-  )
+  const sizing = imageWidth && imageHeight ? zoomImage(imageWidth, imageHeight, 80) : undefined
+  return <ZoomedImage src={imageURL} sizing={sizing} />
 }
 
 const ReplyText = () => {
+  const styles = useStyles()
   const replyTo = React.useContext(ReplyToContext)
-  const showCenteredHighlight = React.useContext(HighlightedContext)
+  const showCenteredHighlight = useIsHighlighted()
 
   const text =
     replyTo.type === 'attachment'
@@ -66,13 +58,18 @@ const ReplyText = () => {
         : ''
 
   return text ? (
-    <Kb.Text
-      type="BodySmall"
-      style={showCenteredHighlight ? styles.textHighlighted : undefined}
+    <Kb.Markdown
+      serviceOnly={true}
       lineClamp={3}
+      context={`reply-${replyTo.id}`}
+      style={
+        showCenteredHighlight
+          ? Kb.Styles.collapseStyles([styles.replyText, styles.replyTextHighlighted])
+          : styles.replyText
+      }
     >
       {text}
-    </Kb.Text>
+    </Kb.Markdown>
   ) : null
 }
 
@@ -80,111 +77,76 @@ type RS = {
   showImage: boolean
   showEdited: boolean
   isDeleted: boolean
-  onClick: () => void
+  onClick?: () => void
 }
 
-const ReplyStructure = React.memo(function ReplyStructure(p: RS) {
+function ReplyStructure(p: RS) {
+  const styles = useStyles()
   const {showImage, showEdited, isDeleted, onClick} = p
 
   return (
-    <Kb.ClickableBox2 onClick={onClick}>
-      <Kb.Box2
-        direction="horizontal"
-        gap="tiny"
-        fullWidth={true}
-        style={styles.replyContainer}
-        className={Kb.Styles.classNames('ReplyBox')}
-      >
-        <Kb.Box2 direction="horizontal" style={styles.quoteContainer} />
-        <Kb.Box2 direction="vertical" gap="xtiny" style={styles.replyContentContainer}>
-          <Kb.Box2 direction="horizontal" fullWidth={true}>
-            <AvatarHolder />
-          </Kb.Box2>
-          <Kb.Box2 direction="horizontal" fullWidth={true} gap="tiny">
-            {showImage && <ReplyImage />}
-            <Kb.Box2 direction="horizontal" style={styles.replyTextContainer}>
-              {isDeleted ? (
-                <Kb.Text type="BodyTiny" style={styles.replyEdited} virtualText={true}>
-                  The original message was deleted.
-                </Kb.Text>
-              ) : (
-                <ReplyText />
-              )}
-            </Kb.Box2>
-          </Kb.Box2>
-          {showEdited && (
-            <Kb.Text type="BodyTiny" style={styles.replyEdited} virtualText={true}>
-              EDITED
-            </Kb.Text>
-          )}
+    <Kb.ClickableBox direction="horizontal" gap="tiny" fullWidth={true} style={styles.replyContainer} className={Kb.Styles.classNames('ReplyBox')} onClick={onClick}>
+      <Kb.Box2 direction="horizontal" alignSelf="stretch" style={styles.quoteContainer} />
+      <Kb.Box2 direction="vertical" gap="xtiny" flex={1}>
+        <Kb.Box2 direction="horizontal" fullWidth={true}>
+          <AvatarHolder />
         </Kb.Box2>
+        <Kb.Box2 direction="horizontal" fullWidth={true} gap="tiny">
+          {showImage && <ReplyImage />}
+          <Kb.Box2 direction="horizontal" flex={1} alignSelf="flex-start">
+            {isDeleted ? (
+              <Kb.Text type="BodyTiny" style={styles.replyEdited} virtualText={true}>
+                The original message was deleted.
+              </Kb.Text>
+            ) : (
+              <ReplyText />
+            )}
+          </Kb.Box2>
+        </Kb.Box2>
+        {showEdited && (
+          <Kb.Text type="BodyTiny" style={styles.replyEdited} virtualText={true}>
+            EDITED
+          </Kb.Text>
+        )}
       </Kb.Box2>
-    </Kb.ClickableBox2>
+    </Kb.ClickableBox>
   )
-})
+}
 
-const Reply = React.memo(function Reply() {
-  const ordinal = React.useContext(OrdinalContext)
-  const replyTo = C.useChatContext(s => {
-    const m = s.messageMap.get(ordinal)
-    return m?.type === 'text' ? m.replyTo : undefined
-  })
-
-  const replyJump = C.useChatContext(s => s.dispatch.replyJump)
-  const onClick = C.useEvent(() => {
-    const id = replyTo?.id ?? 0
-    id && replyJump(id)
-  })
-
-  if (!replyTo?.id) return null
+function Reply({replyTo, onClick}: {onClick?: () => void; replyTo: T.Chat.MessageReplyTo}) {
+  if (!replyTo.id) return null
 
   const showEdited = !!replyTo.hasBeenEdited
   const isDeleted = replyTo.exploded || replyTo.type === 'deleted'
   const showImage = !!replyTo.previewURL
 
   return (
-    <ReplyToContext.Provider value={replyTo}>
+    <ReplyToContext value={replyTo}>
       <ReplyStructure isDeleted={isDeleted} showImage={showImage} showEdited={showEdited} onClick={onClick} />
-    </ReplyToContext.Provider>
+    </ReplyToContext>
   )
-})
+}
 
-const styles = Kb.Styles.styleSheetCreate(
-  () =>
+const useStyles = Kb.Styles.createStyleHook(
+  theme =>
     ({
       quoteContainer: {
-        alignSelf: 'stretch',
-        backgroundColor: Kb.Styles.globalColors.grey,
+        backgroundColor: theme.grey,
         paddingLeft: Kb.Styles.globalMargins.xtiny,
       },
       replyContainer: {
         paddingBottom: Kb.Styles.globalMargins.tiny,
         paddingTop: Kb.Styles.globalMargins.xtiny,
       },
-      replyContentContainer: {flex: 1},
-      replyEdited: {color: Kb.Styles.globalColors.black_35},
-      replyImageContainer: {
-        overflow: 'hidden',
-        position: 'relative',
-      },
-      replyProgress: {
-        bottom: '50%',
-        left: '50%',
-        marginBottom: -12,
-        marginLeft: -12,
-        marginRight: -12,
-        marginTop: -12,
-        position: 'absolute',
-        right: '50%',
-        top: '50%',
-        width: 24,
-      },
-      replyTextContainer: {
-        alignSelf: 'flex-start',
-        flex: 1,
-      },
+      replyEdited: {color: theme.black_35},
+      replyText: Kb.Styles.platformStyles({
+        common: {color: theme.black_50},
+        // match BodySmall, which the quote used before it moved to Markdown
+        isElectron: {fontSize: 13, lineHeight: '17px', whiteSpace: 'pre-wrap'},
+        isMobile: {fontSize: 15, lineHeight: 19},
+      }),
+      replyTextHighlighted: {color: theme.black_50OrBlack_50},
       replyUsername: {alignSelf: 'center'},
-      replyUsernameHighlighted: {color: Kb.Styles.globalColors.blackOrBlack},
-      textHighlighted: {color: Kb.Styles.globalColors.black_50OrBlack_50},
+      replyUsernameHighlighted: {color: theme.blackOrBlack},
     }) as const
 )

@@ -6,6 +6,7 @@ package libkb
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -13,11 +14,11 @@ import (
 	"net/http"
 	"net/url"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"time"
 
-	"golang.org/x/net/context"
 	"golang.org/x/net/context/ctxhttp"
 
 	"github.com/PuerkitoBio/goquery"
@@ -118,9 +119,8 @@ func (a *APIError) Error() string {
 		return a.Msg
 	} else if a.Code > 0 {
 		return fmt.Sprintf("Error HTTP status %d", a.Code)
-	} else {
-		return "Generic API error"
 	}
+	return "Generic API error"
 }
 
 // Errors
@@ -269,10 +269,8 @@ func doRequestShared(m MetaContext, api Requester, arg APIArg, req *http.Request
 		m.Debug("- API %s %s: fixHeaders error: %s", req.Method, req.URL, err)
 		return
 	}
-	needSession := false
-	if arg.SessionType != APISessionTypeNONE {
-		needSession = true
-	}
+	needSession := arg.SessionType != APISessionTypeNONE
+
 	cli, err := api.getCli(needSession)
 	if err != nil {
 		return
@@ -349,7 +347,7 @@ func doRequestShared(m MetaContext, api Requester, arg APIArg, req *http.Request
 
 		reader := newCountingReader(&buf)
 		decoder := json.NewDecoder(reader)
-		var obj interface{}
+		var obj any
 		decoder.UseNumber()
 		err = decoder.Decode(&obj)
 		jsonBytes = reader.numRead()
@@ -387,20 +385,17 @@ func doRetry(m MetaContext, arg APIArg, cli *Client, req *http.Request) (res *ht
 		arg.RetryCount = 0
 	}
 
-	if arg.InitialTimeout == 0 && arg.RetryCount == 0 {
-		res, err = ctxhttp.Do(m.Ctx(), cli.cli, req)
-		return res, nil, err
+	// Determine timeout with precedence: arg.InitialTimeout > config.Timeout > HTTPDefaultTimeout.
+	// This preserves custom timeouts from KEYBASE_API_TIMEOUT env var while allowing per-request overrides.
+	timeout := HTTPDefaultTimeout
+	if cli.config != nil && cli.config.Timeout != 0 {
+		timeout = cli.config.Timeout
 	}
-
-	timeout := cli.cli.Timeout
 	if arg.InitialTimeout != 0 {
 		timeout = arg.InitialTimeout
 	}
 
-	retries := 1
-	if arg.RetryCount > 1 {
-		retries = arg.RetryCount
-	}
+	retries := max(arg.RetryCount, 1)
 
 	multiplier := 1.0
 	if arg.RetryMultiplier != 0.0 {
@@ -408,7 +403,7 @@ func doRetry(m MetaContext, arg APIArg, cli *Client, req *http.Request) (res *ht
 	}
 
 	var lastErr error
-	for i := 0; i < retries; i++ {
+	for i := range retries {
 		if i > 0 {
 			m.Debug("retry attempt %d of %d for %s", i, retries, arg.Endpoint)
 		}
@@ -434,7 +429,9 @@ func doRetry(m MetaContext, arg APIArg, cli *Client, req *http.Request) (res *ht
 		}
 	}
 
-	return nil, nil, fmt.Errorf("doRetry failed, attempts: %d, timeout %s, last err: %s", retries, timeout, lastErr)
+	// Return the original error to preserve its type (e.g., *url.Error for TLS errors).
+	// The retry context is already logged via Debug statements above.
+	return nil, nil, lastErr
 }
 
 // doTimeout does the http request with a timeout. It returns the response from making the HTTP request,
@@ -457,15 +454,13 @@ func doTimeout(m MetaContext, cli *Client, req *http.Request, timeout time.Durat
 
 func checkHTTPStatus(arg APIArg, resp *http.Response) error {
 	var set []int
-	if arg.HTTPStatus == nil || len(arg.HTTPStatus) == 0 {
+	if len(arg.HTTPStatus) == 0 {
 		set = []int{200}
 	} else {
 		set = arg.HTTPStatus
 	}
-	for _, status := range set {
-		if resp.StatusCode == status {
-			return nil
-		}
+	if slices.Contains(set, resp.StatusCode) {
+		return nil
 	}
 	return NewAPIErrorFromHTTPResponse(resp)
 }
@@ -531,7 +526,6 @@ func computeCriticalClockSkew(g *GlobalContext, s string) time.Duration {
 		return ret
 	}
 	serverNow, err := time.Parse(time.RFC1123, s)
-
 	if err != nil {
 		g.Log.Warning("Failed to parse server time: %s", err)
 		return ret
@@ -548,7 +542,6 @@ func computeCriticalClockSkew(g *GlobalContext, s string) time.Duration {
 // clock, we'll get 0.  Otherwise, we set the skew accordingly. Safe
 // to set this every time.
 func (a *InternalAPIEngine) updateCriticalClockSkewWarning(resp *http.Response) {
-
 	g := a.G()
 	g.oodiMu.RLock()
 	criticalClockSkew := int64(computeCriticalClockSkew(a.G(), resp.Header.Get("Date")))
@@ -621,7 +614,6 @@ func (a *InternalAPIEngine) consumeHeaders(m MetaContext, resp *http.Response, n
 }
 
 func (a *InternalAPIEngine) fixHeaders(m MetaContext, arg APIArg, req *http.Request, nist *NIST) error {
-
 	if nist != nil {
 		req.Header.Set("X-Keybase-Session", nist.Token().String())
 	} else if arg.SessionType != APISessionTypeNONE {
@@ -692,10 +684,8 @@ func (a *InternalAPIEngine) checkAppStatus(arg APIArg, ast *AppStatus) error {
 		set = []int{SCOk}
 	}
 
-	for _, status := range set {
-		if ast.Code == status {
-			return nil
-		}
+	if slices.Contains(set, ast.Code) {
+		return nil
 	}
 
 	return appStatusToTypedError(ast)
@@ -761,7 +751,7 @@ func (a *InternalAPIEngine) GetDecodeCtx(ctx context.Context, arg APIArg, v APIR
 }
 
 func (a *InternalAPIEngine) getDecode(m MetaContext, arg APIArg, v APIResponseWrapper) error {
-	resp, finisher, err := a.GetResp(m, arg)
+	resp, finisher, err := a.GetResp(m, arg) //nolint:bodyclose // finisher closes the body
 	if err != nil {
 		m.Debug("| API GetDecode, GetResp error: %s", err)
 		return err
@@ -837,7 +827,7 @@ func (a *InternalAPIEngine) PostDecodeCtx(ctx context.Context, arg APIArg, v API
 }
 
 func (a *InternalAPIEngine) postDecode(m MetaContext, arg APIArg, v APIResponseWrapper) error {
-	resp, finisher, err := a.postResp(m, arg)
+	resp, finisher, err := a.postResp(m, arg) //nolint:bodyclose // finisher closes the body
 	if err != nil {
 		return err
 	}
@@ -881,7 +871,7 @@ func (a *InternalAPIEngine) DoRequest(m MetaContext, arg APIArg, req *http.Reque
 
 func (a *InternalAPIEngine) doRequest(m MetaContext, arg APIArg, req *http.Request) (res *APIRes, err error) {
 	m = m.EnsureCtx().WithLogTag("API")
-	resp, finisher, jw, err := doRequestShared(m, a, arg, req, true)
+	resp, finisher, jw, err := doRequestShared(m, a, arg, req, true) //nolint:bodyclose // finisher closes the body
 	if err != nil {
 		return nil, err
 	}
@@ -959,8 +949,8 @@ func (api *ExternalAPIEngine) isExternal() bool { return true }
 
 func (api *ExternalAPIEngine) DoRequest(m MetaContext,
 	arg APIArg, req *http.Request, restype XAPIResType) (
-	ar *ExternalAPIRes, hr *ExternalHTMLRes, tr *ExternalTextRes, err error) {
-
+	ar *ExternalAPIRes, hr *ExternalHTMLRes, tr *ExternalTextRes, err error,
+) {
 	m = m.EnsureCtx().WithLogTag("API")
 
 	var resp *http.Response
@@ -968,7 +958,7 @@ func (api *ExternalAPIEngine) DoRequest(m MetaContext,
 	var finisher func()
 
 	wantJSONRes := (restype == XAPIResJSON)
-	resp, finisher, jw, err = doRequestShared(m, api, arg, req, wantJSONRes)
+	resp, finisher, jw, err = doRequestShared(m, api, arg, req, wantJSONRes) //nolint:bodyclose // finisher closes the body
 	if err != nil {
 		return
 	}
@@ -997,8 +987,8 @@ func (api *ExternalAPIEngine) DoRequest(m MetaContext,
 }
 
 func (api *ExternalAPIEngine) getCommon(m MetaContext, arg APIArg, restype XAPIResType) (
-	ar *ExternalAPIRes, hr *ExternalHTMLRes, tr *ExternalTextRes, err error) {
-
+	ar *ExternalAPIRes, hr *ExternalHTMLRes, tr *ExternalTextRes, err error,
+) {
 	url1, err := url.Parse(arg.Endpoint)
 	if err != nil {
 		return nil, nil, nil, err
@@ -1041,12 +1031,11 @@ func (api *ExternalAPIEngine) GetText(m MetaContext, arg APIArg) (res *ExternalT
 }
 
 func (api *ExternalAPIEngine) postCommon(m MetaContext, arg APIArg, restype XAPIResType) (
-	ar *ExternalAPIRes, hr *ExternalHTMLRes, err error) {
-
+	ar *ExternalAPIRes, hr *ExternalHTMLRes, err error,
+) {
 	var url1 *url.URL
 	var req *http.Request
 	url1, err = url1.Parse(arg.Endpoint)
-
 	if err != nil {
 		return
 	}

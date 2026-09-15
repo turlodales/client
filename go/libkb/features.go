@@ -1,6 +1,7 @@
 package libkb
 
 import (
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -8,8 +9,10 @@ import (
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 )
 
-type Feature string
-type FeatureFlags []Feature
+type (
+	Feature      string
+	FeatureFlags []Feature
+)
 
 const (
 	EnvironmentFeatureAllowHighSkips   = Feature("env_allow_high_skips")
@@ -22,8 +25,8 @@ func StringToFeatureFlags(s string) (ret FeatureFlags) {
 	if len(s) == 0 {
 		return ret
 	}
-	v := strings.Split(s, ",")
-	for _, f := range v {
+	v := strings.SplitSeq(s, ",")
+	for f := range v {
 		ret = append(ret, Feature(strings.TrimSpace(f)))
 	}
 	return ret
@@ -32,21 +35,14 @@ func StringToFeatureFlags(s string) (ret FeatureFlags) {
 // Admin returns true if the admin feature set is on or the user is a keybase
 // admin.
 func (set FeatureFlags) Admin(uid keybase1.UID) bool {
-	for _, f := range set {
-		if f == Feature("admin") {
-			return true
-		}
+	if slices.Contains(set, Feature("admin")) {
+		return true
 	}
 	return IsKeybaseAdmin(uid)
 }
 
 func (set FeatureFlags) HasFeature(feature Feature) bool {
-	for _, f := range set {
-		if f == feature {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(set, feature)
 }
 
 func (set FeatureFlags) Empty() bool {
@@ -85,7 +81,8 @@ func getInitialFeatures() []Feature {
 		ExperimentalGenericProofs,
 		FeatureCheckForHiddenChainSupport,
 		FeatureJourneycardPreview,
-		FeatureJourneycard}
+		FeatureJourneycard,
+	}
 }
 
 // NewFeatureFlagSet makes a new set of feature flags.

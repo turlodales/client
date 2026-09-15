@@ -1,14 +1,15 @@
-// Auto-generated to Go types and interfaces using avdl-compiler v1.4.10 (https://github.com/keybase/node-avdl-compiler)
+// Code generated to Go types and interfaces using avdl-compiler v1.4.10 (https://github.com/keybase/node-avdl-compiler). DO NOT EDIT.
 //   Input file: avdl/keybase1/favorite.avdl
 
 package keybase1
 
 import (
+	"context"
 	"errors"
 	"fmt"
-	"github.com/keybase/go-framed-msgpack-rpc/rpc"
-	context "golang.org/x/net/context"
 	"time"
+
+	"github.com/keybase/go-framed-msgpack-rpc/rpc"
 )
 
 type FolderType int
@@ -36,11 +37,11 @@ var FolderTypeRevMap = map[FolderType]string{
 	3: "TEAM",
 }
 
-func (e FolderType) String() string {
-	if v, ok := FolderTypeRevMap[e]; ok {
+func (o FolderType) String() string {
+	if v, ok := FolderTypeRevMap[o]; ok {
 		return v
 	}
-	return fmt.Sprintf("%v", int(e))
+	return fmt.Sprintf("%v", int(o))
 }
 
 type FolderConflictType int
@@ -68,11 +69,11 @@ var FolderConflictTypeRevMap = map[FolderConflictType]string{
 	3: "CLEARED_CONFLICT",
 }
 
-func (e FolderConflictType) String() string {
-	if v, ok := FolderConflictTypeRevMap[e]; ok {
+func (o FolderConflictType) String() string {
+	if v, ok := FolderConflictTypeRevMap[o]; ok {
 		return v
 	}
-	return fmt.Sprintf("%v", int(e))
+	return fmt.Sprintf("%v", int(o))
 }
 
 type ConflictStateType int
@@ -94,11 +95,11 @@ var ConflictStateTypeRevMap = map[ConflictStateType]string{
 	2: "ManualResolvingLocalView",
 }
 
-func (e ConflictStateType) String() string {
-	if v, ok := ConflictStateTypeRevMap[e]; ok {
+func (o ConflictStateType) String() string {
+	if v, ok := ConflictStateTypeRevMap[o]; ok {
 		return v
 	}
-	return fmt.Sprintf("%v", int(e))
+	return fmt.Sprintf("%v", int(o))
 }
 
 type FolderNormalView struct {
@@ -198,14 +199,14 @@ func (o ConflictState) DeepCopy() ConflictState {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Normalview__),
 		Manualresolvinglocalview__: (func(x *FolderConflictManualResolvingLocalView) *FolderConflictManualResolvingLocalView {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Manualresolvinglocalview__),
 	}
@@ -236,7 +237,7 @@ func (o Folder) DeepCopy() Folder {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.TeamID),
 		ResetMembers: (func(x []User) []User {
@@ -254,21 +255,21 @@ func (o Folder) DeepCopy() Folder {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Mtime),
 		ConflictState: (func(x *ConflictState) *ConflictState {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.ConflictState),
 		SyncConfig: (func(x *FolderSyncConfig) *FolderSyncConfig {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.SyncConfig),
 	}
@@ -360,11 +361,11 @@ func FavoriteProtocol(i FavoriteInterface) rpc.Protocol {
 		Name: "keybase.1.favorite",
 		Methods: map[string]rpc.ServeHandlerDescription{
 			"favoriteAdd": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]FavoriteAddArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]FavoriteAddArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]FavoriteAddArg)(nil), args)
@@ -375,11 +376,11 @@ func FavoriteProtocol(i FavoriteInterface) rpc.Protocol {
 				},
 			},
 			"favoriteIgnore": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]FavoriteIgnoreArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]FavoriteIgnoreArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]FavoriteIgnoreArg)(nil), args)
@@ -390,11 +391,11 @@ func FavoriteProtocol(i FavoriteInterface) rpc.Protocol {
 				},
 			},
 			"getFavorites": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]GetFavoritesArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]GetFavoritesArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]GetFavoritesArg)(nil), args)
@@ -414,19 +415,19 @@ type FavoriteClient struct {
 
 // Adds a folder to a user's list of favorite folders.
 func (c FavoriteClient) FavoriteAdd(ctx context.Context, __arg FavoriteAddArg) (err error) {
-	err = c.Cli.Call(ctx, "keybase.1.favorite.favoriteAdd", []interface{}{__arg}, nil, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "keybase.1.favorite.favoriteAdd", []any{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 // Removes a folder from a user's list of favorite folders.
 func (c FavoriteClient) FavoriteIgnore(ctx context.Context, __arg FavoriteIgnoreArg) (err error) {
-	err = c.Cli.Call(ctx, "keybase.1.favorite.favoriteIgnore", []interface{}{__arg}, nil, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "keybase.1.favorite.favoriteIgnore", []any{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 // Returns all of a user's favorite folders.
 func (c FavoriteClient) GetFavorites(ctx context.Context, sessionID int) (res FavoritesResult, err error) {
 	__arg := GetFavoritesArg{SessionID: sessionID}
-	err = c.Cli.Call(ctx, "keybase.1.favorite.getFavorites", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "keybase.1.favorite.getFavorites", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }

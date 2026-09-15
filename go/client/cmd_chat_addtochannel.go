@@ -4,6 +4,7 @@
 package client
 
 import (
+	"context"
 	"errors"
 	"strings"
 
@@ -13,7 +14,6 @@ import (
 	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/protocol/chat1"
 	"github.com/keybase/client/go/protocol/keybase1"
-	"golang.org/x/net/context"
 )
 
 type CmdChatAddToChannel struct {
@@ -88,8 +88,8 @@ func (c *CmdChatAddToChannel) ParseArgv(ctx *cli.Context) (err error) {
 	if len(userString) == 0 {
 		return errors.New("add-to-channel needs at least one user")
 	}
-	users := strings.Split(userString, ",")
-	for _, user := range users {
+	users := strings.SplitSeq(userString, ",")
+	for user := range users {
 		if len(user) == 0 {
 			return errors.New("cannot specify an empty user")
 		}

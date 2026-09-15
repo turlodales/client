@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -10,7 +11,6 @@ import (
 	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/protocol/chat1"
 	"github.com/keybase/client/go/protocol/keybase1"
-	context "golang.org/x/net/context"
 )
 
 func ParseOneTeamName(ctx *cli.Context) (string, error) {
@@ -97,10 +97,7 @@ var botSettingsFlags = []cli.Flag{
 }
 
 func ParseBotSettings(ctx *cli.Context) *keybase1.TeamBotSettings {
-	if !(ctx.IsSet("allow-commands") ||
-		ctx.IsSet("allow-mentions") ||
-		ctx.IsSet("allow-trigger") ||
-		ctx.IsSet("allow-conversation")) {
+	if !ctx.IsSet("allow-commands") && !ctx.IsSet("allow-mentions") && !ctx.IsSet("allow-trigger") && !ctx.IsSet("allow-conversation") {
 		return nil
 	}
 	return &keybase1.TeamBotSettings{
@@ -112,7 +109,8 @@ func ParseBotSettings(ctx *cli.Context) *keybase1.TeamBotSettings {
 }
 
 func ValidateBotSettingsConvs(g *libkb.GlobalContext, tlfName string,
-	mt chat1.ConversationMembersType, botSettings *keybase1.TeamBotSettings) error {
+	mt chat1.ConversationMembersType, botSettings *keybase1.TeamBotSettings,
+) error {
 	if botSettings == nil {
 		return nil
 	}
@@ -130,7 +128,8 @@ func ValidateBotSettingsConvs(g *libkb.GlobalContext, tlfName string,
 }
 
 func lookupConvIDsByTopicName(g *libkb.GlobalContext, tlfName string,
-	mt chat1.ConversationMembersType, convs []string) (convIDs []chat1.ConvIDStr, err error) {
+	mt chat1.ConversationMembersType, convs []string,
+) (convIDs []chat1.ConvIDStr, err error) {
 	resolver, err := newChatConversationResolver(g)
 	if err != nil {
 		return nil, err

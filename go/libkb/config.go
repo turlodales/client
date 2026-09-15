@@ -5,6 +5,7 @@ package libkb
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"sync"
@@ -24,7 +25,7 @@ type JSONConfigFile struct {
 	userConfigWrapper *UserConfigWrapper
 }
 
-var _ (ConfigReader) = (*JSONConfigFile)(nil)
+var _ ConfigReader = (*JSONConfigFile)(nil)
 
 func NewJSONConfigFile(g *GlobalContext, s string) *JSONConfigFile {
 	return &JSONConfigFile{NewJSONFile(g, s, "config"), &UserConfigWrapper{}}
@@ -98,8 +99,10 @@ func (f *JSONConfigFile) getUserConfigWithLock() (ret *UserConfig, err error) {
 	} else if ret != nil {
 		f.userConfigWrapper.userConfig = ret
 	} else {
-		err = ConfigError{f.filename,
-			fmt.Sprintf("Didn't find a UserConfig for %s", s)}
+		err = ConfigError{
+			f.filename,
+			fmt.Sprintf("Didn't find a UserConfig for %s", s),
+		}
 	}
 	return
 }
@@ -345,15 +348,14 @@ func (f *JSONConfigFile) SetDeviceID(did keybase1.DeviceID) (err error) {
 	defer f.setMutex.Unlock()
 
 	f.G().Log.Debug("| Setting DeviceID to %v\n", did)
-	var u *UserConfig
-	if u, err = f.getUserConfigWithLock(); err != nil {
+	u, err := f.getUserConfigWithLock()
+	if err != nil {
+		return err
 	} else if u == nil {
-		err = NoUserConfigError{}
-	} else {
-		u.SetDevice(did)
-		err = f.setUserConfigWithLock(u, true)
+		return NoUserConfigError{}
 	}
-	return
+	u.SetDevice(did)
+	return f.setUserConfigWithLock(u, true)
 }
 
 func (f *JSONConfigFile) getCurrentUser() NormalizedUsername {
@@ -375,7 +377,6 @@ func (f *JSONConfigFile) SetUserConfig(u *UserConfig, overwrite bool) error {
 }
 
 func (f *JSONConfigFile) setUserConfigWithLock(u *UserConfig, overwrite bool) error {
-
 	if u == nil {
 		f.G().Log.Debug("| SetUserConfig(nil)")
 		err := f.jw.DeleteKey("current_user")
@@ -511,15 +512,15 @@ func (f *JSONConfigFile) GetTimers() string {
 
 func (f *JSONConfigFile) GetGpgOptions() []string {
 	var ret []string
-	if f.jw == nil {
+	if f.jw == nil { //nolint
 		// noop
-	} else if v := f.jw.AtPath("gpg.options"); v == nil {
+	} else if v := f.jw.AtPath("gpg.options"); v == nil { // nolint
 		// noop
-	} else if l, e := v.Len(); e != nil || l == 0 {
+	} else if l, e := v.Len(); e != nil || l == 0 { //nolint
 		// noop
 	} else {
 		ret = make([]string, 0, l)
-		for i := 0; i < l; i++ {
+		for i := range l {
 			if s, e := v.AtIndex(i).GetString(); e == nil {
 				ret = append(ret, s)
 			}
@@ -582,15 +583,14 @@ func (f *JSONConfigFile) SetPassphraseState(passphraseState keybase1.PassphraseS
 	defer f.setMutex.Unlock()
 
 	f.G().Log.Debug("| Setting PassphraseState to %v\n", passphraseState)
-	var u *UserConfig
-	if u, err = f.getUserConfigWithLock(); err != nil {
+	u, err := f.getUserConfigWithLock()
+	if err != nil {
+		return err
 	} else if u == nil {
-		err = NoUserConfigError{}
-	} else {
-		u.SetPassphraseState(passphraseState)
-		err = f.setUserConfigWithLock(u, true)
+		return NoUserConfigError{}
 	}
-	return
+	u.SetPassphraseState(passphraseState)
+	return f.setUserConfigWithLock(u, true)
 }
 
 func (f *JSONConfigFile) GetTorMode() (ret TorMode, err error) {
@@ -653,7 +653,7 @@ func (f *JSONConfigFile) GetRememberPassphrase(username NormalizedUsername) (boo
 	if username.IsNil() {
 		return f.GetTopLevelBool(legacyRememberPassphraseKey)
 	}
-	if m, ok := f.jw.AtKey("remember_passphrase_map").GetDataOrNil().(map[string]interface{}); ok {
+	if m, ok := f.jw.AtKey("remember_passphrase_map").GetDataOrNil().(map[string]any); ok {
 		if ret, mOk := m[username.String()]; mOk {
 			if boolRet, boolOk := ret.(bool); boolOk {
 				return boolRet, true
@@ -788,7 +788,7 @@ func (f *JSONConfigFile) getStringArray(v *jsonw.Wrapper) []string {
 	}
 
 	ret := make([]string, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		s, err := v.AtIndex(i).GetString()
 		if err != nil {
 			return nil
@@ -852,11 +852,13 @@ func (f *JSONConfigFile) GetProxyCACerts() (ret []string, err error) {
 	defer f.setMutex.RUnlock()
 	jw := f.jw.AtKey("proxy_ca_certs")
 	if l, e := jw.Len(); e == nil {
-		for i := 0; i < l; i++ {
+		for i := range l {
 			s, e2 := jw.AtIndex(i).GetString()
 			if e2 != nil {
-				err = ConfigError{f.filename,
-					fmt.Sprintf("Error reading proxy CA file @ index %d: %s", i, e2)}
+				err = ConfigError{
+					f.filename,
+					fmt.Sprintf("Error reading proxy CA file @ index %d: %s", i, e2),
+				}
 				return
 			}
 
@@ -954,6 +956,9 @@ func (f *JSONConfigFile) GetTimeAtPath(path string) keybase1.Time {
 	if err != nil {
 		return ret
 	}
+	if u > math.MaxInt64 {
+		return ret
+	}
 	ret = keybase1.Time(u)
 	return ret
 }
@@ -992,6 +997,9 @@ func (f *JSONConfigFile) GetBug3964RepairTime(un NormalizedUsername) (time.Time,
 	i, err := strconv.ParseUint(s, 10, 64)
 	if err != nil {
 		return time.Time{}, err
+	}
+	if i > math.MaxInt64 {
+		return time.Time{}, fmt.Errorf("timestamp overflow: %d", i)
 	}
 	return keybase1.FromTime(keybase1.Time(i)), nil
 }

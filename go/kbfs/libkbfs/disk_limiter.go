@@ -1,10 +1,10 @@
 package libkbfs
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/keybase/client/go/protocol/keybase1"
-	"golang.org/x/net/context"
 )
 
 type diskLimitTrackerType int
@@ -138,5 +138,5 @@ type DiskLimiter interface {
 
 	// getStatus returns an object that's marshallable into JSON
 	// for use in displaying status.
-	getStatus(ctx context.Context, chargedTo keybase1.UserOrTeamID) interface{}
+	getStatus(ctx context.Context, chargedTo keybase1.UserOrTeamID) any
 }

@@ -1,12 +1,12 @@
 package libkb
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sync"
 
 	"github.com/keybase/client/go/protocol/keybase1"
-	context "golang.org/x/net/context"
 )
 
 type ActiveDevice struct {
@@ -77,6 +77,7 @@ func NewActiveDeviceWithDeviceWithKeys(m MetaContext, uv keybase1.UserVersion, d
 		uv:            uv,
 		deviceID:      d.deviceID,
 		deviceName:    d.deviceName,
+		deviceCtime:   d.deviceCtime,
 		signingKey:    d.signingKey,
 		encryptionKey: d.encryptionKey,
 		nistFactory:   NewNISTFactory(m.G(), uv.Uid, d.deviceID, d.signingKey),
@@ -95,7 +96,6 @@ func (a *ActiveDevice) ClearCaches() {
 
 // Copy ActiveDevice info from the given ActiveDevice.
 func (a *ActiveDevice) Copy(m MetaContext, src *ActiveDevice) error {
-
 	// Take a consistent snapshot of the src device. Be careful not to hold
 	// locks on both devices at once.
 	src.Lock()
@@ -127,7 +127,8 @@ func (a *ActiveDevice) SetOrClear(m MetaContext, a2 *ActiveDevice) error {
 // The acct parameter is not used for anything except to help ensure
 // that this is called from inside a LoginState account request.
 func (a *ActiveDevice) Set(m MetaContext, uv keybase1.UserVersion, deviceID keybase1.DeviceID,
-	sigKey, encKey GenericKey, deviceName string, deviceCtime keybase1.Time, keychainMode KeychainMode) error {
+	sigKey, encKey GenericKey, deviceName string, deviceCtime keybase1.Time, keychainMode KeychainMode,
+) error {
 	a.Lock()
 	defer a.Unlock()
 
@@ -156,7 +157,8 @@ func (a *ActiveDevice) KeychainMode() KeychainMode {
 // The acct parameter is not used for anything except to help ensure
 // that this is called from inside a LogingState account request.
 func (a *ActiveDevice) setSigningKey(g *GlobalContext, uv keybase1.UserVersion, deviceID keybase1.DeviceID,
-	sigKey GenericKey, deviceName string) error {
+	sigKey GenericKey, deviceName string,
+) error {
 	a.Lock()
 	defer a.Unlock()
 
@@ -189,7 +191,6 @@ func (a *ActiveDevice) setEncryptionKey(uv keybase1.UserVersion, deviceID keybas
 
 // should only called by the functions in this type, with the write lock.
 func (a *ActiveDevice) internalUpdateUserVersionDeviceID(uv keybase1.UserVersion, deviceID keybase1.DeviceID) error {
-
 	if uv.IsNil() {
 		return errors.New("ActiveDevice.set with nil uid")
 	}
@@ -446,63 +447,50 @@ func (a *ActiveDevice) valid() bool {
 }
 
 func (a *ActiveDevice) Ctime(m MetaContext) (keybase1.Time, error) {
-	// make sure the device id doesn't change throughout this function
-	deviceID := a.DeviceID()
-
-	// check if we have a cached ctime already
-	ctime, err := a.ctimeCached(deviceID)
-	if err != nil {
-		return 0, err
+	uv, deviceID, ctime := a.ctimeInfo()
+	if uv.IsNil() || deviceID.IsNil() {
+		return 0, errors.New("active device is not valid")
 	}
 	if ctime > 0 {
 		return ctime, nil
 	}
 
-	// need to build a device and ask the server for ctimes
-	decKeys, err := a.deviceKeys(deviceID)
+	// Resolve the device through the validated UPAK cache. This retries with a
+	// forced poll if the device is missing, which handles newly provisioned
+	// devices without relying on the unauthenticated key/owner/device endpoint.
+	upak, err := m.G().GetUPAKLoader().LoadUPAKWithDeviceID(m.Ctx(), uv.Uid, deviceID)
 	if err != nil {
 		return 0, err
 	}
-	// Note: decKeys.Populate() makes a network API call
-	if _, err := decKeys.Populate(m); err != nil {
-		return 0, nil
+	if !upak.Current.ToUserVersion().Eq(uv) {
+		return 0, NewUIDMismatchError("active user changed during ctime lookup")
+	}
+	device := upak.Current.FindSigningDeviceKey(deviceID)
+	if device == nil {
+		return 0, NoKeyError{"no signing device key found for user"}
+	}
+	if device.Base.Revocation != nil {
+		return 0, NewKeyRevokedError("active device")
+	}
+	if device.Base.CTime <= 0 {
+		return 0, NotFoundError{Msg: "device ctime not found"}
 	}
 
 	// set the ctime value under a write lock
 	a.Lock()
 	defer a.Unlock()
-	if !a.deviceID.Eq(deviceID) {
+	if !a.uv.Eq(uv) || !a.deviceID.Eq(deviceID) {
 		return 0, errors.New("active device changed during ctime lookup")
 	}
-	a.deviceCtime = decKeys.DeviceCtime()
+	a.deviceCtime = device.Base.CTime
 
 	return a.deviceCtime, nil
 }
 
-func (a *ActiveDevice) ctimeCached(deviceID keybase1.DeviceID) (keybase1.Time, error) {
+func (a *ActiveDevice) ctimeInfo() (keybase1.UserVersion, keybase1.DeviceID, keybase1.Time) {
 	a.RLock()
 	defer a.RUnlock()
-
-	if !a.deviceID.Eq(deviceID) {
-		return 0, errors.New("active device changed during ctime lookup")
-	}
-
-	return a.deviceCtime, nil
-}
-
-func (a *ActiveDevice) deviceKeys(deviceID keybase1.DeviceID) (*DeviceWithKeys, error) {
-	a.RLock()
-	defer a.RUnlock()
-
-	if !a.valid() {
-		return nil, errors.New("active device is not valid")
-	}
-
-	if !a.deviceID.Eq(deviceID) {
-		return nil, errors.New("active device changed")
-	}
-
-	return NewDeviceWithKeysOnly(a.signingKey, a.encryptionKey, a.keychainMode), nil
+	return a.uv, a.deviceID, a.deviceCtime
 }
 
 func (a *ActiveDevice) DeviceKeys() (*DeviceWithKeys, error) {
@@ -598,6 +586,24 @@ func (a *ActiveDevice) SyncSecretsForce(m MetaContext) (ret *SecretSyncer, err e
 	defer m.Trace("ActiveDevice#SyncSecretsForce", &err)()
 	var zed keybase1.UID
 	return a.SyncSecretsForUID(m, zed, true /* force */)
+}
+
+func (a *ActiveDevice) SyncSecretsFromCache(m MetaContext) (ret *SecretSyncer, err error) {
+	defer m.Trace("ActiveDevice#SyncSecretsFromCache", &err)()
+	a.RLock()
+	s := a.secretSyncer
+	uid := a.uv.Uid
+	a.RUnlock()
+	if s == nil {
+		return nil, fmt.Errorf("Can't sync secrets: nil secret syncer")
+	}
+	if uid.IsNil() {
+		return nil, fmt.Errorf("can't run secret syncer without a UID")
+	}
+	if err = RunSyncerCached(m, s, uid); err != nil {
+		return nil, err
+	}
+	return s, nil
 }
 
 func (a *ActiveDevice) CheckForUsername(m MetaContext, n NormalizedUsername, suppressNetworkErrors bool) (err error) {

@@ -5,11 +5,47 @@ package util
 
 import (
 	"archive/zip"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
+	"time"
 )
+
+// MaxDecompressedSize is the maximum size of a decompressed file to prevent decompression bombs
+const MaxDecompressedSize = 500 * 1024 * 1024 // 500MB limit for updater packages
+
+// removeAllWithRetry attempts to remove a directory, retrying on Windows if files are locked.
+// Windows can briefly lock files after they're created/accessed, especially in freshly extracted directories.
+func removeAllWithRetry(path string, log Log) error {
+	err := os.RemoveAll(path)
+	if err == nil {
+		return nil
+	}
+
+	// On Windows, retry if we get a "file is being used by another process" error
+	if runtime.GOOS == "windows" && strings.Contains(err.Error(), "being used by another process") {
+		log.Infof("File locked on Windows, retrying removal of %s", path)
+		maxRetries := 3
+		for i := range maxRetries {
+			time.Sleep(100 * time.Millisecond * time.Duration(i+1)) // Exponential backoff: 100ms, 200ms, 300ms
+			err = os.RemoveAll(path)
+			if err == nil {
+				log.Infof("Successfully removed %s after %d retries", path, i+1)
+				return nil
+			}
+			if !strings.Contains(err.Error(), "being used by another process") {
+				// Different error, don't retry
+				break
+			}
+		}
+	}
+
+	return err
+}
 
 // UnzipOver safely unzips a file and copies it contents to a destination path.
 // If destination path exists, it will be removed first.
@@ -57,7 +93,7 @@ func unzipOver(sourcePath string, destinationPath string, log Log) error {
 
 	if _, ferr := os.Stat(destinationPath); ferr == nil {
 		log.Infof("Removing existing unzip destination path: %s", destinationPath)
-		err := os.RemoveAll(destinationPath)
+		err := removeAllWithRetry(destinationPath, log)
 		if err != nil {
 			return err
 		}
@@ -81,7 +117,7 @@ func Unzip(sourcePath, destinationPath string, log Log) error {
 		}
 	}()
 
-	err = os.MkdirAll(destinationPath, 0755)
+	err = os.MkdirAll(destinationPath, 0o755)
 	if err != nil {
 		return err
 	}
@@ -98,7 +134,13 @@ func Unzip(sourcePath, destinationPath string, log Log) error {
 			}
 		}()
 
-		filePath := filepath.Join(destinationPath, f.Name)
+		filePath := filepath.Join(destinationPath, f.Name) //nolint:gosec // G305: Path traversal check on lines 138-141
+
+		// G305: Prevent path traversal attacks
+		if !strings.HasPrefix(filepath.Clean(filePath), filepath.Clean(destinationPath)+string(os.PathSeparator)) {
+			return fmt.Errorf("zip slip vulnerability: %s is outside of %s", f.Name, destinationPath)
+		}
+
 		fileInfo := f.FileInfo()
 
 		if fileInfo.IsDir() {
@@ -107,7 +149,7 @@ func Unzip(sourcePath, destinationPath string, log Log) error {
 				return err
 			}
 		} else {
-			err := os.MkdirAll(filepath.Dir(filePath), 0755)
+			err := os.MkdirAll(filepath.Dir(filePath), 0o755)
 			if err != nil {
 				return err
 			}
@@ -126,9 +168,14 @@ func Unzip(sourcePath, destinationPath string, log Log) error {
 			}
 			defer Close(fileCopy)
 
-			_, err = io.Copy(fileCopy, rc)
-			if err != nil {
+			// G110: Limit the size of the decompressed file to prevent decompression bombs
+			limitedReader := &io.LimitedReader{R: rc, N: MaxDecompressedSize}
+			n, err := io.Copy(fileCopy, limitedReader)
+			if err != nil && !errors.Is(err, io.EOF) {
 				return err
+			}
+			if limitedReader.N == 0 && n == MaxDecompressedSize {
+				return fmt.Errorf("file %s exceeds maximum decompressed size of %d bytes", f.Name, MaxDecompressedSize)
 			}
 		}
 

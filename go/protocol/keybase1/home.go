@@ -1,14 +1,15 @@
-// Auto-generated to Go types and interfaces using avdl-compiler v1.4.10 (https://github.com/keybase/node-avdl-compiler)
+// Code generated to Go types and interfaces using avdl-compiler v1.4.10 (https://github.com/keybase/node-avdl-compiler). DO NOT EDIT.
 //   Input file: avdl/keybase1/home.avdl
 
 package keybase1
 
 import (
+	"context"
 	"errors"
 	"fmt"
-	"github.com/keybase/go-framed-msgpack-rpc/rpc"
-	context "golang.org/x/net/context"
 	"time"
+
+	"github.com/keybase/go-framed-msgpack-rpc/rpc"
 )
 
 type HomeScreenItemID string
@@ -39,11 +40,11 @@ var HomeScreenItemTypeRevMap = map[HomeScreenItemType]string{
 	3: "ANNOUNCEMENT",
 }
 
-func (e HomeScreenItemType) String() string {
-	if v, ok := HomeScreenItemTypeRevMap[e]; ok {
+func (o HomeScreenItemType) String() string {
+	if v, ok := HomeScreenItemTypeRevMap[o]; ok {
 		return v
 	}
-	return fmt.Sprintf("%v", int(e))
+	return fmt.Sprintf("%v", int(o))
 }
 
 type HomeScreenItemData struct {
@@ -138,21 +139,21 @@ func (o HomeScreenItemData) DeepCopy() HomeScreenItemData {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Todo__),
 		People__: (func(x *HomeScreenPeopleNotification) *HomeScreenPeopleNotification {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.People__),
 		Announcement__: (func(x *HomeScreenAnnouncement) *HomeScreenAnnouncement {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Announcement__),
 	}
@@ -204,7 +205,7 @@ func (o HomeScreenItemDataExt) DeepCopy() HomeScreenItemDataExt {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Todo__),
 	}
@@ -250,11 +251,11 @@ var AppLinkTypeRevMap = map[AppLinkType]string{
 	8: "TEAMS",
 }
 
-func (e AppLinkType) String() string {
-	if v, ok := AppLinkTypeRevMap[e]; ok {
+func (o AppLinkType) String() string {
+	if v, ok := AppLinkTypeRevMap[o]; ok {
 		return v
 	}
-	return fmt.Sprintf("%v", int(e))
+	return fmt.Sprintf("%v", int(o))
 }
 
 type HomeScreenAnnouncementID int
@@ -363,11 +364,11 @@ var HomeScreenTodoTypeRevMap = map[HomeScreenTodoType]string{
 	10000: "ANNONCEMENT_PLACEHOLDER",
 }
 
-func (e HomeScreenTodoType) String() string {
-	if v, ok := HomeScreenTodoTypeRevMap[e]; ok {
+func (o HomeScreenTodoType) String() string {
+	if v, ok := HomeScreenTodoTypeRevMap[o]; ok {
 		return v
 	}
-	return fmt.Sprintf("%v", int(e))
+	return fmt.Sprintf("%v", int(o))
 }
 
 // Most of TODO items do not carry additional data, but some do. e.g. TODO
@@ -470,21 +471,21 @@ func (o HomeScreenTodo) DeepCopy() HomeScreenTodo {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.VerifyAllPhoneNumber__),
 		VerifyAllEmail__: (func(x *EmailAddress) *EmailAddress {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.VerifyAllEmail__),
 		LegacyEmailVisibility__: (func(x *EmailAddress) *EmailAddress {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.LegacyEmailVisibility__),
 	}
@@ -536,7 +537,7 @@ func (o HomeScreenTodoExt) DeepCopy() HomeScreenTodoExt {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.VerifyAllEmail__),
 	}
@@ -577,11 +578,11 @@ var HomeScreenPeopleNotificationTypeRevMap = map[HomeScreenPeopleNotificationTyp
 	4: "CONTACT_MULTI",
 }
 
-func (e HomeScreenPeopleNotificationType) String() string {
-	if v, ok := HomeScreenPeopleNotificationTypeRevMap[e]; ok {
+func (o HomeScreenPeopleNotificationType) String() string {
+	if v, ok := HomeScreenPeopleNotificationTypeRevMap[o]; ok {
 		return v
 	}
-	return fmt.Sprintf("%v", int(e))
+	return fmt.Sprintf("%v", int(o))
 }
 
 type HomeScreenPeopleNotificationFollowed struct {
@@ -767,28 +768,28 @@ func (o HomeScreenPeopleNotification) DeepCopy() HomeScreenPeopleNotification {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Followed__),
 		FollowedMulti__: (func(x *HomeScreenPeopleNotificationFollowedMulti) *HomeScreenPeopleNotificationFollowedMulti {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.FollowedMulti__),
 		Contact__: (func(x *HomeScreenPeopleNotificationContact) *HomeScreenPeopleNotificationContact {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Contact__),
 		ContactMulti__: (func(x *HomeScreenPeopleNotificationContactMulti) *HomeScreenPeopleNotificationContactMulti {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.ContactMulti__),
 	}
@@ -840,7 +841,7 @@ func (o HomeUserSummary) DeepCopy() HomeUserSummary {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Pics),
 	}
@@ -925,11 +926,11 @@ func HomeProtocol(i HomeInterface) rpc.Protocol {
 		Name: "keybase.1.home",
 		Methods: map[string]rpc.ServeHandlerDescription{
 			"homeGetScreen": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]HomeGetScreenArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]HomeGetScreenArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]HomeGetScreenArg)(nil), args)
@@ -940,11 +941,11 @@ func HomeProtocol(i HomeInterface) rpc.Protocol {
 				},
 			},
 			"homeSkipTodoType": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]HomeSkipTodoTypeArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]HomeSkipTodoTypeArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]HomeSkipTodoTypeArg)(nil), args)
@@ -955,11 +956,11 @@ func HomeProtocol(i HomeInterface) rpc.Protocol {
 				},
 			},
 			"homeDismissAnnouncement": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]HomeDismissAnnouncementArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]HomeDismissAnnouncementArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]HomeDismissAnnouncementArg)(nil), args)
@@ -970,21 +971,21 @@ func HomeProtocol(i HomeInterface) rpc.Protocol {
 				},
 			},
 			"homeActionTaken": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]HomeActionTakenArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					err = i.HomeActionTaken(ctx)
 					return
 				},
 			},
 			"homeMarkViewed": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]HomeMarkViewedArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					err = i.HomeMarkViewed(ctx)
 					return
 				},
@@ -1005,28 +1006,28 @@ type HomeClient struct {
 // the default number will be returned (10).  Otherwise, the caller should
 // specify.
 func (c HomeClient) HomeGetScreen(ctx context.Context, __arg HomeGetScreenArg) (res HomeScreen, err error) {
-	err = c.Cli.Call(ctx, "keybase.1.home.homeGetScreen", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "keybase.1.home.homeGetScreen", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c HomeClient) HomeSkipTodoType(ctx context.Context, t HomeScreenTodoType) (err error) {
 	__arg := HomeSkipTodoTypeArg{T: t}
-	err = c.Cli.Call(ctx, "keybase.1.home.homeSkipTodoType", []interface{}{__arg}, nil, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "keybase.1.home.homeSkipTodoType", []any{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c HomeClient) HomeDismissAnnouncement(ctx context.Context, i HomeScreenAnnouncementID) (err error) {
 	__arg := HomeDismissAnnouncementArg{I: i}
-	err = c.Cli.Call(ctx, "keybase.1.home.homeDismissAnnouncement", []interface{}{__arg}, nil, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "keybase.1.home.homeDismissAnnouncement", []any{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c HomeClient) HomeActionTaken(ctx context.Context) (err error) {
-	err = c.Cli.Call(ctx, "keybase.1.home.homeActionTaken", []interface{}{HomeActionTakenArg{}}, nil, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "keybase.1.home.homeActionTaken", []any{HomeActionTakenArg{}}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c HomeClient) HomeMarkViewed(ctx context.Context) (err error) {
-	err = c.Cli.Call(ctx, "keybase.1.home.homeMarkViewed", []interface{}{HomeMarkViewedArg{}}, nil, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "keybase.1.home.homeMarkViewed", []any{HomeMarkViewedArg{}}, nil, 0*time.Millisecond)
 	return
 }

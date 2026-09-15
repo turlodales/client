@@ -1,45 +1,31 @@
 import * as C from '@/constants'
 import * as Kb from '@/common-adapters'
-import * as React from 'react'
+import {useConfigState} from '@/stores/config'
 
-type Props = {
-  error: string
-  onBack: () => void
-}
+type Props = {route: {params: {error: string}}}
 
-const useConn = () => {
-  const loggedIn = C.useConfigState(s => s.loggedIn)
-  const error = C.useRecoverState(s => s.error)
-  const popStack = C.useRouterState(s => s.dispatch.popStack)
-  const navigateUp = C.useRouterState(s => s.dispatch.navigateUp)
+const ErrorModal = ({route}: Props) => {
+  const loggedIn = useConfigState(s => s.loggedIn)
+  const {error} = route.params
   const onBack = () => {
-    loggedIn ? navigateUp() : popStack()
+    if (loggedIn) {
+      C.Router2.navigateUp()
+    } else {
+      C.Router2.popStack()
+    }
   }
-  return {error, onBack}
+
+  return (
+    <>
+      <Kb.Box2 direction="vertical" centerChildren={true} fullWidth={true} padding="small">
+        <Kb.Text type="Body" center={true}>
+          {error}
+        </Kb.Text>
+      </Kb.Box2>
+      <Kb.ModalFooter>
+        <Kb.Button label="Back" onClick={onBack} fullWidth={true} />
+      </Kb.ModalFooter>
+    </>
+  )
 }
-
-const ErrorModal = (props: Props) => (
-  <Kb.Modal
-    header={{title: 'Error'}}
-    footer={{content: <Kb.Button label="Back" onClick={props.onBack} fullWidth={true} />}}
-    onClose={props.onBack}
-  >
-    <Kb.Box2 direction="vertical" centerChildren={true} fullWidth={true} style={styles.padding}>
-      <Kb.Text type="Body" center={true}>
-        {props.error}
-      </Kb.Text>
-    </Kb.Box2>
-  </Kb.Modal>
-)
-
-const styles = Kb.Styles.styleSheetCreate(() => ({
-  padding: {
-    padding: Kb.Styles.globalMargins.small,
-  },
-}))
-
-const ConnectedErrorModal = () => {
-  const props = useConn()
-  return <ErrorModal {...props} />
-}
-export default ConnectedErrorModal
+export default ErrorModal

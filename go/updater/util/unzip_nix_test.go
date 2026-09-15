@@ -2,7 +2,6 @@
 // this source code is governed by the included BSD license.
 
 //go:build !windows
-// +build !windows
 
 package util
 
@@ -23,9 +22,6 @@ import (
 // TestUnzipOtherUser checks to make sure that a zip file created from a
 // different uid has the current uid after unpacking.
 func TestUnzipOtherUser(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Unsupported on windows")
-	}
 	_, filename, _, _ := runtime.Caller(0)
 	testZipOtherUserPath := filepath.Join(filepath.Dir(filename), "../test/test-uid-503.zip")
 	destinationPath := TempPath("", "TestUnzipOtherUser.")
@@ -60,12 +56,12 @@ func TestUnzipFileModTime(t *testing.T) {
 	dirMod := fileInfo.ModTime()
 	diffDir := dirMod.Sub(now)
 	t.Logf("Diff (dir): %s", diffDir)
-	assert.True(t, diffDir >= 0, "now=%s, dirtime=%s", now, dirMod)
+	assert.GreaterOrEqual(t, diffDir, time.Duration(0), "now=%s, dirtime=%s", now, dirMod)
 
 	fileInfo, err = os.Stat(filepath.Join(destinationPath, "test", "testfile"))
 	require.NoError(t, err)
 	fileMod := fileInfo.ModTime()
 	diffFile := fileMod.Sub(now)
 	t.Logf("Diff (file): %s", diffFile)
-	assert.True(t, diffFile >= 0, "now=%s, filetime=%s", now, fileMod)
+	assert.GreaterOrEqual(t, diffFile, time.Duration(0), "now=%s, filetime=%s", now, fileMod)
 }

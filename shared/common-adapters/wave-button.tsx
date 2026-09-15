@@ -1,20 +1,21 @@
 import * as C from '@/constants'
 import * as React from 'react'
-import {Box2, Box} from './box'
+import {Box2} from './box'
 import Icon from './icon'
 import Text from './text'
 import Button from './button'
-import Emoji from './emoji'
+import NativeEmoji from './emoji/native-emoji'
 import * as Styles from '@/styles'
-import type * as T from '@/constants/types'
+import * as T from '@/constants/types'
 import logger from '@/logger'
+import {useCurrentUserState} from '@/stores/current-user'
+import {sendTextToConversation} from '@/chat/conversation/send-actions'
 
 const Kb = {
-  Box,
   Box2,
   Button,
-  Emoji,
   Icon,
+  NativeEmoji,
   Text,
 }
 
@@ -24,7 +25,7 @@ type Props = {
   toMany?: boolean
   disabled?: boolean
 } & (
-  | {conversationIDKey: T.Chat.ConversationIDKey; username?: never}
+  | {conversationIDKey: T.Chat.ConversationIDKey; tlfName: string; username?: never}
   | {conversationIDKey?: never; username: string}
 )
 
@@ -32,39 +33,46 @@ const getWaveWaitingKey = (recipient: string) => {
   return `settings:waveButton:${recipient}`
 }
 
-const WaveButton = (props: Props) => {
-  const hasContext = C.Chat.useHasContext()
-  if (props.username) {
-    if (hasContext) {
-      return <WaveButtonImpl {...props} />
-    } else {
-      return (
-        <C.ChatProvider key="wave" id="" canBeNull={true}>
-          <WaveButtonImpl {...props} />
-        </C.ChatProvider>
-      )
-    }
-  }
-  if (hasContext) {
-    return <WaveButtonImpl {...props} />
-  } else {
-    logger.warn('WaveButton: need one of username or conversationIDKey')
-    return null
-  }
-}
-
 // A button that sends a wave emoji into a chat.
-const WaveButtonImpl = (props: Props) => {
+const WaveButton = (props: Props) => {
+  const styles = useStyles()
+  const theme = Styles.useTheme()
   const [waved, setWaved] = React.useState(false)
   const waitingKey = getWaveWaitingKey(props.username || props.conversationIDKey || 'missing')
   const waving = C.Waiting.useAnyWaiting(waitingKey)
-  const messageSend = C.useChatContext(s => s.dispatch.messageSend)
-  const messageSendByUsername = C.useChatState(s => s.dispatch.messageSendByUsername)
+  const username = useCurrentUserState(s => s.username)
+  const createConversation = C.useRPC(T.RPCChat.localNewConversationLocalRpcPromise)
   const onWave = () => {
     if (props.username) {
-      messageSendByUsername(props.username, ':wave:', waitingKey)
+      if (!username) {
+        logger.warn('WaveButton: missing username for direct wave')
+        return
+      }
+      createConversation(
+        [
+          {
+            identifyBehavior: T.RPCGen.TLFIdentifyBehavior.chatGui,
+            membersType: T.RPCChat.ConversationMembersType.impteamnative,
+            tlfName: `${username},${props.username}`,
+            tlfVisibility: T.RPCGen.TLFVisibility.private,
+            topicType: T.RPCChat.TopicType.chat,
+          },
+          waitingKey,
+        ],
+        result => {
+          const conversationIDKey = T.Chat.conversationIDToKey(result.conv.info.id)
+          if (!conversationIDKey) {
+            logger.warn("WaveButton: couldn't resolve wave conversation")
+            return
+          }
+          sendTextToConversation(conversationIDKey, `${username},${props.username}`, ':wave:')
+        },
+        error => {
+          logger.warn('Could not send in WaveButton', error.message)
+        }
+      )
     } else if (props.conversationIDKey) {
-      messageSend(':wave:', undefined, waitingKey)
+      sendTextToConversation(props.conversationIDKey, props.tlfName, ':wave:')
     } else {
       logger.warn('WaveButton: need one of username or conversationIDKey')
       return
@@ -76,10 +84,10 @@ const WaveButtonImpl = (props: Props) => {
 
   const hideButton = waved && !waving
   return (
-    <Kb.Box style={Styles.collapseStyles([props.style, styles.outer])}>
+    <Kb.Box2 direction="vertical" noShrink={true} style={props.style}>
       {hideButton && (
         <Kb.Box2 direction="horizontal" centerChildren={true} style={styles.waved} gap="xtiny">
-          <Kb.Icon type="iconfont-check" color={Styles.globalColors.black_50} sizeType="Tiny" />
+          <Kb.Icon type="iconfont-check" color={theme.black_50} sizeType="Tiny" />
           <Kb.Text type="BodySmall"> Waved</Kb.Text>
         </Kb.Box2>
       )}
@@ -94,24 +102,23 @@ const WaveButtonImpl = (props: Props) => {
         <Kb.Text type="BodySemibold" style={styles.blueText}>
           {waveText}
         </Kb.Text>
-        <Kb.Emoji emojiName=":wave:" size={18} />
+        <Kb.NativeEmoji emojiName=":wave:" size={18} />
       </Kb.Button>
-    </Kb.Box>
+    </Kb.Box2>
   )
 }
 
-const styles = Styles.styleSheetCreate(
-  () =>
+export default WaveButton
+
+const useStyles = Styles.createStyleHook(
+  theme =>
     ({
-      blueText: {color: Styles.globalColors.blueDark, paddingRight: Styles.globalMargins.xtiny},
-      button: {},
+      blueText: {color: theme.blueDark, paddingRight: Styles.globalMargins.xtiny},
+      button: Styles.platformStyles({isElectron: {width: 'auto'}}),
       hiddenButton: {opacity: 0},
-      outer: {flexShrink: 0},
       waved: {
         ...Styles.padding(Styles.globalMargins.tiny, Styles.globalMargins.small, Styles.globalMargins.xtiny),
         position: 'absolute',
       },
     }) as const
 )
-
-export default WaveButton

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sync"
@@ -9,7 +10,6 @@ import (
 	"github.com/keybase/client/go/engine"
 	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/protocol/keybase1"
-	context "golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -39,7 +39,7 @@ func NewTrackerLoader(g *libkb.GlobalContext) *TrackerLoader {
 	return l
 }
 
-func (l *TrackerLoader) debug(ctx context.Context, msg string, args ...interface{}) {
+func (l *TrackerLoader) debug(ctx context.Context, msg string, args ...any) {
 	l.G().Log.CDebugf(ctx, "TrackerLoader: %s", fmt.Sprintf(msg, args...))
 }
 

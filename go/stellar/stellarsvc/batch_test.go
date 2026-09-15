@@ -54,7 +54,7 @@ func TestPrepareBatchRelays(t *testing.T) {
 			require.Nil(t, p.Direct)
 			require.NotNil(t, p.Relay)
 			require.True(t, p.Relay.QuickReturn)
-			require.Nil(t, p.Error)
+			require.NoError(t, p.Error)
 			require.NotEmpty(t, p.Seqno)
 			require.NotEmpty(t, p.TxID)
 			require.Equal(t, batchID, p.Relay.BatchID)
@@ -62,16 +62,16 @@ func TestPrepareBatchRelays(t *testing.T) {
 			require.NotNil(t, p.Direct)
 			require.Nil(t, p.Relay)
 			require.True(t, p.Direct.QuickReturn)
-			require.Nil(t, p.Error)
+			require.NoError(t, p.Error)
 			require.NotEmpty(t, p.Seqno)
 			require.NotEmpty(t, p.TxID)
 			require.Equal(t, batchID, p.Direct.BatchID)
 		default:
-			t.Fatalf("unknown username in result: %s", p.Username)
+			require.FailNow(t, fmt.Sprintf("unknown username in result: %s", p.Username))
 		}
 	}
 	if prepared[0].Seqno > prepared[1].Seqno {
-		t.Errorf("prepared sort failed (seqnos out of order)")
+		require.Fail(t, "prepared sort failed (seqnos out of order)")
 	}
 }
 
@@ -122,7 +122,7 @@ func TestPrepareBatchLowAmounts(t *testing.T) {
 			require.Empty(t, p.Seqno)
 			require.Empty(t, p.TxID)
 		default:
-			t.Fatalf("unknown username in result: %s", p.Username)
+			require.FailNow(t, fmt.Sprintf("unknown username in result: %s", p.Username))
 		}
 	}
 }
@@ -142,7 +142,7 @@ func TestBatchMultiDirect(t *testing.T) {
 	// recipient test contexts
 	const numRecips = 3
 	recipTC := make([]*TestContext, numRecips)
-	for i := 0; i < numRecips; i++ {
+	for i := range numRecips {
 		var c func()
 		recipTC[i], c = setupDesktopTest(t)
 		defer c()
@@ -172,7 +172,7 @@ func TestBatchMultiDirect(t *testing.T) {
 			if p.Status == stellar1.PaymentStatus_ERROR {
 				t.Logf("payment %d error: %s (%d)", i, p.Error.Message, p.Error.Code)
 			}
-			t.Errorf("payment %d not complete: %+v", i, p)
+			require.Failf(t, "", "payment %d not complete: %+v", i, p)
 		}
 
 		var msg *paymentMsg
@@ -183,9 +183,9 @@ func TestBatchMultiDirect(t *testing.T) {
 			}
 		}
 		if msg == nil {
-			t.Errorf("payment %d no chat message found: %+v", i, p)
+			require.Failf(t, "", "payment %d no chat message found: %+v", i, p)
 		} else if msg.PaymentID != stellar1.PaymentID(p.TxID) {
-			t.Errorf("payment %d chat msg tx id: %q, expected %q", i, msg.PaymentID, p.TxID)
+			require.Failf(t, "", "payment %d chat msg tx id: %q, expected %q", i, msg.PaymentID, p.TxID)
 		}
 	}
 }
@@ -206,7 +206,8 @@ type testChatHelper struct {
 
 func (tch *testChatHelper) SendMsgByName(ctx context.Context, name string, topicName *string,
 	membersType chat1.ConversationMembersType, ident keybase1.TLFIdentifyBehavior, body chat1.MessageBody,
-	msgType chat1.MessageType) error {
+	msgType chat1.MessageType,
+) error {
 	tch.Lock()
 	defer tch.Unlock()
 	if msgType == chat1.MessageType_SENDPAYMENT {

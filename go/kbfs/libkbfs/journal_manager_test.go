@@ -5,6 +5,7 @@
 package libkbfs
 
 import (
+	"context"
 	"math"
 	"os"
 	"sync"
@@ -23,13 +24,13 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/context"
 )
 
 func setupJournalManagerTest(t *testing.T) (
 	tempdir string, ctx context.Context, cancel context.CancelFunc,
 	config *ConfigLocal, quotaUsage *EventuallyConsistentQuotaUsage,
-	jManager *JournalManager) {
+	jManager *JournalManager,
+) {
 	tempdir, err := ioutil.TempDir(os.TempDir(), "journal_server")
 	require.NoError(t, err)
 
@@ -80,7 +81,8 @@ func setupJournalManagerTest(t *testing.T) (
 
 func teardownJournalManagerTest(
 	ctx context.Context, t *testing.T, tempdir string,
-	cancel context.CancelFunc, config Config) {
+	cancel context.CancelFunc, config Config,
+) {
 	CheckConfigAndShutdown(ctx, t, config)
 	cancel()
 	err := ioutil.RemoveAll(tempdir)
@@ -96,7 +98,8 @@ type quotaBlockServer struct {
 }
 
 func (qbs *quotaBlockServer) setUserQuotaInfo(
-	remoteUsageBytes, limitBytes, remoteGitUsageBytes, gitLimitBytes int64) {
+	remoteUsageBytes, limitBytes, remoteGitUsageBytes, gitLimitBytes int64,
+) {
 	qbs.quotaInfoLock.Lock()
 	defer qbs.quotaInfoLock.Unlock()
 	qbs.userQuotaInfo.Limit = limitBytes
@@ -110,7 +113,8 @@ func (qbs *quotaBlockServer) setUserQuotaInfo(
 }
 
 func (qbs *quotaBlockServer) setTeamQuotaInfo(
-	tid keybase1.TeamID, remoteUsageBytes, limitBytes int64) {
+	tid keybase1.TeamID, remoteUsageBytes, limitBytes int64,
+) {
 	qbs.quotaInfoLock.Lock()
 	defer qbs.quotaInfoLock.Unlock()
 	if qbs.teamQuotaInfo == nil {
@@ -127,7 +131,8 @@ func (qbs *quotaBlockServer) setTeamQuotaInfo(
 }
 
 func (qbs *quotaBlockServer) GetUserQuotaInfo(ctx context.Context) (
-	info *kbfsblock.QuotaInfo, err error) {
+	info *kbfsblock.QuotaInfo, err error,
+) {
 	qbs.quotaInfoLock.Lock()
 	defer qbs.quotaInfoLock.Unlock()
 	infoCopy := qbs.userQuotaInfo
@@ -136,7 +141,8 @@ func (qbs *quotaBlockServer) GetUserQuotaInfo(ctx context.Context) (
 
 func (qbs *quotaBlockServer) GetTeamQuotaInfo(
 	ctx context.Context, tid keybase1.TeamID) (
-	info *kbfsblock.QuotaInfo, err error) {
+	info *kbfsblock.QuotaInfo, err error,
+) {
 	qbs.quotaInfoLock.Lock()
 	defer qbs.quotaInfoLock.Unlock()
 	infoCopy := qbs.teamQuotaInfo[tid]
@@ -144,8 +150,7 @@ func (qbs *quotaBlockServer) GetTeamQuotaInfo(
 }
 
 func TestJournalManagerOverQuotaError(t *testing.T) {
-	tempdir, ctx, cancel, config, quotaUsage, jManager :=
-		setupJournalManagerTest(t)
+	tempdir, ctx, cancel, config, quotaUsage, jManager := setupJournalManagerTest(t)
 	defer teardownJournalManagerTest(ctx, t, tempdir, cancel, config)
 
 	name := kbname.NormalizedUsername("t1")
@@ -277,8 +282,7 @@ func (c tlfJournalConfigWithDiskLimitTimeout) diskLimitTimeout() time.Duration {
 }
 
 func TestJournalManagerOverDiskLimitError(t *testing.T) {
-	tempdir, ctx, cancel, config, quotaUsage, jManager :=
-		setupJournalManagerTest(t)
+	tempdir, ctx, cancel, config, quotaUsage, jManager := setupJournalManagerTest(t)
 	defer teardownJournalManagerTest(ctx, t, tempdir, cancel, config)
 
 	qbs := &quotaBlockServer{BlockServer: config.BlockServer()}
@@ -328,8 +332,7 @@ func TestJournalManagerOverDiskLimitError(t *testing.T) {
 	require.NoError(t, err)
 	serverHalf, err := kbfscrypto.MakeRandomBlockCryptKeyServerHalf()
 	require.NoError(t, err)
-	usageBytes, limitBytes, usageFiles, limitFiles :=
-		tj.diskLimiter.getDiskLimitInfo()
+	usageBytes, limitBytes, usageFiles, limitFiles := tj.diskLimiter.getDiskLimitInfo()
 	putCtx := context.Background() // rely on default disk limit timeout
 	err = blockServer.Put(
 		putCtx, tlfID1, bID, bCtx, data, serverHalf, DiskBlockAnyCache)
@@ -502,7 +505,7 @@ func TestJournalManagerLogOutLogIn(t *testing.T) {
 	// Get the block, which should fail.
 
 	_, _, err = blockServer.Get(ctx, tlfID, bID, bCtx, DiskBlockAnyCache)
-	require.IsType(t, kbfsblock.ServerErrorBlockNonExistent{}, err)
+	require.ErrorAs(t, err, new(kbfsblock.ServerErrorBlockNonExistent))
 
 	// Get the head, which should be empty.
 
@@ -628,7 +631,7 @@ func TestJournalManagerMultiUser(t *testing.T) {
 	// None of user 1's changes should be visible.
 
 	_, _, err = blockServer.Get(ctx, tlfID, bID1, bCtx1, DiskBlockAnyCache)
-	require.IsType(t, kbfsblock.ServerErrorBlockNonExistent{}, err)
+	require.ErrorAs(t, err, new(kbfsblock.ServerErrorBlockNonExistent))
 
 	head, err := mdOps.GetForTLF(ctx, tlfID, nil)
 	require.NoError(t, err)
@@ -667,10 +670,10 @@ func TestJournalManagerMultiUser(t *testing.T) {
 	// No block or MD should be visible.
 
 	_, _, err = blockServer.Get(ctx, tlfID, bID1, bCtx1, DiskBlockAnyCache)
-	require.IsType(t, kbfsblock.ServerErrorBlockNonExistent{}, err)
+	require.ErrorAs(t, err, new(kbfsblock.ServerErrorBlockNonExistent))
 
 	_, _, err = blockServer.Get(ctx, tlfID, bID2, bCtx2, DiskBlockAnyCache)
-	require.IsType(t, kbfsblock.ServerErrorBlockNonExistent{}, err)
+	require.ErrorAs(t, err, new(kbfsblock.ServerErrorBlockNonExistent))
 
 	head, err = mdOps.GetForTLF(ctx, tlfID, nil)
 	require.NoError(t, err)
@@ -695,7 +698,7 @@ func TestJournalManagerMultiUser(t *testing.T) {
 	require.Equal(t, serverHalf1, key)
 
 	_, _, err = blockServer.Get(ctx, tlfID, bID2, bCtx2, DiskBlockAnyCache)
-	require.IsType(t, kbfsblock.ServerErrorBlockNonExistent{}, err)
+	require.ErrorAs(t, err, new(kbfsblock.ServerErrorBlockNonExistent))
 
 	head, err = mdOps.GetForTLF(ctx, tlfID, nil)
 	require.NoError(t, err)
@@ -717,7 +720,7 @@ func TestJournalManagerMultiUser(t *testing.T) {
 	// Only user 2's block and MD should be visible.
 
 	_, _, err = blockServer.Get(ctx, tlfID, bID1, bCtx1, DiskBlockAnyCache)
-	require.IsType(t, kbfsblock.ServerErrorBlockNonExistent{}, err)
+	require.ErrorAs(t, err, new(kbfsblock.ServerErrorBlockNonExistent))
 
 	buf, key, err = blockServer.Get(ctx, tlfID, bID2, bCtx2, DiskBlockAnyCache)
 	require.NoError(t, err)
@@ -730,8 +733,7 @@ func TestJournalManagerMultiUser(t *testing.T) {
 }
 
 func TestJournalManagerEnableAuto(t *testing.T) {
-	delegateCtx, delegateCancel := context.WithCancel(context.Background())
-	defer delegateCancel()
+	delegateCtx := t.Context()
 
 	tempdir, ctx, cancel, config, _, jManager := setupJournalManagerTest(t)
 	defer teardownJournalManagerTest(ctx, t, tempdir, cancel, config)
@@ -742,7 +744,7 @@ func TestJournalManagerEnableAuto(t *testing.T) {
 	status, tlfIDs := jManager.Status(ctx)
 	require.True(t, status.EnableAuto)
 	require.Zero(t, status.JournalCount)
-	require.Len(t, tlfIDs, 0)
+	require.Empty(t, tlfIDs)
 
 	delegate := testBWDelegate{
 		t:          t,
@@ -818,7 +820,7 @@ func TestJournalManagerReaderTLFs(t *testing.T) {
 	status, tlfIDs := jManager.Status(ctx)
 	require.True(t, status.EnableAuto)
 	require.Zero(t, status.JournalCount)
-	require.Len(t, tlfIDs, 0)
+	require.Empty(t, tlfIDs)
 
 	// This will end up calling journalMDOps.GetIDForHandle, which
 	// initializes the journal if possible.  In this case for a
@@ -830,7 +832,7 @@ func TestJournalManagerReaderTLFs(t *testing.T) {
 	status, tlfIDs = jManager.Status(ctx)
 	require.True(t, status.EnableAuto)
 	require.Equal(t, 0, status.JournalCount)
-	require.Len(t, tlfIDs, 0)
+	require.Empty(t, tlfIDs)
 
 	// Neither should a private, reader folder.
 	h, err := tlfhandle.ParseHandle(
@@ -841,7 +843,7 @@ func TestJournalManagerReaderTLFs(t *testing.T) {
 	status, tlfIDs = jManager.Status(ctx)
 	require.True(t, status.EnableAuto)
 	require.Equal(t, 0, status.JournalCount)
-	require.Len(t, tlfIDs, 0)
+	require.Empty(t, tlfIDs)
 
 	// Or a team folder, where you're just a reader.
 	teamName := kbname.NormalizedUsername("t1")
@@ -859,7 +861,7 @@ func TestJournalManagerReaderTLFs(t *testing.T) {
 	status, tlfIDs = jManager.Status(ctx)
 	require.True(t, status.EnableAuto)
 	require.Equal(t, 0, status.JournalCount)
-	require.Len(t, tlfIDs, 0)
+	require.Empty(t, tlfIDs)
 
 	// But accessing our own should make one.
 	_, err = tlfhandle.ParseHandle(
@@ -882,7 +884,7 @@ func TestJournalManagerNukeEmptyJournalsOnRestart(t *testing.T) {
 	status, tlfIDs := jManager.Status(ctx)
 	require.True(t, status.EnableAuto)
 	require.Zero(t, status.JournalCount)
-	require.Len(t, tlfIDs, 0)
+	require.Empty(t, tlfIDs)
 
 	blockServer := config.BlockServer()
 	h, err := tlfhandle.ParseHandle(
@@ -930,7 +932,7 @@ func TestJournalManagerNukeEmptyJournalsOnRestart(t *testing.T) {
 	status, tlfIDs = jManager.Status(ctx)
 	require.True(t, status.EnableAuto)
 	require.Equal(t, 0, status.JournalCount)
-	require.Len(t, tlfIDs, 0)
+	require.Empty(t, tlfIDs)
 	_, err = os.Stat(tj.dir)
 	require.True(t, ioutil.IsNotExist(err))
 }
@@ -1068,7 +1070,7 @@ func TestJournalManagerCorruptJournal(t *testing.T) {
 	status, tlfIDs := jManager.Status(ctx)
 	require.True(t, status.EnableAuto)
 	require.Zero(t, status.JournalCount)
-	require.Len(t, tlfIDs, 0)
+	require.Empty(t, tlfIDs)
 
 	blockServer := config.BlockServer()
 	h, err := tlfhandle.ParseHandle(
@@ -1119,7 +1121,7 @@ func TestJournalManagerCorruptJournal(t *testing.T) {
 	status, tlfIDs = jManager.Status(ctx)
 	require.True(t, status.EnableAuto)
 	require.Equal(t, 0, status.JournalCount)
-	require.Len(t, tlfIDs, 0)
+	require.Empty(t, tlfIDs)
 	config.SetBlockServer(
 		journalBlockServer{jManager, jManager.delegateBlockServer, false})
 	blockServer = config.BlockServer()

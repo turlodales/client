@@ -1,9 +1,9 @@
-import * as C from '@/constants'
 import * as React from 'react'
 import * as Kb from '@/common-adapters'
-import type * as T from '@/constants/types'
-
-export type SaveStateType = 'same' | 'saving' | 'justSaved'
+import * as T from '@/constants/types'
+import {ignorePromise} from '@/constants/utils'
+import {muteConversationPromise} from '../../status-actions'
+import {useConversationMeta} from '../../data-hooks'
 
 type UnmutedProps = {
   channelWide: boolean
@@ -15,6 +15,7 @@ type UnmutedProps = {
 }
 
 const UnmutedNotificationPrefs = (props: UnmutedProps) => {
+  const styles = useStyles()
   const {desktop, setDesktop, mobile, setMobile, channelWide, toggleChannelWide} = props
   const allNotifsEnabled = desktop === 'onAnyActivity' && mobile === 'onAnyActivity'
   let ignoreMentionsSuffix = ''
@@ -24,13 +25,13 @@ const UnmutedNotificationPrefs = (props: UnmutedProps) => {
     ignoreMentionsSuffix = '(desktop)'
   }
   return (
-    <Kb.Box2 direction="vertical" fullWidth={true} gap="small">
+    <>
       {!allNotifsEnabled && (
         <Kb.Checkbox
           checked={!channelWide}
           label=""
           labelComponent={
-            <Kb.Box2 direction="vertical" style={{flex: 1}}>
+            <Kb.Box2 direction="vertical" flex={1}>
               <Kb.Text type="Body">
                 Ignore <Kb.Text type="BodySemibold">@here</Kb.Text> and{' '}
                 <Kb.Text type="BodySemibold">@channel</Kb.Text> mentions {ignoreMentionsSuffix}
@@ -40,7 +41,6 @@ const UnmutedNotificationPrefs = (props: UnmutedProps) => {
           onCheck={toggleChannelWide}
         />
       )}
-
       <Kb.Box2 direction="vertical" fullWidth={true}>
         <Kb.Text type="BodySmallSemibold">Desktop notifications</Kb.Text>
         <Kb.Box2 direction="vertical" fullWidth={true} gap="tiny" style={styles.radioButton}>
@@ -96,33 +96,95 @@ const UnmutedNotificationPrefs = (props: UnmutedProps) => {
           />
         </Kb.Box2>
       </Kb.Box2>
-    </Kb.Box2>
+    </>
   )
 }
 
-const Notifications = () => {
-  const meta = C.useChatContext(s => s.meta)
+const Notifications = (props: {conversationIDKey: T.Chat.ConversationIDKey}) => {
+  const styles = useStyles()
+  const theme = Kb.Styles.useTheme()
+  const {conversationIDKey} = props
+  const meta = useConversationMeta(conversationIDKey)
   const [channelWide, setChannelWide] = React.useState(meta.notificationsGlobalIgnoreMentions)
   const [desktop, setDesktop] = React.useState(meta.notificationsDesktop)
   const [mobile, setMobile] = React.useState(meta.notificationsMobile)
   const [muted, setMuted] = React.useState(meta.isMuted)
   const [saving, setSaving] = React.useState(false)
-  const delayUnsave = Kb.useTimeout(() => setSaving(false), 100)
-  const updateNotificationSettings = C.useChatContext(s => s.dispatch.updateNotificationSettings)
+  const [saveError, setSaveError] = React.useState('')
+  const latestSaveIDRef = React.useRef(0)
+  const startSave = () => {
+    const saveID = latestSaveIDRef.current + 1
+    latestSaveIDRef.current = saveID
+    setSaveError('')
+    setSaving(true)
+    return saveID
+  }
+  const finishSave = (saveID: number) => {
+    if (latestSaveIDRef.current === saveID) {
+      setSaving(false)
+    }
+  }
+  const failSave = (saveID: number, error: unknown) => {
+    if (latestSaveIDRef.current !== saveID) {
+      return
+    }
+    setSaveError(
+      error instanceof Error && error.message ? error.message : 'Failed to save notification settings.'
+    )
+    setSaving(false)
+  }
   const saveNotifications = (
     desktop: T.Chat.NotificationsType,
     mobile: T.Chat.NotificationsType,
     channelWide: boolean
   ) => {
-    setSaving(true)
-    updateNotificationSettings(desktop, mobile, channelWide)
-    delayUnsave()
+    const saveID = startSave()
+    const f = async () => {
+      try {
+        await T.RPCChat.localSetAppNotificationSettingsLocalRpcPromise({
+          channelWide,
+          convID: T.Chat.keyToConversationID(conversationIDKey),
+          settings: [
+            {
+              deviceType: T.RPCGen.DeviceType.desktop,
+              enabled: desktop === 'onWhenAtMentioned',
+              kind: T.RPCChat.NotificationKind.atmention,
+            },
+            {
+              deviceType: T.RPCGen.DeviceType.desktop,
+              enabled: desktop === 'onAnyActivity',
+              kind: T.RPCChat.NotificationKind.generic,
+            },
+            {
+              deviceType: T.RPCGen.DeviceType.mobile,
+              enabled: mobile === 'onWhenAtMentioned',
+              kind: T.RPCChat.NotificationKind.atmention,
+            },
+            {
+              deviceType: T.RPCGen.DeviceType.mobile,
+              enabled: mobile === 'onAnyActivity',
+              kind: T.RPCChat.NotificationKind.generic,
+            },
+          ],
+        })
+        finishSave(saveID)
+      } catch (error) {
+        failSave(saveID, error)
+      }
+    }
+    ignorePromise(f())
   }
-  const mute = C.useChatContext(s => s.dispatch.mute)
   const saveMuted = (muted: boolean) => {
-    setSaving(true)
-    mute(muted)
-    delayUnsave()
+    const saveID = startSave()
+    const f = async () => {
+      try {
+        await muteConversationPromise(conversationIDKey, muted)
+        finishSave(saveID)
+      } catch (error) {
+        failSave(saveID, error)
+      }
+    }
+    ignorePromise(f())
   }
 
   const [lastMeta, setLastMeta] = React.useState<undefined | T.Chat.ConversationMeta>()
@@ -135,8 +197,8 @@ const Notifications = () => {
   }
 
   return (
-    <Kb.Box2 direction="vertical" fullWidth={true} gap="small">
-      <Kb.Box2 direction="horizontal" fullWidth={true}>
+    <>
+      <Kb.Box2 direction="horizontal" fullWidth={true} alignItems="center">
         <Kb.Checkbox
           checked={muted}
           onCheck={() => {
@@ -145,7 +207,8 @@ const Notifications = () => {
           }}
           label="Mute all notifications"
         />
-        <Kb.Icon type="iconfont-shh" style={styles.icon} color={Kb.Styles.globalColors.black_20} />
+        <Kb.Icon type="iconfont-shh" style={styles.icon} color={theme.black_20} />
+        <Kb.SaveIndicator saving={saving} style={styles.saveIndicator} />
       </Kb.Box2>
       {!muted && (
         <UnmutedNotificationPrefs
@@ -166,15 +229,20 @@ const Notifications = () => {
           }}
         />
       )}
-      <Kb.SaveIndicator saving={saving} minSavingTimeMs={300} savedTimeoutMs={2500} />
-    </Kb.Box2>
+      {saveError ? (
+        <Kb.Banner color="red">
+          <Kb.BannerParagraph bannerColor="red" content={saveError} />
+        </Kb.Banner>
+      ) : null}
+    </>
   )
 }
 
-const styles = Kb.Styles.styleSheetCreate(
+const useStyles = Kb.Styles.createStyleHook(
   () =>
     ({
       icon: {marginLeft: Kb.Styles.globalMargins.xtiny},
+      saveIndicator: {height: 17},
       radioButton: {
         ...Kb.Styles.globalStyles.flexBoxRow,
         marginLeft: Kb.Styles.globalMargins.tiny,

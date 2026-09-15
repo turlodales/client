@@ -19,6 +19,16 @@ import (
 	"sync"
 	"time"
 
+	billy "github.com/go-git/go-billy/v5"
+	"github.com/go-git/go-billy/v5/osfs"
+	gogit "github.com/go-git/go-git/v5"
+	gogitcfg "github.com/go-git/go-git/v5/config"
+	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/cache"
+	gogitobj "github.com/go-git/go-git/v5/plumbing/object"
+	gogitstor "github.com/go-git/go-git/v5/plumbing/storer"
+	"github.com/go-git/go-git/v5/storage"
+	"github.com/go-git/go-git/v5/storage/filesystem"
 	"github.com/keybase/client/go/kbfs/data"
 	"github.com/keybase/client/go/kbfs/idutil"
 	"github.com/keybase/client/go/kbfs/kbfsmd"
@@ -31,15 +41,6 @@ import (
 	"github.com/keybase/client/go/logger"
 	"github.com/keybase/client/go/protocol/keybase1"
 	"github.com/pkg/errors"
-	billy "gopkg.in/src-d/go-billy.v4"
-	"gopkg.in/src-d/go-billy.v4/osfs"
-	gogit "gopkg.in/src-d/go-git.v4"
-	gogitcfg "gopkg.in/src-d/go-git.v4/config"
-	"gopkg.in/src-d/go-git.v4/plumbing"
-	gogitobj "gopkg.in/src-d/go-git.v4/plumbing/object"
-	gogitstor "gopkg.in/src-d/go-git.v4/plumbing/storer"
-	"gopkg.in/src-d/go-git.v4/storage"
-	"gopkg.in/src-d/go-git.v4/storage/filesystem"
 )
 
 const (
@@ -176,7 +177,8 @@ func ParseRepo(repo string) (tlfType tlf.Type, tlfName string, repoName string, 
 func newRunnerWithType(ctx context.Context, config libkbfs.Config,
 	remote, repo, gitDir string, input io.Reader, output, errput io.Writer,
 	processType runnerProcessType) (
-	*runner, error) {
+	*runner, error,
+) {
 	tlfType, tlfName, repoName, err := ParseRepo(repo)
 	if err != nil {
 		return nil, err
@@ -221,7 +223,8 @@ func newRunnerWithType(ctx context.Context, config libkbfs.Config,
 // on-disk repo.
 func newRunner(ctx context.Context, config libkbfs.Config,
 	remote, repo, gitDir string, input io.Reader, output, errput io.Writer) (
-	*runner, error) {
+	*runner, error,
+) {
 	return newRunnerWithType(
 		ctx, config, remote, repo, gitDir, input, output, errput, processGit)
 }
@@ -254,7 +257,8 @@ func (r *runner) handleCapabilities() error {
 // location of a memory profile taken at the end of the phase.
 func (r *runner) getElapsedStr(
 	ctx context.Context, startTime time.Time, profName string,
-	cpuProfFullPath string) string {
+	cpuProfFullPath string,
+) string {
 	if r.verbosity < 2 {
 		return ""
 	}
@@ -263,7 +267,7 @@ func (r *runner) getElapsedStr(
 
 	if r.verbosity >= 3 {
 		profName = filepath.Join(os.TempDir(), profName)
-		f, err := os.Create(profName)
+		f, err := os.Create(profName) //nolint:gosec // G304: profName is a defined constant.
 		if err != nil {
 			r.log.CDebugf(ctx, err.Error())
 		} else {
@@ -272,7 +276,7 @@ func (r *runner) getElapsedStr(
 			if err != nil {
 				r.log.CDebugf(ctx, "Couldn't write heap profile: %+v", err)
 			}
-			f.Close()
+			_ = f.Close()
 		}
 		elapsedStr += " [memprof " + profName + "]"
 	}
@@ -286,7 +290,8 @@ func (r *runner) getElapsedStr(
 }
 
 func (r *runner) printDoneOrErr(
-	ctx context.Context, err error, startTime time.Time) {
+	ctx context.Context, err error, startTime time.Time,
+) {
 	if r.verbosity < 1 {
 		return
 	}
@@ -339,7 +344,8 @@ func (r *runner) makeFS(ctx context.Context) (fs *libfs.FS, err error) {
 }
 
 func (r *runner) initRepoIfNeeded(ctx context.Context, forCmd string) (
-	repo *gogit.Repository, fs *libfs.FS, err error) {
+	repo *gogit.Repository, fs *libfs.FS, err error,
+) {
 	// This function might be called multiple times per function, but
 	// the subsequent calls will use the local cache.  So only print
 	// these messages once.
@@ -410,7 +416,7 @@ func (r *runner) initRepoIfNeeded(ctx context.Context, forCmd string) (
 	// repo.
 	r.log.CDebugf(ctx, "Attempting to init or open repo %s", r.repo)
 	repo, err = gogit.Init(storage, nil)
-	if err == gogit.ErrRepositoryAlreadyExists {
+	if errors.Is(err, gogit.ErrRepositoryAlreadyExists) {
 		repo, err = gogit.Open(storage, nil)
 	}
 	if err != nil {
@@ -476,7 +482,8 @@ func (r *runner) printStageEndIfNeeded(ctx context.Context) {
 }
 
 func (r *runner) printStageStart(ctx context.Context,
-	toPrint []byte, memProfName, cpuProfName string) {
+	toPrint []byte, memProfName, cpuProfName string,
+) {
 	if len(toPrint) == 0 {
 		return
 	}
@@ -491,12 +498,13 @@ func (r *runner) printStageStart(ctx context.Context,
 	if len(cpuProfName) > 0 && r.verbosity >= 4 {
 		cpuProfPath := filepath.Join(
 			os.TempDir(), cpuProfName)
-		f, err := os.Create(cpuProfPath)
+		f, err := os.Create(cpuProfPath) //nolint:gosec // G304: profName is a defined constant.
 		if err != nil {
 			r.log.CDebugf(
 				ctx, "Couldn't create CPU profile: %s", cpuProfName)
 			cpuProfPath = ""
 		} else {
+			defer func() { _ = f.Close() }()
 			err := pprof.StartCPUProfile(f)
 			if err != nil {
 				r.log.CDebugf(ctx, "Couldn't start CPU profile: %+v", err)
@@ -519,19 +527,17 @@ func (r *runner) printGitJournalStart(ctx context.Context) {
 	}
 	if r.verbosity >= 1 {
 		r.printStageStart(ctx,
-			[]byte(fmt.Sprintf("Syncing %s data to Keybase: ", adj)),
+			fmt.Appendf(nil, "Syncing %s data to Keybase: ", adj),
 			"mem.flush.prof", "")
 	}
 }
 
 func (r *runner) printGitJournalMessage(
-	ctx context.Context, lastByteCount int, totalSize, sizeLeft int64) int {
+	ctx context.Context, lastByteCount int, totalSize, sizeLeft int64,
+) int {
 	const bytesFmt string = "(%.2f%%) %s... "
 	eraseStr := strings.Repeat("\b", lastByteCount)
-	flushed := totalSize - sizeLeft
-	if flushed < 0 {
-		flushed = 0
-	}
+	flushed := max(totalSize-sizeLeft, 0)
 	str := fmt.Sprintf(
 		bytesFmt, percent(flushed, totalSize),
 		humanizeBytes(flushed, totalSize))
@@ -549,7 +555,8 @@ func (r *runner) printJournalStatus(
 	ctx context.Context, jManager *libkbfs.JournalManager, tlfID tlf.ID,
 	doneCh <-chan struct{}, printStart func(context.Context),
 	printProgress func(context.Context, int, int64, int64) int,
-	printEnd func(context.Context)) {
+	printEnd func(context.Context),
+) {
 	printEnd(ctx)
 	// Note: the "first" status here gets us the number of unflushed
 	// bytes left at the time we started printing.  However, we don't
@@ -601,7 +608,8 @@ func (r *runner) printJournalStatus(
 func (r *runner) waitForJournalWithPrinters(
 	ctx context.Context, printStart func(context.Context),
 	printProgress func(context.Context, int, int64, int64) int,
-	printEnd func(context.Context)) error {
+	printEnd func(context.Context),
+) error {
 	// See if there are any deleted repos to clean up before we flush
 	// the journal.
 	err := libgit.CleanOldDeletedReposTimeLimited(ctx, r.config, r.h)
@@ -672,6 +680,21 @@ func (r *runner) waitForJournal(ctx context.Context) error {
 		r.printStageEndIfNeeded)
 }
 
+// bestBranchFromCandidates selects the best branch for HEAD from a set of
+// candidate branch names (prefer main > master > alphabetically first).
+func bestBranchFromCandidates(best plumbing.ReferenceName, candidate plumbing.ReferenceName) plumbing.ReferenceName {
+	switch {
+	case candidate == "refs/heads/main":
+		return candidate
+	case candidate == "refs/heads/master" && best != "refs/heads/main":
+		return candidate
+	case best == "" || (best != "refs/heads/main" && best != "refs/heads/master" && candidate < best):
+		return candidate
+	default:
+		return best
+	}
+}
+
 // handleList: From https://git-scm.com/docs/git-remote-helpers
 //
 // Lists the refs, one per line, in the format "<value> <name> [<attr>
@@ -698,12 +721,21 @@ func (r *runner) handleList(ctx context.Context, args []string) (err error) {
 	if err != nil {
 		return err
 	}
+	defer refs.Close()
 
-	var symRefs []string
+	type symRefInfo struct {
+		name   plumbing.ReferenceName
+		target plumbing.ReferenceName
+	}
+	var symRefs []symRefInfo
+	hashRefNames := make(map[plumbing.ReferenceName]bool)
 	hashesSeen := false
+	// Track the best fallback branch for HEAD in case its target
+	// doesn't exist (prefer main > master > alphabetically first).
+	var bestBranch plumbing.ReferenceName
 	for {
 		ref, err := refs.Next()
-		if errors.Cause(err) == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
@@ -715,6 +747,11 @@ func (r *runner) handleList(ctx context.Context, args []string) (err error) {
 		case plumbing.HashReference:
 			value = ref.Hash().String()
 			hashesSeen = true
+			hashRefNames[ref.Name()] = true
+			// Track best branch for fallback HEAD.
+			if strings.HasPrefix(ref.Name().String(), "refs/heads/") {
+				bestBranch = bestBranchFromCandidates(bestBranch, ref.Name())
+			}
 		case plumbing.SymbolicReference:
 			value = "@" + ref.Target().String()
 		default:
@@ -727,7 +764,10 @@ func (r *runner) handleList(ctx context.Context, args []string) (err error) {
 			// cloning an empty repo will result in an error because
 			// the HEAD symbolic ref points to a ref that doesn't
 			// exist.
-			symRefs = append(symRefs, refStr)
+			symRefs = append(symRefs, symRefInfo{
+				name:   ref.Name(),
+				target: ref.Target(),
+			})
 			continue
 		}
 		r.log.CDebugf(ctx, "Listing ref %s", refStr)
@@ -738,7 +778,30 @@ func (r *runner) handleList(ctx context.Context, args []string) (err error) {
 	}
 
 	if hashesSeen && !forPush {
-		for _, refStr := range symRefs {
+		for _, sr := range symRefs {
+			target := sr.target
+			// If the symref target doesn't exist among hash refs,
+			// rewrite it to point to the best available branch,
+			// but only for HEAD. Other symrefs are emitted as-is.
+			if !hashRefNames[target] {
+				if sr.name == plumbing.HEAD {
+					if bestBranch == "" {
+						r.log.CDebugf(ctx,
+							"Skipping HEAD symref %s -> %s (no branches available)",
+							sr.name, target)
+						continue
+					}
+					r.log.CDebugf(ctx,
+						"Rewriting HEAD symref from %s to %s",
+						target, bestBranch)
+					target = bestBranch
+				} else {
+					r.log.CDebugf(ctx,
+						"Emitting non-HEAD symref %s -> %s with unknown target",
+						sr.name, target)
+				}
+			}
+			refStr := "@" + target.String() + " " + sr.name.String() + "\n"
 			r.log.CDebugf(ctx, "Listing symbolic ref %s", refStr)
 			_, err = r.output.Write([]byte(refStr))
 			if err != nil {
@@ -795,7 +858,8 @@ func humanizeObjects(n int, d int) string {
 }
 
 func (r *runner) printJournalStatusUntilFlushed(
-	ctx context.Context, doneCh <-chan struct{}) {
+	ctx context.Context, doneCh <-chan struct{},
+) {
 	rootNode, _, err := r.config.KBFSOps().GetOrCreateRootNode(
 		ctx, r.h, data.MasterBranch)
 	if err != nil {
@@ -821,21 +885,15 @@ func (r *runner) printJournalStatusUntilFlushed(
 }
 
 func (r *runner) processGogitStatus(ctx context.Context,
-	statusChan <-chan plumbing.StatusUpdate, fsEvents <-chan libfs.FSEvent) {
+	statusChan <-chan plumbing.StatusUpdate, fsEvents <-chan libfs.FSEvent,
+) {
 	if r.h.Type() == tlf.Public {
 		gogitStagesToStatus[plumbing.StatusFetch] = "Preparing and signing: "
 	}
 
 	currStage := plumbing.StatusUnknown
 	lastByteCount := 0
-	for {
-		if statusChan == nil && fsEvents == nil {
-			// statusChan is never passed in as nil. So if it's nil, it's been
-			// closed in the select/case below because receive failed. So
-			// instead of letting select block forever, we break out of the
-			// loop here.
-			break
-		}
+	for statusChan != nil || fsEvents != nil {
 		select {
 		case update, ok := <-statusChan:
 			if !ok {
@@ -919,7 +977,8 @@ func (r *runner) processGogitStatus(ctx context.Context,
 // overwriting the text on the next update.
 func (r *runner) recursiveByteCount(
 	ctx context.Context, fs billy.Filesystem, totalSoFar int64, toErase int) (
-	bytes int64, toEraseRet int, err error) {
+	bytes int64, toEraseRet int, err error,
+) {
 	fileInfos, err := fs.ReadDir("/")
 	if err != nil {
 		return 0, 0, err
@@ -992,17 +1051,18 @@ func (sw *statusWriter) Write(p []byte) (n int, err error) {
 
 func (r *runner) copyFile(
 	ctx context.Context, from billy.Filesystem, to billy.Filesystem,
-	name string, sw *statusWriter) (err error) {
+	name string, sw *statusWriter,
+) (err error) {
 	f, err := from.Open(name)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	toF, err := to.Create(name)
 	if err != nil {
 		return err
 	}
-	defer toF.Close()
+	defer func() { _ = toF.Close() }()
 
 	var w io.Writer = toF
 	// Wrap the destination file in a status shim if we are supposed
@@ -1017,15 +1077,16 @@ func (r *runner) copyFile(
 
 func (r *runner) copyFileWithCount(
 	ctx context.Context, from billy.Filesystem, to billy.Filesystem,
-	name, countingText, countingProf, copyingText, copyingProf string) error {
+	name, countingText, countingProf, copyingText, copyingProf string,
+) error {
 	var sw *statusWriter
 	if r.verbosity >= 1 {
 		// Get the total number of bytes we expect to fetch, for the
 		// progress report.
 		startTime := r.config.Clock().Now()
 		zeroStr := fmt.Sprintf("%s... ", humanizeBytes(0, 1))
-		_, err := r.errput.Write(
-			[]byte(fmt.Sprintf("%s: %s", countingText, zeroStr)))
+		_, err := fmt.Fprintf(r.errput,
+			"%s: %s", countingText, zeroStr)
 		if err != nil {
 			return err
 		}
@@ -1048,7 +1109,7 @@ func (r *runner) copyFileWithCount(
 		}
 
 		sw = &statusWriter{r, nil, 0, fi.Size(), 0}
-		_, err = r.errput.Write([]byte(fmt.Sprintf("%s: ", copyingText)))
+		_, err = fmt.Fprintf(r.errput, "%s: ", copyingText)
 		if err != nil {
 			return err
 		}
@@ -1076,7 +1137,8 @@ func (r *runner) copyFileWithCount(
 // `localFS`.
 func (r *runner) recursiveCopy(
 	ctx context.Context, from billy.Filesystem, to billy.Filesystem,
-	sw *statusWriter) (err error) {
+	sw *statusWriter,
+) (err error) {
 	fileInfos, err := from.ReadDir("")
 	if err != nil {
 		return err
@@ -1087,7 +1149,7 @@ func (r *runner) recursiveCopy(
 			if fi.Name() == "." {
 				continue
 			}
-			err := to.MkdirAll(fi.Name(), 0775)
+			err := to.MkdirAll(fi.Name(), 0o775)
 			if err != nil {
 				return err
 			}
@@ -1115,13 +1177,14 @@ func (r *runner) recursiveCopy(
 
 func (r *runner) recursiveCopyWithCounts(
 	ctx context.Context, from billy.Filesystem, to billy.Filesystem,
-	countingText, countingProf, copyingText, copyingProf string) error {
+	countingText, countingProf, copyingText, copyingProf string,
+) error {
 	var sw *statusWriter
 	if r.verbosity >= 1 {
 		// Get the total number of bytes we expect to fetch, for the
 		// progress report.
 		startTime := r.config.Clock().Now()
-		_, err := r.errput.Write([]byte(fmt.Sprintf("%s: ", countingText)))
+		_, err := fmt.Fprintf(r.errput, "%s: ", countingText)
 		if err != nil {
 			return err
 		}
@@ -1137,7 +1200,7 @@ func (r *runner) recursiveCopyWithCounts(
 		}
 
 		sw = &statusWriter{r, nil, 0, b, 0}
-		_, err = r.errput.Write([]byte(fmt.Sprintf("%s: ", copyingText)))
+		_, err = fmt.Fprintf(r.errput, "%s: ", copyingText)
 		if err != nil {
 			return err
 		}
@@ -1204,7 +1267,8 @@ func (r *runner) checkGC(ctx context.Context) (err error) {
 
 	fs, _, err := libgit.GetRepoAndID(
 		ctx, r.config, r.h, r.repo, r.uniqID)
-	if _, noRepo := errors.Cause(err).(libkb.RepoDoesntExistError); noRepo {
+	var noRepoErr libkb.RepoDoesntExistError
+	if errors.As(err, &noRepoErr) {
 		r.log.CDebugf(ctx, "No such repo: %v", err)
 		return nil
 	} else if err != nil {
@@ -1289,7 +1353,7 @@ func (r *runner) handleClone(ctx context.Context) (err error) {
 	}
 
 	localObjectsPath := filepath.Join(r.gitDir, "objects")
-	err = os.MkdirAll(localObjectsPath, 0775)
+	err = os.MkdirAll(localObjectsPath, 0o775) //nolint:gosec // G301: Git objects dir may need group write for multi-user git operations
 	if err != nil {
 		return err
 	}
@@ -1325,7 +1389,8 @@ func (r *runner) handleClone(ctx context.Context) (err error) {
 // GIT_DIR/objects/pack which is keeping a pack until refs can be
 // suitably updated.
 func (r *runner) handleFetchBatch(ctx context.Context, args [][]string) (
-	err error) {
+	err error,
+) {
 	repo, _, err := r.initRepoIfNeeded(ctx, gitCmdFetch)
 	if err != nil {
 		return err
@@ -1409,17 +1474,18 @@ func (r *runner) handleFetchBatch(ctx context.Context, args [][]string) (
 // --all/--mirror).
 func (r *runner) canPushAll(
 	ctx context.Context, repo *gogit.Repository, args [][]string) (
-	canPushAll, kbfsRepoEmpty bool, err error) {
+	canPushAll, kbfsRepoEmpty bool, err error,
+) {
 	refs, err := repo.References()
 	if err != nil {
 		return false, false, err
 	}
-	defer refs.Close()
+	defer func() { refs.Close() }()
 
 	// Iterate through the remote references.
 	for {
 		ref, err := refs.Next()
-		if errors.Cause(err) == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		} else if err != nil {
 			return false, false, err
@@ -1450,10 +1516,7 @@ func (r *runner) canPushAll(
 	}
 
 	localGit := osfs.New(r.gitDir)
-	localStorer, err := filesystem.NewStorage(localGit)
-	if err != nil {
-		return false, false, err
-	}
+	localStorer := filesystem.NewStorage(localGit, cache.NewObjectLRUDefault())
 	localRefs, err := localStorer.IterReferences()
 	if err != nil {
 		return false, false, err
@@ -1463,7 +1526,7 @@ func (r *runner) canPushAll(
 	// for this push.  If not, we can't blindly push everything.
 	for {
 		ref, err := localRefs.Next()
-		if errors.Cause(err) == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
@@ -1572,8 +1635,8 @@ func dstNameFromRefString(refStr string) plumbing.ReferenceName {
 // not in `remoteStorer`.
 func (r *runner) parentCommitsForRef(ctx context.Context,
 	localStorer gogitstor.Storer, remoteStorer gogitstor.Storer,
-	refs map[gogitcfg.RefSpec]bool) (libgit.RefDataByName, error) {
-
+	refs map[gogitcfg.RefSpec]bool,
+) (libgit.RefDataByName, error) {
 	commitsByRef := make(libgit.RefDataByName, len(refs))
 	haves := make(map[plumbing.Hash]bool)
 
@@ -1630,17 +1693,15 @@ func (r *runner) parentCommitsForRef(ctx context.Context,
 			if toVisit == 0 {
 				// Append a sentinel value to communicate that there would be
 				// more commits.
-				commitsByRef[dstRefName].Commits =
-					append(commitsByRef[dstRefName].Commits,
-						libgit.CommitSentinelValue)
+				commitsByRef[dstRefName].Commits = append(commitsByRef[dstRefName].Commits,
+					libgit.CommitSentinelValue)
 				return gogitstor.ErrStop
 			}
 			hasEncodedObjectErr := remoteStorer.HasEncodedObject(c.Hash)
 			if hasEncodedObjectErr == nil {
 				return gogitstor.ErrStop
 			}
-			commitsByRef[dstRefName].Commits =
-				append(commitsByRef[dstRefName].Commits, c)
+			commitsByRef[dstRefName].Commits = append(commitsByRef[dstRefName].Commits, c)
 			return nil
 		})
 		if err != nil {
@@ -1652,7 +1713,8 @@ func (r *runner) parentCommitsForRef(ctx context.Context,
 
 func (r *runner) pushSome(
 	ctx context.Context, repo *gogit.Repository, fs *libfs.FS, args [][]string,
-	kbfsRepoEmpty bool) (map[string]error, error) {
+	kbfsRepoEmpty bool,
+) (map[string]error, error) {
 	r.log.CDebugf(ctx, "Pushing %d refs into %s", len(args), r.gitDir)
 
 	remote, err := repo.CreateRemote(&gogitcfg.RemoteConfig{
@@ -1711,7 +1773,7 @@ func (r *runner) pushSome(
 				r.processGogitStatus(ctx, s, events)
 				fs.UnsubscribeToEvents(events)
 				// Drain any pending writes to the channel.
-				for range events {
+				for range events { //nolint:revive // empty-block: intentionally draining channel
 				}
 			}()
 		}
@@ -1725,10 +1787,17 @@ func (r *runner) pushSome(
 			RemoteName: localRepoRemoteName,
 			RefSpecs:   refspecs,
 			StatusChan: statusChan,
-			PackRefs:   kbfsRepoEmpty,
 		})
 		if err == gogit.NoErrAlreadyUpToDate {
 			err = nil
+		}
+
+		// Pack refs for empty repos (KBFS performance optimization)
+		if err == nil && kbfsRepoEmpty {
+			if packErr := repo.Storer.PackRefs(); packErr != nil {
+				r.log.CDebugf(ctx, "PackRefs failed (non-fatal): %+v", packErr)
+				// Don't fail the fetch - loose refs work fine
+			}
 		}
 
 		// All non-deleted refspecs in the batch get the same error.
@@ -1768,7 +1837,8 @@ func (r *runner) pushSome(
 // option field <why> may be quoted in a C style string if it contains
 // an LF.
 func (r *runner) handlePushBatch(ctx context.Context, args [][]string) (
-	commits libgit.RefDataByName, err error) {
+	commits libgit.RefDataByName, err error,
+) {
 	repo, fs, err := r.initRepoIfNeeded(ctx, gitCmdPush)
 	if err != nil {
 		return nil, err
@@ -1780,10 +1850,7 @@ func (r *runner) handlePushBatch(ctx context.Context, args [][]string) (
 	}
 
 	localGit := osfs.New(r.gitDir)
-	localStorer, err := filesystem.NewStorage(localGit)
-	if err != nil {
-		return nil, err
-	}
+	localStorer := filesystem.NewStorage(localGit, cache.NewObjectLRUDefault())
 
 	refspecs := make(map[gogitcfg.RefSpec]bool, len(args))
 	for _, push := range args {
@@ -1816,6 +1883,53 @@ func (r *runner) handlePushBatch(ctx context.Context, args [][]string) (
 	}
 	if err != nil {
 		return nil, err
+	}
+
+	// If HEAD points to a nonexistent ref, update it to point to the
+	// best available branch in the repo (prefer main > master > alphabetical).
+	// We intentionally repair HEAD even when the target was explicitly
+	// deleted in this batch, because a broken HEAD causes clone failures.
+	// This must happen before waitForJournal so the HEAD update is
+	// included in the same flush.
+	head, headErr := repo.Storer.Reference(plumbing.HEAD)
+	if headErr == nil && head.Type() == plumbing.SymbolicReference {
+		_, targetErr := repo.Storer.Reference(head.Target())
+		var bestBranch plumbing.ReferenceName
+		if errors.Is(targetErr, plumbing.ErrReferenceNotFound) {
+			allRefs, refsErr := repo.References()
+			if refsErr == nil {
+				defer allRefs.Close()
+				for {
+					ref, nextErr := allRefs.Next()
+					if errors.Is(nextErr, io.EOF) {
+						break
+					}
+					if nextErr != nil {
+						break
+					}
+					if ref.Type() != plumbing.HashReference {
+						continue
+					}
+					if !strings.HasPrefix(ref.Name().String(), "refs/heads/") {
+						continue
+					}
+					bestBranch = bestBranchFromCandidates(bestBranch, ref.Name())
+				}
+			}
+		}
+		if bestBranch != "" {
+			newHead := plumbing.NewSymbolicReference(
+				plumbing.HEAD, bestBranch)
+			if setErr := repo.Storer.SetReference(
+				newHead); setErr != nil {
+				r.log.CDebugf(ctx,
+					"Error updating HEAD to %s: %+v",
+					bestBranch, setErr)
+			} else {
+				r.log.CDebugf(ctx,
+					"Updated HEAD to point to %s", bestBranch)
+			}
+		}
 	}
 
 	err = r.waitForJournal(ctx)
@@ -1881,8 +1995,8 @@ func (r *runner) handlePushBatch(ctx context.Context, args [][]string) (
 func (r *runner) handleOption(ctx context.Context, args []string) (err error) {
 	defer func() {
 		if err != nil {
-			_, _ = r.output.Write(
-				[]byte(fmt.Sprintf("error %s\n", err.Error())))
+			_, _ = fmt.Fprintf(r.output,
+				"error %s\n", err.Error())
 		}
 	}()
 
@@ -1961,7 +2075,7 @@ type lfsProgressWriter struct {
 	oid                   string
 	start                 int
 	soFar                 int     // how much in absolute bytes has been copied
-	totalForCopy          int     // how much in absolue bytes will be copied
+	totalForCopy          int     // how much in absolute bytes will be copied
 	plaintextSize         int     // how much LFS expects to be copied
 	factorOfPlaintextSize float64 // what frac of the above size is this copy?
 }
@@ -2010,7 +2124,8 @@ func (lpw *lfsProgressWriter) Write(p []byte) (n int, err error) {
 }
 
 func (lpw *lfsProgressWriter) printOne(
-	ctx context.Context, _ int, totalSize, sizeLeft int64) int {
+	ctx context.Context, _ int, totalSize, sizeLeft int64,
+) int {
 	if lpw.r.processType == processLFSNoProgress {
 		return 0
 	}
@@ -2036,17 +2151,18 @@ func (lpw *lfsProgressWriter) printOne(
 func (r *runner) copyFileLFS(
 	ctx context.Context, from billy.Filesystem, to billy.Filesystem,
 	fromName, toName, oid string, totalSize int,
-	progressScale float64) (err error) {
+	progressScale float64,
+) (err error) {
 	f, err := from.Open(fromName)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	toF, err := to.Create(toName)
 	if err != nil {
 		return err
 	}
-	defer toF.Close()
+	defer func() { _ = toF.Close() }()
 
 	// Scale the progress by the given factor.
 	w := &lfsProgressWriter{
@@ -2062,12 +2178,13 @@ func (r *runner) copyFileLFS(
 }
 
 func (r *runner) handleLFSUpload(
-	ctx context.Context, oid string, localPath string, size int) (err error) {
+	ctx context.Context, oid string, localPath string, size int,
+) (err error) {
 	fs, err := r.makeFS(ctx)
 	if err != nil {
 		return err
 	}
-	err = fs.MkdirAll(libgit.LFSSubdir, 0600)
+	err = fs.MkdirAll(libgit.LFSSubdir, 0o600)
 	if err != nil {
 		return err
 	}
@@ -2102,12 +2219,13 @@ func (r *runner) handleLFSUpload(
 }
 
 func (r *runner) handleLFSDownload(
-	ctx context.Context, oid string, size int) (localPath string, err error) {
+	ctx context.Context, oid string, size int,
+) (localPath string, err error) {
 	fs, err := r.makeFS(ctx)
 	if err != nil {
 		return "", err
 	}
-	err = fs.MkdirAll(libgit.LFSSubdir, 0600)
+	err = fs.MkdirAll(libgit.LFSSubdir, 0o600)
 	if err != nil {
 		return "", err
 	}
@@ -2130,7 +2248,8 @@ func (r *runner) handleLFSDownload(
 }
 
 func (r *runner) processCommand(
-	ctx context.Context, commandChan <-chan string) (err error) {
+	ctx context.Context, commandChan <-chan string,
+) (err error) {
 	var fetchBatch, pushBatch [][]string
 	for {
 		select {
@@ -2224,7 +2343,8 @@ type lfsResponse struct {
 }
 
 func (r *runner) processCommandLFS(
-	ctx context.Context, commandChan <-chan string) (err error) {
+	ctx context.Context, commandChan <-chan string,
+) (err error) {
 lfsLoop:
 	for {
 		select {
@@ -2300,9 +2420,7 @@ func (r *runner) processCommands(ctx context.Context) (err error) {
 	// interrupted).
 	commandChan := make(chan string, 100)
 	processorErrChan := make(chan error, 1)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		switch r.processType {
 		case processGit:
 			processorErrChan <- r.processCommand(ctx, commandChan)
@@ -2311,7 +2429,7 @@ func (r *runner) processCommands(ctx context.Context) (err error) {
 		default:
 			panic(fmt.Sprintf("Unknown process type: %v", r.processType))
 		}
-	}()
+	})
 
 	for {
 		stdinErrChan := make(chan error, 1)
@@ -2329,7 +2447,7 @@ func (r *runner) processCommands(ctx context.Context) (err error) {
 
 		select {
 		case err := <-stdinErrChan:
-			if errors.Cause(err) == io.EOF {
+			if errors.Is(err, io.EOF) {
 				r.log.CDebugf(ctx, "Done processing commands")
 				return nil
 			} else if err != nil {

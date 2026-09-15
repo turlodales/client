@@ -1,9 +1,9 @@
-import * as React from 'react'
 import * as Kb from '@/common-adapters'
-import * as Constants from '@/constants/crypto'
+import * as Crypto from '@/constants/crypto'
 import NavRow from './nav-row'
+import * as TestIDs from '@/tests/e2e/shared/test-ids'
 
-type Row = (typeof Constants.Tabs)[number] & {
+type Row = (typeof Crypto.Tabs)[number] & {
   isSelected: boolean
   key: string
 }
@@ -11,22 +11,18 @@ type Row = (typeof Constants.Tabs)[number] & {
 type Props = {
   onClick: (a: string) => void
   selected: string
-  children?: React.ReactNode
 }
 
-class SubNav extends React.PureComponent<Props> {
-  private getRows = () =>
-    Constants.Tabs.map(t => ({
-      ...t,
-      isSelected: this.props.selected === t.tab,
-      key: t.tab,
-    }))
+const LeftNav = (props: Props) => {
+  const styles = useStyles()
+  const {onClick} = props
+  const rows = Crypto.Tabs.map(t => ({
+    ...t,
+    isSelected: props.selected === t.tab,
+    key: t.tab,
+  }))
 
-  private _onClick = (tab: string) => {
-    this.props.onClick(tab)
-  }
-
-  private renderItem = (_: number, row: Row) => {
+  const renderItem = (_: number, row: Row) => {
     return (
       <NavRow
         key={row.tab}
@@ -34,41 +30,42 @@ class SubNav extends React.PureComponent<Props> {
         title={row.title}
         tab={row.tab}
         icon={row.icon}
-        onClick={() => this._onClick(row.tab)}
+        onClick={() => onClick(row.tab)}
       />
     )
   }
 
-  render() {
-    return (
-      <Kb.Box2 direction="horizontal" fullHeight={true} fullWidth={true}>
-        <Kb.Box2 direction="vertical" fullHeight={true} style={styles.listContainer}>
-          <Kb.BoxGrow>
-            <Kb.List
-              items={this.getRows()}
-              renderItem={this.renderItem}
-              keyProperty="key"
-              style={styles.list}
-            />
-          </Kb.BoxGrow>
-        </Kb.Box2>
-        {this.props.children}
-      </Kb.Box2>
-    )
-  }
+  return (
+    <Kb.Box2
+      direction="vertical"
+      fullHeight={true}
+      noShrink={true}
+      style={styles.listContainer}
+      testID={TestIDs.CRYPTO_INPUT}
+    >
+      <Kb.BoxGrow>
+        <Kb.List
+          items={rows}
+          renderItem={renderItem}
+          keyProperty="key"
+          extraData={props.selected}
+          style={styles.list}
+          itemHeight={{sizeType: 'Small', type: 'fixedListItemAuto'}}
+        />
+      </Kb.BoxGrow>
+    </Kb.Box2>
+  )
 }
 
-const styles = Kb.Styles.styleSheetCreate(() => ({
+const useStyles = Kb.Styles.createStyleHook(theme => ({
   list: {
     ...Kb.Styles.globalStyles.fullHeight,
   },
   listContainer: {
-    backgroundColor: Kb.Styles.globalColors.blueGrey,
-    borderStyle: 'solid',
+    backgroundColor: theme.blueGrey,
     flexGrow: 0,
-    flexShrink: 0,
     width: 180,
   },
 }))
 
-export default SubNav
+export default LeftNav

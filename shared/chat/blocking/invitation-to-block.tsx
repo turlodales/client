@@ -1,54 +1,95 @@
 import * as C from '@/constants'
+import {isAssertion} from '@/constants/chat/helpers'
 import * as Kb from '@/common-adapters'
-import * as Styles from '@/styles'
-import * as Container from '@/util/container'
+import * as React from 'react'
+import {useCurrentUserState} from '@/stores/current-user'
+import {navToProfile} from '@/constants/router'
+import * as T from '@/constants/types'
+import logger from '@/logger'
+import {RPCError} from '@/util/errors'
+import {useBlockButtonsInfo} from './block-buttons-state'
+import {
+  useConversationThreadID,
+  useConversationThreadSelector,
+  useThreadMeta,
+} from '../conversation/thread-context'
+import {useConversationParticipantsSelector} from '../conversation/data-hooks'
+
+const dismissBlockButtons = (teamID: T.RPCGen.TeamID) => {
+  const f = async () => {
+    try {
+      await T.RPCGen.userDismissBlockButtonsRpcPromise({tlfID: teamID})
+    } catch (error) {
+      if (error instanceof RPCError) {
+        logger.error(`Couldn't dismiss block buttons: ${error.message}`)
+      }
+    }
+  }
+  C.ignorePromise(f())
+}
 
 const BlockButtons = () => {
-  const nav = Container.useSafeNavigation()
-  const conversationIDKey = C.useChatContext(s => s.id)
+  const styles = useStyles()
+  const theme = Kb.Styles.useTheme()
+  const navigateAppend = C.Router2.navigateAppend
+  const conversationIDKey = useConversationThreadID()
+  const {team, teamID, tlfname} = useThreadMeta(
+    C.useShallow(m => ({team: m.teamname, teamID: m.teamID, tlfname: m.tlfname}))
+  )
+  const participantInfo = useConversationParticipantsSelector(
+    conversationIDKey,
+    C.useShallow(p => ({all: p.all, name: p.name}))
+  )
+  const blockButtonInfo = useBlockButtonsInfo(teamID)
+  const currentUser = useCurrentUserState(s => s.username)
+  // Derive the boolean in the selector so thread churn only re-renders this when the
+  // answer flips; skip the scan entirely for the common no-block-buttons case.
+  const hasOwnMessage = useConversationThreadSelector(
+    s =>
+      !!blockButtonInfo &&
+      !!currentUser &&
+      (s.messageOrdinals ?? []).some(ordinal => s.messageMap.get(ordinal)?.author === currentUser)
+  )
 
-  const team = C.useChatContext(s => s.meta.teamname)
-  const teamID = C.useChatContext(s => s.meta.teamID)
-  const blockButtonInfo = C.useChatState(s => {
-    const blockButtonsMap = s.blockButtonsMap
-    return teamID ? blockButtonsMap.get(teamID) : undefined
-  })
-  const participantInfo = C.useChatContext(s => s.participants)
-  const currentUser = C.useCurrentUserState(s => s.username)
-  const showUserProfile = C.useProfileState(s => s.dispatch.showUserProfile)
-  const dismissBlockButtons = C.useChatContext(s => s.dispatch.dismissBlockButtons)
+  React.useEffect(() => {
+    if (hasOwnMessage && blockButtonInfo && teamID) {
+      dismissBlockButtons(teamID)
+    }
+  }, [blockButtonInfo, hasOwnMessage, teamID])
+
   if (!blockButtonInfo) {
     return null
   }
   const adder = blockButtonInfo.adder
   const others = (team ? participantInfo.all : participantInfo.name).filter(
-    person => person !== currentUser && person !== adder && !C.Chat.isAssertion(person)
+    person => person !== currentUser && person !== adder && !isAssertion(person)
   )
 
-  const onViewProfile = () => showUserProfile(adder)
-  const onViewTeam = () => nav.safeNavigateAppend({props: {teamID}, selected: 'team'})
+  const onViewProfile = () => navToProfile(adder)
+  const onViewTeam = () => navigateAppend({name: 'team', params: {teamID}})
   const onBlock = () =>
-    nav.safeNavigateAppend({
-      props: {
+    navigateAppend({
+      name: 'chatBlockingModal',
+      params: {
         blockUserByDefault: true,
         conversationIDKey,
         others: others,
         team: team,
         username: adder,
       },
-      selected: 'chatBlockingModal',
     })
   const onDismiss = () => dismissBlockButtons(teamID)
 
   const buttonRow = (
     <Kb.ButtonBar
-      fullWidth={Styles.isMobile}
-      direction={Styles.isMobile ? 'column' : 'row'}
+      fullWidth={isMobile}
+      direction={isMobile ? 'column' : 'row'}
       style={styles.button}
     >
       <Kb.WaveButton
         small={true}
         conversationIDKey={conversationIDKey}
+        tlfName={tlfname}
         toMany={others.length > 0 || !!team}
         style={styles.waveButton}
       />
@@ -80,11 +121,12 @@ const BlockButtons = () => {
       />
     </Kb.ButtonBar>
   )
-  return Styles.isMobile ? (
+  return isMobile ? (
     <Kb.Box2
       direction="vertical"
       centerChildren={true}
       gap="tiny"
+      relative={true}
       style={styles.dismissContainer}
       fullWidth={true}
     >
@@ -92,14 +134,19 @@ const BlockButtons = () => {
         <Kb.Text type="BodySmall">
           {team ? `${adder} added you to this team.` : `You don't follow ${adder}.`}
         </Kb.Text>
-        <Kb.Icon style={styles.dismissIcon} type="iconfont-close" onClick={onDismiss} />
+        <Kb.Icon
+          style={styles.dismissIcon}
+          type="iconfont-close"
+          color={theme.black_20}
+          onClick={onDismiss}
+        />
       </Kb.Box2>
       <Kb.Box2 direction="vertical" gap="tiny" fullWidth={true} style={styles.buttonContainer}>
         {buttonRow}
       </Kb.Box2>
     </Kb.Box2>
   ) : (
-    <Kb.Box2 direction="horizontal" gap="xsmall" style={styles.container} centerChildren={false}>
+    <Kb.Box2 direction="horizontal" gap="xsmall" alignItems="center" style={styles.container}>
       <Kb.Text type="BodySmall">
         {team ? `${adder} added you to this team.` : `You don't follow ${adder}.`}
       </Kb.Text>
@@ -111,35 +158,32 @@ const BlockButtons = () => {
 
 export default BlockButtons
 
-const styles = Styles.styleSheetCreate(
-  () =>
+const useStyles = Kb.Styles.createStyleHook(
+  theme =>
     ({
-      button: Styles.platformStyles({
+      button: Kb.Styles.platformStyles({
         isElectron: {
           width: '',
         },
         isMobile: {
-          ...Styles.padding(0, Styles.globalMargins.small),
+          ...Kb.Styles.padding(0, Kb.Styles.globalMargins.small),
         },
       }),
       buttonContainer: {maxWidth: 322},
       container: {
-        alignItems: 'center',
         alignSelf: 'flex-start',
         marginLeft: 57,
       },
       dismissContainer: {
-        backgroundColor: Styles.globalColors.blueGrey,
-        paddingBottom: Styles.globalMargins.xsmall,
-        paddingTop: Styles.globalMargins.xsmall,
-        position: 'relative',
+        backgroundColor: theme.blueGrey,
+        ...Kb.Styles.paddingV(Kb.Styles.globalMargins.xsmall),
       },
       dismissIcon: {
         position: 'absolute',
-        right: Styles.globalMargins.small,
+        right: Kb.Styles.globalMargins.small,
         top: -1,
       },
-      waveButton: Styles.platformStyles({
+      waveButton: Kb.Styles.platformStyles({
         isElectron: {
           width: '',
         },

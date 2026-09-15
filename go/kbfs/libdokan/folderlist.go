@@ -5,6 +5,7 @@
 package libdokan
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -17,7 +18,6 @@ import (
 	kbname "github.com/keybase/client/go/kbun"
 	"github.com/keybase/client/go/libkb"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 )
 
 type fileOpener interface {
@@ -44,7 +44,8 @@ func (*FolderList) GetFileInformation(context.Context, *dokan.FileInfo) (*dokan.
 }
 
 func (fl *FolderList) reportErr(ctx context.Context,
-	mode libkbfs.ErrorModeType, tlfName tlf.CanonicalName, err error, cancelFn func()) {
+	mode libkbfs.ErrorModeType, tlfName tlf.CanonicalName, err error, cancelFn func(),
+) {
 	if cancelFn != nil {
 		defer cancelFn()
 	}
@@ -60,7 +61,6 @@ func (fl *FolderList) reportErr(ctx context.Context,
 	// TODO: Classify errors and escalate the logging level of the
 	// important ones.
 	fl.fs.log.CDebugf(ctx, err.Error())
-
 }
 
 // open tries to open the correct thing. Following aliases and deferring to
@@ -242,7 +242,8 @@ func (fl *FolderList) lockedAddChild(name string, val fileOpener) {
 }
 
 func (fl *FolderList) updateTlfName(ctx context.Context, oldName string,
-	newName string) {
+	newName string,
+) {
 	fl.mu.Lock()
 	defer fl.mu.Unlock()
 	tlf, ok := fl.folders[oldName]

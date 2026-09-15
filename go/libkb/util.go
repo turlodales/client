@@ -6,6 +6,7 @@ package libkb
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base32"
@@ -23,6 +24,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -39,7 +41,6 @@ import (
 	"github.com/keybase/clockwork"
 	"github.com/keybase/go-codec/codec"
 	jsonw "github.com/keybase/go-jsonw"
-	"golang.org/x/net/context"
 )
 
 // PrereleaseBuild can be set at compile time for prerelease builds.
@@ -131,7 +132,6 @@ func NameTrim(s string) string {
 			return -1
 		}
 		return r
-
 	}
 	return strings.Map(strip, s)
 }
@@ -201,8 +201,8 @@ type SafeWriter interface {
 }
 
 type SafeWriteLogger interface {
-	Debug(format string, args ...interface{})
-	Errorf(format string, args ...interface{})
+	Debug(format string, args ...any)
+	Errorf(format string, args ...any)
 }
 
 // SafeWriteToFile to safely write to a file. Use mode=0 for default permissions.
@@ -387,11 +387,8 @@ func RandBytesWithSuffix(length int, suffix byte) ([]byte, error) {
 }
 
 func XORBytes(dst, a, b []byte) int {
-	n := len(a)
-	if len(b) < n {
-		n = len(b)
-	}
-	for i := 0; i < n; i++ {
+	n := min(len(b), len(a))
+	for i := range n {
 		dst[i] = a[i] ^ b[i]
 	}
 	return n
@@ -421,8 +418,8 @@ func IsArmored(buf []byte) bool {
 }
 
 func RandInt64() (int64, error) {
-	max := big.NewInt(math.MaxInt64)
-	x, err := rand.Int(rand.Reader, max)
+	maxI := big.NewInt(math.MaxInt64)
+	x, err := rand.Int(rand.Reader, maxI)
 	if err != nil {
 		return 0, err
 	}
@@ -493,7 +490,7 @@ func IsDirEmpty(dir string) (bool, error) {
 	defer f.Close()
 
 	_, err = f.Readdir(1)
-	if err == io.EOF {
+	if errors.Is(err, io.EOF) {
 		return true, nil
 	}
 	return false, err // Either not empty or error, suits both cases
@@ -552,9 +549,11 @@ func CTrace(ctx context.Context, log logger.Logger, msg string, err *error, cl c
 func (g *GlobalContext) Trace(msg string, err *error) func() {
 	return Trace(g.Log.CloneWithAddedDepth(1), msg, err)
 }
+
 func (g *GlobalContext) CTrace(ctx context.Context, msg string, err *error) func() {
 	return CTrace(ctx, g.Log.CloneWithAddedDepth(1), msg, err, g.Clock())
 }
+
 func (g *GlobalContext) CPerfTrace(ctx context.Context, msg string, err *error) func() {
 	return CTrace(ctx, g.PerfLog, msg, err, g.Clock())
 }
@@ -582,12 +581,7 @@ func (g *GlobalContext) CTimeBuckets(ctx context.Context) (context.Context, *pro
 // SplitByRunes splits string by runes
 func SplitByRunes(s string, separators []rune) []string {
 	f := func(r rune) bool {
-		for _, s := range separators {
-			if r == s {
-				return true
-			}
-		}
-		return false
+		return slices.Contains(separators, r)
 	}
 	return strings.FieldsFunc(s, f)
 }
@@ -636,14 +630,14 @@ func Digest(r io.Reader) (string, error) {
 // TimeLog calls out with the time since start.  Use like this:
 //
 //	defer TimeLog("MyFunc", time.Now(), e.G().Log.Warning)
-func TimeLog(name string, start time.Time, out func(string, ...interface{})) {
+func TimeLog(name string, start time.Time, out func(string, ...any)) {
 	out("time> %s: %s", name, time.Since(start))
 }
 
 // CTimeLog calls out with the time since start.  Use like this:
 //
 //	defer CTimeLog(ctx, "MyFunc", time.Now(), e.G().Log.Warning)
-func CTimeLog(ctx context.Context, name string, start time.Time, out func(context.Context, string, ...interface{})) {
+func CTimeLog(ctx context.Context, name string, start time.Time, out func(context.Context, string, ...any)) {
 	out(ctx, "time> %s: %s", name, time.Since(start))
 }
 
@@ -674,9 +668,9 @@ func JoinPredicate(arr []string, delimeter string, f func(s string) bool) string
 // LogTagsFromContext is a wrapper around logger.LogTagsFromContext
 // that simply casts the result to the type expected by
 // rpc.Connection.
-func LogTagsFromContext(ctx context.Context) (map[interface{}]string, bool) {
+func LogTagsFromContext(ctx context.Context) (map[any]string, bool) {
 	tags, ok := logger.LogTagsFromContext(ctx)
-	return map[interface{}]string(tags), ok
+	return map[any]string(tags), ok
 }
 
 func MakeByte24(a []byte) [24]byte {
@@ -818,11 +812,11 @@ func IsNoSpaceOnDeviceError(err error) bool {
 	case NoSpaceOnDeviceError:
 		return true
 	case *os.PathError:
-		return err.Err == syscall.ENOSPC
+		return errors.Is(err.Err, syscall.ENOSPC)
 	case *os.LinkError:
-		return err.Err == syscall.ENOSPC
+		return errors.Is(err.Err, syscall.ENOSPC)
 	case *os.SyscallError:
-		return err.Err == syscall.ENOSPC
+		return errors.Is(err.Err, syscall.ENOSPC)
 	}
 
 	return false
@@ -840,7 +834,7 @@ func ShredFile(filename string) error {
 
 	defer os.Remove(filename)
 
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		noise, err := RandBytes(size)
 		if err != nil {
 			return err
@@ -853,7 +847,7 @@ func ShredFile(filename string) error {
 	return os.Remove(filename)
 }
 
-func MPackEncode(input interface{}) ([]byte, error) {
+func MPackEncode(input any) ([]byte, error) {
 	mh := codec.MsgpackHandle{WriteExt: true}
 	var data []byte
 	enc := codec.NewEncoderBytes(&data, &mh)
@@ -863,7 +857,7 @@ func MPackEncode(input interface{}) ([]byte, error) {
 	return data, nil
 }
 
-func MPackDecode(data []byte, res interface{}) error {
+func MPackDecode(data []byte, res any) error {
 	mh := codec.MsgpackHandle{WriteExt: true}
 	dec := codec.NewDecoderBytes(data, &mh)
 	err := dec.Decode(res)
@@ -888,8 +882,8 @@ func NoiseXOR(secret [32]byte, noise NoiseBytes) ([]byte, error) {
 	}
 
 	xor := make([]byte, len(sum))
-	for i := 0; i < len(sum); i++ {
-		xor[i] = sum[i] ^ secret[i]
+	for i, v := range sum {
+		xor[i] = v ^ secret[i]
 	}
 
 	return xor, nil
@@ -1081,7 +1075,7 @@ func getKBFSDeeplinkPath(afterKeybase string) string {
 		return ""
 	}
 	var segments []string
-	for _, segment := range strings.Split(afterKeybase, "/") {
+	for segment := range strings.SplitSeq(afterKeybase, "/") {
 		segments = append(segments, url.PathEscape(segment))
 	}
 	return "keybase:/" + strings.Join(segments, "/")
@@ -1160,23 +1154,24 @@ var throttleBatchClock = clockwork.NewRealClock()
 
 type throttleBatchEmpty struct{}
 
-func isEmptyThrottleData(arg interface{}) bool {
+func isEmptyThrottleData(arg any) bool {
 	_, ok := arg.(throttleBatchEmpty)
 	return ok
 }
 
-func ThrottleBatch(f func(interface{}), batcher func(interface{}, interface{}) interface{},
-	reset func() interface{}, delay time.Duration, leadingFire bool) (func(interface{}), func()) {
+func ThrottleBatch(f func(any), batcher func(any, any) any,
+	reset func() any, delay time.Duration, leadingFire bool,
+) (func(any), func()) {
 	var lock sync.Mutex
 	var closeLock sync.Mutex
 	var lastCalled time.Time
-	var creation func(interface{})
+	var creation func(any)
 	hasStored := false
 	scheduled := false
 	stored := reset()
 	cancelCh := make(chan struct{})
 	closed := false
-	creation = func(arg interface{}) {
+	creation = func(arg any) {
 		lock.Lock()
 		defer lock.Unlock()
 		elapsed := throttleBatchClock.Since(lastCalled)
@@ -1215,59 +1210,6 @@ func ThrottleBatch(f func(interface{}), batcher func(interface{}, interface{}) i
 		closed = true
 		close(cancelCh)
 	}
-}
-
-// Format a proof for web-of-trust. Does not support all proof types.
-func NewWotProof(proofType keybase1.ProofType, key, value string) (res keybase1.WotProof, err error) {
-	switch proofType {
-	case keybase1.ProofType_TWITTER, keybase1.ProofType_GITHUB, keybase1.ProofType_REDDIT,
-		keybase1.ProofType_COINBASE, keybase1.ProofType_HACKERNEWS, keybase1.ProofType_FACEBOOK,
-		keybase1.ProofType_GENERIC_SOCIAL, keybase1.ProofType_ROOTER:
-		return keybase1.WotProof{
-			ProofType: proofType,
-			Name:      key,
-			Username:  value,
-		}, nil
-	case keybase1.ProofType_GENERIC_WEB_SITE:
-		return keybase1.WotProof{
-			ProofType: proofType,
-			Protocol:  key,
-			Hostname:  value,
-		}, nil
-	case keybase1.ProofType_DNS:
-		return keybase1.WotProof{
-			ProofType: proofType,
-			Protocol:  key,
-			Domain:    value,
-		}, nil
-	default:
-		return res, fmt.Errorf("unexpected proof type: %v", proofType)
-	}
-}
-
-// Format a web-of-trust proof for gui display.
-func NewWotProofUI(mctx MetaContext, proof keybase1.WotProof) (res keybase1.WotProofUI, err error) {
-	iconKey := ProofIconKey(mctx, proof.ProofType, proof.Name)
-	res = keybase1.WotProofUI{
-		SiteIcon:         MakeProofIcons(mctx, iconKey, ProofIconTypeSmall, 16),
-		SiteIconDarkmode: MakeProofIcons(mctx, iconKey, ProofIconTypeSmallDarkmode, 16),
-	}
-	switch proof.ProofType {
-	case keybase1.ProofType_TWITTER, keybase1.ProofType_GITHUB, keybase1.ProofType_REDDIT,
-		keybase1.ProofType_COINBASE, keybase1.ProofType_HACKERNEWS, keybase1.ProofType_FACEBOOK,
-		keybase1.ProofType_GENERIC_SOCIAL, keybase1.ProofType_ROOTER:
-		res.Type = proof.Name
-		res.Value = proof.Username
-	case keybase1.ProofType_GENERIC_WEB_SITE:
-		res.Type = proof.Protocol
-		res.Value = proof.Hostname
-	case keybase1.ProofType_DNS:
-		res.Type = "dns"
-		res.Value = proof.Domain
-	default:
-		return res, fmt.Errorf("unexpected proof type: %v", proof.ProofType)
-	}
-	return res, nil
 }
 
 func ProofIconKey(mctx MetaContext, proofType keybase1.ProofType, genericKeyAndFallback string) (iconKey string) {

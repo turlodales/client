@@ -49,7 +49,10 @@ func newKbwebClient() (*kbwebClient, error) {
 	}
 	client := &http.Client{
 		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{RootCAs: certPool},
+			TLSClientConfig: &tls.Config{
+				RootCAs:    certPool,
+				MinVersion: tls.VersionTLS12,
+			},
 		},
 	}
 	return &kbwebClient{http: client}, nil
@@ -110,7 +113,7 @@ func AnnounceBuild(keybaseToken string, buildA string, buildB string, platform s
 	if err != nil {
 		return fmt.Errorf("json marshal err, %v", err)
 	}
-	var data = jsonStr
+	data := jsonStr
 	return client.post(keybaseToken, "/_/api/1.0/pkg/add_build.json", data, nil)
 }
 
@@ -138,7 +141,7 @@ func KBWebPromote(keybaseToken string, buildA string, platform string, dryRun bo
 	if err != nil {
 		return releaseTime, fmt.Errorf("json marshal err, %v", err)
 	}
-	var data = jsonStr
+	data := jsonStr
 	var response promoteBuildResponse
 	if dryRun {
 		log.Printf("DRYRUN: Would post %s\n", data)
@@ -176,6 +179,6 @@ func SetBuildInTesting(keybaseToken string, buildA string, platform string, inTe
 	if err != nil {
 		return fmt.Errorf("json marshal err: %v", err)
 	}
-	var data = jsonStr
+	data := jsonStr
 	return client.post(keybaseToken, "/_/api/1.0/pkg/set_in_testing.json", data, nil)
 }

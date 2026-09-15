@@ -9,10 +9,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func createProofTerm(idInt int, seqno keybase1.Seqno) proofTerm {
+func createProofTerm(idInt byte, seqno keybase1.Seqno) proofTerm {
 	var id [16]byte
 	id[15] = 0x25
-	id[0] = byte(idInt)
+	id[0] = idInt
 	return proofTerm{
 		leafID: keybase1.UserOrTeamID(hex.EncodeToString(id[:])),
 		sigMeta: keybase1.SignatureMetadata{
@@ -129,5 +129,5 @@ func TestProofSetSameChain(t *testing.T) {
 	for _, p := range ret {
 		t.Logf("%v\n", p.shortForm())
 	}
-	require.Len(t, ret, 0)
+	require.Empty(t, ret)
 }

@@ -19,13 +19,14 @@ import (
 )
 
 func consumeFlipToResult(t *testing.T, ui *kbtest.ChatUI, listener *serverChatListener,
-	gameID chat1.FlipGameIDStr, numUsers int) string {
+	gameID chat1.FlipGameIDStr, numUsers int,
+) string {
 	timeout := 20 * time.Second
 	consumeNewMsgRemote(t, listener, chat1.MessageType_FLIP) // host msg
 	for {
 		select {
 		case updates := <-ui.CoinFlipUpdates:
-			require.Equal(t, 1, len(updates))
+			require.Len(t, updates, 1)
 			t.Logf("update: %v gameID: %s", updates[0].Phase, updates[0].GameID)
 			if updates[0].Phase == chat1.UICoinFlipPhase_COMPLETE {
 				if updates[0].GameID != gameID {
@@ -34,7 +35,7 @@ func consumeFlipToResult(t *testing.T, ui *kbtest.ChatUI, listener *serverChatLi
 					t.Logf("skipping complete: looking: %s found: %s", gameID, updates[0].GameID)
 					continue
 				}
-				require.Equal(t, numUsers, len(updates[0].Participants))
+				require.Len(t, updates[0].Participants, numUsers)
 				return updates[0].ResultText
 			}
 		case <-time.After(timeout):
@@ -42,6 +43,7 @@ func consumeFlipToResult(t *testing.T, ui *kbtest.ChatUI, listener *serverChatLi
 		}
 	}
 }
+
 func assertNoFlip(t *testing.T, ui *kbtest.ChatUI) {
 	select {
 	case <-ui.CoinFlipUpdates:
@@ -195,11 +197,11 @@ func TestFlipManagerStartFlip(t *testing.T) {
 			consumeNewMsgRemote(t, listener2, chat1.MessageType_FLIP)
 			res0 = consumeFlipToResult(t, ui0, listener0, gameID, numUsers)
 			t.Logf("res0 (shuffle): %s", res0)
-			toks := strings.Split(res0, ",")
-			for _, t := range toks {
+			toks := strings.SplitSeq(res0, ",")
+			for t := range toks {
 				delete(refMap, strings.Trim(t, " "))
 			}
-			require.Zero(t, len(refMap))
+			require.Empty(t, refMap)
 			require.True(t, found)
 			res1 = consumeFlipToResult(t, ui1, listener1, gameID, numUsers)
 			require.Equal(t, res0, res1)
@@ -234,7 +236,7 @@ func TestFlipManagerStartFlip(t *testing.T) {
 					TopicType: &ttype,
 				})
 			require.NoError(t, err)
-			require.Zero(t, len(ibox.Convs))
+			require.Empty(t, ibox.Convs)
 		})
 	})
 }
@@ -433,8 +435,9 @@ func TestFlipManagerLoadFlip(t *testing.T) {
 				body.Flip().FlipConvID, gameID)
 			select {
 			case updates := <-ui0.CoinFlipUpdates:
-				require.Equal(t, 1, len(updates))
+				require.Len(t, updates, 1)
 				require.Equal(t, chat1.UICoinFlipPhase_COMPLETE, updates[0].Phase)
+				require.Equal(t, conv.Id.ConvIDStr(), updates[0].ConvID)
 				require.Equal(t, res, updates[0].ResultText)
 			case <-time.After(timeout):
 				require.Fail(t, "no updates")
@@ -555,5 +558,4 @@ func TestFlipManagerRateLimit(t *testing.T) {
 	res1 = consumeFlipToResult(t, ui1, listener1, gameID, 2)
 	require.Equal(t, res, res1)
 	close(stopCh)
-
 }

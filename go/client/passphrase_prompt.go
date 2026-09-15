@@ -4,9 +4,8 @@
 package client
 
 import (
+	"context"
 	"fmt"
-
-	"golang.org/x/net/context"
 
 	"github.com/keybase/client/go/libkb"
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
@@ -61,7 +60,7 @@ func promptPassphraseWithArg(g *libkb.GlobalContext, arg keybase1.GUIEntryArg, p
 
 	firstPrompt := arg.Prompt
 
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		// get the first passphrase
 		res, err := libkb.GetPassphraseUntilCheckWithChecker(m, arg, prompter, &libkb.CheckPassphraseNew)
 		if err != nil {

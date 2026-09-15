@@ -1,13 +1,16 @@
 // Entry point to the chrome part of the app: ORDER IS IMPORTANT
 import './globals.desktop'
 import {isDarwin, isWindows} from '@/constants/platform'
-import '@/util/why-did-you-render'
-import KB2, {waitOnKB2Loaded} from '@/util/electron.desktop'
-import * as DarkMode from '@/constants/darkmode'
+import KB2, {waitOnKB2Loaded} from '@/util/electron'
+import * as DarkMode from '@/stores/darkmode'
 
 waitOnKB2Loaded(() => {
-  const {setSystemSupported, setSystemDarkMode} = DarkMode._useState.getState().dispatch
+  const {setSystemSupported, setSystemDarkMode} = DarkMode.useDarkModeState.getState().dispatch
   setSystemDarkMode(KB2.constants.startDarkMode)
   setSystemSupported(isDarwin || isWindows)
-  import('./main2.desktop').then(() => {}).catch(() => {})
+  import('./main2.desktop')
+    .then(() => {})
+    .catch((e: unknown) => {
+      console.error('main2.desktop load failed', e)
+    })
 })

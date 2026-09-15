@@ -5,19 +5,20 @@
 package libkbfs
 
 import (
+	"context"
 	"sync"
 
 	"github.com/keybase/backoff"
 	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/logger"
 	"github.com/keybase/go-framed-msgpack-rpc/rpc"
-	"golang.org/x/net/context"
 )
 
 // NewSharedKeybaseConnection returns a connection that tries to
 // connect to the local keybase daemon.
 func NewSharedKeybaseConnection(kbCtx Context, config Config,
-	handler rpc.ConnectionHandler) *rpc.Connection {
+	handler rpc.ConnectionHandler,
+) *rpc.Connection {
 	transport := &SharedKeybaseTransport{kbCtx: kbCtx}
 	constBackoff := backoff.NewConstantBackOff(RPCReconnectInterval)
 	opts := rpc.ConnectionOpts{
@@ -47,7 +48,8 @@ var _ rpc.ConnectionTransport = (*SharedKeybaseTransport)(nil)
 
 // Dial is an implementation of the ConnectionTransport interface.
 func (kt *SharedKeybaseTransport) Dial(ctx context.Context) (
-	rpc.Transporter, error) {
+	rpc.Transporter, error,
+) {
 	_, transport, _, err := kt.kbCtx.GetSocket(true)
 	if err != nil {
 		return nil, err
@@ -70,6 +72,9 @@ func (kt *SharedKeybaseTransport) IsConnected() bool {
 func (kt *SharedKeybaseTransport) Finalize() {
 	kt.mutex.Lock()
 	defer kt.mutex.Unlock()
+	if kt.transport != nil {
+		kt.transport.Close()
+	}
 	kt.transport = kt.stagedTransport
 	kt.stagedTransport = nil
 }

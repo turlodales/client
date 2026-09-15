@@ -1,9 +1,9 @@
 import * as React from 'react'
 import * as Kb from '@/common-adapters'
-import * as Styles from '@/styles'
 import AudioVideo from './audio-video'
 import {formatAudioRecordDuration} from '@/util/timestamp'
-import {isMobile} from '@/constants/platform'
+// The non-iOS module throws when rendered, so usage is gated on isIOS.
+import {SFSymbol} from '@react-navigation/native'
 
 type VisProps = {
   amps: undefined | ReadonlyArray<number>
@@ -13,6 +13,7 @@ type VisProps = {
 }
 
 const AudioVis = (props: VisProps) => {
+  const theme = Kb.Styles.useTheme()
   const {amps, playedRatio, maxWidth} = props
   let threshold = Math.floor((amps?.length ?? 0) * playedRatio)
   if (threshold > 0) {
@@ -33,15 +34,15 @@ const AudioVis = (props: VisProps) => {
         direction="vertical"
         key={index}
         style={{
-          backgroundColor: index < threshold ? Styles.globalColors.blue : Styles.globalColors.black,
+          backgroundColor: index < threshold ? theme.blue : theme.black,
           height,
-          marginRight: isMobile ? 4 * Styles.hairlineWidth : 2,
-          width: isMobile ? 3 * Styles.hairlineWidth : 1,
+          marginRight: isMobile ? 4 * Kb.Styles.hairlineWidth : 2,
+          width: isMobile ? 3 * Kb.Styles.hairlineWidth : 1,
         }}
       />
     )
   })
-  return Styles.isMobile ? (
+  return isMobile ? (
     <Kb.ScrollView
       horizontal={true}
       style={{height: maxHeight, maxWidth: maxWidth}}
@@ -52,7 +53,7 @@ const AudioVis = (props: VisProps) => {
   ) : (
     <Kb.Box2
       direction="horizontal"
-      style={{height: maxHeight, marginTop: Styles.globalMargins.xtiny, maxWidth: maxWidth}}
+      style={{height: maxHeight, marginTop: Kb.Styles.globalMargins.xtiny, maxWidth: maxWidth}}
     >
       {content}
     </Kb.Box2>
@@ -68,82 +69,74 @@ type Props = {
 }
 
 const AudioPlayer = (props: Props) => {
+  const styles = useStyles()
+  const theme = Kb.Styles.useTheme()
   const {duration, big, maxWidth, url, visAmps} = props
-  const seekRef = React.useRef<null | ((n: number) => void)>(null)
   const [playedRatio, setPlayedRatio] = React.useState(0)
   const [paused, setPaused] = React.useState(true)
+  // Only mount AudioVideo after the user first taps play; calling useAudioPlayer
+  // unconditionally for every message in the list spawns CoreMedia threads per
+  // message and exhausts VM memory.
+  const [everPlayed, setEverPlayed] = React.useState(false)
   const onClick = () => {
     if (paused) {
+      setEverPlayed(true)
       setPaused(false)
     } else {
       setPaused(true)
     }
   }
 
-  const onPositionUpdated = React.useCallback(
-    (ratio: number) => {
-      setPlayedRatio(ratio)
-    },
-    [setPlayedRatio]
-  )
+  const onPositionUpdated = (ratio: number) => {
+    setPlayedRatio(ratio)
+  }
 
-  const onEnded = React.useCallback(() => {
+  const onEnded = () => {
     setPaused(true)
     setPlayedRatio(0)
-  }, [setPaused, setPlayedRatio])
+  }
 
   const timeLeft = duration - playedRatio * duration
   return (
     <Kb.Box2
       direction="horizontal"
-      style={Styles.collapseStyles([styles.container, {height: big ? 56 : 40}])}
+      style={Kb.Styles.collapseStyles([styles.container, {height: big ? 56 : 40}])}
       gap="tiny"
     >
-      <Kb.ClickableBox onClick={url ? onClick : undefined} style={{justifyContent: 'center'}}>
-        <Kb.Icon
-          type={!paused ? 'iconfont-pause' : 'iconfont-play'}
-          fontSize={32}
-          color={url ? Styles.globalColors.blue : Styles.globalColors.grey}
-        />
+      <Kb.ClickableBox direction="vertical" justifyContent="center" onClick={url ? onClick : undefined}>
+        {isIOS ? (
+          <SFSymbol
+            name={paused ? 'play.fill' : 'pause.fill'}
+            size={32}
+            color={url ? theme.blue : theme.grey}
+            contentTransition={{magic: true, type: 'replace'}}
+          />
+        ) : (
+          <Kb.Icon
+            type={!paused ? 'iconfont-pause' : 'iconfont-play'}
+            fontSize={32}
+            color={url ? theme.blue : theme.grey}
+          />
+        )}
       </Kb.ClickableBox>
-      <Kb.Box2 direction="vertical" style={styles.visContainer} gap="xxtiny" fullHeight={true}>
+      <Kb.Box2 direction="vertical" alignItems="flex-start" style={styles.visContainer} gap="xxtiny" fullHeight={true} justifyContent="flex-end">
         <AudioVis height={big ? 32 : 18} amps={visAmps} maxWidth={maxWidth} playedRatio={playedRatio} />
         <Kb.Text type="BodyTiny">{formatAudioRecordDuration(timeLeft)}</Kb.Text>
       </Kb.Box2>
-      {url.length > 0 && (
-        <AudioVideo
-          seekRef={seekRef}
-          url={url}
-          paused={paused}
-          onPositionUpdated={onPositionUpdated}
-          onEnded={onEnded}
-        />
+      {url.length > 0 && everPlayed && (
+        <AudioVideo url={url} paused={paused} onPositionUpdated={onPositionUpdated} onEnded={onEnded} />
       )}
     </Kb.Box2>
   )
 }
 
-const styles = Styles.styleSheetCreate(() => ({
-  button: {
-    borderRadius: 15,
-    height: 30,
-    position: 'relative',
-    width: 30,
-  },
+const useStyles = Kb.Styles.createStyleHook(theme => ({
   container: {
-    ...Styles.padding(Styles.globalMargins.xxtiny, Styles.globalMargins.tiny),
-    backgroundColor: Styles.globalColors.white,
-    borderColor: Styles.globalColors.grey,
-    borderRadius: Styles.borderRadius,
-    borderStyle: 'solid',
-    borderWidth: 1,
-  },
-  vis: {
-    alignSelf: 'flex-start',
+    ...Kb.Styles.padding(Kb.Styles.globalMargins.xxtiny, Kb.Styles.globalMargins.tiny),
+    ...Kb.Styles.border(theme.grey, 1, Kb.Styles.borderRadius),
+    backgroundColor: theme.white,
   },
   visContainer: {
-    alignItems: 'flex-start',
-    justifyContent: 'flex-end',
     minWidth: 40,
   },
 }))

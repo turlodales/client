@@ -5,11 +5,12 @@
 package libkbfs
 
 import (
+	"context"
+
 	"github.com/keybase/client/go/kbfs/kbfsblock"
 	"github.com/keybase/client/go/kbfs/kbfscrypto"
 	"github.com/keybase/client/go/kbfs/tlf"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 )
 
 type journalBlockServer struct {
@@ -23,7 +24,8 @@ var _ BlockServer = journalBlockServer{}
 func (j journalBlockServer) getBlockFromJournal(
 	ctx context.Context, tlfID tlf.ID, id kbfsblock.ID) (
 	data []byte, serverHalf kbfscrypto.BlockCryptKeyServerHalf,
-	found bool, err error) {
+	found bool, err error,
+) {
 	tlfJournal, ok := j.jManager.getTLFJournal(tlfID, nil)
 	if !ok {
 		return nil, kbfscrypto.BlockCryptKeyServerHalf{}, false, nil
@@ -47,7 +49,8 @@ func (j journalBlockServer) getBlockFromJournal(
 
 func (j journalBlockServer) getBlockSizeFromJournal(
 	ctx context.Context, tlfID tlf.ID, id kbfsblock.ID) (
-	size uint32, found bool, err error) {
+	size uint32, found bool, err error,
+) {
 	tlfJournal, ok := j.jManager.getTLFJournal(tlfID, nil)
 	if !ok {
 		return 0, false, nil
@@ -72,7 +75,8 @@ func (j journalBlockServer) getBlockSizeFromJournal(
 func (j journalBlockServer) Get(
 	ctx context.Context, tlfID tlf.ID, id kbfsblock.ID,
 	context kbfsblock.Context, cacheType DiskBlockCacheType) (
-	data []byte, serverHalf kbfscrypto.BlockCryptKeyServerHalf, err error) {
+	data []byte, serverHalf kbfscrypto.BlockCryptKeyServerHalf, err error,
+) {
 	j.jManager.log.LazyTrace(ctx, "jBServer: Get %s", id)
 	defer func() {
 		j.jManager.deferLog.LazyTrace(ctx, "jBServer: Get %s done (err=%v)", id, err)
@@ -93,7 +97,8 @@ func (j journalBlockServer) Put(
 	ctx context.Context, tlfID tlf.ID, id kbfsblock.ID,
 	context kbfsblock.Context, buf []byte,
 	serverHalf kbfscrypto.BlockCryptKeyServerHalf,
-	cacheType DiskBlockCacheType) (err error) {
+	cacheType DiskBlockCacheType,
+) (err error) {
 	// Don't trace this function, as it gets too verbose and is
 	// called in parallel anyway. Rely on caller (usually
 	// doBlockPuts) to do the tracing.
@@ -123,7 +128,8 @@ func (j journalBlockServer) Put(
 
 func (j journalBlockServer) AddBlockReference(
 	ctx context.Context, tlfID tlf.ID, id kbfsblock.ID,
-	context kbfsblock.Context) (err error) {
+	context kbfsblock.Context,
+) (err error) {
 	j.jManager.log.LazyTrace(ctx, "jBServer: AddRef %s", id)
 	defer func() {
 		j.jManager.deferLog.LazyTrace(ctx, "jBServer: AddRef %s done (err=%v)", id, err)
@@ -159,7 +165,8 @@ func (j journalBlockServer) AddBlockReference(
 func (j journalBlockServer) RemoveBlockReferences(
 	ctx context.Context, tlfID tlf.ID,
 	contexts kbfsblock.ContextMap) (
-	liveCounts map[kbfsblock.ID]int, err error) {
+	liveCounts map[kbfsblock.ID]int, err error,
+) {
 	j.jManager.log.LazyTrace(ctx, "jBServer: RemRef %v", contexts)
 	defer func() {
 		j.jManager.deferLog.LazyTrace(ctx, "jBServer: RemRef %v done (err=%v)", contexts, err)
@@ -175,7 +182,8 @@ func (j journalBlockServer) RemoveBlockReferences(
 
 func (j journalBlockServer) ArchiveBlockReferences(
 	ctx context.Context, tlfID tlf.ID,
-	contexts kbfsblock.ContextMap) (err error) {
+	contexts kbfsblock.ContextMap,
+) (err error) {
 	j.jManager.log.LazyTrace(ctx, "jBServer: ArchiveRef %v", contexts)
 	defer func() {
 		j.jManager.deferLog.LazyTrace(ctx, "jBServer: ArchiveRef %v done (err=%v)", contexts, err)
@@ -190,7 +198,8 @@ func (j journalBlockServer) ArchiveBlockReferences(
 }
 
 func (j journalBlockServer) IsUnflushed(ctx context.Context, tlfID tlf.ID,
-	id kbfsblock.ID) (isLocal bool, err error) {
+	id kbfsblock.ID,
+) (isLocal bool, err error) {
 	j.jManager.log.LazyTrace(ctx, "jBServer: IsUnflushed %s", id)
 	defer func() {
 		j.jManager.deferLog.LazyTrace(ctx, "jBServer: IsUnflushed %s done (err=%v)", id, err)

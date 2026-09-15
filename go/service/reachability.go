@@ -4,9 +4,9 @@
 package service
 
 import (
+	"context"
 	"sync"
-
-	"golang.org/x/net/context"
+	"time"
 
 	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/protocol/keybase1"
@@ -16,14 +16,14 @@ import (
 type reachabilityHandler struct {
 	*BaseHandler
 	libkb.Contextified
-	reachability *reachability
+	service *Service
 }
 
-func newReachabilityHandler(xp rpc.Transporter, g *libkb.GlobalContext, reachability *reachability) *reachabilityHandler {
+func newReachabilityHandler(xp rpc.Transporter, g *libkb.GlobalContext, service *Service) *reachabilityHandler {
 	return &reachabilityHandler{
 		BaseHandler:  NewBaseHandler(g, xp),
 		Contextified: libkb.NewContextified(g),
-		reachability: reachability,
+		service:      service,
 	}
 }
 
@@ -39,9 +39,17 @@ func (h *reachabilityHandler) StartReachability(_ context.Context) (res keybase1
 	}, nil
 }
 
-func (h *reachabilityHandler) CheckReachability(_ context.Context) (res keybase1.Reachability, err error) {
+func (h *reachabilityHandler) CheckReachability(ctx context.Context) (res keybase1.Reachability, err error) {
 	h.G().Trace("CheckReachability", &err)()
-	return h.reachability.check(), nil
+	// reachability is wired up during startupGregor, which can lag behind the
+	// first client connection (e.g. an online tryLogin blocking ahead of it on
+	// mobile). Guard against a nil reachability so an early call returns UNKNOWN
+	// instead of panicking.
+	r := h.service.reachability
+	if r == nil {
+		return keybase1.Reachability{Reachable: keybase1.Reachable_UNKNOWN}, nil
+	}
+	return r.check(ctx), nil
 }
 
 type reachability struct {
@@ -71,8 +79,8 @@ func (h *reachability) setReachability(r keybase1.Reachability) {
 	}
 }
 
-func (h *reachability) check() (k keybase1.Reachability) {
-	reachable := h.gh.isReachable()
+func (h *reachability) check(ctx context.Context) (k keybase1.Reachability) {
+	reachable := h.gh.isReachable(ctx)
 	if reachable {
 		k.Reachable = keybase1.Reachable_YES
 	} else {
@@ -80,6 +88,10 @@ func (h *reachability) check() (k keybase1.Reachability) {
 	}
 	h.setReachability(k)
 	return k
+}
+
+func (h *reachability) ConnectedSince(ctx context.Context) time.Time {
+	return h.gh.connectedSince()
 }
 
 func (h *reachability) IsConnected(ctx context.Context) libkb.ConnectivityMonitorResult {
@@ -97,6 +109,6 @@ func (h *reachability) IsConnected(ctx context.Context) libkb.ConnectivityMonito
 }
 
 func (h *reachability) CheckReachability(ctx context.Context) error {
-	h.check()
+	h.check(ctx)
 	return nil
 }

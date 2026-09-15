@@ -6,6 +6,7 @@ package libkbfs
 
 import (
 	"container/heap"
+	"context"
 	"io"
 	"reflect"
 	"sync"
@@ -22,7 +23,6 @@ import (
 	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/logger"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 )
 
 const (
@@ -165,7 +165,8 @@ func newBlockRetrievalQueue(
 	numWorkers int, numPrefetchWorkers int,
 	throttledPrefetchPeriod time.Duration,
 	config blockRetrievalConfig,
-	appStateUpdater env.AppStateUpdater) *blockRetrievalQueue {
+	appStateUpdater env.AppStateUpdater,
+) *blockRetrievalQueue {
 	var throttledWorkCh channels.Channel
 	if numPrefetchWorkers > 0 {
 		throttledWorkCh = NewInfiniteChannelWrapper()
@@ -188,11 +189,11 @@ func newBlockRetrievalQueue(
 			numWorkers+numPrefetchWorkers),
 	}
 	q.prefetcher = newBlockPrefetcher(q, config, nil, nil, appStateUpdater)
-	for i := 0; i < numWorkers; i++ {
+	for range numWorkers {
 		q.workers = append(q.workers, newBlockRetrievalWorker(
 			config.blockGetter(), q, q.workerCh))
 	}
-	for i := 0; i < numPrefetchWorkers; i++ {
+	for range numPrefetchWorkers {
 		q.workers = append(q.workers, newBlockRetrievalWorker(
 			config.blockGetter(), q, q.prefetchWorkerCh))
 	}
@@ -213,7 +214,8 @@ func (brq *blockRetrievalQueue) sendWork(workerCh channels.Channel) {
 }
 
 func (brq *blockRetrievalQueue) throttleReleaseLoop(
-	period time.Duration) {
+	period time.Duration,
+) {
 	var tickerCh <-chan time.Time
 	if period > 0 {
 		t := time.NewTicker(period)
@@ -262,7 +264,7 @@ func (brq *blockRetrievalQueue) shutdownRetrievalLocked() bool {
 	}
 
 	// TODO: try to infer the block type from the requests in the retrieval?
-	bpLookup := blockPtrLookup{retrieval.blockPtr, reflect.TypeOf(nil)}
+	bpLookup := blockPtrLookup{retrieval.blockPtr, nil}
 	delete(brq.ptrs, bpLookup)
 	brq.finalizeRequestAfterPtrDeletion(
 		retrieval, nil, DiskBlockAnyCache, io.EOF)
@@ -313,7 +315,8 @@ func (brq *blockRetrievalQueue) initPrefetchStatusCacheLocked() error {
 }
 
 func (brq *blockRetrievalQueue) getPrefetchStatus(
-	id kbfsblock.ID) (PrefetchStatus, error) {
+	id kbfsblock.ID,
+) (PrefetchStatus, error) {
 	brq.prefetchStatusLock.Lock()
 	defer brq.prefetchStatusLock.Unlock()
 	if brq.prefetchStatusForNoDiskCache == nil {
@@ -330,7 +333,8 @@ func (brq *blockRetrievalQueue) getPrefetchStatus(
 }
 
 func (brq *blockRetrievalQueue) setPrefetchStatus(
-	id kbfsblock.ID, prefetchStatus PrefetchStatus) error {
+	id kbfsblock.ID, prefetchStatus PrefetchStatus,
+) error {
 	brq.prefetchStatusLock.Lock()
 	defer brq.prefetchStatusLock.Unlock()
 	if brq.prefetchStatusForNoDiskCache == nil {
@@ -350,7 +354,8 @@ func (brq *blockRetrievalQueue) setPrefetchStatus(
 }
 
 func (brq *blockRetrievalQueue) cacheHashBehavior(
-	tlfID tlf.ID) data.BlockCacheHashBehavior {
+	tlfID tlf.ID,
+) data.BlockCacheHashBehavior {
 	return cacheHashBehavior(brq.config, brq.config, tlfID)
 }
 
@@ -358,7 +363,8 @@ func (brq *blockRetrievalQueue) cacheHashBehavior(
 // BlockRetrievalQueue.
 func (brq *blockRetrievalQueue) PutInCaches(ctx context.Context,
 	ptr data.BlockPointer, tlfID tlf.ID, block data.Block, lifetime data.BlockCacheLifetime,
-	prefetchStatus PrefetchStatus, cacheType DiskBlockCacheType) (err error) {
+	prefetchStatus PrefetchStatus, cacheType DiskBlockCacheType,
+) (err error) {
 	err = brq.config.BlockCache().Put(
 		ptr, tlfID, block, lifetime, brq.cacheHashBehavior(tlfID))
 	switch err.(type) {
@@ -390,7 +396,8 @@ func (brq *blockRetrievalQueue) PutInCaches(ctx context.Context,
 // checkCaches copies a block into `block` if it's in one of our caches.
 func (brq *blockRetrievalQueue) checkCaches(ctx context.Context,
 	kmd libkey.KeyMetadata, ptr data.BlockPointer, block data.Block,
-	action BlockRequestAction) (PrefetchStatus, error) {
+	action BlockRequestAction,
+) (PrefetchStatus, error) {
 	dbc := brq.config.DiskBlockCache()
 	preferredCacheType := action.CacheType()
 
@@ -438,7 +445,8 @@ func (brq *blockRetrievalQueue) checkCaches(ctx context.Context,
 // request retrieves blocks asynchronously.
 func (brq *blockRetrievalQueue) request(ctx context.Context,
 	priority int, kmd libkey.KeyMetadata, ptr data.BlockPointer, block data.Block,
-	lifetime data.BlockCacheLifetime, action BlockRequestAction) <-chan error {
+	lifetime data.BlockCacheLifetime, action BlockRequestAction,
+) <-chan error {
 	brq.vlog.CLogf(ctx, libkb.VLog2,
 		"Request of %v, action=%s, priority=%d", ptr, action, priority)
 
@@ -520,7 +528,7 @@ func (brq *blockRetrievalQueue) request(ctx context.Context,
 			brq.notifyWorker(priority)
 		} else {
 			err := br.ctx.AddContext(ctx)
-			if err == context.Canceled {
+			if errors.Is(err, context.Canceled) {
 				// We need to delete the request pointer, but we'll still let
 				// the existing request be processed by a worker.
 				delete(brq.ptrs, bpLookup)
@@ -580,7 +588,8 @@ func (brq *blockRetrievalQueue) request(ctx context.Context,
 // Request implements the BlockRetriever interface for blockRetrievalQueue.
 func (brq *blockRetrievalQueue) Request(ctx context.Context,
 	priority int, kmd libkey.KeyMetadata, ptr data.BlockPointer, block data.Block,
-	lifetime data.BlockCacheLifetime, action BlockRequestAction) <-chan error {
+	lifetime data.BlockCacheLifetime, action BlockRequestAction,
+) <-chan error {
 	if !action.NonMasterBranch() && brq.config.IsSyncedTlf(kmd.TlfID()) {
 		action = action.AddSync()
 	}
@@ -589,7 +598,8 @@ func (brq *blockRetrievalQueue) Request(ctx context.Context,
 
 func (brq *blockRetrievalQueue) finalizeRequestAfterPtrDeletion(
 	retrieval *blockRetrieval, block data.Block, cacheType DiskBlockCacheType,
-	retrievalErr error) {
+	retrievalErr error,
+) {
 	defer retrieval.cancelFunc()
 
 	// This is a lock that exists for the race detector, since there
@@ -670,7 +680,8 @@ func (brq *blockRetrievalQueue) finalizeRequestAfterPtrDeletion(
 // subscribed requests.
 func (brq *blockRetrievalQueue) FinalizeRequest(
 	retrieval *blockRetrieval, block data.Block, cacheType DiskBlockCacheType,
-	retrievalErr error) {
+	retrievalErr error,
+) {
 	brq.mtx.Lock()
 	// This might have already been removed if the context has been canceled.
 	// That's okay, because this will then be a no-op.
@@ -682,11 +693,9 @@ func (brq *blockRetrievalQueue) FinalizeRequest(
 }
 
 func channelToWaitGroup(wg *sync.WaitGroup, ch <-chan struct{}) {
-	wg.Add(1)
-	go func() {
+	wg.Go(func() {
 		<-ch
-		wg.Done()
-	}()
+	})
 }
 
 func (brq *blockRetrievalQueue) finalizeAllRequests() {
@@ -737,7 +746,8 @@ func (brq *blockRetrievalQueue) Shutdown() <-chan struct{} {
 // off. If an error is returned due to a context cancelation, the prefetcher is
 // never re-enabled.
 func (brq *blockRetrievalQueue) TogglePrefetcher(enable bool,
-	testSyncCh <-chan struct{}, testDoneCh chan<- struct{}) <-chan struct{} {
+	testSyncCh <-chan struct{}, testDoneCh chan<- struct{},
+) <-chan struct{} {
 	// We must hold this lock for the whole function so that multiple calls to
 	// this function doesn't leak prefetchers.
 	brq.prefetchMtx.Lock()

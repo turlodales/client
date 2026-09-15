@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path"
 	"path/filepath"
 	"sort"
 	"sync"
@@ -159,10 +158,10 @@ func (r *ChatArchiveRegistry) flushLoop(stopCh chan struct{}) error {
 	}
 }
 
-func (r *ChatArchiveRegistry) resumeAllBgJobs(ctx context.Context) (err error) {
+func (r *ChatArchiveRegistry) resumeAllBgJobs(ctx context.Context, stopCh chan struct{}) (err error) {
 	defer r.Trace(ctx, &err, "resumeAllBgJobs")()
 	select {
-	case <-r.stopCh:
+	case <-stopCh:
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
@@ -188,20 +187,21 @@ func (r *ChatArchiveRegistry) resumeAllBgJobs(ctx context.Context) (err error) {
 	return nil
 }
 
-func (r *ChatArchiveRegistry) monitorAppState() error {
+func (r *ChatArchiveRegistry) monitorAppState(stopCh chan struct{}) error {
 	appState := keybase1.MobileAppState_FOREGROUND
 	ctx, cancel := context.WithCancel(context.Background())
 	for {
 		select {
-		case <-r.stopCh:
+		case <-stopCh:
 			cancel()
 			return nil
-		case appState = <-r.G().MobileAppState.NextUpdate(&appState):
+		case <-r.G().MobileAppState.NextUpdate(appState):
+			appState = r.G().MobileAppState.State()
 			r.Debug(ctx, "monitorAppState: next state -> %v", appState)
 			switch appState {
 			case keybase1.MobileAppState_FOREGROUND:
 				go func() {
-					ierr := r.resumeAllBgJobs(ctx)
+					ierr := r.resumeAllBgJobs(ctx, stopCh)
 					if ierr != nil {
 						r.Debug(ctx, ierr.Error())
 					}
@@ -233,13 +233,16 @@ func (r *ChatArchiveRegistry) Start(ctx context.Context, uid gregor1.UID) {
 	r.uid = uid
 	r.started = true
 	r.stopCh = make(chan struct{})
+	stopCh := r.stopCh
 	r.eg.Go(func() error {
-		return r.flushLoop(r.stopCh)
+		return r.flushLoop(stopCh)
 	})
 	r.eg.Go(func() error {
-		return r.resumeAllBgJobs(context.Background())
+		return r.resumeAllBgJobs(context.Background(), stopCh)
 	})
-	r.eg.Go(r.monitorAppState)
+	r.eg.Go(func() error {
+		return r.monitorAppState(stopCh)
+	})
 }
 
 func (r *ChatArchiveRegistry) bgPauseAllJobsLocked(ctx context.Context) (err error) {
@@ -291,7 +294,6 @@ func (r *ChatArchiveRegistry) Stop(ctx context.Context) chan struct{} {
 		close(ch)
 	}
 	return ch
-
 }
 
 func (r *ChatArchiveRegistry) OnDbNuke(mctx libkb.MetaContext) (err error) {
@@ -474,8 +476,10 @@ func (r *ChatArchiveRegistry) Resume(ctx context.Context, jobID chat1.ArchiveJob
 
 var _ types.ChatArchiveRegistry = (*ChatArchiveRegistry)(nil)
 
-const defaultPageSizeDesktop = 1000
-const defaultPageSizeMobile = 300
+const (
+	defaultPageSizeDesktop = 1000
+	defaultPageSizeMobile  = 300
+)
 
 // Fullfil an archive query
 type ChatArchiver struct {
@@ -511,7 +515,8 @@ func (c *ChatArchiver) notifyProgress(ctx context.Context, jobID chat1.ArchiveJo
 }
 
 func (c *ChatArchiver) archiveName(conv chat1.ConversationLocal) string {
-	return chatrender.ConvName(c.G().GlobalContext, conv, c.G().GlobalContext.Env.GetUsername().String())
+	name := chatrender.ConvName(c.G().GlobalContext, conv, c.G().GlobalContext.Env.GetUsername().String())
+	return libkb.GetSafeFilename(name)
 }
 
 func (c *ChatArchiver) attachmentName(msg chat1.MessageUnboxedValid) string {
@@ -522,7 +527,8 @@ func (c *ChatArchiver) attachmentName(msg chat1.MessageUnboxedValid) string {
 	}
 	if typ == chat1.MessageType_ATTACHMENT {
 		att := body.Attachment()
-		return fmt.Sprintf("%s (%d) - %s", gregor1.FromTime(msg.ServerHeader.Ctime).Format("2006-01-02 15.04.05"), msg.ServerHeader.MessageID, att.Object.Filename)
+		safeFilename := libkb.GetSafeFilename(att.Object.Filename)
+		return fmt.Sprintf("%s (%d) - %s", gregor1.FromTime(msg.ServerHeader.Ctime).Format("2006-01-02 15.04.05"), msg.ServerHeader.MessageID, safeFilename)
 	}
 	return ""
 }
@@ -564,7 +570,7 @@ func (c *ChatArchiver) archiveConv(ctx context.Context, jobReq chat1.ArchiveChat
 		c.Debug(ctx, "Resuming from checkpoint %+v", checkpoint)
 	}
 
-	convArchivePath := path.Join(job.Request.OutputPath, c.archiveName(conv), "chat.txt")
+	convArchivePath := filepath.Join(job.Request.OutputPath, c.archiveName(conv), "chat.txt")
 	f, err := os.OpenFile(convArchivePath, os.O_RDWR|os.O_CREATE, libkb.PermFile)
 	if err != nil {
 		return err
@@ -635,8 +641,8 @@ func (c *ChatArchiver) archiveConv(ctx context.Context, jobReq chat1.ArchiveChat
 			}
 			if typ == chat1.MessageType_ATTACHMENT {
 				eg.Go(func() error {
-					attachmentPath := path.Join(jobReq.OutputPath, c.archiveName(conv), c.attachmentName(msg))
-					f, err := os.Create(attachmentPath)
+					attachmentPath := filepath.Join(jobReq.OutputPath, c.archiveName(conv), c.attachmentName(msg))
+					f, err := os.OpenFile(attachmentPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, libkb.PermFile)
 					if err != nil {
 						return err
 					}
@@ -677,9 +683,9 @@ func (c *ChatArchiver) ArchiveChat(ctx context.Context, arg chat1.ArchiveChatJob
 	if len(arg.OutputPath) == 0 {
 		switch c.G().GetAppType() {
 		case libkb.MobileAppType:
-			arg.OutputPath = path.Join(c.G().GlobalContext.Env.GetCacheDir(), fmt.Sprintf("kbchat-%s", arg.JobID))
+			arg.OutputPath = filepath.Join(c.G().Env.GetCacheDir(), fmt.Sprintf("kbchat-%s", arg.JobID))
 		default:
-			arg.OutputPath = path.Join(c.G().GlobalContext.Env.GetDownloadsDir(), fmt.Sprintf("kbchat-%s", arg.JobID))
+			arg.OutputPath = filepath.Join(c.G().Env.GetDownloadsDir(), fmt.Sprintf("kbchat-%s", arg.JobID))
 		}
 	}
 
@@ -745,7 +751,7 @@ func (c *ChatArchiver) ArchiveChat(ctx context.Context, arg chat1.ArchiveChatJob
 	c.notifyProgress(ctx, arg.JobID, jobInfo.MessagesComplete, jobInfo.MessagesTotal)
 
 	// Make sure the root output path exists
-	err = os.MkdirAll(arg.OutputPath, os.ModePerm)
+	err = os.MkdirAll(arg.OutputPath, libkb.PermDir)
 	if err != nil {
 		return "", err
 	}
@@ -761,10 +767,10 @@ func (c *ChatArchiver) ArchiveChat(ctx context.Context, arg chat1.ArchiveChatJob
 	// Fetch size of each conv to track progress.
 	var totalMsgs int64
 	for _, conv := range convs {
-		totalMsgs += int64(conv.MaxVisibleMsgID() - conv.GetMaxDeletedUpTo())
+		totalMsgs += int64(conv.MaxVisibleMsgID() - conv.GetMaxDeletedUpTo()) //nolint:gosec // G115: Message count for progress tracking, safe to convert
 
-		convArchivePath := path.Join(arg.OutputPath, c.archiveName(conv))
-		err = os.MkdirAll(convArchivePath, os.ModePerm)
+		convArchivePath := filepath.Join(arg.OutputPath, c.archiveName(conv))
+		err = os.MkdirAll(convArchivePath, libkb.PermDir)
 		if err != nil {
 			return "", err
 		}
@@ -782,7 +788,6 @@ func (c *ChatArchiver) ArchiveChat(ctx context.Context, arg chat1.ArchiveChatJob
 	//    - Messages are rendered in a text format and attachments are downloaded to the archive path.
 	eg.SetLimit(10)
 	for _, conv := range convs {
-		conv := conv
 		eg.Go(func() error {
 			return c.archiveConv(ctx, arg, &jobInfo, conv)
 		})
@@ -809,7 +814,7 @@ func (c *ChatArchiver) ArchiveChat(ctx context.Context, arg chat1.ArchiveChatJob
 }
 
 func tarGzip(inPath, outPath string) error {
-	f, err := os.Create(outPath)
+	f, err := os.OpenFile(outPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, libkb.PermFile)
 	if err != nil {
 		return err
 	}
@@ -840,7 +845,7 @@ func tarGzip(inPath, outPath string) error {
 		if fi.IsDir() {
 			return nil
 		}
-		file, err := os.Open(fp)
+		file, err := os.Open(fp) //nolint:gosec // G122: packing a user-selected export directory; Walk path is the archive tree
 		if err != nil {
 			return err
 		}

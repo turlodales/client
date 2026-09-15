@@ -1,13 +1,14 @@
-// Auto-generated to Go types and interfaces using avdl-compiler v1.4.10 (https://github.com/keybase/node-avdl-compiler)
+// Code generated to Go types and interfaces using avdl-compiler v1.4.10 (https://github.com/keybase/node-avdl-compiler). DO NOT EDIT.
 //   Input file: avdl/keybase1/audit.avdl
 
 package keybase1
 
 import (
+	"context"
 	"fmt"
-	"github.com/keybase/go-framed-msgpack-rpc/rpc"
-	context "golang.org/x/net/context"
 	"time"
+
+	"github.com/keybase/go-framed-msgpack-rpc/rpc"
 )
 
 type BoxAuditAttemptResult int
@@ -41,11 +42,11 @@ var BoxAuditAttemptResultRevMap = map[BoxAuditAttemptResult]string{
 	5: "OK_NOT_ATTEMPTED_SUBTEAM",
 }
 
-func (e BoxAuditAttemptResult) String() string {
-	if v, ok := BoxAuditAttemptResultRevMap[e]; ok {
+func (o BoxAuditAttemptResult) String() string {
+	if v, ok := BoxAuditAttemptResultRevMap[o]; ok {
 		return v
 	}
-	return fmt.Sprintf("%v", int(e))
+	return fmt.Sprintf("%v", int(o))
 }
 
 type BoxAuditAttempt struct {
@@ -71,7 +72,7 @@ func (o BoxAuditAttempt) DeepCopy() BoxAuditAttempt {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Generation),
 		Rotated: o.Rotated,
@@ -110,11 +111,11 @@ func AuditProtocol(i AuditInterface) rpc.Protocol {
 		Name: "keybase.1.audit",
 		Methods: map[string]rpc.ServeHandlerDescription{
 			"isInJail": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]IsInJailArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]IsInJailArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]IsInJailArg)(nil), args)
@@ -125,11 +126,11 @@ func AuditProtocol(i AuditInterface) rpc.Protocol {
 				},
 			},
 			"boxAuditTeam": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]BoxAuditTeamArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]BoxAuditTeamArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]BoxAuditTeamArg)(nil), args)
@@ -140,11 +141,11 @@ func AuditProtocol(i AuditInterface) rpc.Protocol {
 				},
 			},
 			"attemptBoxAudit": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]AttemptBoxAuditArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]AttemptBoxAuditArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]AttemptBoxAuditArg)(nil), args)
@@ -155,11 +156,11 @@ func AuditProtocol(i AuditInterface) rpc.Protocol {
 				},
 			},
 			"knownTeamIDs": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]KnownTeamIDsArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]KnownTeamIDsArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]KnownTeamIDsArg)(nil), args)
@@ -178,22 +179,22 @@ type AuditClient struct {
 }
 
 func (c AuditClient) IsInJail(ctx context.Context, __arg IsInJailArg) (res bool, err error) {
-	err = c.Cli.Call(ctx, "keybase.1.audit.isInJail", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "keybase.1.audit.isInJail", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c AuditClient) BoxAuditTeam(ctx context.Context, __arg BoxAuditTeamArg) (res *BoxAuditAttempt, err error) {
-	err = c.Cli.Call(ctx, "keybase.1.audit.boxAuditTeam", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "keybase.1.audit.boxAuditTeam", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c AuditClient) AttemptBoxAudit(ctx context.Context, __arg AttemptBoxAuditArg) (res BoxAuditAttempt, err error) {
-	err = c.Cli.Call(ctx, "keybase.1.audit.attemptBoxAudit", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "keybase.1.audit.attemptBoxAudit", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c AuditClient) KnownTeamIDs(ctx context.Context, sessionID int) (res []TeamID, err error) {
 	__arg := KnownTeamIDsArg{SessionID: sessionID}
-	err = c.Cli.Call(ctx, "keybase.1.audit.knownTeamIDs", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "keybase.1.audit.knownTeamIDs", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }

@@ -1,8 +1,17 @@
 import * as Kb from '@/common-adapters'
-import type * as T from '@/constants/types'
+import * as T from '@/constants/types'
+import * as FS from '@/constants/fs'
 import {formatTimeForFS} from '@/util/timestamp'
+import {useFsTlfs} from './hooks'
+import {useCurrentUserState} from '@/stores/current-user'
 
-export type Props = {
+export type OwnProps = {
+  path: T.FS.Path
+  mixedMode?: boolean
+  mode: 'row' | 'default'
+}
+
+type Props = {
   isNew: boolean
   mixedMode?: boolean
   mode: 'row' | 'default'
@@ -20,21 +29,20 @@ const getOtherResetText = (names: ReadonlyArray<string>): string => {
   return `${names.slice(0, -1).join(', ')}, and ${names.at(-1)} have reset or deleted their accounts.`
 }
 
-const newMetaMaybe = (props: Props) =>
+const newMetaMaybe = (props: Props, styles: ReturnType<typeof useStyles>) =>
   props.mode === 'row' && props.isNew ? (
     <Kb.Meta
-      title="new"
-      backgroundColor={Kb.Styles.globalColors.orange}
+      variant="new"
       style={Kb.Styles.collapseStyles([styles.meta, {marginRight: Kb.Styles.globalMargins.xtiny}])}
     />
   ) : null
 
-const resetMetaMaybe = (props: Props) =>
+const resetMetaMaybe = (props: Props, styles: ReturnType<typeof useStyles>) =>
   props.mode === 'row' && props.reset === true ? (
-    <Kb.Meta title="reset" backgroundColor={Kb.Styles.globalColors.red} style={styles.meta} />
+    <Kb.Meta variant="reset" style={styles.meta} />
   ) : null
 
-const resetText = (props: Props) => {
+const resetText = (props: Props, styles: ReturnType<typeof useStyles>) => {
   const text =
     props.reset === true
       ? 'Participants have to let you back in.'
@@ -45,71 +53,83 @@ const resetText = (props: Props) => {
     <Kb.Text
       type="BodySmallError"
       style={props.mode === 'default' ? styles.textDefault : styles.textRow}
-      lineClamp={props.mode === 'row' && Kb.Styles.isMobile ? 1 : undefined}
+      lineClamp={props.mode === 'row' && isMobile ? 1 : undefined}
     >
       {text}
     </Kb.Text>
   ) : null
 }
 
-const getPrefixText = (props: Props) =>
+const getPrefixText = (props: Props, styles: ReturnType<typeof useStyles>) =>
   props.mixedMode && props.tlfType ? (
     <Kb.Box2 direction="horizontal" gap="xtiny" gapEnd={true}>
       <Kb.Text
-        fixOverdraw={true}
         type="BodySmall"
         style={props.mode === 'default' ? styles.textDefault : styles.textRow}
-        lineClamp={props.mode === 'row' && Kb.Styles.isMobile ? 1 : undefined}
+        lineClamp={props.mode === 'row' && isMobile ? 1 : undefined}
       >
         {props.tlfType}/
       </Kb.Text>
     </Kb.Box2>
   ) : null
 
-const timeText = (props: Props) =>
+const timeText = (props: Props, styles: ReturnType<typeof useStyles>) =>
   props.tlfMtime ? (
     <Kb.Text
-      fixOverdraw={true}
       type="BodySmall"
       style={props.mode === 'default' ? styles.textDefault : styles.textRow}
-      lineClamp={props.mode === 'row' && Kb.Styles.isMobile ? 1 : undefined}
+      lineClamp={props.mode === 'row' && isMobile ? 1 : undefined}
     >
       {formatTimeForFS(props.tlfMtime, props.mode !== 'row')}
     </Kb.Text>
   ) : null
 
-const getText = (props: Props) => {
-  if (Kb.Styles.isMobile && props.mixedMode) {
+const getText = (props: Props, styles: ReturnType<typeof useStyles>) => {
+  if (isMobile && props.mixedMode) {
     // on mobile in fs root, don't show reset text, and only show time text
     // if reset badge isn't shown, i.e. not self reset
-    return props.reset !== true ? timeText(props) : null
+    return props.reset !== true ? timeText(props, styles) : null
   }
 
   // in mixed mode, reset text takes higher priority
   if (props.mixedMode) {
-    return props.reset ? resetText(props) : timeText(props)
+    return props.reset ? resetText(props, styles) : timeText(props, styles)
   }
 
   // otherwise, show reset text if we need, and don't show time text.
-  return props.reset ? resetText(props) : null
+  return props.reset ? resetText(props, styles) : null
 }
 
-const TlfInfoLine = (props: Props) => {
-  const prefix = getPrefixText(props)
+const TlfInfoLine = (ownProps: OwnProps) => {
+  const styles = useStyles()
+  const _tlf = FS.getTlfFromPath(useFsTlfs(), ownProps.path)
+  const _username = useCurrentUserState(s => s.username)
+  const resetParticipants = _tlf === FS.unknownTlf ? undefined : _tlf.resetParticipants
+  const props: Props = {
+    isNew: _tlf.isNew,
+    mixedMode: ownProps.mixedMode,
+    mode: ownProps.mode,
+    reset:
+      !!resetParticipants &&
+      !!resetParticipants.length &&
+      (resetParticipants.includes(_username) || resetParticipants),
+    tlfMtime: _tlf.tlfMtime,
+    tlfType: T.FS.getPathVisibility(ownProps.path),
+  }
+  const prefix = getPrefixText(props, styles)
   const dot = (
     <Kb.Text
-      fixOverdraw={true}
       type="BodySmall"
       style={props.mode === 'default' ? styles.textDefault : styles.textRow}
-      lineClamp={props.mode === 'row' && Kb.Styles.isMobile ? 1 : undefined}
+      lineClamp={props.mode === 'row' && isMobile ? 1 : undefined}
     >
       •&nbsp;
     </Kb.Text>
   )
 
-  const newMeta = newMetaMaybe(props)
-  const resetMeta = resetMetaMaybe(props)
-  const text = getText(props)
+  const newMeta = newMetaMaybe(props, styles)
+  const resetMeta = resetMetaMaybe(props, styles)
+  const text = getText(props, styles)
   return (
     <Kb.Box2
       direction="horizontal"
@@ -126,11 +146,10 @@ const TlfInfoLine = (props: Props) => {
   )
 }
 
-const styles = Kb.Styles.styleSheetCreate(
+const useStyles = Kb.Styles.createStyleHook(
   () =>
     ({
       meta: {
-        alignSelf: 'center',
         marginRight: Kb.Styles.globalMargins.xtiny,
       },
       textDefault: {
@@ -139,9 +158,7 @@ const styles = Kb.Styles.styleSheetCreate(
       },
       textRow: Kb.Styles.platformStyles({
         isElectron: {
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
+          ...Kb.Styles.textEllipsis,
         },
         isMobile: {
           flexShrink: 1,

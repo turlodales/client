@@ -9,6 +9,7 @@ package libkb
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"runtime/debug"
 	"sort"
 	"time"
@@ -250,25 +251,15 @@ func (cki ComputedKeyInfos) ShallowCopy() *ComputedKeyInfos {
 		KIDToDeviceID: make(map[keybase1.KID]keybase1.DeviceID, len(cki.KIDToDeviceID)),
 		PerUserKeys:   make(map[keybase1.PerUserKeyGeneration]keybase1.PerUserKey),
 	}
-	for k, v := range cki.Infos {
-		ret.Infos[k] = v
-	}
+	maps.Copy(ret.Infos, cki.Infos)
 
-	for k, v := range cki.Sigs {
-		ret.Sigs[k] = v
-	}
+	maps.Copy(ret.Sigs, cki.Sigs)
 
-	for k, v := range cki.Devices {
-		ret.Devices[k] = v
-	}
+	maps.Copy(ret.Devices, cki.Devices)
 
-	for k, v := range cki.KIDToDeviceID {
-		ret.KIDToDeviceID[k] = v
-	}
+	maps.Copy(ret.KIDToDeviceID, cki.KIDToDeviceID)
 
-	for k, v := range cki.PerUserKeys {
-		ret.PerUserKeys[k] = v
-	}
+	maps.Copy(ret.PerUserKeys, cki.PerUserKeys)
 
 	return ret
 }
@@ -283,25 +274,15 @@ func (kf KeyFamily) ShallowCopy() *KeyFamily {
 		SingleKeys:   make(map[keybase1.KID]GenericKey),
 	}
 
-	for k, v := range kf.pgp2kid {
-		ret.pgp2kid[k] = v
-	}
+	maps.Copy(ret.pgp2kid, kf.pgp2kid)
 
-	for k, v := range kf.kid2pgp {
-		ret.kid2pgp[k] = v
-	}
+	maps.Copy(ret.kid2pgp, kf.kid2pgp)
 
-	for k, v := range kf.AllKIDs {
-		ret.AllKIDs[k] = v
-	}
+	maps.Copy(ret.AllKIDs, kf.AllKIDs)
 
-	for k, v := range kf.PGPKeySets {
-		ret.PGPKeySets[k] = v
-	}
+	maps.Copy(ret.PGPKeySets, kf.PGPKeySets)
 
-	for k, v := range kf.SingleKeys {
-		ret.SingleKeys[k] = v
-	}
+	maps.Copy(ret.SingleKeys, kf.SingleKeys)
 
 	return ret
 }
@@ -445,7 +426,6 @@ func ParseKeyFamily(g *GlobalContext, jw *jsonw.Wrapper) (ret *KeyFamily, err er
 	kf.SingleKeys = make(map[keybase1.KID]GenericKey)
 	for i, bundle := range rkf.AllBundles {
 		newKey, w, err := ParseGenericKey(bundle)
-
 		// Some users have some historical bad keys, so no reason to crap
 		// out if we can't parse them, especially if there are others than
 		// can do just as well.
@@ -453,7 +433,7 @@ func ParseKeyFamily(g *GlobalContext, jw *jsonw.Wrapper) (ret *KeyFamily, err er
 			g.Log.Notice("Failed to parse public key at position %d", i)
 			g.Log.Debug("Key parsing error: %s", err)
 			g.Log.Debug("Full key dump follows")
-			g.Log.Debug(bundle)
+			g.Log.Debug("%s", bundle)
 			continue
 		}
 		w.Warn(g)
@@ -544,7 +524,7 @@ func (ckf ComputedKeyFamily) FindActiveSibkey(kid keybase1.KID) (key GenericKey,
 // replayed in order.
 func (ckf ComputedKeyFamily) FindActiveSibkeyAtTime(kid keybase1.KID, t time.Time) (key GenericKey, cki ComputedKeyInfo, err error) {
 	liveCki, err := ckf.getCkiIfActiveAtTime(kid, t)
-	if liveCki == nil || err != nil {
+	if liveCki == nil || err != nil { //nolint
 		// err gets returned.
 	} else if !liveCki.Sibkey {
 		err = kbcrypto.BadKeyError{Msg: fmt.Sprintf("The key '%s' wasn't delegated as a sibkey", kid)}
@@ -606,7 +586,6 @@ func NowAsKeybaseTime(seqno keybase1.Seqno) *KeybaseTime {
 // Delegate performs a delegation to the key described in the given TypedChainLink.
 // This maybe be a sub- or sibkey delegation.
 func (ckf *ComputedKeyFamily) Delegate(tcl TypedChainLink) (err error) {
-
 	kid := tcl.GetDelegatedKid()
 	sigid := tcl.GetSigID()
 	tm := TclToKeybaseTime(tcl)
@@ -642,8 +621,8 @@ func (ckf *ComputedKeyFamily) DelegatePerUserKey(perUserKey keybase1.PerUserKey)
 func (cki *ComputedKeyInfos) Delegate(kid keybase1.KID, tm *KeybaseTime, sigid keybase1.SigID, signingKid, parentKID keybase1.KID,
 	pgpHash string, isSibkey bool, ctime, etime time.Time,
 	merkleHashMeta keybase1.HashMeta, fau keybase1.Seqno,
-	dascl keybase1.SigChainLocation) (err error) {
-
+	dascl keybase1.SigChainLocation,
+) (err error) {
 	cki.G().Log.Debug("ComputeKeyInfos#Delegate To %s with %s at sig %s", kid.String(), signingKid, sigid.ToDisplayString(true))
 	info, found := cki.Infos[kid]
 	etimeUnix := cki.G().HonorSigchainExpireTime(etime.Unix())
@@ -720,7 +699,7 @@ func (ckf *ComputedKeyFamily) SetActivePGPHash(kid keybase1.KID, hash string) {
 		found = true
 	}
 	if !found {
-		// We've noted this case in the wild (see CORE-4771). It occured
+		// We've noted this case in the wild (see CORE-4771). It occurred
 		// because the server accepted a new Cv25519 key, but an old client
 		// failed to parse it in ParseKeyFamily above. So just warn here.
 		// We expect, though, that if you get this Warning there is trouble ahead,
@@ -771,7 +750,7 @@ func (ckf *ComputedKeyFamily) revokeKids(kids []keybase1.KID, tcl TypedChainLink
 }
 
 func (ckf *ComputedKeyFamily) RevokeSig(sig keybase1.SigID, tcl TypedChainLink) (err error) {
-	if info, found := ckf.cki.Sigs[sig.ToMapKey()]; !found {
+	if info, found := ckf.cki.Sigs[sig.ToMapKey()]; !found { //nolint
 		// silently no-op if the signature doesn't exist
 	} else if _, found := info.Delegations[sig.ToMapKey()]; found {
 		// Tricky legacy detail: For some eldest links that implicitly delegate
@@ -1052,7 +1031,6 @@ func (ckf ComputedKeyFamily) GetDeletedKeys() []GenericKey {
 // UpdateDevices takes the Device object from the given ChainLink
 // and updates keys to reflects any device changes encoded therein.
 func (ckf *ComputedKeyFamily) UpdateDevices(tcl TypedChainLink) (err error) {
-
 	var dobj *Device
 	if dobj = tcl.GetDevice(); dobj == nil {
 		ckf.G().VDL.Log(VLog1, "Short-circuit of UpdateDevices(); not a device link")
@@ -1146,13 +1124,13 @@ func (ckf *ComputedKeyFamily) GetEncryptionSubkeyForDevice(did keybase1.DeviceID
 	if kid.IsNil() {
 		return
 	}
-	if cki, found := ckf.cki.Infos[kid]; !found {
+	cki, found := ckf.cki.Infos[kid]
+	if !found {
 		return
 	} else if !cki.Subkey.IsValid() {
 		return
-	} else {
-		key, _, err = ckf.FindActiveEncryptionSubkey(cki.Subkey)
 	}
+	key, _, err = ckf.FindActiveEncryptionSubkey(cki.Subkey)
 	return
 }
 
@@ -1190,7 +1168,6 @@ func (ckf *ComputedKeyFamily) GetDeviceForKID(kid keybase1.KID) (*Device, error)
 	}
 
 	return ckf.getDeviceForKidHelper(parent)
-
 }
 
 func (ckf *ComputedKeyFamily) getDeviceForKidHelper(kid keybase1.KID) (ret *Device, err error) {

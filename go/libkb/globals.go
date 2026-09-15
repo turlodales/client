@@ -17,6 +17,7 @@
 package libkb
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -29,7 +30,6 @@ import (
 	logger "github.com/keybase/client/go/logger"
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 	clockwork "github.com/keybase/clockwork"
-	context "golang.org/x/net/context"
 )
 
 var IsIPad bool // Set by bind's Init.
@@ -468,7 +468,7 @@ func migrateGUIConfig(serviceConfig ConfigReader, guiConfig *JSONFile) error {
 			errs = append(errs, err)
 		}
 	} else {
-		syncSettings, ok := syncSettings.(map[string]interface{})
+		syncSettings, ok := syncSettings.(map[string]any)
 		if !ok {
 			errs = append(errs, fmt.Errorf("Failed to coerce ui.importContacts in migration"))
 		} else {
@@ -537,7 +537,7 @@ func VersionMessage(linefn func(string)) {
 }
 
 func (g *GlobalContext) StartupMessage() {
-	VersionMessage(func(s string) { g.Log.Debug(s) })
+	VersionMessage(func(s string) { g.Log.Debug("%s", s) })
 }
 
 func (g *GlobalContext) ConfigureAPI() error {
@@ -554,7 +554,6 @@ func (g *GlobalContext) ConfigureAPI() error {
 // in them. It can be called from either configureMemCachesLocked (via logout or flush),
 // or via Shutdown. In either case, callers must hold g.cacheMu.
 func (g *GlobalContext) shutdownCachesLocked() {
-
 	// shutdown and nil out any existing caches.
 	if g.trackCache != nil {
 		g.trackCache.Shutdown()
@@ -595,7 +594,6 @@ func (g *GlobalContext) LinkCache() *LinkCache {
 }
 
 func (g *GlobalContext) configureMemCachesLocked(isFlush bool) {
-
 	g.shutdownCachesLocked()
 
 	g.IDLocktab = NewLockTable()
@@ -755,8 +753,8 @@ func (g *GlobalContext) GetImplicitTeamConflictInfoCacher() LRUer {
 }
 
 func (g *GlobalContext) SetImplicitTeamConflictInfoCacher(l LRUer) {
-	g.cacheMu.RLock()
-	defer g.cacheMu.RUnlock()
+	g.cacheMu.Lock()
+	defer g.cacheMu.Unlock()
 	g.itciCacher = l
 }
 
@@ -767,8 +765,8 @@ func (g *GlobalContext) GetImplicitTeamCacher() MemLRUer {
 }
 
 func (g *GlobalContext) SetImplicitTeamCacher(l MemLRUer) {
-	g.cacheMu.RLock()
-	defer g.cacheMu.RUnlock()
+	g.cacheMu.Lock()
+	defer g.cacheMu.Unlock()
 	g.iteamCacher = l
 }
 
@@ -779,8 +777,8 @@ func (g *GlobalContext) GetKVRevisionCache() KVRevisionCacher {
 }
 
 func (g *GlobalContext) SetKVRevisionCache(kvr KVRevisionCacher) {
-	g.cacheMu.RLock()
-	defer g.cacheMu.RUnlock()
+	g.cacheMu.Lock()
+	defer g.cacheMu.Unlock()
 	g.kvRevisionCache = kvr
 }
 
@@ -1012,7 +1010,7 @@ func (g *GlobalContext) GetGpgClient() *GpgCLI {
 }
 
 func (g *GlobalContext) GetMyUID() keybase1.UID {
-	// Prefer ActiveDevice, that's the prefered way
+	// Prefer ActiveDevice, that's the preferred way
 	// to figure out what the current user's UID is.
 	uid := g.ActiveDevice.UID()
 	if uid.Exists() {
@@ -1124,12 +1122,12 @@ func (g *GlobalContext) GetMyClientDetails() keybase1.ClientDetails {
 }
 
 type UnforwardedLoggerWithLegacyInterface interface {
-	Debug(s string, args ...interface{})
-	Error(s string, args ...interface{})
-	Errorf(s string, args ...interface{})
-	Warning(s string, args ...interface{})
-	Info(s string, args ...interface{})
-	Profile(s string, args ...interface{})
+	Debug(s string, args ...any)
+	Error(s string, args ...any)
+	Errorf(s string, args ...any)
+	Warning(s string, args ...any)
+	Info(s string, args ...any)
+	Profile(s string, args ...any)
 }
 
 func (g *GlobalContext) GetUnforwardedLogger() (log UnforwardedLoggerWithLegacyInterface) {

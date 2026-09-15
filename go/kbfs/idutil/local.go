@@ -6,6 +6,7 @@ package idutil
 
 import (
 	"fmt"
+	"maps"
 	"strings"
 
 	"github.com/keybase/client/go/kbfs/kbfscrypto"
@@ -41,13 +42,13 @@ func (lu *LocalUser) GetCurrentVerifyingKey() kbfscrypto.VerifyingKey {
 // LocalUsers suitable to use with KeybaseDaemonLocal.
 func MakeLocalUsers(users []kbname.NormalizedUsername) []LocalUser {
 	localUsers := make([]LocalUser, len(users))
-	for i := 0; i < len(users); i++ {
+	for i := range users {
 		verifyingKey := MakeLocalUserVerifyingKeyOrBust(users[i])
 		cryptPublicKey := MakeLocalUserCryptPublicKeyOrBust(users[i])
 		localUsers[i] = LocalUser{
 			UserInfo: UserInfo{
 				Name:            users[i],
-				UID:             keybase1.MakeTestUID(uint32(i + 1)),
+				UID:             keybase1.MakeTestUID(uint32(i + 1)), //nolint:gosec // G115: Test data with small bounded values
 				VerifyingKeys:   []kbfscrypto.VerifyingKey{verifyingKey},
 				CryptPublicKeys: []kbfscrypto.CryptPublicKey{cryptPublicKey},
 				KIDNames: map[keybase1.KID]string{
@@ -62,7 +63,8 @@ func MakeLocalUsers(users []kbname.NormalizedUsername) []LocalUser {
 }
 
 func verifyingKeysToPublicKeys(
-	keys []kbfscrypto.VerifyingKey) []keybase1.PublicKey {
+	keys []kbfscrypto.VerifyingKey,
+) []keybase1.PublicKey {
 	publicKeys := make([]keybase1.PublicKey, len(keys))
 	for i, key := range keys {
 		publicKeys[i] = keybase1.PublicKey{
@@ -74,7 +76,8 @@ func verifyingKeysToPublicKeys(
 }
 
 func cryptPublicKeysToPublicKeys(
-	keys []kbfscrypto.CryptPublicKey) []keybase1.PublicKey {
+	keys []kbfscrypto.CryptPublicKey,
+) []keybase1.PublicKey {
 	publicKeys := make([]keybase1.PublicKey, len(keys))
 	for i, key := range keys {
 		publicKeys[i] = keybase1.PublicKey{
@@ -105,23 +108,17 @@ func (lu LocalUser) DeepCopy() LocalUser {
 	copy(luCopy.CryptPublicKeys, lu.CryptPublicKeys)
 
 	luCopy.KIDNames = make(map[keybase1.KID]string, len(lu.KIDNames))
-	for k, v := range lu.KIDNames {
-		luCopy.KIDNames[k] = v
-	}
+	maps.Copy(luCopy.KIDNames, lu.KIDNames)
 
 	luCopy.RevokedVerifyingKeys = make(
 		map[kbfscrypto.VerifyingKey]RevokedKeyInfo,
 		len(lu.RevokedVerifyingKeys))
-	for k, v := range lu.RevokedVerifyingKeys {
-		luCopy.RevokedVerifyingKeys[k] = v
-	}
+	maps.Copy(luCopy.RevokedVerifyingKeys, lu.RevokedVerifyingKeys)
 
 	luCopy.RevokedCryptPublicKeys = make(
 		map[kbfscrypto.CryptPublicKey]RevokedKeyInfo,
 		len(lu.RevokedCryptPublicKeys))
-	for k, v := range lu.RevokedCryptPublicKeys {
-		luCopy.RevokedCryptPublicKeys[k] = v
-	}
+	maps.Copy(luCopy.RevokedCryptPublicKeys, lu.RevokedCryptPublicKeys)
 
 	luCopy.Asserts = make([]string, len(lu.Asserts))
 	copy(luCopy.Asserts, lu.Asserts)
@@ -133,16 +130,17 @@ func (lu LocalUser) DeepCopy() LocalUser {
 
 func makeLocalTeams(
 	teams []kbname.NormalizedUsername, startingIndex int, ty tlf.Type) (
-	localTeams []TeamInfo) {
+	localTeams []TeamInfo,
+) {
 	localTeams = make([]TeamInfo, len(teams))
-	for index := 0; index < len(teams); index++ {
+	for index := range teams {
 		i := index + startingIndex
 		cryptKey := MakeLocalTLFCryptKeyOrBust(
 			tlf.SingleTeam.String()+"/"+string(teams[index]),
 			kbfsmd.FirstValidKeyGen)
 		localTeams[index] = TeamInfo{
 			Name: teams[index],
-			TID:  keybase1.MakeTestTeamID(uint32(i+1), ty == tlf.Public),
+			TID:  keybase1.MakeTestTeamID(uint32(i+1), ty == tlf.Public), //nolint:gosec // G115: Test data with small bounded values
 			CryptKeys: map[kbfsmd.KeyGen]kbfscrypto.TLFCryptKey{
 				kbfsmd.FirstValidKeyGen: cryptKey,
 			},
@@ -151,7 +149,7 @@ func makeLocalTeams(
 		// If this is a subteam, set the root ID.
 		if strings.Contains(string(teams[index]), ".") {
 			parts := strings.SplitN(string(teams[index]), ".", 2)
-			for j := 0; j < index; j++ {
+			for j := range index {
 				if parts[0] == string(localTeams[j].Name) {
 					localTeams[index].RootID = localTeams[j].TID
 					break
@@ -175,7 +173,8 @@ func MakeLocalTeams(teams []kbname.NormalizedUsername) []TeamInfo {
 
 // MakeLocalUserSigningKeyOrBust returns a unique signing key for this user.
 func MakeLocalUserSigningKeyOrBust(
-	name kbname.NormalizedUsername) kbfscrypto.SigningKey {
+	name kbname.NormalizedUsername,
+) kbfscrypto.SigningKey {
 	return kbfscrypto.MakeFakeSigningKeyOrBust(
 		string(name) + " signing key")
 }
@@ -183,21 +182,24 @@ func MakeLocalUserSigningKeyOrBust(
 // MakeLocalUserCryptPublicKeyOrBust returns the public key
 // corresponding to the crypt private key for this user.
 func MakeLocalUserCryptPublicKeyOrBust(
-	name kbname.NormalizedUsername) kbfscrypto.CryptPublicKey {
+	name kbname.NormalizedUsername,
+) kbfscrypto.CryptPublicKey {
 	return MakeLocalUserCryptPrivateKeyOrBust(name).GetPublicKey()
 }
 
 // MakeLocalUserVerifyingKeyOrBust makes a new verifying key
 // corresponding to the signing key for this user.
 func MakeLocalUserVerifyingKeyOrBust(
-	name kbname.NormalizedUsername) kbfscrypto.VerifyingKey {
+	name kbname.NormalizedUsername,
+) kbfscrypto.VerifyingKey {
 	return MakeLocalUserSigningKeyOrBust(name).GetVerifyingKey()
 }
 
 // MakeLocalUserCryptPrivateKeyOrBust returns a unique private
 // encryption key for this user.
 func MakeLocalUserCryptPrivateKeyOrBust(
-	name kbname.NormalizedUsername) kbfscrypto.CryptPrivateKey {
+	name kbname.NormalizedUsername,
+) kbfscrypto.CryptPrivateKey {
 	return kbfscrypto.MakeFakeCryptPrivateKeyOrBust(
 		string(name) + " crypt key")
 }
@@ -205,7 +207,8 @@ func MakeLocalUserCryptPrivateKeyOrBust(
 // MakeLocalTLFCryptKeyOrBust returns a unique private symmetric key
 // for a TLF.
 func MakeLocalTLFCryptKeyOrBust(
-	name string, keyGen kbfsmd.KeyGen) kbfscrypto.TLFCryptKey {
+	name string, keyGen kbfsmd.KeyGen,
+) kbfscrypto.TLFCryptKey {
 	// Put the key gen first to make it more likely to fit into the
 	// 32-character "random" seed.
 	return kbfscrypto.MakeFakeTLFCryptKeyOrBust(

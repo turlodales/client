@@ -1,4 +1,3 @@
-import * as React from 'react'
 import {Box2} from '@/common-adapters/box'
 import type {MeasureRef} from '@/common-adapters/measure-ref'
 import Divider from '@/common-adapters/divider'
@@ -16,7 +15,7 @@ const Kb = {
 }
 
 type Props = {
-  attachTo?: React.RefObject<MeasureRef>
+  attachTo?: React.RefObject<MeasureRef | null>
   onHidden: () => void
   error: string
   visible: boolean
@@ -25,6 +24,7 @@ type Props = {
 const items: MenuItems = []
 
 const PaymentStatusError = (props: Props) => {
+  const styles = useStyles()
   const header = (
     <Kb.Box2 direction="vertical" fullWidth={true}>
       <Kb.Text type="BodyExtrabold" style={styles.headerError}>
@@ -51,11 +51,11 @@ const PaymentStatusError = (props: Props) => {
   )
 }
 
-const styles = Kb.Styles.styleSheetCreate(
-  () =>
+const useStyles = Kb.Styles.createStyleHook(
+  theme =>
     ({
       bodyError: Kb.Styles.platformStyles({
-        common: {color: Kb.Styles.globalColors.redDark, textAlign: 'center'},
+        common: {color: theme.redDark, textAlign: 'center'},
         isElectron: {
           wordBreak: 'break-word',
         } as const,
@@ -71,7 +71,7 @@ const styles = Kb.Styles.styleSheetCreate(
       }),
       headerError: {
         alignSelf: 'center',
-        color: Kb.Styles.globalColors.redDark,
+        color: theme.redDark,
         padding: Kb.Styles.globalMargins.tiny,
       },
     }) as const

@@ -4,10 +4,9 @@
 package client
 
 import (
+	"context"
 	"encoding/base64"
 	"time"
-
-	"golang.org/x/net/context"
 
 	humanize "github.com/dustin/go-humanize"
 	"github.com/keybase/cli"
@@ -95,7 +94,7 @@ func newNotificationDisplay(g *libkb.GlobalContext) *notificationDisplay {
 	return &notificationDisplay{Contextified: libkb.NewContextified(g)}
 }
 
-func (d *notificationDisplay) printf(fmt string, args ...interface{}) error {
+func (d *notificationDisplay) printf(fmt string, args ...any) error {
 	_, err := d.G().UI.GetTerminalUI().Printf(fmt, args...)
 	return err
 }
@@ -103,9 +102,11 @@ func (d *notificationDisplay) printf(fmt string, args ...interface{}) error {
 func (d *notificationDisplay) LoggedOut(_ context.Context) error {
 	return d.printf("Logged out\n")
 }
+
 func (d *notificationDisplay) LoggedIn(_ context.Context, arg keybase1.LoggedInArg) error {
 	return d.printf("Logged in as %q, signedUp: %t\n", arg.Username, arg.SignedUp)
 }
+
 func (d *notificationDisplay) ClientOutOfDate(_ context.Context, arg keybase1.ClientOutOfDateArg) (err error) {
 	if arg.UpgradeMsg != "" {
 		var decodedMsg []byte
@@ -135,7 +136,8 @@ func (d *notificationDisplay) FSOnlineStatusChanged(_ context.Context, online bo
 }
 
 func (d *notificationDisplay) FSOverallSyncStatusChanged(_ context.Context,
-	status keybase1.FolderSyncStatus) error {
+	status keybase1.FolderSyncStatus,
+) error {
 	return d.printf("KBFS overall sync status: %+v\n", status)
 }
 
@@ -148,7 +150,8 @@ func (d *notificationDisplay) FSActivity(_ context.Context, notification keybase
 }
 
 func (d *notificationDisplay) FSPathUpdated(
-	_ context.Context, path string) error {
+	_ context.Context, path string,
+) error {
 	return d.printf("KBFS path updated notification: %s\n", path)
 }
 
@@ -157,12 +160,14 @@ func (d *notificationDisplay) FSSyncActivity(_ context.Context, status keybase1.
 }
 
 func (d *notificationDisplay) FSEditListResponse(
-	_ context.Context, arg keybase1.FSEditListResponseArg) error {
+	_ context.Context, arg keybase1.FSEditListResponseArg,
+) error {
 	return d.printf("KBFS edit list response: %+v\n", arg)
 }
 
 func (d *notificationDisplay) FSSyncStatusResponse(
-	_ context.Context, arg keybase1.FSSyncStatusResponseArg) error {
+	_ context.Context, arg keybase1.FSSyncStatusResponseArg,
+) error {
 	return d.printf("KBFS sync status response: %+v\n", arg)
 }
 
@@ -170,14 +175,11 @@ func (d *notificationDisplay) TrackingChanged(_ context.Context, arg keybase1.Tr
 	return d.printf("Tracking changed for %s (%s)\n", arg.Username, arg.Uid)
 }
 
-func (d *notificationDisplay) WebOfTrustChanged(_ context.Context, username string) error {
-	return d.printf("Web of Trust changed for %s\n", username)
-}
-
 func (d *notificationDisplay) TrackingInfo(_ context.Context, arg keybase1.TrackingInfoArg) error {
 	return d.printf("Tracking info for %s followers: %v followees: %v\n", arg.Uid, arg.Followers,
 		arg.Followees)
 }
+
 func (d *notificationDisplay) NotifyUserBlocked(_ context.Context, arg keybase1.UserBlockedSummary) error {
 	return d.printf("User blocked: %+v\n", arg)
 }
@@ -191,7 +193,8 @@ func (d *notificationDisplay) BoxAuditError(_ context.Context, msg string) (err 
 }
 
 func (d *notificationDisplay) RuntimeStatsUpdate(
-	_ context.Context, stats *keybase1.RuntimeStats) (err error) {
+	_ context.Context, stats *keybase1.RuntimeStats,
+) (err error) {
 	if stats == nil {
 		return nil
 	}
@@ -247,9 +250,11 @@ func (d *notificationDisplay) RuntimeStatsUpdate(
 func (d *notificationDisplay) FSSubscriptionNotify(_ context.Context, arg keybase1.FSSubscriptionNotifyArg) error {
 	return d.printf("FS subscription notify: %v %s\n", arg.SubscriptionIDs, arg.Topic.String())
 }
+
 func (d *notificationDisplay) FSSubscriptionNotifyPath(_ context.Context, arg keybase1.FSSubscriptionNotifyPathArg) error {
 	return d.printf("FS subscription notify path: %v %q %v\n", arg.SubscriptionIDs, arg.Path, arg.Topics)
 }
+
 func (d *notificationDisplay) IdentifyUpdate(_ context.Context, arg keybase1.IdentifyUpdateArg) error {
 	return d.printf("identify update: ok:%v broken:%v\n", arg.OkUsernames, arg.BrokenUsernames)
 }

@@ -40,7 +40,8 @@ func GetTeamRepoSettings(ctx context.Context, g *libkb.GlobalContext, arg keybas
 }
 
 func convertTeamRepoSettings(ctx context.Context, g *libkb.GlobalContext,
-	teamID keybase1.TeamID, chatConvID string, chatDisabled bool) (keybase1.GitTeamRepoSettings, error) {
+	teamID keybase1.TeamID, chatConvID string, chatDisabled bool,
+) (keybase1.GitTeamRepoSettings, error) {
 	settings := keybase1.GitTeamRepoSettings{
 		ChatDisabled: chatDisabled,
 	}
@@ -70,7 +71,6 @@ func convertTeamRepoSettings(ctx context.Context, g *libkb.GlobalContext,
 	}
 
 	return settings, nil
-
 }
 
 func SetTeamRepoSettings(ctx context.Context, g *libkb.GlobalContext, arg keybase1.SetTeamRepoSettingsArg) error {
@@ -84,7 +84,7 @@ func SetTeamRepoSettings(ctx context.Context, g *libkb.GlobalContext, arg keybas
 	}
 	apiArg.Args["chat_disabled"] = libkb.B{Val: arg.ChatDisabled}
 
-	if arg.ChannelName != nil && *(arg.ChannelName) != "" {
+	if arg.ChannelName != nil && *arg.ChannelName != "" {
 		// lookup the conv id for the channel name
 		vis := keybase1.TLFVisibility_PRIVATE
 		if arg.Folder.FolderType == keybase1.FolderType_PUBLIC {
@@ -117,7 +117,8 @@ func SetTeamRepoSettings(ctx context.Context, g *libkb.GlobalContext, arg keybas
 }
 
 func settingsArg(ctx context.Context, g *libkb.GlobalContext,
-	folder keybase1.FolderHandle, repoID keybase1.RepoID) (apiArg *libkb.APIArg, teamID keybase1.TeamID, err error) {
+	folder keybase1.FolderHandle, repoID keybase1.RepoID,
+) (apiArg *libkb.APIArg, teamID keybase1.TeamID, err error) {
 	teamer := NewTeamer(g)
 	teamIDVis, err := teamer.LookupOrCreate(ctx, folder)
 	if err != nil {

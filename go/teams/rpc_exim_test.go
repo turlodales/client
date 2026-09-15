@@ -1,12 +1,13 @@
 package teams
 
 import (
+	"context"
 	"strings"
 	"testing"
 
-	"golang.org/x/net/context"
-
 	"github.com/keybase/client/go/kbtest"
+	"github.com/keybase/client/go/libkb"
+	"github.com/keybase/client/go/protocol/chat1"
 	"github.com/keybase/client/go/protocol/keybase1"
 	"github.com/stretchr/testify/require"
 )
@@ -16,36 +17,24 @@ func TestTeamPlusApplicationKeysExim(t *testing.T) {
 	defer tc.Cleanup()
 
 	_, err := kbtest.CreateAndSignupFakeUser("team", tc.G)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	name := createTeam(tc)
 	team, err := Load(context.TODO(), tc.G, keybase1.LoadTeamArg{
 		Name: name,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	exported, err := team.ExportToTeamPlusApplicationKeys(context.TODO(), keybase1.Time(0),
 		keybase1.TeamApplication_KBFS, true)
-	if err != nil {
-		t.Fatalf("Error during export: %s", err)
-	}
-	if exported.Name != team.Name().String() {
-		t.Fatalf("Got name %s, expected %s", exported.Name, team.Name())
-	}
-	if !exported.Id.Eq(team.ID) {
-		t.Fatalf("Got id %q, expected %q", exported.Id, team.ID)
-	}
+	require.NoError(t, err,
+		"Error during export: %s", err)
+	require.Equal(t, team.Name().String(), exported.Name, "Got name %s, expected %s", exported.Name, team.Name())
+	require.True(t, exported.Id.Eq(team.ID),
+		"Got id %q, expected %q", exported.Id, team.ID)
 	expectedKeys, err := team.AllApplicationKeys(context.TODO(), keybase1.TeamApplication_KBFS)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(exported.ApplicationKeys) != len(expectedKeys) {
-		t.Fatalf("Got %v applicationKeys, expected %v", len(exported.ApplicationKeys), len(expectedKeys))
-	}
+	require.NoError(t, err)
+	require.Len(t, exported.ApplicationKeys, len(expectedKeys), "Got %v applicationKeys, expected %v", len(exported.ApplicationKeys), len(expectedKeys))
 }
 
 func TestImplicitTeamLTPAK(t *testing.T) {
@@ -98,4 +87,35 @@ func TestImplicitTeamLTPAK(t *testing.T) {
 		require.NoError(t, tc.Logout())
 		require.NoError(t, u2.Login(tc.G))
 	}
+}
+
+func TestChatBadConversationError(t *testing.T) {
+	e := libkb.ChatBadConversationError{Msg: "", ConvID: nil}
+	status := e.ToStatus()
+	require.Len(t, status.Fields, 2)
+	msg := status.Fields[0]
+	require.Equal(t, "Msg", msg.Key)
+	require.Empty(t, msg.Value)
+	convID := status.Fields[1]
+	require.Equal(t, "ConvID", convID.Key)
+	require.Empty(t, convID.Value)
+	err := libkb.ImportStatusAsError(nil, &status)
+	e, ok := err.(libkb.ChatBadConversationError)
+	require.True(t, ok)
+	require.True(t, e.ConvID.IsNil())
+
+	cid, err := chat1.MakeConvID("0000c5f97ea8d159507946968bc68ed5d3422ea1450d28171e0d4c7a3541d613")
+	require.NoError(t, err)
+
+	e = libkb.ChatBadConversationError{Msg: "msg", ConvID: cid}
+	status = e.ToStatus()
+	require.Len(t, status.Fields, 2)
+	msg = status.Fields[0]
+	require.Equal(t, "Msg", msg.Key)
+	require.Equal(t, "msg", msg.Value)
+	convID = status.Fields[1]
+	require.Equal(t, "ConvID", convID.Key)
+	require.Equal(t, convID.Value, cid.String())
+	err = libkb.ImportStatusAsError(nil, &status)
+	require.Equal(t, e, err)
 }

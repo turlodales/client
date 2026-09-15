@@ -5,6 +5,7 @@
 package libkbfs
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -14,13 +15,12 @@ import (
 	"github.com/keybase/client/go/kbfs/tlf"
 	"github.com/keybase/client/go/protocol/keybase1"
 	"github.com/stretchr/testify/require"
-
-	"golang.org/x/net/context"
 )
 
 func makeBRMDForTest(t *testing.T, codec kbfscodec.Codec,
 	id tlf.ID, h tlf.Handle, revision kbfsmd.Revision, uid keybase1.UID,
-	prevRoot kbfsmd.ID) *kbfsmd.RootMetadataV2 {
+	prevRoot kbfsmd.ID,
+) *kbfsmd.RootMetadataV2 {
 	var md kbfsmd.RootMetadataV2
 	// MDv3 TODO: uncomment the below when we're ready for MDv3
 	// md := &kbfsmd.RootMetadataV3{}
@@ -36,7 +36,8 @@ func makeBRMDForTest(t *testing.T, codec kbfscodec.Codec,
 
 func signRMDSForTest(
 	t *testing.T, codec kbfscodec.Codec, signer kbfscrypto.Signer,
-	brmd *kbfsmd.RootMetadataV2) *RootMetadataSigned {
+	brmd *kbfsmd.RootMetadataV2,
+) *RootMetadataSigned {
 	ctx := context.Background()
 
 	// Encode and sign writer metadata.
@@ -92,7 +93,7 @@ func TestMDServerBasics(t *testing.T) {
 	rmds = signRMDSForTest(t, config.Codec(), config.Crypto(), brmd)
 	// MDv3 TODO: pass actual key bundles
 	err = mdServer.Put(ctx, rmds, nil, nil, keybase1.MDPriorityNormal)
-	require.IsType(t, kbfsmd.ServerErrorConflictRevision{}, err)
+	require.ErrorAs(t, err, new(kbfsmd.ServerErrorConflictRevision))
 
 	// (4) push some new unmerged metadata blocks linking to the
 	//     middle merged block.
@@ -120,7 +121,7 @@ func TestMDServerBasics(t *testing.T) {
 	// (6a) try to get unmerged range
 	rmdses, err := mdServer.GetRange(ctx, id, bid, kbfsmd.Unmerged, 1, 100, nil)
 	require.NoError(t, err)
-	require.Equal(t, 35, len(rmdses))
+	require.Len(t, rmdses, 35)
 	for i := kbfsmd.Revision(6); i < 41; i++ {
 		require.Equal(t, i, rmdses[i-6].MD.RevisionNumber())
 	}
@@ -128,7 +129,7 @@ func TestMDServerBasics(t *testing.T) {
 	// (6b) try to get unmerged range subset.
 	rmdses, err = mdServer.GetRange(ctx, id, bid, kbfsmd.Unmerged, 7, 14, nil)
 	require.NoError(t, err)
-	require.Equal(t, 8, len(rmdses))
+	require.Len(t, rmdses, 8)
 	for i := kbfsmd.Revision(7); i <= 14; i++ {
 		require.Equal(t, i, rmdses[i-7].MD.RevisionNumber())
 	}
@@ -145,7 +146,7 @@ func TestMDServerBasics(t *testing.T) {
 	// (9) verify revision history is pruned
 	rmdses, err = mdServer.GetRange(ctx, id, kbfsmd.NullBranchID, kbfsmd.Unmerged, 1, 100, nil)
 	require.NoError(t, err)
-	require.Equal(t, 0, len(rmdses))
+	require.Empty(t, rmdses)
 
 	// (10) check for proper merged head
 	head, err = mdServer.GetForTLF(ctx, id, kbfsmd.NullBranchID, kbfsmd.Merged, nil)
@@ -156,7 +157,7 @@ func TestMDServerBasics(t *testing.T) {
 	// (11) try to get merged range
 	rmdses, err = mdServer.GetRange(ctx, id, kbfsmd.NullBranchID, kbfsmd.Merged, 1, 100, nil)
 	require.NoError(t, err)
-	require.Equal(t, 10, len(rmdses))
+	require.Len(t, rmdses, 10)
 	for i := kbfsmd.Revision(1); i <= 10; i++ {
 		require.Equal(t, i, rmdses[i-1].MD.RevisionNumber())
 	}

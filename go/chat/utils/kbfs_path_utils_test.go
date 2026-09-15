@@ -1,16 +1,15 @@
 package utils
 
 import (
+	"context"
 	"testing"
 
 	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/protocol/chat1"
 	"github.com/keybase/client/go/protocol/keybase1"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/context"
 )
 
-func strPointer(str string) *string { return &str }
 func makeKBFSPathForTest(rawPath string, standardPath *string) chat1.KBFSPath {
 	if standardPath == nil {
 		return chat1.KBFSPath{RawPath: rawPath, StandardPath: rawPath}
@@ -25,14 +24,14 @@ var kbfsPathTests = map[string]chat1.KBFSPath{
 	"之前/keybase":                             makeKBFSPathForTest("/keybase", nil),
 	"/keybase/public":                        makeKBFSPathForTest("/keybase/public", nil),
 	"/keybase/team":                          makeKBFSPathForTest("/keybase/team", nil),
-	"/keybase/private/":                      makeKBFSPathForTest("/keybase/private/", strPointer("/keybase/private")),
+	"/keybase/private/":                      makeKBFSPathForTest("/keybase/private/", new("/keybase/private")),
 	"/keybase/team/keybase":                  makeKBFSPathForTest("/keybase/team/keybase", nil),
 	"/keybase/team/keybase/blahblah":         makeKBFSPathForTest("/keybase/team/keybase/blahblah", nil),
-	`/keybase/team/keybase/blah\ blah\ blah`: makeKBFSPathForTest(`/keybase/team/keybase/blah\ blah\ blah`, strPointer("/keybase/team/keybase/blah blah blah")),
-	`/keybase/team/keybase/blah\\blah\\blah`: makeKBFSPathForTest(`/keybase/team/keybase/blah\\blah\\blah`, strPointer(`/keybase/team/keybase/blah\blah\blah`)),
-	"/keybase/team/keybase/blahblah/":        makeKBFSPathForTest("/keybase/team/keybase/blahblah/", strPointer("/keybase/team/keybase/blahblah")),
+	`/keybase/team/keybase/blah\ blah\ blah`: makeKBFSPathForTest(`/keybase/team/keybase/blah\ blah\ blah`, new("/keybase/team/keybase/blah blah blah")),
+	`/keybase/team/keybase/blah\\blah\\blah`: makeKBFSPathForTest(`/keybase/team/keybase/blah\\blah\\blah`, new(`/keybase/team/keybase/blah\blah\blah`)),
+	"/keybase/team/keybase/blahblah/":        makeKBFSPathForTest("/keybase/team/keybase/blahblah/", new("/keybase/team/keybase/blahblah")),
 	"/keybase/private/songgao/🍻":             makeKBFSPathForTest("/keybase/private/songgao/🍻", nil),
-	"/keybase/private/songgao/🍻/🍹.png/":      makeKBFSPathForTest("/keybase/private/songgao/🍻/🍹.png/", strPointer("/keybase/private/songgao/🍻/🍹.png")),
+	"/keybase/private/songgao/🍻/🍹.png/":      makeKBFSPathForTest("/keybase/private/songgao/🍻/🍹.png/", new("/keybase/private/songgao/🍻/🍹.png")),
 	"/keybase/private/songgao/囧/yo":          makeKBFSPathForTest("/keybase/private/songgao/囧/yo", nil),
 	"/keybase/team/keybase,blah":             {},
 	"/keybase/team/keybase.blah":             makeKBFSPathForTest("/keybase/team/keybase.blah", nil),
@@ -46,46 +45,46 @@ var kbfsPathTests = map[string]chat1.KBFSPath{
 	"/keybase/private/song-gao,strib#jzila/file":                                                                  {},
 	"/keybase/private/songgao,strib#jzila,jakob223/file":                                                          makeKBFSPathForTest("/keybase/private/songgao,strib#jzila,jakob223/file", nil),
 	"/keybase/private/__songgao__@twitter,strib@github,jzila@reddit,jakob.weisbl.at@dns/file":                     makeKBFSPathForTest("/keybase/private/__songgao__@twitter,strib@github,jzila@reddit,jakob.weisbl.at@dns/file", nil),
-	`"/keybase/private/songgao,kbpbot_staging,songgao_test (files before songgao_test account reset 2019-05-10)"`: makeKBFSPathForTest(`"/keybase/private/songgao,kbpbot_staging,songgao_test (files before songgao_test account reset 2019-05-10)"`, strPointer("/keybase/private/songgao,kbpbot_staging,songgao_test (files before songgao_test account reset 2019-05-10)")),
-	"/keybase/private/songgao,[meatball+keybase@gao.io]@email":                                                    makeKBFSPathForTest("/keybase/private/songgao,[meatball+keybase@gao.io]@email", strPointer("/keybase/private/songgao,[meatball+keybase@gao.io]@email")),
+	`"/keybase/private/songgao,kbpbot_staging,songgao_test (files before songgao_test account reset 2019-05-10)"`: makeKBFSPathForTest(`"/keybase/private/songgao,kbpbot_staging,songgao_test (files before songgao_test account reset 2019-05-10)"`, new("/keybase/private/songgao,kbpbot_staging,songgao_test (files before songgao_test account reset 2019-05-10)")),
+	"/keybase/private/songgao,[meatball+keybase@gao.io]@email":                                                    makeKBFSPathForTest("/keybase/private/songgao,[meatball+keybase@gao.io]@email", new("/keybase/private/songgao,[meatball+keybase@gao.io]@email")),
 
-	"keybase://team/keybase/blahblah":                               makeKBFSPathForTest("keybase://team/keybase/blahblah", strPointer("/keybase/team/keybase/blahblah")),
-	"keybase://private/foo/blahblah":                                makeKBFSPathForTest("keybase://private/foo/blahblah", strPointer("/keybase/private/foo/blahblah")),
-	"keybase://public/foo/blahblah":                                 makeKBFSPathForTest("keybase://public/foo/blahblah", strPointer("/keybase/public/foo/blahblah")),
-	"keybase://public/foo/blah%20blah":                              makeKBFSPathForTest("keybase://public/foo/blah%20blah", strPointer("/keybase/public/foo/blah blah")),
+	"keybase://team/keybase/blahblah":                               makeKBFSPathForTest("keybase://team/keybase/blahblah", new("/keybase/team/keybase/blahblah")),
+	"keybase://private/foo/blahblah":                                makeKBFSPathForTest("keybase://private/foo/blahblah", new("/keybase/private/foo/blahblah")),
+	"keybase://public/foo/blahblah":                                 makeKBFSPathForTest("keybase://public/foo/blahblah", new("/keybase/public/foo/blahblah")),
+	"keybase://public/foo/blah%20blah":                              makeKBFSPathForTest("keybase://public/foo/blah%20blah", new("/keybase/public/foo/blah blah")),
 	"keybase://chat/blah":                                           {},
-	"keybase://private/songgao,[meatball+keybase@gao.io]@email/abc": makeKBFSPathForTest("keybase://private/songgao,[meatball+keybase@gao.io]@email/abc", strPointer("/keybase/private/songgao,[meatball+keybase@gao.io]@email/abc")),
+	"keybase://private/songgao,[meatball+keybase@gao.io]@email/abc": makeKBFSPathForTest("keybase://private/songgao,[meatball+keybase@gao.io]@email/abc", new("/keybase/private/songgao,[meatball+keybase@gao.io]@email/abc")),
 
-	"/Volumes/Keybase/team/keybase/blahblah":             makeKBFSPathForTest("/Volumes/Keybase/team/keybase/blahblah", strPointer("/keybase/team/keybase/blahblah")),
-	"/Volumes/Keybase/private/foo/blahblah":              makeKBFSPathForTest("/Volumes/Keybase/private/foo/blahblah", strPointer("/keybase/private/foo/blahblah")),
-	"/Volumes/Keybase/public/foo/blahblah":               makeKBFSPathForTest("/Volumes/Keybase/public/foo/blahblah", strPointer("/keybase/public/foo/blahblah")),
-	`/Volumes/Keybase\ (meatball)/team/keybase/blahblah`: makeKBFSPathForTest(`/Volumes/Keybase\ (meatball)/team/keybase/blahblah`, strPointer("/keybase/team/keybase/blahblah")),
-	`/Volumes/Keybase\ (meatball)/private/foo/blahblah`:  makeKBFSPathForTest(`/Volumes/Keybase\ (meatball)/private/foo/blahblah`, strPointer("/keybase/private/foo/blahblah")),
-	`/Volumes/Keybase\ (meatball)/public/foo/blahblah`:   makeKBFSPathForTest(`/Volumes/Keybase\ (meatball)/public/foo/blahblah`, strPointer("/keybase/public/foo/blahblah")),
-	`"/Volumes/Keybase (meatball)/public/foo/blahblah"`:  makeKBFSPathForTest(`"/Volumes/Keybase (meatball)/public/foo/blahblah"`, strPointer("/keybase/public/foo/blahblah")),
+	"/Volumes/Keybase/team/keybase/blahblah":             makeKBFSPathForTest("/Volumes/Keybase/team/keybase/blahblah", new("/keybase/team/keybase/blahblah")),
+	"/Volumes/Keybase/private/foo/blahblah":              makeKBFSPathForTest("/Volumes/Keybase/private/foo/blahblah", new("/keybase/private/foo/blahblah")),
+	"/Volumes/Keybase/public/foo/blahblah":               makeKBFSPathForTest("/Volumes/Keybase/public/foo/blahblah", new("/keybase/public/foo/blahblah")),
+	`/Volumes/Keybase\ (meatball)/team/keybase/blahblah`: makeKBFSPathForTest(`/Volumes/Keybase\ (meatball)/team/keybase/blahblah`, new("/keybase/team/keybase/blahblah")),
+	`/Volumes/Keybase\ (meatball)/private/foo/blahblah`:  makeKBFSPathForTest(`/Volumes/Keybase\ (meatball)/private/foo/blahblah`, new("/keybase/private/foo/blahblah")),
+	`/Volumes/Keybase\ (meatball)/public/foo/blahblah`:   makeKBFSPathForTest(`/Volumes/Keybase\ (meatball)/public/foo/blahblah`, new("/keybase/public/foo/blahblah")),
+	`"/Volumes/Keybase (meatball)/public/foo/blahblah"`:  makeKBFSPathForTest(`"/Volumes/Keybase (meatball)/public/foo/blahblah"`, new("/keybase/public/foo/blahblah")),
 
-	`K:\team\keybase\blahblah`:        makeKBFSPathForTest(`K:\team\keybase\blahblah`, strPointer("/keybase/team/keybase/blahblah")),
-	`K:\private\foo\blahblah`:         makeKBFSPathForTest(`K:\private\foo\blahblah`, strPointer("/keybase/private/foo/blahblah")),
-	`k:\public\foo\blahblah`:          makeKBFSPathForTest(`k:\public\foo\blahblah`, strPointer("/keybase/public/foo/blahblah")),
-	`K:\public\foo\blahblah lalala`:   makeKBFSPathForTest(`K:\public\foo\blahblah`, strPointer("/keybase/public/foo/blahblah")),
-	`"K:\public\foo\blahblah lalala"`: makeKBFSPathForTest(`"K:\public\foo\blahblah lalala"`, strPointer("/keybase/public/foo/blahblah lalala")),
+	`K:\team\keybase\blahblah`:        makeKBFSPathForTest(`K:\team\keybase\blahblah`, new("/keybase/team/keybase/blahblah")),
+	`K:\private\foo\blahblah`:         makeKBFSPathForTest(`K:\private\foo\blahblah`, new("/keybase/private/foo/blahblah")),
+	`k:\public\foo\blahblah`:          makeKBFSPathForTest(`k:\public\foo\blahblah`, new("/keybase/public/foo/blahblah")),
+	`K:\public\foo\blahblah lalala`:   makeKBFSPathForTest(`K:\public\foo\blahblah`, new("/keybase/public/foo/blahblah")),
+	`"K:\public\foo\blahblah lalala"`: makeKBFSPathForTest(`"K:\public\foo\blahblah lalala"`, new("/keybase/public/foo/blahblah lalala")),
 
 	"/keybase.":                        makeKBFSPathForTest("/keybase", nil),
 	"/keybase/team.":                   makeKBFSPathForTest("/keybase/team", nil),
 	"/keybase/team/keybase/blahblah.":  makeKBFSPathForTest("/keybase/team/keybase/blahblah", nil),
-	`K:\team\keybase\blahblah.`:        makeKBFSPathForTest(`K:\team\keybase\blahblah`, strPointer("/keybase/team/keybase/blahblah")),
-	"keybase://team/keybase/blahblah.": makeKBFSPathForTest("keybase://team/keybase/blahblah", strPointer("/keybase/team/keybase/blahblah")),
+	`K:\team\keybase\blahblah.`:        makeKBFSPathForTest(`K:\team\keybase\blahblah`, new("/keybase/team/keybase/blahblah")),
+	"keybase://team/keybase/blahblah.": makeKBFSPathForTest("keybase://team/keybase/blahblah", new("/keybase/team/keybase/blahblah")),
 
 	"/keybase？":                        makeKBFSPathForTest("/keybase", nil),
 	"/keybase/team？":                   makeKBFSPathForTest("/keybase/team", nil),
 	"/keybase/team/keybase/blahblah？":  makeKBFSPathForTest("/keybase/team/keybase/blahblah", nil),
-	`K:\team\keybase\blahblah？`:        makeKBFSPathForTest(`K:\team\keybase\blahblah`, strPointer("/keybase/team/keybase/blahblah")),
-	"keybase://team/keybase/blahblah？": makeKBFSPathForTest("keybase://team/keybase/blahblah", strPointer("/keybase/team/keybase/blahblah")),
+	`K:\team\keybase\blahblah？`:        makeKBFSPathForTest(`K:\team\keybase\blahblah`, new("/keybase/team/keybase/blahblah")),
+	"keybase://team/keybase/blahblah？": makeKBFSPathForTest("keybase://team/keybase/blahblah", new("/keybase/team/keybase/blahblah")),
 
-	`"/keybase/team/keybase/blahblah."`: makeKBFSPathForTest(`"/keybase/team/keybase/blahblah."`, strPointer("/keybase/team/keybase/blahblah.")),
-	`"K:\team\keybase\blahblah."`:       makeKBFSPathForTest(`"K:\team\keybase\blahblah."`, strPointer("/keybase/team/keybase/blahblah.")),
+	`"/keybase/team/keybase/blahblah."`: makeKBFSPathForTest(`"/keybase/team/keybase/blahblah."`, new("/keybase/team/keybase/blahblah.")),
+	`"K:\team\keybase\blahblah."`:       makeKBFSPathForTest(`"K:\team\keybase\blahblah."`, new("/keybase/team/keybase/blahblah.")),
 
-	`"/keybase/team/keybase (local conflicted copy 2019-10-24 #2)"`: makeKBFSPathForTest(`"/keybase/team/keybase (local conflicted copy 2019-10-24 #2)"`, strPointer("/keybase/team/keybase (local conflicted copy 2019-10-24 #2)")),
+	`"/keybase/team/keybase (local conflicted copy 2019-10-24 #2)"`: makeKBFSPathForTest(`"/keybase/team/keybase (local conflicted copy 2019-10-24 #2)"`, new("/keybase/team/keybase (local conflicted copy 2019-10-24 #2)")),
 }
 
 func TestParseKBFSPathMatches(t *testing.T) {
@@ -96,7 +95,7 @@ func TestParseKBFSPathMatches(t *testing.T) {
 			require.Equal(t, expected.RawPath, paths[0].RawPath, "wrong RawPath %q", input)
 			require.Equal(t, expected.StandardPath, paths[0].StandardPath, "wrong RebasePath %q", input)
 		} else {
-			require.Len(t, paths, 0, "unexpected match: %s", input)
+			require.Empty(t, paths, "unexpected match: %s", input)
 		}
 	}
 }

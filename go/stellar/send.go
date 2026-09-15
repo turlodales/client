@@ -2,6 +2,7 @@ package stellar
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -17,7 +18,7 @@ func SendPaymentLocal(mctx libkb.MetaContext, arg stellar1.SendPaymentLocalArg) 
 	}
 
 	if !arg.Bid.IsNil() {
-		// Finalize the payment way up here so that it's predicatble
+		// Finalize the payment way up here so that it's predictable
 		// that when an error is returned the payment has been canceled.
 		data, err := getGlobal(mctx.G()).finalizeBuildPayment(mctx, arg.Bid)
 		if err != nil {
@@ -108,11 +109,7 @@ func isTimeoutError(err error) bool {
 	if err == nil {
 		return false
 	}
-	if err == context.DeadlineExceeded {
-		return true
-	}
-	if err, ok := err.(libkb.APINetError); ok && err.Err == context.DeadlineExceeded {
-		return true
-	}
-	return false
+	// APINetError implements Unwrap, so errors.Is traverses into its
+	// wrapped cause as well.
+	return errors.Is(err, context.DeadlineExceeded)
 }

@@ -1,9 +1,10 @@
 package storage
 
 import (
+	"context"
+
 	"github.com/keybase/client/go/protocol/chat1"
 	"github.com/keybase/client/go/protocol/gregor1"
-	context "golang.org/x/net/context"
 )
 
 // For a given conversation, purge all ephemeral messages from
@@ -37,7 +38,7 @@ func (s *Storage) EphemeralPurge(ctx context.Context, convID chat1.ConversationI
 	}
 
 	// We don't care about holes.
-	maxHoles := int(maxMsgID-purgeInfo.MinUnexplodedID) + 1
+	maxHoles := int(maxMsgID-purgeInfo.MinUnexplodedID) + 1 //nolint:gosec // G115: Message count for result collector, safe to convert
 	var target int
 	if purgeInfo.MinUnexplodedID == 0 {
 		target = 0 // we need to traverse the whole conversation
@@ -79,7 +80,8 @@ func (s *Storage) EphemeralPurge(ctx context.Context, convID chat1.ConversationI
 }
 
 func (s *Storage) explodeExpiredMessages(ctx context.Context, convID chat1.ConversationID,
-	uid gregor1.UID, msgs []chat1.MessageUnboxed) (explodedMsgs []chat1.MessageUnboxed, err Error) {
+	uid gregor1.UID, msgs []chat1.MessageUnboxed,
+) (explodedMsgs []chat1.MessageUnboxed, err Error) {
 	purgeInfo, explodedMsgs, err := s.ephemeralPurgeHelper(ctx, convID, uid, msgs)
 	if err != nil {
 		return nil, err
@@ -97,8 +99,8 @@ func (s *Storage) explodeExpiredMessages(ctx context.Context, convID chat1.Conve
 // give info for our bookkeeping for the next time we have to purge.
 // requires msgs to be sorted by descending message ID
 func (s *Storage) ephemeralPurgeHelper(ctx context.Context, convID chat1.ConversationID,
-	uid gregor1.UID, msgs []chat1.MessageUnboxed) (purgeInfo *chat1.EphemeralPurgeInfo, explodedMsgs []chat1.MessageUnboxed, err Error) {
-
+	uid gregor1.UID, msgs []chat1.MessageUnboxed,
+) (purgeInfo *chat1.EphemeralPurgeInfo, explodedMsgs []chat1.MessageUnboxed, err Error) {
 	if len(msgs) == 0 {
 		return nil, nil, nil
 	}
@@ -125,7 +127,7 @@ func (s *Storage) ephemeralPurgeHelper(ctx context.Context, convID chat1.Convers
 				if nextPurgeTime == 0 || mvalid.Etime() < nextPurgeTime {
 					nextPurgeTime = mvalid.Etime()
 				}
-			} else if mvalid.MessageBody.IsNil() {
+			} else if mvalid.MessageBody.IsNil() { //nolint
 				// do nothing
 			} else {
 				msgPurged, assets := s.purgeMessage(mvalid)

@@ -245,7 +245,7 @@ func (bi BlockInfo) String() string {
 }
 
 // BPSize is the estimated size of a block pointer in bytes.
-var BPSize = uint64(reflect.TypeOf(BlockPointer{}).Size())
+var BPSize = uint64(reflect.TypeFor[BlockPointer]().Size())
 
 // ReadyBlockData is a block that has been encoded (and encrypted).
 type ReadyBlockData struct {
@@ -300,13 +300,20 @@ func EntryInfoFromFileInfo(fi os.FileInfo) EntryInfo {
 		t = Dir
 	case fi.Mode()&os.ModeSymlink != 0:
 		t = Sym
-	case fi.Mode()&0100 != 0:
+	case fi.Mode()&0o100 != 0:
 		t = Exec
 	}
 	mtime := fi.ModTime().UnixNano()
+
+	// Handle negative file sizes (shouldn't happen in practice, but FileInfo.Size() returns int64)
+	size := uint64(0)
+	if fi.Size() >= 0 {
+		size = uint64(fi.Size()) //nolint:gosec // G115: Validated above to be non-negative
+	}
+
 	return EntryInfo{
 		Type:  t,
-		Size:  uint64(fi.Size()), // TODO: deal with negatives?
+		Size:  size,
 		Mtime: mtime,
 		Ctime: mtime,
 		// Leave TeamWriter and PrevRevisions empty
@@ -404,7 +411,8 @@ func MakeRevBranchName(rev kbfsmd.Revision) BranchName {
 // MakeConflictBranchNameFromExtension returns a branch name
 // specifying a conflict date, if possible.
 func MakeConflictBranchNameFromExtension(
-	ext *tlf.HandleExtension) BranchName {
+	ext *tlf.HandleExtension,
+) BranchName {
 	return BranchName(branchLocalConflictPrefix + ext.String())
 }
 

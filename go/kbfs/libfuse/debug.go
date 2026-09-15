@@ -3,7 +3,6 @@
 // license that can be found in the LICENSE file.
 //
 //go:build !windows
-// +build !windows
 
 package libfuse
 
@@ -20,8 +19,9 @@ var statfsOrAccessRegexp = regexp.MustCompile(`^(<-|->).* (Statfs|Access)`)
 // MakeFuseDebugFn returns a function that logs its argument to the
 // given log, suitable to assign to fuse.Debug.
 func MakeFuseDebugFn(
-	log logger.Logger, superVerbose bool) func(msg interface{}) {
-	return func(msg interface{}) {
+	log logger.Logger, superVerbose bool,
+) func(msg any) {
+	return func(msg any) {
 		str := fmt.Sprintf("%s", msg)
 		// If superVerbose is not set, filter out Statfs and
 		// Access messages, since they're spammy on OS X.
@@ -38,8 +38,9 @@ func MakeFuseDebugFn(
 // MakeFuseVDebugFn returns a function that logs its argument to the
 // given vlog at level 1, suitable to assign to fuse.Debug.
 func MakeFuseVDebugFn(
-	vlog *libkb.VDebugLog, superVerbose bool) func(msg interface{}) {
-	return func(msg interface{}) {
+	vlog *libkb.VDebugLog, superVerbose bool,
+) func(msg any) {
+	return func(msg any) {
 		str := fmt.Sprintf("%s", msg)
 		// If superVerbose is not set, filter out Statfs and
 		// Access messages, since they're spammy on OS X.

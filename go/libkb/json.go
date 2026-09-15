@@ -61,7 +61,7 @@ func (f *JSONFile) Load(warnOnNotFound bool) error {
 		if warnOnNotFound {
 			f.G().Log.Warning(msg)
 		} else {
-			f.G().Log.Debug(msg)
+			f.G().Log.Debug("%s", msg)
 		}
 	}
 	return nil
@@ -95,9 +95,9 @@ func (f *JSONFile) LoadCheckFound() (found bool, err error) {
 	}
 
 	decoder := json.NewDecoder(&buf)
-	obj := make(map[string]interface{})
+	obj := make(map[string]any)
 	// Treat empty files like an empty dictionary
-	if err = decoder.Decode(&obj); err != nil && err != io.EOF {
+	if err = decoder.Decode(&obj); err != nil && !errors.Is(err, io.EOF) {
 		f.G().Log.Errorf("Error decoding %s file %s", f.which, f.filename)
 		return true, err
 	}
@@ -225,11 +225,11 @@ func (f *JSONFile) save() (err error) {
 		return err
 	}
 
-	var dat interface{}
+	var dat any
 
 	if f.jw == nil {
 		// Make a default Dictionary if none already exists
-		dat = make(map[string]interface{})
+		dat = make(map[string]any)
 		f.G().Log.Warning("No value for %s file; assuming empty value (i.e., {})",
 			f.which)
 	} else {
@@ -302,7 +302,7 @@ func (f *JSONFile) save() (err error) {
 			f.G().Log.Debug("error marshaling for log dump: %s", err)
 		} else {
 			f.G().Log.Debug("data written to %s:", filename)
-			f.G().Log.Debug(string(encodedForLog))
+			f.G().Log.Debug("%s", encodedForLog)
 		}
 
 		// load the file and dump its contents to the log
@@ -313,7 +313,7 @@ func (f *JSONFile) save() (err error) {
 			defer fc.Close()
 
 			decoder := json.NewDecoder(fc)
-			obj := make(map[string]interface{})
+			obj := make(map[string]any)
 			if err := decoder.Decode(&obj); err != nil {
 				f.G().Log.Debug("error decoding %s: %s", filename, err)
 			} else {
@@ -377,9 +377,9 @@ func (f *jsonFileTransaction) Commit() (err error) {
 	return f.f.setTx(nil)
 }
 
-type valueGetter func(*jsonw.Wrapper) (interface{}, error)
+type valueGetter func(*jsonw.Wrapper) (any, error)
 
-func (f *JSONFile) getValueAtPath(p string, getter valueGetter) (ret interface{}, isSet bool) {
+func (f *JSONFile) getValueAtPath(p string, getter valueGetter) (ret any, isSet bool) {
 	var err error
 	ret, err = getter(f.jw.AtPath(p))
 	if err == nil {
@@ -388,19 +388,19 @@ func (f *JSONFile) getValueAtPath(p string, getter valueGetter) (ret interface{}
 	return ret, isSet
 }
 
-func getString(w *jsonw.Wrapper) (interface{}, error) {
+func getString(w *jsonw.Wrapper) (any, error) {
 	return w.GetString()
 }
 
-func getBool(w *jsonw.Wrapper) (interface{}, error) {
+func getBool(w *jsonw.Wrapper) (any, error) {
 	return w.GetBool()
 }
 
-func getInt(w *jsonw.Wrapper) (interface{}, error) {
+func getInt(w *jsonw.Wrapper) (any, error) {
 	return w.GetInt()
 }
 
-func getFloat(w *jsonw.Wrapper) (interface{}, error) {
+func getFloat(w *jsonw.Wrapper) (any, error) {
 	return w.GetFloat()
 }
 
@@ -408,7 +408,7 @@ func (f *JSONFile) GetFilename() string {
 	return f.filename
 }
 
-func (f *JSONFile) GetInterfaceAtPath(p string) (i interface{}, err error) {
+func (f *JSONFile) GetInterfaceAtPath(p string) (i any, err error) {
 	f.setMutex.RLock()
 	defer f.setMutex.RUnlock()
 	return f.jw.AtPath(p).GetInterface()
@@ -462,7 +462,7 @@ func (f *JSONFile) GetNullAtPath(p string) (isSet bool) {
 	return isSet
 }
 
-func (f *JSONFile) setValueAtPath(p string, getter valueGetter, v interface{}) error {
+func (f *JSONFile) setValueAtPath(p string, getter valueGetter, v any) error {
 	existing, err := getter(f.jw.AtPath(p))
 
 	if err != nil || existing != v {
@@ -518,6 +518,6 @@ func (f *JSONFile) SetNullAtPath(p string) (err error) {
 }
 
 func isJSONNoSuchKeyError(err error) bool {
-	_, isJSONError := err.(*jsonw.Error)
-	return err != nil && isJSONError && strings.Contains(err.Error(), "no such key")
+	var jsonErr *jsonw.Error
+	return errors.As(err, &jsonErr) && strings.Contains(err.Error(), "no such key")
 }

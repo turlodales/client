@@ -38,7 +38,7 @@ func SetLogFileConfig(lfc *LogFileConfig, blc *BufferedLoggerConfig) error {
 	defer globalLock.Unlock()
 
 	first := true
-	var w = currentLogFileWriter
+	w := currentLogFileWriter
 	if w != nil {
 		first = false
 		w.lock.Lock()
@@ -62,6 +62,7 @@ func SetLogFileConfig(lfc *LogFileConfig, blc *BufferedLoggerConfig) error {
 	if first {
 		buf, shutdown, _ := NewAutoFlushingBufferedWriter(w, blc)
 		w.stopFlushing = shutdown
+		currentBufferedWriter = buf.(*autoFlushingBufferedWriter)
 		fileBackend := logging.NewLogBackend(buf, "", 0)
 		logging.SetBackend(fileBackend)
 
@@ -105,6 +106,18 @@ func (lfw *LogFileWriter) Open(at time.Time) error {
 	return nil
 }
 
+// FlushLogFile synchronously flushes any buffered log data to disk.
+// Call this before the app is suspended or after resuming from background
+// to ensure logs are not lost if the process is killed.
+func FlushLogFile() {
+	globalLock.Lock()
+	buf := currentBufferedWriter
+	globalLock.Unlock()
+	if buf != nil {
+		buf.Flush()
+	}
+}
+
 func (lfw *LogFileWriter) Close() error {
 	if lfw == nil {
 		return nil
@@ -121,9 +134,11 @@ func (lfw *LogFileWriter) Close() error {
 	return lfw.file.Close()
 }
 
-const zeroDuration time.Duration = 0
-const oldLogFileTimeRangeTimeLayout = "20060102T150405Z0700"
-const oldLogFileTimeRangeTimeLayoutLegacy = "20060102T150405"
+const (
+	zeroDuration                        time.Duration = 0
+	oldLogFileTimeRangeTimeLayout                     = "20060102T150405Z0700"
+	oldLogFileTimeRangeTimeLayoutLegacy               = "20060102T150405"
+)
 
 func (lfw *LogFileWriter) Write(bs []byte) (int, error) {
 	lfw.lock.Lock()
@@ -189,7 +204,7 @@ func deleteOldLogFilesIfNeededWorker(config LogFileConfig) error {
 	}
 	// Try to remove all old log files that we want to remove, and
 	// don't stop on the first error.
-	for i := 0; i < removeN; i++ {
+	for i := range removeN {
 		err2 := os.Remove(entries[i])
 		if err == nil {
 			err = err2
@@ -221,7 +236,8 @@ func (a logFilenamesByTime) Less(i, j int) bool {
 // format of log file names. TODO: simplify this when we don't care about old
 // format any more.
 func getLogFilenamesOrderByTime(
-	baseName string, fNames []string) (names []string, err error) {
+	baseName string, fNames []string,
+) (names []string, err error) {
 	re, err := regexp.Compile(`^` + regexp.QuoteMeta(baseName) +
 		`-(\d{8}T\d{6}(?:(?:[Z\+-]\d{4})|(?:Z))?)-\d{8}T\d{6}(?:(?:[Z\+-]\d{4})|(?:Z))?$`)
 	if err != nil {

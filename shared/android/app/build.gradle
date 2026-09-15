@@ -1,26 +1,16 @@
+import com.github.triplet.gradle.androidpublisher.ResolutionStrategy
+
 apply plugin: "com.android.application"
+apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
 apply plugin: 'com.github.triplet.play'
 
 // KB: app version
-def VERSION_NAME = "6.4.1"
+def VERSION_NAME = "6.7.0"
 
-// KB: Number of commits, like ios
-Integer getVersionCode() {
-    def stdout = new ByteArrayOutputStream()
-    exec {
-        commandLine 'git', 'rev-list', 'HEAD', '--count'
-        standardOutput = stdout
-    }
-    return Integer.parseInt(stdout.toString().trim()) + 10517780 // plus bump it so its above the old version code
-}
-
-project.logger.lifecycle('Version code: ' + getVersionCode().toString())
-
-def nodeModules = "../../node_modules"
-def defaultDir = file("$nodeModules/react-native/android")
-def androidSourcesDir = defaultDir.parentFile.toString()
-def prebuiltDir = "$buildDir/react-native-0*/jni"
+// KB: local-build fallback only. Publishing via the play plugin (ResolutionStrategy.AUTO)
+// fetches the live version code from Play and increments it.
+def kbVersionCode = 10555519
 
 /**
  * This is the configuration block to customize your React Native Android app.
@@ -28,21 +18,25 @@ def prebuiltDir = "$buildDir/react-native-0*/jni"
  */
 
 react {
+    enableBundleCompression = (findProperty('android.enableBundleCompression') ?: false).toBoolean()
+    cliFile = new File(["node", "--print", "require.resolve('@expo/cli', { paths: [require.resolve('expo/package.json')] })"].execute(null, rootDir).text.trim())
+    bundleCommand = "export:embed"
+
     /* Folders */
-    //   The root of your project, i.e. where "package.json" lives. Default is '..'
+    //   The root of your project, i.e. where "package.json" lives. Default is '../..'
     // root = file("../../")
-    //   The folder where the react-native NPM package is. Default is ../node_modules/react-native
-    // reactNativeDir = file("../node_modules/react-native")
-    //   The folder where the react-native Codegen package is. Default is ../node_modules/@react-native/codegen
-    // codegenDir = file("../node_modules/@react-native/codegen")
-    //   The cli.js file which is the React Native CLI entrypoint. Default is ../node_modules/react-native/cli.js
-    // cliFile = file("../node_modules/react-native/cli.js")
+    //   The folder where the react-native NPM package is. Default is ../../node_modules/react-native
+    // reactNativeDir = file("../../node_modules/react-native")
+    //   The folder where the react-native Codegen package is. Default is ../../node_modules/@react-native/codegen
+    // codegenDir = file("../../node_modules/@react-native/codegen")
+    //   The cli.js file which is the React Native CLI entrypoint. Default is ../../node_modules/react-native/cli.js
+    // cliFile = file("../../node_modules/react-native/cli.js")
 
     /* Variants */
     //   The list of variants to that are debuggable. For those we're going to
-    //   skip the bundling of the JS bundle and the assets. By default is just 'debug'.
+    //   skip the bundling of the JS bundle and the assets. Default is "debug", "debugOptimized".
     //   If you add flavors like lite, prod, etc. you'll have to list your debuggableVariants.
-    // debuggableVariants = ["liteDebug", "prodDebug"]
+    // debuggableVariants = ["liteDebug", "liteDebugOptimized", "prodDebug", "prodDebugOptimized"]
 
     /* Bundling */
     //   A list containing the node command and its flags. Default is just 'node'.
@@ -71,40 +65,43 @@ react {
     //   The list of flags to pass to the Hermes compiler. By default is "-O", "-output-source-map"
     // hermesFlags = ["-O", "-output-source-map"]
 
+    /* Autolinking */
+    autolinkLibrariesWithApp()
 }
 
 /**
- * Set this to true to Run Proguard on Release builds to minify the Java bytecode.
+ * Set this to true in release builds to optimize the app using [R8](https://developer.android.com/topic/performance/app-optimization/enable-app-optimization).
  */
-def enableProguardInReleaseBuilds = false
+def enableMinifyInReleaseBuilds = (findProperty('android.enableMinifyInReleaseBuilds') ?: false).toBoolean()
 
 /**
  * The preferred build flavor of JavaScriptCore (JSC)
  *
  * For example, to use the international variant, you can use:
- * `def jscFlavor = 'org.webkit:android-jsc-intl:+'`
+ * `def jscFlavor = io.github.react-native-community:jsc-android-intl:2026004.+`
  *
  * The international variant includes ICU i18n library and necessary data
  * allowing to use e.g. `Date.toLocaleString` and `String.localeCompare` that
  * give correct results when using with locales other than en-US. Note that
  * this variant is about 6MiB larger per architecture than default.
  */
-def jscFlavor = 'org.webkit:android-jsc:+'
+def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 
 android {
-    ndkVersion rootProject.ext.ndkVersion
+    ndkVersion = rootProject.ext.ndkVersion
+    buildToolsVersion rootProject.ext.buildToolsVersion
+    compileSdk rootProject.ext.compileSdkVersion
 
-    compileSdkVersion rootProject.ext.compileSdkVersion
-
-    namespace "io.keybase.ossifrage"
+    namespace = "io.keybase.ossifrage"
     defaultConfig {
         applicationId "io.keybase.ossifrage"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode getVersionCode()
+        versionCode kbVersionCode
         versionName VERSION_NAME
+        buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
         // KB added
-        multiDexEnabled true
+        multiDexEnabled = true
     }
 
     signingConfigs {
@@ -118,32 +115,24 @@ android {
 
     buildTypes {
         debug {
-        }
-
-        storyBook.initWith(buildTypes.debug)
-        storyBook {
-            applicationIdSuffix ".storybook"
-            matchingFallbacks = ['debug']
+            ndk {
+                abiFilters = (findProperty('reactNativeArchitectures') ?: 'arm64-v8a').split(',').collect { it.trim() }
+            }
         }
         release {
-            signingConfig signingConfigs.release
-            minifyEnabled enableProguardInReleaseBuilds
+            signingConfig = signingConfigs.release
+            minifyEnabled enableMinifyInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }
         releaseUnsigned.initWith(buildTypes.release)
         releaseUnsigned {
             applicationIdSuffix ".unsigned"
-            signingConfig buildTypes.debug.signingConfig
+            signingConfig = buildTypes.debug.signingConfig
             matchingFallbacks = ['release']
+            manifestPlaceholders["usesCleartextTraffic"] = "false"
         }
     }
 
-    // applicationVariants are e.g. debug, release
-    applicationVariants.all { variant ->
-        variant.outputs.each { output ->
-            output.versionCodeOverride = getVersionCode()
-        }
-    }
     bundle {
         language {
             enableSplit = true
@@ -159,6 +148,7 @@ android {
    play {
        track = 'internal'
        serviceAccountCredentials = file(KB_SERVICE_ACCT_JSON)
+       resolutionStrategy = ResolutionStrategy.AUTO
    }
 }
 
@@ -166,32 +156,23 @@ dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
 
-    debugImplementation("com.facebook.flipper:flipper:${FLIPPER_VERSION}")
-    debugImplementation("com.facebook.flipper:flipper-network-plugin:${FLIPPER_VERSION}") {
-        exclude group:'com.squareup.okhttp3', module:'okhttp'
-    }
-
-    debugImplementation("com.facebook.flipper:flipper-fresco-plugin:${FLIPPER_VERSION}")
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")
     } else {
         implementation jscFlavor
     }
 
-    implementation 'androidx.work:work-runtime:2.8.1'
+    implementation 'androidx.work:work-runtime:2.11.2'
     implementation 'androidx.multidex:multidex:2.0.1'
-    implementation "com.google.firebase:firebase-messaging:22.0.0"
-    implementation "com.facebook.fresco:animated-gif:2.6.0"
-    implementation "com.facebook.fresco:fresco:2.6.0"
-    implementation 'org.msgpack:msgpack-core:0.9.0'
+    implementation "com.google.firebase:firebase-messaging:25.0.2"
+    implementation "com.facebook.fresco:animated-gif:${expoLibs.versions.fresco.get()}"
+    implementation 'org.msgpack:msgpack-core:0.9.12'
     implementation project(':keybaselib')
     implementation 'com.android.installreferrer:installreferrer:2.2'
-    implementation "me.leolin:ShortcutBadger:1.1.22@aar"
-    implementation "androidx.lifecycle:lifecycle-common-java8:2.6.1"
-    implementation "androidx.lifecycle:lifecycle-process:2.6.1"
+    implementation "androidx.lifecycle:lifecycle-common-java8:2.10.0"
+    implementation "androidx.lifecycle:lifecycle-process:2.10.0"
 }
 
-apply from: file("../../node_modules/@react-native-community/cli-platform-android/native_modules.gradle"); applyNativeModulesAppBuildGradle(project)
 // This requires a google-services.json file locally.  Drop it in
 // android/app/src/debug/google-services.json
 // android/app/src/releaseUnsigned/google-services.json

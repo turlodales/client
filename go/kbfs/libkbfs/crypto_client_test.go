@@ -5,6 +5,7 @@
 package libkbfs
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -20,7 +21,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/nacl/box"
-	"golang.org/x/net/context"
 )
 
 type FakeCryptoClient struct {
@@ -32,7 +32,8 @@ type FakeCryptoClient struct {
 func NewFakeCryptoClient(
 	codec kbfscodec.Codec, signingKey kbfscrypto.SigningKey,
 	cryptPrivateKey kbfscrypto.CryptPrivateKey, readyChan chan<- struct{},
-	goChan <-chan struct{}) *FakeCryptoClient {
+	goChan <-chan struct{},
+) *FakeCryptoClient {
 	return &FakeCryptoClient{
 		Local: NewCryptoLocal(
 			codec, signingKey, cryptPrivateKey, makeBlockCryptV1()),
@@ -57,23 +58,25 @@ func (fc FakeCryptoClient) maybeWaitOnChannel(ctx context.Context) error {
 	}
 }
 
-func (fc FakeCryptoClient) Call(ctx context.Context, s string, args interface{},
-	res interface{}, _ time.Duration) error {
+func (fc FakeCryptoClient) Call(ctx context.Context, s string, args any,
+	res any, _ time.Duration,
+) error {
 	return fc.call(ctx, s, args, res)
 }
 
-func (fc FakeCryptoClient) CallCompressed(ctx context.Context, s string, args interface{},
-	res interface{}, _ rpc.CompressionType, _ time.Duration) error {
+func (fc FakeCryptoClient) CallCompressed(ctx context.Context, s string, args any,
+	res any, _ rpc.CompressionType, _ time.Duration,
+) error {
 	return fc.call(ctx, s, args, res)
 }
 
-func (fc FakeCryptoClient) call(ctx context.Context, s string, args interface{}, res interface{}) error {
+func (fc FakeCryptoClient) call(ctx context.Context, s string, args any, res any) error {
 	switch s {
 	case "keybase.1.crypto.signED25519":
 		if err := fc.maybeWaitOnChannel(ctx); err != nil {
 			return err
 		}
-		arg := args.([]interface{})[0].(keybase1.SignED25519Arg)
+		arg := args.([]any)[0].(keybase1.SignED25519Arg)
 		sigInfo, err := fc.Local.Sign(ctx, arg.Msg)
 		if err != nil {
 			return err
@@ -84,8 +87,7 @@ func (fc FakeCryptoClient) call(ctx context.Context, s string, args interface{},
 		// there's no need.
 		var ed25519Signature keybase1.ED25519Signature
 		copy(ed25519Signature[:], sigInfo.Signature)
-		publicKey :=
-			kbcrypto.KIDToNaclSigningKeyPublic(sigInfo.VerifyingKey.KID().ToBytes())
+		publicKey := kbcrypto.KIDToNaclSigningKeyPublic(sigInfo.VerifyingKey.KID().ToBytes())
 		*sigRes = keybase1.ED25519SignatureInfo{
 			Sig:       ed25519Signature,
 			PublicKey: keybase1.ED25519PublicKey(*publicKey),
@@ -96,7 +98,7 @@ func (fc FakeCryptoClient) call(ctx context.Context, s string, args interface{},
 		if err := fc.maybeWaitOnChannel(ctx); err != nil {
 			return err
 		}
-		arg := args.([]interface{})[0].(keybase1.UnboxBytes32Arg)
+		arg := args.([]any)[0].(keybase1.UnboxBytes32Arg)
 		publicKey := kbfscrypto.MakeTLFEphemeralPublicKey(
 			arg.PeersPublicKey)
 		encryptedClientHalf := kbfscrypto.MakeEncryptedTLFCryptKeyClientHalfForTest(
@@ -115,7 +117,7 @@ func (fc FakeCryptoClient) call(ctx context.Context, s string, args interface{},
 		if err := fc.maybeWaitOnChannel(ctx); err != nil {
 			return err
 		}
-		arg := args.([]interface{})[0].(keybase1.UnboxBytes32AnyArg)
+		arg := args.([]any)[0].(keybase1.UnboxBytes32AnyArg)
 		keys := make([]EncryptedTLFCryptKeyClientAndEphemeral, 0, len(arg.Bundles))
 		for _, k := range arg.Bundles {
 			ePublicKey := kbfscrypto.MakeTLFEphemeralPublicKey(
@@ -146,7 +148,7 @@ func (fc FakeCryptoClient) call(ctx context.Context, s string, args interface{},
 	}
 }
 
-func (fc FakeCryptoClient) Notify(_ context.Context, s string, args interface{}, _ time.Duration) error {
+func (fc FakeCryptoClient) Notify(_ context.Context, s string, args any, _ time.Duration) error {
 	return errors.Errorf("Unknown notify: %s %v", s, args)
 }
 
@@ -271,7 +273,7 @@ func TestCryptoClientDecryptEmptyEncryptedTLFCryptKeyClientHalfAny(t *testing.T)
 
 	_, _, err := c.DecryptTLFCryptKeyClientHalfAny(
 		context.Background(), keys, false)
-	require.IsType(t, NoKeysError{}, errors.Cause(err))
+	require.ErrorAs(t, errors.Cause(err), new(NoKeysError))
 }
 
 // Test that when decrypting set of client keys, the first working one
@@ -286,9 +288,8 @@ func TestCryptoClientDecryptEncryptedTLFCryptKeyClientHalfAny(t *testing.T) {
 
 	keys := make([]EncryptedTLFCryptKeyClientAndEphemeral, 0, 4)
 	clientHalves := make([]kbfscrypto.TLFCryptKeyClientHalf, 0, 4)
-	for i := 0; i < 4; i++ {
-		ephPublicKey, ephPrivateKey, err :=
-			c.MakeRandomTLFEphemeralKeys()
+	for range 4 {
+		ephPublicKey, ephPrivateKey, err := c.MakeRandomTLFEphemeralKeys()
 		require.NoError(t, err)
 
 		cryptKey, err := kbfscrypto.MakeRandomTLFCryptKey()
@@ -433,7 +434,8 @@ func TestCryptoClientDecryptTLFCryptKeyClientHalfFailures(t *testing.T) {
 		encryptedClientHalfWrongVersion)
 	assert.Equal(t,
 		kbfscrypto.UnknownEncryptionVer{
-			Ver: encryptedClientHalfWrongVersion.Version},
+			Ver: encryptedClientHalfWrongVersion.Version,
+		},
 		errors.Cause(err))
 
 	// Wrong sizes.
@@ -442,7 +444,7 @@ func TestCryptoClientDecryptTLFCryptKeyClientHalfFailures(t *testing.T) {
 	encryptedClientHalfWrongSize.EncryptedData = encryptedClientHalfWrongSize.EncryptedData[:len(encryptedClientHalfWrongSize.EncryptedData)-1]
 	_, err = c.DecryptTLFCryptKeyClientHalf(ctx, ephPublicKey,
 		encryptedClientHalfWrongSize)
-	assert.EqualError(t, errors.Cause(err),
+	require.EqualError(t, errors.Cause(err),
 		fmt.Sprintf("Expected %d bytes, got %d",
 			len(encryptedClientHalf.EncryptedData),
 			len(encryptedClientHalfWrongSize.EncryptedData)))
@@ -453,7 +455,8 @@ func TestCryptoClientDecryptTLFCryptKeyClientHalfFailures(t *testing.T) {
 		encryptedClientHalfWrongNonceSize)
 	assert.Equal(t,
 		kbfscrypto.InvalidNonceError{
-			Nonce: encryptedClientHalfWrongNonceSize.Nonce},
+			Nonce: encryptedClientHalfWrongNonceSize.Nonce,
+		},
 		errors.Cause(err))
 
 	// Corrupt key.
@@ -464,7 +467,7 @@ func TestCryptoClientDecryptTLFCryptKeyClientHalfFailures(t *testing.T) {
 		ephPublicKeyCorruptData)
 	_, err = c.DecryptTLFCryptKeyClientHalf(ctx, ephPublicKeyCorrupt,
 		encryptedClientHalf)
-	assert.IsType(t, libkb.DecryptionError{}, errors.Cause(err))
+	require.ErrorAs(t, errors.Cause(err), new(libkb.DecryptionError))
 
 	// Corrupt data.
 
@@ -472,7 +475,7 @@ func TestCryptoClientDecryptTLFCryptKeyClientHalfFailures(t *testing.T) {
 	encryptedClientHalfCorruptData.EncryptedData[0] = ^encryptedClientHalfCorruptData.EncryptedData[0]
 	_, err = c.DecryptTLFCryptKeyClientHalf(ctx, ephPublicKey,
 		encryptedClientHalfCorruptData)
-	assert.IsType(t, libkb.DecryptionError{}, errors.Cause(err))
+	assert.ErrorAs(t, errors.Cause(err), new(libkb.DecryptionError))
 }
 
 // Test that canceling a signing RPC returns the correct error

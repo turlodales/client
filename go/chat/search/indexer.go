@@ -2,7 +2,7 @@ package search
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"sort"
 	"sync"
 	"time"
@@ -23,19 +23,29 @@ import (
 // is read, a prerequisite for searching.
 const minPriorityScore = 10
 
+// storageOp is what every queued storage operation has in common: a waiter that
+// must be released whether or not the op ever runs.
+type storageOp interface {
+	callback() chan error
+}
+
 type storageAdd struct {
 	ctx    context.Context
 	convID chat1.ConversationID
 	msgs   []chat1.MessageUnboxed
-	cb     chan struct{}
+	cb     chan error
 }
+
+func (o storageAdd) callback() chan error { return o.cb }
 
 type storageRemove struct {
 	ctx    context.Context
 	convID chat1.ConversationID
 	msgs   []chat1.MessageUnboxed
-	cb     chan struct{}
+	cb     chan error
 }
+
+func (o storageRemove) callback() chan error { return o.cb }
 
 type Indexer struct {
 	globals.Contextified
@@ -52,12 +62,17 @@ type Indexer struct {
 	resumeWait   time.Duration
 	started      bool
 	clock        clockwork.Clock
-	eg           errgroup.Group
-	uid          gregor1.UID
-	storageCh    chan interface{}
+	// the loops of the current run. Replaced by each Start rather than reused:
+	// Stop waits on it from a goroutine, and a Group cannot be added to while
+	// somebody is waiting on it.
+	eg         *errgroup.Group
+	stoppingCh chan struct{}
+	uid        gregor1.UID
+	storageCh  chan storageOp
 
 	maxSyncConvs          int
 	startSyncDelay        time.Duration
+	syncInterval          time.Duration
 	selectiveSyncActiveMu sync.Mutex
 	selectiveSyncActive   bool
 	flushDelay            time.Duration
@@ -81,15 +96,17 @@ func NewIndexer(g *globals.Context) *Indexer {
 		pokeSyncCh:   make(chan struct{}, 100),
 		clock:        clockwork.NewRealClock(),
 		flushDelay:   15 * time.Second,
-		storageCh:    make(chan interface{}, 100),
+		storageCh:    make(chan storageOp, 100),
 	}
 	switch idx.G().GetAppType() {
 	case libkb.MobileAppType:
 		idx.SetMaxSyncConvs(maxSyncConvsMobile)
 		idx.startSyncDelay = startSyncDelayMobile
+		idx.syncInterval = syncIntervalMobile
 	default:
 		idx.startSyncDelay = startSyncDelayDesktop
 		idx.SetMaxSyncConvs(maxSyncConvsDesktop)
+		idx.syncInterval = syncIntervalDesktop
 	}
 	return idx
 }
@@ -123,34 +140,53 @@ func (idx *Indexer) SetUID(uid gregor1.UID) {
 	idx.store = newStore(idx.G(), uid)
 }
 
+// startLoopLocked runs f as part of the current run, opening one if there isn't
+// one yet. Callers hold idx.Lock.
+func (idx *Indexer) startLoopLocked(f func(stopCh chan struct{}) error) {
+	idx.waitForStopLocked()
+	if !idx.started {
+		idx.started = true
+		idx.newRunLocked()
+	}
+	stopCh, eg := idx.stopCh, idx.eg
+	eg.Go(func() error { return f(stopCh) })
+}
+
+// waitForStopLocked keeps successive runs disjoint while Stop finishes its
+// asynchronous final flush. It returns with idx.Lock held.
+func (idx *Indexer) waitForStopLocked() {
+	for idx.stoppingCh != nil {
+		stoppingCh := idx.stoppingCh
+		idx.Unlock()
+		<-stoppingCh
+		idx.Lock()
+	}
+}
+
+// newRunLocked gives this run its own stop channel and errgroup, so nothing a
+// previous run is still shutting down can be confused for part of this one.
+// Callers hold idx.Lock.
+func (idx *Indexer) newRunLocked() {
+	idx.stopCh = make(chan struct{})
+	idx.eg = new(errgroup.Group)
+}
+
 func (idx *Indexer) StartFlushLoop() {
 	idx.Lock()
 	defer idx.Unlock()
-	if !idx.started {
-		idx.started = true
-		idx.stopCh = make(chan struct{})
-	}
-	idx.eg.Go(func() error { return idx.flushLoop(idx.stopCh) })
+	idx.startLoopLocked(idx.flushLoop)
 }
 
 func (idx *Indexer) StartStorageLoop() {
 	idx.Lock()
 	defer idx.Unlock()
-	if !idx.started {
-		idx.started = true
-		idx.stopCh = make(chan struct{})
-	}
-	idx.eg.Go(func() error { return idx.storageLoop(idx.stopCh) })
+	idx.startLoopLocked(idx.storageLoop)
 }
 
 func (idx *Indexer) StartSyncLoop() {
 	idx.Lock()
 	defer idx.Unlock()
-	if !idx.started {
-		idx.started = true
-		idx.stopCh = make(chan struct{})
-	}
-	idx.eg.Go(func() error { return idx.SyncLoop(idx.stopCh) })
+	idx.startLoopLocked(idx.SyncLoop)
 }
 
 func (idx *Indexer) SetFlushDelay(dur time.Duration) {
@@ -160,6 +196,11 @@ func (idx *Indexer) SetFlushDelay(dur time.Duration) {
 func (idx *Indexer) Start(ctx context.Context, uid gregor1.UID) {
 	defer idx.Trace(ctx, nil, "Start")()
 	idx.Lock()
+	// Stop performs its final flush asynchronously. Do not install a new store
+	// while the old loops can still read idx.store or drain the shared storage
+	// queue. Waiting here keeps runs disjoint without duplicating every loop and
+	// dispatch API around a per-run object.
+	idx.waitForStopLocked()
 	defer idx.Unlock()
 	if idx.started {
 		return
@@ -167,12 +208,12 @@ func (idx *Indexer) Start(ctx context.Context, uid gregor1.UID) {
 	idx.uid = uid
 	idx.store = newStore(idx.G(), uid)
 	idx.started = true
-	idx.stopCh = make(chan struct{})
+	idx.newRunLocked()
 	if !idx.G().IsMobileAppType() && !idx.G().GetEnv().GetDisableSearchIndexer() {
-		idx.eg.Go(func() error { return idx.SyncLoop(idx.stopCh) })
+		idx.startLoopLocked(idx.SyncLoop)
 	}
-	idx.eg.Go(func() error { return idx.flushLoop(idx.stopCh) })
-	idx.eg.Go(func() error { return idx.storageLoop(idx.stopCh) })
+	idx.startLoopLocked(idx.flushLoop)
+	idx.startLoopLocked(idx.storageLoop)
 }
 
 func (idx *Indexer) CancelSync(ctx context.Context) {
@@ -198,14 +239,15 @@ func (idx *Indexer) SyncLoop(stopCh chan struct{}) error {
 	idx.Lock()
 	suspendCh := idx.suspendCh
 	idx.Unlock()
-	idx.Debug(ctx, "starting SelectiveSync bg loop")
+	idx.Debug(ctx, "starting SelectiveSync bg loop with interval: %v", idx.syncInterval)
 
-	ticker := libkb.NewBgTicker(time.Hour)
+	ticker := libkb.NewBgTicker(idx.syncInterval)
 	after := time.After(idx.startSyncDelay)
 	appState := keybase1.MobileAppState_FOREGROUND
 	netState := keybase1.MobileNetworkState_WIFI
 	var cancelFn context.CancelFunc
 	var l sync.Mutex
+	var syncAttemptWG sync.WaitGroup
 	cancelSync := func() {
 		l.Lock()
 		defer l.Unlock()
@@ -221,15 +263,19 @@ func (idx *Indexer) SyncLoop(stopCh chan struct{}) error {
 		l.Lock()
 		defer l.Unlock()
 		if cancelFn != nil {
-			cancelFn()
+			idx.Debug(ctx, "SelectiveSync already running, skipping new sync attempt")
+			return
 		}
 		ctx, cancelFn = context.WithCancel(ctx)
-		go func() {
+		syncAttemptWG.Go(func() {
 			idx.Debug(ctx, "running SelectiveSync")
 			if err := idx.SelectiveSync(ctx); err != nil {
 				idx.Debug(ctx, "unable to complete SelectiveSync: %v", err)
 				if idx.syncLoopCh != nil {
-					idx.syncLoopCh <- struct{}{}
+					select {
+					case idx.syncLoopCh <- struct{}{}:
+					default:
+					}
 				}
 			}
 			l.Lock()
@@ -238,13 +284,16 @@ func (idx *Indexer) SyncLoop(stopCh chan struct{}) error {
 				cancelFn()
 				cancelFn = nil
 			}
-		}()
+		})
 	}
 
 	stopSync := func(ctx context.Context) {
 		idx.Debug(ctx, "stopping SelectiveSync bg loop")
 		cancelSync()
 		ticker.Stop()
+		// Stop must not finish while an old attempt can still read idx.store or
+		// dispatch into the next run.
+		syncAttemptWG.Wait()
 	}
 	defer func() {
 		idx.Debug(ctx, "shutting down SyncLoop")
@@ -259,14 +308,16 @@ func (idx *Indexer) SyncLoop(stopCh chan struct{}) error {
 			attemptSync(ctx)
 		case <-ticker.C:
 			attemptSync(ctx)
-		case appState = <-idx.G().MobileAppState.NextUpdate(&appState):
+		case <-idx.G().MobileAppState.NextUpdate(appState):
+			appState = idx.G().MobileAppState.State()
 			switch appState {
 			case keybase1.MobileAppState_FOREGROUND:
 			// if we enter any state besides foreground cancel any running syncs
 			default:
 				cancelSync()
 			}
-		case netState = <-idx.G().MobileNetState.NextUpdate(&netState):
+		case <-idx.G().MobileNetState.NextUpdate(netState):
+			netState = idx.G().MobileNetState.State()
 			if netState.IsLimited() {
 				// if we switch off of wifi cancel any running syncs
 				cancelSync()
@@ -277,7 +328,7 @@ func (idx *Indexer) SyncLoop(stopCh chan struct{}) error {
 			select {
 			case <-ch:
 				time.Sleep(libkb.RandomJitter(idx.resumeWait))
-			case <-idx.stopCh:
+			case <-stopCh:
 				stopSync(ctx)
 				return nil
 			}
@@ -294,15 +345,30 @@ func (idx *Indexer) Stop(ctx context.Context) chan struct{} {
 	defer idx.Unlock()
 	ch := make(chan struct{})
 	if idx.started {
-		idx.store.ClearMemory()
 		idx.started = false
 		close(idx.stopCh)
+		idx.stoppingCh = ch
+		// Keep the shutdown goroutine self-contained. Start waits on stoppingCh,
+		// so these remain the old run's store and loops.
+		store, eg := idx.store, idx.eg
+		stopCtx := context.WithoutCancel(ctx)
 		go func() {
-			idx.Debug(context.Background(), "Stop: waiting for shutdown")
-			_ = idx.eg.Wait()
-			idx.Debug(context.Background(), "Stop: shutdown complete")
+			idx.Debug(stopCtx, "Stop: waiting for shutdown")
+			if eg != nil {
+				// nil when nothing ever started a loop, which only a test does
+				_ = eg.Wait()
+			}
+			store.ClearMemory()
+			idx.Debug(stopCtx, "Stop: shutdown complete")
+			idx.Lock()
+			if idx.stoppingCh == ch {
+				idx.stoppingCh = nil
+			}
 			close(ch)
+			idx.Unlock()
 		}()
+	} else if idx.stoppingCh != nil {
+		return idx.stoppingCh
 	} else {
 		close(ch)
 	}
@@ -370,11 +436,60 @@ func (idx *Indexer) consumeResultsForTest(convID chat1.ConversationID, err error
 	}
 }
 
-func (idx *Indexer) storageDispatch(op interface{}) {
+// storageDispatch queues op, reporting why it was rejected when it cannot.
+// The caller completes the op's callback with that error so every op has exactly
+// one result and no waiter can be stranded.
+// It also refuses to queue once the indexer is stopping. Nothing is left to run
+// the op then, and the drain that would have released its callback may already
+// have walked the queue.
+func (idx *Indexer) storageDispatch(op storageOp) error {
+	// The queue check has to happen under the same lock hold as the started
+	// check, and Stop clears started and closes stopCh under that lock. Testing
+	// started, releasing, then sending leaves a window where Stop runs in
+	// between and the drain has already walked the queue, so the op is enqueued
+	// with nobody left to release its callback. Selecting on stopCh instead of
+	// holding the lock does not close it either: once stopCh is closed both
+	// cases are ready and Go picks between them at random. The send is
+	// non-blocking and storageLoop never takes idx.Lock, so holding it here
+	// cannot deadlock.
+	idx.Lock()
+	defer idx.Unlock()
+	if !idx.started {
+		return errStorageStopped
+	}
 	select {
 	case idx.storageCh <- op:
+		return nil
 	default:
 		idx.Debug(context.Background(), "storageDispatch: failed to dispatch storage operation")
+		return errStorageQueueFull
+	}
+}
+
+// releaseStorageCB wakes an op's waiter, reporting whether the op actually ran.
+// The channel is buffered, so the one result never blocks even with nobody
+// waiting. Every accepted or rejected op completes exactly once.
+func releaseStorageCB(cb chan error, err error) {
+	if cb == nil {
+		return
+	}
+	cb <- err
+}
+
+// drainStorageQueue releases every op still queued at shutdown. They will not
+// run, so each callback reports errStorageStopped: a caller told an op finished
+// marks its messages as indexed, and nothing put them there.
+//
+// Split out of storageLoop because that select has both cases ready once stopCh
+// closes and Go picks between them at random, which is untestable from outside.
+func (idx *Indexer) drainStorageQueue() {
+	for {
+		select {
+		case op := <-idx.storageCh:
+			releaseStorageCB(op.callback(), errStorageStopped)
+		default:
+			return
+		}
 	}
 }
 
@@ -385,6 +500,7 @@ func (idx *Indexer) storageLoop(stopCh chan struct{}) error {
 		select {
 		case <-stopCh:
 			idx.Debug(ctx, "storageLoop: shutting down")
+			idx.drainStorageQueue()
 			return nil
 		case iop := <-idx.storageCh:
 			switch op := iop.(type) {
@@ -394,14 +510,14 @@ func (idx *Indexer) storageLoop(stopCh chan struct{}) error {
 					idx.Debug(op.ctx, "storageLoop: add failed: %s", err)
 				}
 				idx.consumeResultsForTest(op.convID, err)
-				close(op.cb)
+				releaseStorageCB(op.cb, err)
 			case storageRemove:
 				err := idx.store.Remove(op.ctx, op.convID, op.msgs)
 				if err != nil {
 					idx.Debug(op.ctx, "storageLoop: remove failed: %s", err)
 				}
 				idx.consumeResultsForTest(op.convID, err)
-				close(op.cb)
+				releaseStorageCB(op.cb, err)
 			}
 		}
 	}
@@ -415,6 +531,11 @@ func (idx *Indexer) flushLoop(stopCh chan struct{}) error {
 		case <-stopCh:
 			idx.Debug(ctx, "flushLoop: shutting down")
 			return nil
+		case <-idx.store.flushNeeded():
+			// too much pending to wait out the interval
+			if err := idx.store.Flush(); err != nil {
+				idx.Debug(ctx, "flushLoop: failed to flush: %s", err)
+			}
 		case <-idx.clock.After(idx.flushDelay):
 			if err := idx.store.Flush(); err != nil {
 				idx.Debug(ctx, "flushLoop: failed to flush: %s", err)
@@ -437,7 +558,8 @@ func (idx *Indexer) hasPriority(ctx context.Context, convID chat1.ConversationID
 }
 
 func (idx *Indexer) Add(ctx context.Context, convID chat1.ConversationID,
-	msgs []chat1.MessageUnboxed) (err error) {
+	msgs []chat1.MessageUnboxed,
+) (err error) {
 	idx.Lock()
 	if !idx.started {
 		idx.Unlock()
@@ -449,35 +571,40 @@ func (idx *Indexer) Add(ctx context.Context, convID chat1.ConversationID,
 }
 
 func (idx *Indexer) add(ctx context.Context, convID chat1.ConversationID,
-	msgs []chat1.MessageUnboxed, force bool) (cb chan struct{}, err error) {
-	cb = make(chan struct{})
+	msgs []chat1.MessageUnboxed, force bool,
+) (cb chan error, err error) {
+	cb = make(chan error, 1)
 	if idx.G().GetEnv().GetDisableSearchIndexer() {
-		close(cb)
+		releaseStorageCB(cb, nil)
 		return cb, nil
 	}
 	if !idx.validBatch(msgs) {
-		close(cb)
+		releaseStorageCB(cb, nil)
 		return cb, nil
 	}
-	if !(force || idx.hasPriority(ctx, convID)) {
-		close(cb)
+	if !force && !idx.hasPriority(ctx, convID) {
+		releaseStorageCB(cb, nil)
 		return cb, nil
 	}
 
 	defer idx.Trace(ctx, &err,
-		fmt.Sprintf("Indexer.Add conv: %v, msgs: %d, force: %v",
-			convID, len(msgs), force))()
-	idx.storageDispatch(storageAdd{
+		"Indexer.Add conv: %v, msgs: %d, force: %v",
+		convID, len(msgs), force)()
+	if err := idx.storageDispatch(storageAdd{
 		ctx:    globals.BackgroundChatCtx(ctx, idx.G()),
 		convID: convID,
 		msgs:   msgs,
 		cb:     cb,
-	})
+	}); err != nil {
+		releaseStorageCB(cb, err)
+		return cb, err
+	}
 	return cb, nil
 }
 
 func (idx *Indexer) Remove(ctx context.Context, convID chat1.ConversationID,
-	msgs []chat1.MessageUnboxed) (err error) {
+	msgs []chat1.MessageUnboxed,
+) (err error) {
 	idx.Lock()
 	if !idx.started {
 		idx.Unlock()
@@ -489,125 +616,173 @@ func (idx *Indexer) Remove(ctx context.Context, convID chat1.ConversationID,
 }
 
 func (idx *Indexer) remove(ctx context.Context, convID chat1.ConversationID,
-	msgs []chat1.MessageUnboxed, force bool) (cb chan struct{}, err error) {
-	cb = make(chan struct{})
+	msgs []chat1.MessageUnboxed, force bool,
+) (cb chan error, err error) {
+	cb = make(chan error, 1)
 	if idx.G().GetEnv().GetDisableSearchIndexer() {
-		close(cb)
+		releaseStorageCB(cb, nil)
 		return cb, nil
 	}
 	if !idx.validBatch(msgs) {
-		close(cb)
+		releaseStorageCB(cb, nil)
 		return cb, nil
 	}
-	if !(force || idx.hasPriority(ctx, convID)) {
-		close(cb)
+	if !force && !utils.IsConvLoaderContext(ctx) && !idx.hasPriority(ctx, convID) {
+		releaseStorageCB(cb, nil)
 		return cb, nil
 	}
 
 	defer idx.Trace(ctx, &err,
-		fmt.Sprintf("Indexer.Remove conv: %v, msgs: %d, force: %v",
-			convID, len(msgs), force))()
-	idx.storageDispatch(storageRemove{
+		"Indexer.Remove conv: %v, msgs: %d, force: %v",
+		convID, len(msgs), force)()
+	if err := idx.storageDispatch(storageRemove{
 		ctx:    globals.BackgroundChatCtx(ctx, idx.G()),
 		convID: convID,
 		msgs:   msgs,
 		cb:     cb,
-	})
+	}); err != nil {
+		releaseStorageCB(cb, err)
+		return cb, err
+	}
 	return cb, nil
 }
 
-// reindexConv attempts to fill in any missing messages from the index.  For a
-// small number of messages we use the GetMessages api to fill in the holes. If
-// our index is missing many messages, we page through and add batches of
-// missing messages.
+// maxConsecutiveFetchFailures is how many transient fetch failures in a row
+// reindexConv tolerates before it abandons the conv for this pass. Two rather
+// than one so a single bad chunk does not stop a conv that is otherwise fine.
+const maxConsecutiveFetchFailures = 2
+
+type reindexResult struct {
+	completed int
+	attempted int
+}
+
+// reindexConv fills in missing messages. Chunks missing IDs by pageSize, fetches each
+// chunk, indexes it, then marks unreturned IDs seen so the conv can converge despite
+// deleted messages and gaps. Stops after numJobs chunks (large convs indexed across
+// multiple passes).
 func (idx *Indexer) reindexConv(ctx context.Context, rconv types.RemoteConversation,
-	numJobs int, inboxIndexStatus *inboxIndexStatus) (completedJobs int, err error) {
+	numJobs int, inboxIndexStatus *inboxIndexStatus,
+) (res reindexResult, err error) {
+	if idx.G().GetEnv().GetDisableSearchIndexer() {
+		// add() drops everything in this case, so paging on would MarkSeen ids
+		// that were never indexed and leave them permanently unsearchable if the
+		// indexer is turned back on.
+		return res, nil
+	}
 	conv := rconv.Conv
 	convID := conv.GetConvID()
-	md, err := idx.store.GetMetadata(ctx, convID)
+	missingIDs, err := idx.store.MissingIDForConv(ctx, conv)
 	if err != nil {
-		return 0, err
+		return res, err
 	}
-	missingIDs := md.MissingIDForConv(conv)
 	if len(missingIDs) == 0 {
-		return 0, nil
+		return res, nil
 	}
 	minIdxID := missingIDs[0]
 	maxIdxID := missingIDs[len(missingIDs)-1]
 
 	defer idx.Trace(ctx, &err,
-		fmt.Sprintf("Indexer.reindex: conv: %v, minID: %v, maxID: %v, numMissing: %v",
-			utils.GetRemoteConvDisplayName(rconv), minIdxID, maxIdxID, len(missingIDs)))()
+		"Indexer.reindex: conv: %v, minID: %v, maxID: %v, numMissing: %v",
+		utils.GetRemoteConvDisplayName(rconv), minIdxID, maxIdxID, len(missingIDs))()
 
 	reason := chat1.GetThreadReason_INDEXED_SEARCH
-	if len(missingIDs) < idx.pageSize {
-		msgs, err := idx.G().ConvSource.GetMessages(ctx, rconv.GetConvID(), idx.uid, missingIDs, &reason,
-			nil, false)
+	// Page over MISSING ids only, not the full min..max range. Otherwise we refetch
+	// tens of thousands of already-indexed messages and spend the budget before
+	// reaching the holes. Failed fetches count toward budget same as successful ones
+	// (both cost a round trip); counting only successes lets a broken conv spend
+	// hundreds of attempts in one pass.
+	consecutiveFetchFailures := 0
+	for start := 0; start < len(missingIDs); start += idx.pageSize {
+		select {
+		case <-ctx.Done():
+			return res, ctx.Err()
+		default:
+		}
+		end := min(start+idx.pageSize, len(missingIDs))
+		chunk := missingIDs[start:end]
+		msgs, err := idx.G().ConvSource.GetMessages(ctx, convID, idx.uid, chunk, &reason, nil, false)
+		res.attempted++
 		if err != nil {
 			if utils.IsPermanentErr(err) {
-				return 0, err
+				return res, err
 			}
-			return 0, nil
+			// transient: leave these ids missing so a later pass retries them
+			consecutiveFetchFailures++
+			if consecutiveFetchFailures >= maxConsecutiveFetchFailures {
+				// it is the network failing rather than these particular ids, so
+				// paging on just spends the budget on the same failure
+				idx.Debug(ctx, "reindexConv: giving up on conv after %d consecutive fetch failures: %s",
+					consecutiveFetchFailures, err)
+				return res, nil
+			}
+			if numJobs > 0 && res.attempted >= numJobs {
+				return res, nil
+			}
+			continue
 		}
+		consecutiveFetchFailures = 0
 		cb, err := idx.add(ctx, convID, msgs, true)
 		if err != nil {
-			return 0, err
+			return res, err
 		}
-		<-cb
-		completedJobs++
-	} else {
-		query := &chat1.GetThreadQuery{
-			DisablePostProcessThread: true,
-			MarkAsRead:               false,
-		}
-		for i := minIdxID; i < maxIdxID; i += chat1.MessageID(idx.pageSize) {
-			select {
-			case <-ctx.Done():
-				return 0, ctx.Err()
-			default:
+		select {
+		case addErr := <-cb:
+			if addErr != nil {
+				// The op failed or never ran, so nothing in this chunk was
+				// indexed. Marking it seen here would record those messages as
+				// indexed with no tokens behind them, and the conv would never
+				// be revisited to fix it.
+				return res, addErr
 			}
-			pagination := utils.MessageIDControlToPagination(ctx, idx.DebugLabeler, &chat1.MessageIDControl{
-				Num:   idx.pageSize,
-				Pivot: &i,
-				Mode:  chat1.MessageIDControlMode_NEWERMESSAGES,
-			}, nil)
-			tv, err := idx.G().ConvSource.Pull(ctx, convID, idx.uid, reason, nil, query, pagination)
+		case <-ctx.Done():
+			return res, ctx.Err()
+		}
+		// Add accounts for the messages that came back. Mark only requested IDs
+		// absent from the successful response: a returned edit whose superseded
+		// message was unavailable is deliberately left unseen by Add so it can
+		// be retried.
+		returnedIDs := make(map[chat1.MessageID]struct{}, len(msgs))
+		for _, msg := range msgs {
+			returnedIDs[msg.GetMessageID()] = struct{}{}
+		}
+		unreturnedIDs := make([]chat1.MessageID, 0, len(chunk))
+		for _, id := range chunk {
+			if _, ok := returnedIDs[id]; !ok {
+				unreturnedIDs = append(unreturnedIDs, id)
+			}
+		}
+		if err := idx.store.MarkSeen(ctx, convID, unreturnedIDs); err != nil {
+			// The store is failing, not the conv. Give up on this conv rather
+			// than paging on: without the mark these ids stay missing, so
+			// counting the job would misreport storage failure as completed
+			// indexing work.
+			return res, err
+		}
+		res.completed++
+		if numJobs > 0 && res.attempted >= numJobs {
+			break
+		}
+		if inboxIndexStatus != nil {
+			status, err := idx.store.IndexStatus(ctx, conv)
 			if err != nil {
-				if utils.IsPermanentErr(err) {
-					return 0, err
-				}
+				idx.Debug(ctx, "updateInboxIndex: unable to get index status %v", err)
 				continue
 			}
-			cb, err := idx.add(ctx, convID, tv.Messages, true)
+			inboxIndexStatus.addConv(status, conv)
+			percentIndexed, err := inboxIndexStatus.updateUI(ctx)
 			if err != nil {
-				return 0, err
-			}
-			<-cb
-			completedJobs++
-			if numJobs > 0 && completedJobs >= numJobs {
-				break
-			}
-			if inboxIndexStatus != nil {
-				md, err := idx.store.GetMetadata(ctx, conv.GetConvID())
-				if err != nil {
-					idx.Debug(ctx, "updateInboxIndex: unable to GetMetadata %v", err)
-					continue
-				}
-				inboxIndexStatus.addConv(md, conv)
-				percentIndexed, err := inboxIndexStatus.updateUI(ctx)
-				if err != nil {
-					idx.Debug(ctx, "unable to update ui %v", err)
-				} else {
-					idx.Debug(ctx, "%v is %d%% indexed, inbox is %d%% indexed",
-						utils.GetRemoteConvDisplayName(rconv), md.PercentIndexed(conv), percentIndexed)
-				}
+				idx.Debug(ctx, "unable to update ui %v", err)
+			} else {
+				idx.Debug(ctx, "%v is %d%% indexed, inbox is %d%% indexed",
+					utils.GetRemoteConvDisplayName(rconv), status.percentIndexed(), percentIndexed)
 			}
 		}
 	}
 	if idx.reindexCh != nil {
 		idx.reindexCh <- convID
 	}
-	return completedJobs, nil
+	return res, nil
 }
 
 func (idx *Indexer) SearchableConvs(ctx context.Context, convID *chat1.ConversationID) (res []types.RemoteConversation, err error) {
@@ -666,7 +841,8 @@ func (idx *Indexer) allConvs(ctx context.Context, convID *chat1.ConversationID) 
 }
 
 func (idx *Indexer) convsPrioritySorted(ctx context.Context,
-	convMap map[chat1.ConvIDStr]types.RemoteConversation) (res []types.RemoteConversation) {
+	convMap map[chat1.ConvIDStr]types.RemoteConversation,
+) (res []types.RemoteConversation) {
 	res = make([]types.RemoteConversation, len(convMap))
 	index := 0
 	for _, conv := range convMap {
@@ -682,7 +858,8 @@ func (idx *Indexer) convsPrioritySorted(ctx context.Context,
 // Search tokenizes the given query and finds the intersection of all matches
 // for each token, returning matches.
 func (idx *Indexer) Search(ctx context.Context, query, origQuery string,
-	opts chat1.SearchOpts, hitUICh chan chat1.ChatSearchInboxHit, indexUICh chan chat1.ChatSearchIndexStatus) (res *chat1.ChatSearchInboxResults, err error) {
+	opts chat1.SearchOpts, hitUICh chan chat1.ChatSearchInboxHit, indexUICh chan chat1.ChatSearchIndexStatus,
+) (res *chat1.ChatSearchInboxResults, err error) {
 	defer idx.Trace(ctx, &err, "Indexer.Search")()
 	defer func() {
 		// get a selective sync to run after the search completes even if we
@@ -700,7 +877,6 @@ func (idx *Indexer) Search(ctx context.Context, query, origQuery string,
 		idx.Debug(ctx, "Search: Search indexer is disabled, results will be inaccurate.")
 	}
 
-	idx.CancelSync(ctx)
 	sess := newSearchSession(query, origQuery, idx.uid, hitUICh, indexUICh, idx, opts)
 	return sess.run(ctx)
 }
@@ -716,6 +892,15 @@ func (idx *Indexer) setSelectiveSyncActive(val bool) {
 	defer idx.selectiveSyncActiveMu.Unlock()
 	idx.selectiveSyncActive = val
 }
+
+// errStorageQueueFull reports that a storage op was never queued. Callers that
+// mark work as done once the op completes must not do so on this error: the op
+// did not run, so nothing was indexed.
+var errStorageQueueFull = errors.New("search storage queue full, operation dropped")
+
+// errStorageStopped reports that a queued op was released by shutdown rather
+// than run. Same contract as errStorageQueueFull: the op did not run.
+var errStorageStopped = errors.New("search storage loop stopped, operation dropped")
 
 // SelectiveSync queues up a small number of jobs on the background loader
 // periodically so our index can cover all conversations. The number of jobs
@@ -742,24 +927,27 @@ func (idx *Indexer) SelectiveSync(ctx context.Context) (err error) {
 		default:
 		}
 		convID := conv.GetConvID()
-		md, err := idx.store.GetMetadata(ctx, convID)
+		fullyIndexed, err := idx.store.FullyIndexed(ctx, conv.Conv)
 		if err != nil {
 			idx.Debug(ctx, "SelectiveSync: Unable to get md for conv: %v, %v", convID, err)
 			continue
 		}
-		if md.FullyIndexed(conv.Conv) {
+		if fullyIndexed {
 			continue
 		}
 
-		completedJobs, err := idx.reindexConv(ctx, conv, numJobs, nil)
+		result, err := idx.reindexConv(ctx, conv, numJobs, nil)
+		numJobs -= result.attempted
 		if err != nil {
 			idx.Debug(ctx, "Unable to reindex conv: %v, %v", convID, err)
-			continue
-		} else if completedJobs == 0 {
+			if numJobs <= 0 {
+				break
+			}
 			continue
 		}
-		idx.Debug(ctx, "SelectiveSync: Indexed completed jobs %d", completedJobs)
-		numJobs -= completedJobs
+		if result.completed > 0 {
+			idx.Debug(ctx, "SelectiveSync: Indexed completed jobs %d", result.completed)
+		}
 		if numJobs <= 0 {
 			break
 		}
@@ -795,22 +983,19 @@ func (idx *Indexer) IndexInbox(ctx context.Context) (res map[chat1.ConvIDStr]cha
 
 func (idx *Indexer) indexConvWithProfile(ctx context.Context, conv types.RemoteConversation) (res chat1.ProfileSearchConvStats, err error) {
 	defer idx.Trace(ctx, &err, "Indexer.indexConvWithProfile")()
-	md, err := idx.store.GetMetadata(ctx, conv.GetConvID())
-	if err != nil {
-		return res, err
-	}
 	defer func() {
 		res.ConvName = utils.GetRemoteConvDisplayName(conv)
-		if md != nil {
-			min, max := MinMaxIDs(conv.Conv)
-			res.MinConvID = min
-			res.MaxConvID = max
-			res.NumMissing = len(md.MissingIDForConv(conv.Conv))
-			res.NumMessages = len(md.SeenIDs)
-			res.PercentIndexed = md.PercentIndexed(conv.Conv)
+		// Re-read stats so the report reflects any reindexing performed above.
+		if stats, statsErr := idx.store.ConvIndexStats(ctx, conv.Conv); statsErr == nil {
+			minID, maxID := MinMaxIDs(conv.Conv)
+			res.MinConvID = minID
+			res.MaxConvID = maxID
+			res.NumMissing = stats.numMissing
+			res.NumMessages = stats.numMessages
+			res.PercentIndexed = stats.percent
+			res.IndexSizeMem = stats.sizeMem
 		}
 		if err != nil {
-
 			res.Err = err.Error()
 		}
 	}()
@@ -827,7 +1012,6 @@ func (idx *Indexer) indexConvWithProfile(ctx context.Context, conv types.RemoteC
 		return res, err
 	}
 	res.IndexSizeDisk = len(b)
-	res.IndexSizeMem = md.Size()
 	return res, nil
 }
 
@@ -837,11 +1021,7 @@ func (idx *Indexer) FullyIndexed(ctx context.Context, convID chat1.ConversationI
 	if err != nil {
 		return false, err
 	}
-	md, err := idx.store.GetMetadata(ctx, convID)
-	if err != nil {
-		return false, err
-	}
-	return md.FullyIndexed(conv.Conv), nil
+	return idx.store.FullyIndexed(ctx, conv.Conv)
 }
 
 func (idx *Indexer) PercentIndexed(ctx context.Context, convID chat1.ConversationID) (res int, err error) {
@@ -850,18 +1030,18 @@ func (idx *Indexer) PercentIndexed(ctx context.Context, convID chat1.Conversatio
 	if err != nil {
 		return 0, err
 	}
-	md, err := idx.store.GetMetadata(ctx, convID)
-	if err != nil {
-		return 0, err
-	}
-	return md.PercentIndexed(conv.Conv), nil
+	return idx.store.PercentIndexed(ctx, conv.Conv)
 }
 
 func (idx *Indexer) Clear(ctx context.Context, uid gregor1.UID, convID chat1.ConversationID) (err error) {
-	defer idx.Trace(ctx, &err, fmt.Sprintf("Indexer.Clear uid: %v convID: %v", uid, convID))()
+	defer idx.Trace(ctx, &err, "Indexer.Clear uid: %v convID: %v", uid, convID)()
 	idx.Lock()
-	defer idx.Unlock()
-	return idx.store.Clear(ctx, uid, convID)
+	store := idx.store
+	idx.Unlock()
+	if store == nil {
+		return nil
+	}
+	return store.Clear(ctx, uid, convID)
 }
 
 func (idx *Indexer) OnDbNuke(mctx libkb.MetaContext) (err error) {
@@ -876,6 +1056,7 @@ func (idx *Indexer) OnDbNuke(mctx libkb.MetaContext) (err error) {
 }
 
 func (idx *Indexer) GetStoreHits(ctx context.Context, uid gregor1.UID, convID chat1.ConversationID,
-	query string) (res map[chat1.MessageID]chat1.EmptyStruct, err error) {
+	query string,
+) (res map[chat1.MessageID]chat1.EmptyStruct, err error) {
 	return idx.store.GetHits(ctx, convID, query)
 }

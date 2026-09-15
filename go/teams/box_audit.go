@@ -2,6 +2,7 @@ package teams
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"errors"
 	"fmt"
@@ -12,7 +13,6 @@ import (
 	lru "github.com/hashicorp/golang-lru"
 	"github.com/keybase/client/go/libkb"
 	storage "github.com/keybase/client/go/teams/storage"
-	"golang.org/x/net/context"
 
 	"github.com/keybase/client/go/protocol/keybase1"
 )
@@ -40,13 +40,15 @@ func ShouldRunBoxAudit(mctx libkb.MetaContext) bool {
 	return true
 }
 
-const CurrentBoxAuditVersion boxAuditVersion = 6
-const JailLRUSize = 100
-const BoxAuditIDLen = 16
-const MaxBoxAuditRetryAttempts = 6
-const BoxAuditTag = "BOXAUD"
-const MaxBoxAuditQueueSize = 100
-const MaxBoxAuditLogSize = 10
+const (
+	CurrentBoxAuditVersion   boxAuditVersion = 6
+	JailLRUSize                              = 100
+	BoxAuditIDLen                            = 16
+	MaxBoxAuditRetryAttempts                 = 6
+	BoxAuditTag                              = "BOXAUD"
+	MaxBoxAuditQueueSize                     = 100
+	MaxBoxAuditLogSize                       = 10
+)
 
 type contextKey string
 
@@ -692,22 +694,27 @@ func (d DummyBoxAuditor) AssertUnjailedOrReaudit(mctx libkb.MetaContext, _ keyba
 	mctx.Debug(dummyMsg)
 	return false, nil
 }
+
 func (d DummyBoxAuditor) IsInJail(mctx libkb.MetaContext, _ keybase1.TeamID) (bool, error) {
 	mctx.Debug(dummyMsg)
 	return false, nil
 }
+
 func (d DummyBoxAuditor) RetryNextBoxAudit(mctx libkb.MetaContext) (*keybase1.BoxAuditAttempt, error) {
 	mctx.Debug(dummyMsg)
 	return nil, nil
 }
+
 func (d DummyBoxAuditor) BoxAuditRandomTeam(mctx libkb.MetaContext) (*keybase1.BoxAuditAttempt, error) {
 	mctx.Debug(dummyMsg)
 	return nil, nil
 }
+
 func (d DummyBoxAuditor) BoxAuditTeam(mctx libkb.MetaContext, _ keybase1.TeamID) (*keybase1.BoxAuditAttempt, error) {
 	mctx.Debug(dummyMsg)
 	return nil, nil
 }
+
 func (d DummyBoxAuditor) Attempt(mctx libkb.MetaContext, _ keybase1.TeamID, _ bool) keybase1.BoxAuditAttempt {
 	mctx.Debug(dummyMsg)
 	return keybase1.BoxAuditAttempt{
@@ -715,6 +722,7 @@ func (d DummyBoxAuditor) Attempt(mctx libkb.MetaContext, _ keybase1.TeamID, _ bo
 		Ctime:  keybase1.ToUnixTime(time.Now()),
 	}
 }
+
 func (d DummyBoxAuditor) MaybeScheduleDelayedBoxAuditTeam(mctx libkb.MetaContext, teamID keybase1.TeamID) {
 }
 
@@ -869,8 +877,10 @@ func loadTeamForBoxAuditInner(mctx libkb.MetaContext, teamID keybase1.TeamID, fo
 	return team, nil
 }
 
-type merkleSeqno = keybase1.Seqno
-type merkleCheckpoints map[keybase1.UserVersion]merkleSeqno
+type (
+	merkleSeqno       = keybase1.Seqno
+	merkleCheckpoints map[keybase1.UserVersion]merkleSeqno
+)
 
 func getPUKCheckpoints(mctx libkb.MetaContext, teamchain *TeamSigChainState, checkpoint merkleSeqno, fastforwardToAddition bool) (merkleCheckpoints, error) {
 	mctx.Debug("getting PUK checkpoints at merkle seqno %v; fastforwardToAddition=%t", checkpoint, fastforwardToAddition)
@@ -890,13 +900,6 @@ func getPUKCheckpoints(mctx libkb.MetaContext, teamchain *TeamSigChainState, che
 		checkpoints[uv] = latest
 	}
 	return checkpoints, nil
-}
-
-func max(a, b merkleSeqno) merkleSeqno {
-	if a > b {
-		return a
-	}
-	return b
 }
 
 // calculateCurrentSummary calculates the box summary as it is currently for
@@ -1066,10 +1069,12 @@ func keySetToTeamIDs(dbKeySet libkb.DBKeySet) ([]keybase1.TeamID, error) {
 	return teamIDs, nil
 }
 
-type boxAuditVersion int
-type boxAuditVersioned interface {
-	getVersion() boxAuditVersion
-}
+type (
+	boxAuditVersion   int
+	boxAuditVersioned interface {
+		getVersion() boxAuditVersion
+	}
+)
 
 func BoxAuditLogDbKey(mctx libkb.MetaContext, teamID keybase1.TeamID) libkb.DbKey {
 	return libkb.DbKey{Typ: libkb.DBBoxAuditor, Key: string(teamID) + mctx.ActiveDevice().UID().String()}
@@ -1141,7 +1146,7 @@ func putJailToDisk(mctx libkb.MetaContext, jail *BoxAuditJail) error {
 	return putToDisk(mctx, BoxAuditJailDbKey(mctx), jail)
 }
 
-func putToDisk(mctx libkb.MetaContext, dbKey libkb.DbKey, i interface{}) error {
+func putToDisk(mctx libkb.MetaContext, dbKey libkb.DbKey, i any) error {
 	return mctx.G().LocalDb.PutObj(dbKey, nil, i)
 }
 
@@ -1200,7 +1205,7 @@ func (a *BoxAuditor) MaybeScheduleDelayedBoxAuditTeam(mctx libkb.MetaContext, te
 		mctx.Debug("no re-scheduling a delayed box audit since we're calling recursively based on context")
 		return
 	}
-	go a.scheduleDelayedBoxAuditTeam(mctx, teamID)
+	go a.scheduleDelayedBoxAuditTeam(mctx.BackgroundWithLogTags(), teamID)
 }
 
 func (a *BoxAuditor) scheduleDelayedBoxAuditTeam(mctx libkb.MetaContext, teamID keybase1.TeamID) {

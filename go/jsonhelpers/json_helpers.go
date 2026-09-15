@@ -33,15 +33,15 @@ func JSONStringSimple(object *jsonw.Wrapper) (string, error) {
 
 // pyindex converts an index into a real index like python.
 // Returns an index to use and whether the index is safe to use.
-func pyindex(index, len int) (int, bool) {
-	if len <= 0 {
+func pyindex(index, length int) (int, bool) {
+	if length <= 0 {
 		return 0, false
 	}
 	// wrap from the end
 	if index < 0 {
-		index = len + index
+		index = length + index
 	}
-	if index < 0 || index >= len {
+	if index < 0 || index >= length {
 		return 0, false
 	}
 	return index, true
@@ -58,7 +58,7 @@ func jsonUnpackArray(w *jsonw.Wrapper) ([]*jsonw.Wrapper, error) {
 		return nil, err
 	}
 	res := make([]*jsonw.Wrapper, length)
-	for i := 0; i < length; i++ {
+	for i := range length {
 		res[i] = w.AtIndex(i)
 	}
 	return res, nil
@@ -77,7 +77,7 @@ func JSONGetChildren(w *jsonw.Wrapper) ([]*jsonw.Wrapper, error) {
 		if err != nil {
 			return nil, err
 		}
-		var res = make([]*jsonw.Wrapper, len(keys))
+		res := make([]*jsonw.Wrapper, len(keys))
 		for i, key := range keys {
 			res[i] = dict.AtKey(key)
 		}
@@ -93,7 +93,8 @@ func JSONGetChildren(w *jsonw.Wrapper) ([]*jsonw.Wrapper, error) {
 // ([], nil) will be returned.  This is because a selector may descend into
 // many subtrees and fail in all but one.
 func AtSelectorPath(selectedObject *jsonw.Wrapper, selectors []keybase1.SelectorEntry,
-	logger func(format string, arg ...interface{}), mkErr func(selector keybase1.SelectorEntry) error) ([]*jsonw.Wrapper, error) {
+	logger func(format string, arg ...any), mkErr func(selector keybase1.SelectorEntry) error,
+) ([]*jsonw.Wrapper, error) {
 	// The terminating condition is when we've consumed all the selectors.
 	if len(selectors) == 0 {
 		return []*jsonw.Wrapper{selectedObject}, nil

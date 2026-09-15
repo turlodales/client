@@ -5,6 +5,7 @@
 package libkbfs
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -21,7 +22,6 @@ import (
 	"github.com/keybase/go-framed-msgpack-rpc/rpc"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/context"
 )
 
 // If we cancel the RPC before the RPC returns, the call should error quickly.
@@ -69,17 +69,19 @@ type fakeKeybaseClient struct {
 
 var _ rpc.GenericClient = (*fakeKeybaseClient)(nil)
 
-func (c *fakeKeybaseClient) Call(ctx context.Context, s string, args interface{},
-	res interface{}, _ time.Duration) error {
+func (c *fakeKeybaseClient) Call(ctx context.Context, s string, args any,
+	res any, _ time.Duration,
+) error {
 	return c.call(ctx, s, args, res)
 }
 
-func (c *fakeKeybaseClient) CallCompressed(ctx context.Context, s string, args interface{},
-	res interface{}, _ rpc.CompressionType, _ time.Duration) error {
+func (c *fakeKeybaseClient) CallCompressed(ctx context.Context, s string, args any,
+	res any, _ rpc.CompressionType, _ time.Duration,
+) error {
 	return c.call(ctx, s, args, res)
 }
 
-func (c *fakeKeybaseClient) call(ctx context.Context, s string, args interface{}, res interface{}) error {
+func (c *fakeKeybaseClient) call(ctx context.Context, s string, args any, res any) error {
 	switch s {
 	case "keybase.1.session.currentSession":
 		*res.(*keybase1.Session) = keybase1.Session{
@@ -93,7 +95,7 @@ func (c *fakeKeybaseClient) call(ctx context.Context, s string, args interface{}
 		return nil
 
 	case "keybase.1.identify.identifyLite":
-		arg := args.([]interface{})[0].(keybase1.IdentifyLiteArg)
+		arg := args.([]any)[0].(keybase1.IdentifyLiteArg)
 		uidStr := strings.TrimPrefix(arg.Assertion, "uid:")
 		if len(uidStr) == len(arg.Assertion) {
 			return fmt.Errorf("Non-uid assertion %s", arg.Assertion)
@@ -116,20 +118,19 @@ func (c *fakeKeybaseClient) call(ctx context.Context, s string, args interface{}
 		return nil
 
 	case "keybase.1.user.loadUserPlusKeysV2":
-		arg := args.([]interface{})[0].(keybase1.LoadUserPlusKeysV2Arg)
+		arg := args.([]any)[0].(keybase1.LoadUserPlusKeysV2Arg)
 
 		userInfo, ok := c.users[arg.Uid]
 		if !ok {
 			return fmt.Errorf("Could not find user info for UID %s", arg.Uid)
 		}
 
-		*res.(*keybase1.UserPlusKeysV2AllIncarnations) =
-			keybase1.UserPlusKeysV2AllIncarnations{
-				Current: keybase1.UserPlusKeysV2{
-					Uid:      arg.Uid,
-					Username: string(userInfo.Name),
-				},
-			}
+		*res.(*keybase1.UserPlusKeysV2AllIncarnations) = keybase1.UserPlusKeysV2AllIncarnations{
+			Current: keybase1.UserPlusKeysV2{
+				Uid:      arg.Uid,
+				Username: string(userInfo.Name),
+			},
+		}
 
 		c.loadUserPlusKeysCalled = true
 		return nil
@@ -144,7 +145,7 @@ func (c *fakeKeybaseClient) call(ctx context.Context, s string, args interface{}
 		return nil
 
 	case "keybase.1.kbfs.FSEditList":
-		c.editResponse = args.([]interface{})[0].(keybase1.FSEditListArg)
+		c.editResponse = args.([]any)[0].(keybase1.FSEditListArg)
 		return nil
 
 	default:
@@ -152,16 +153,19 @@ func (c *fakeKeybaseClient) call(ctx context.Context, s string, args interface{}
 	}
 }
 
-func (c *fakeKeybaseClient) Notify(_ context.Context, s string, args interface{}, timeout time.Duration) error {
+func (c *fakeKeybaseClient) Notify(_ context.Context, s string, args any, timeout time.Duration) error {
 	return fmt.Errorf("Unknown notify: %s %v", s, args)
 }
 
-const expectCall = true
-const expectCached = false
+const (
+	expectCall   = true
+	expectCached = false
+)
 
 func testCurrentSession(
 	t *testing.T, client *fakeKeybaseClient, c *KeybaseDaemonRPC,
-	expectedSession idutil.SessionInfo, expectedCalled bool) {
+	expectedSession idutil.SessionInfo, expectedCalled bool,
+) {
 	client.currentSessionCalled = false
 
 	ctx := context.Background()
@@ -215,7 +219,8 @@ func TestKeybaseDaemonSessionCache(t *testing.T) {
 func testLoadUserPlusKeys(
 	t *testing.T, client *fakeKeybaseClient, c *KeybaseDaemonRPC,
 	uid keybase1.UID, expectedName kbname.NormalizedUsername,
-	expectedCalled bool) {
+	expectedCalled bool,
+) {
 	client.loadUserPlusKeysCalled = false
 
 	ctx := context.Background()
@@ -230,7 +235,8 @@ func testLoadUserPlusKeys(
 func testIdentify(
 	t *testing.T, client *fakeKeybaseClient, c *KeybaseDaemonRPC,
 	uid keybase1.UID, expectedName kbname.NormalizedUsername,
-	expectedCalled bool) {
+	expectedCalled bool,
+) {
 	client.identifyCalled = false
 
 	ctx := context.Background()

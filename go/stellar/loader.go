@@ -1,11 +1,10 @@
 package stellar
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/keybase/client/go/chat/utils"
 	"github.com/keybase/client/go/libkb"
@@ -51,8 +50,10 @@ type Loader struct {
 	sync.Mutex
 }
 
-var defaultLoader *Loader
-var defaultLock sync.Mutex
+var (
+	defaultLoader *Loader
+	defaultLock   sync.Mutex
+)
 
 func NewLoader(g *libkb.GlobalContext) *Loader {
 	p := &Loader{
@@ -490,7 +491,7 @@ func (p *Loader) cleanPayments(n int) int {
 		return 0
 	}
 
-	for i := 0; i < toDelete; i++ {
+	for i := range toDelete {
 		delete(p.payments, p.plist[i])
 		delete(p.pmessages, p.plist[i])
 		deleted++
@@ -511,7 +512,7 @@ func (p *Loader) cleanRequests(n int) int {
 		return 0
 	}
 
-	for i := 0; i < toDelete; i++ {
+	for i := range toDelete {
 		delete(p.requests, p.rlist[i])
 		delete(p.rmessages, p.rlist[i])
 		deleted++

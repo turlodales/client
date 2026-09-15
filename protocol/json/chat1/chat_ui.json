@@ -69,6 +69,10 @@
           "name": "time"
         },
         {
+          "type": "gregor1.Time",
+          "name": "lastSendTime"
+        },
+        {
           "type": [
             null,
             "string"
@@ -1924,6 +1928,10 @@
         {
           "type": "FlipGameIDStr",
           "name": "gameID"
+        },
+        {
+          "type": "ConvIDStr",
+          "name": "convID"
         },
         {
           "type": "UICoinFlipPhase",

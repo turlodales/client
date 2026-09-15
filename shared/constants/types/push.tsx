@@ -1,11 +1,10 @@
-import type * as ChatTypes from './chat2'
-import type * as RPCChatTypes from './rpc-chat-gen'
-
-export type TokenType = 'apple' | 'appledev' | 'androidplay'
+import type * as ChatTypes from './chat'
+import type * as RPCChatTypes from '@/constants/rpc/rpc-chat-gen'
 
 export type PushNotification =
   | {
       badges: number
+      forUid?: string
       type: 'chat.readmessage'
     }
   | {
@@ -16,19 +15,37 @@ export type PushNotification =
     }
   | {
       conversationIDKey: ChatTypes.ConversationIDKey
+      forUid?: string
       membersType?: RPCChatTypes.ConversationMembersType
       type: 'chat.newmessage'
       unboxPayload: string
       userInteraction: boolean
     }
   | {
+      forUid?: string
       type: 'follow'
       userInteraction: boolean
       username: string
     }
   | {
-      type: 'chat.extension'
+      forUid?: string
+      type: 'device.revoked'
+      userInteraction: boolean
+    }
+  | {
+      forUid?: string
+      type: 'device.new'
+      userInteraction: boolean
+    }
+  | {
+      forUid?: string
+      type: 'autoreset'
+      userInteraction: boolean
+    }
+  | {
       conversationIDKey: ChatTypes.ConversationIDKey
+      forUid?: string
+      type: 'chat.extension'
     }
   | {
       type: 'settings.contacts'

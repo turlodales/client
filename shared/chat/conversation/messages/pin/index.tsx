@@ -1,13 +1,14 @@
-import * as C from '@/constants'
 import * as Kb from '@/common-adapters'
 import type * as T from '@/constants/types'
+import {useConversationCenterActions} from '../../center-context'
 
 type Props = {messageID: T.Chat.MessageID}
 
 const Pin = (props: Props) => {
+  const styles = useStyles()
   const {messageID} = props
-  const replyJump = C.useChatContext(s => s.dispatch.replyJump)
-  const onReplyClick = () => replyJump(messageID)
+  const {centerOnMessage} = useConversationCenterActions()
+  const onReplyClick = () => centerOnMessage(messageID, 'flash')
   return (
     <Kb.Text type="BodySmall" style={styles.text} onClick={onReplyClick}>
       pinned a message to this chat.
@@ -17,7 +18,7 @@ const Pin = (props: Props) => {
 
 export default Pin
 
-const styles = Kb.Styles.styleSheetCreate(
+const useStyles = Kb.Styles.createStyleHook(
   () =>
     ({
       text: {flexGrow: 1},

@@ -1,14 +1,8 @@
-import * as C from '@/constants'
 import * as Common from './common'
 import * as Kb from '@/common-adapters'
-import * as React from 'react'
-import {
-  emojiSearch,
-  emojiDataToRenderableEmoji,
-  renderEmoji,
-  type EmojiData,
-  RPCToEmojiData,
-} from '@/util/emoji'
+import {type EmojiData, RPCToEmojiData, emojiData} from '@/common-adapters/emoji'
+import {useUserEmoji} from '@/chat/user-emoji'
+import type * as T from '@/constants/types'
 
 export const transformer = (
   emoji: EmojiData,
@@ -21,19 +15,24 @@ export const transformer = (
 
 const keyExtractor = (_item: EmojiData, idx: number) => String(idx) // emojis can have conflicts on the names
 
+const emojiSize = 24
+const rowHeight = Common.desktopRowHeight(emojiSize)
+
 const ItemRenderer = (p: Common.ItemRendererProps<EmojiData>) => {
+  const styles = Common.useStyles()
+  const theme = Kb.Styles.useTheme()
   const {item, selected} = p
   return (
     <Kb.Box2
       direction="horizontal"
       fullWidth={true}
       style={Kb.Styles.collapseStyles([
-        Common.styles.suggestionBase,
-        {backgroundColor: selected ? Kb.Styles.globalColors.blueLighter2 : Kb.Styles.globalColors.white},
+        styles.suggestionBase,
+        {backgroundColor: selected ? theme.blueLighter2 : theme.white},
       ])}
       gap="small"
     >
-      {renderEmoji({emoji: emojiDataToRenderableEmoji(item), showTooltip: false, size: 24})}
+      <Kb.Emoji emojiData={item} showTooltip={false} size={emojiSize} />
       <Kb.Text type="BodySmallSemibold">{item.short_name}</Kb.Text>
     </Kb.Box2>
   )
@@ -43,21 +42,28 @@ const ItemRenderer = (p: Common.ItemRendererProps<EmojiData>) => {
 const emojiPrepass = /[a-z0-9_]{2,}(?!.*:)/i
 const empty = new Array<EmojiData>()
 
-const useDataSource = (filter: string) => {
-  const conversationIDKey = C.useChatContext(s => s.id)
-  const fetchUserEmoji = C.useChatState(s => s.dispatch.fetchUserEmoji)
-  C.Chat.useCIDChanged(
+// converting per keystroke makes fresh objects; keep identities stable so
+// memoized rows can bail (keyed on the store's emoji object, GCs with it)
+const emojiDataCache = new WeakMap<T.RPCChat.Emoji, EmojiData>()
+const cachedEmojiData = (emoji: T.RPCChat.Emoji) => {
+  let data = emojiDataCache.get(emoji)
+  if (!data) {
+    data = RPCToEmojiData(emoji, false)
+    emojiDataCache.set(emoji, data)
+  }
+  return data
+}
+
+const useDataSource = (conversationIDKey: T.Chat.ConversationIDKey, filter: string) => {
+  // a filter the prepass rejects discards the result below, so don't pay for the
+  // fetch — userEmojis is expensive to resolve service-side
+  const matchesPrepass = emojiPrepass.test(filter)
+  const {emojis: userEmojis, loading: userEmojisLoading} = useUserEmoji({
     conversationIDKey,
-    () => {
-      fetchUserEmoji(conversationIDKey)
-    },
-    true
-  )
+    disabled: !matchesPrepass,
+  })
 
-  const userEmojisLoading = C.Waiting.useAnyWaiting(C.Chat.waitingKeyLoadingEmoji)
-  const userEmojis = C.useChatState(s => s.userEmojisForAutocomplete)
-
-  if (!emojiPrepass.test(filter)) {
+  if (!matchesPrepass) {
     return {
       items: empty,
       loading: false,
@@ -65,33 +71,32 @@ const useDataSource = (filter: string) => {
   }
 
   // prefill data with stock emoji
-  let emojiData: Array<EmojiData> = emojiSearch(filter, 50)
+  let results: Array<EmojiData> = emojiData.emojiSearch(filter, 50)
 
-  if (userEmojis) {
-    const userEmoji = userEmojis
-      .filter(emoji => emoji.alias.toLowerCase().includes(filter))
-      .map(emoji => RPCToEmojiData(emoji, false))
-    emojiData = userEmoji.sort((a, b) => a.short_name.localeCompare(b.short_name)).concat(emojiData)
-  }
+  const userEmoji = userEmojis
+    .filter(emoji => emoji.alias.toLowerCase().includes(filter))
+    .map(emoji => cachedEmojiData(emoji))
+  results = userEmoji.sort((a, b) => a.short_name.localeCompare(b.short_name)).concat(results)
 
   return {
-    items: emojiData,
+    items: results,
     loading: userEmojisLoading,
   }
 }
 
 type ListProps = Pick<
   Common.ListProps<EmojiData>,
-  'expanded' | 'suggestBotCommandsUpdateStatus' | 'listStyle' | 'spinnerStyle'
+  'suggestBotCommandsUpdateStatus' | 'listStyle' | 'spinnerStyle'
 > & {
+  conversationIDKey: T.Chat.ConversationIDKey
   filter: string
   onSelected: (item: EmojiData, final: boolean) => void
-  onMoveRef: React.MutableRefObject<((up: boolean) => void) | undefined>
-  onSubmitRef: React.MutableRefObject<(() => boolean) | undefined>
+  setOnMoveRef: (r: (up: boolean) => void) => void
+  setOnSubmitRef: (r: () => boolean) => void
 }
 export const List = (p: ListProps) => {
-  const {filter, ...rest} = p
-  const {items, loading} = useDataSource(filter)
+  const {conversationIDKey, filter, ...rest} = p
+  const {items, loading} = useDataSource(conversationIDKey, filter)
   return (
     <Common.List
       {...rest}
@@ -99,6 +104,7 @@ export const List = (p: ListProps) => {
       items={items}
       ItemRenderer={ItemRenderer}
       loading={loading}
+      rowHeight={rowHeight}
     />
   )
 }

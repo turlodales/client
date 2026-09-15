@@ -1,35 +1,31 @@
 import * as C from '@/constants'
 import * as React from 'react'
+import {useConfigState} from '@/stores/config'
 import * as Kb from '@/common-adapters'
 import {InfoIcon} from '@/signup/common'
+import useRequestAutoInvite from '@/signup/use-request-auto-invite'
+import {startProvision} from '@/provision/flow'
 
 const Intro = () => {
-  const justDeletedSelf = C.useConfigState(s => s.justDeletedSelf)
-  const justRevokedSelf = C.useConfigState(s => s.justRevokedSelf)
+  const styles = useStyles()
+  const justDeletedSelf = useConfigState(s => s.justDeletedSelf)
+  const justRevokedSelf = useConfigState(s => s.justRevokedSelf)
   const bannerMessage = justDeletedSelf
     ? `Your Keybase account ${justDeletedSelf} has been deleted. Au revoir!`
     : justRevokedSelf
       ? `${justRevokedSelf} was revoked successfully`
       : ''
 
-  const isOnline = C.useConfigState(s => s.isOnline)
-  const loadIsOnline = C.useConfigState(s => s.dispatch.loadIsOnline)
-
-  const navigateAppend = C.useRouterState(s => s.dispatch.navigateAppend)
-  const checkIsOnline = loadIsOnline
-  const startProvision = C.useProvisionState(s => s.dispatch.startProvision)
-  const onLogin = () => {
-    startProvision()
-  }
-  const requestAutoInvite = C.useSignupState(s => s.dispatch.requestAutoInvite)
-  const onSignup = () => {
-    requestAutoInvite()
-  }
+  const isOnline = useConfigState(s => s.isOnline)
+  const loadIsOnline = useConfigState(s => s.dispatch.loadIsOnline)
+  const requestAutoInvite = useRequestAutoInvite()
+  const onLogin = () => startProvision()
+  const onSignup = () => requestAutoInvite('')
   const showProxySettings = () => {
-    navigateAppend('proxySettingsModal')
+    C.Router2.navigateAppend({name: 'proxySettingsModal', params: {}})
   }
   const [showing, setShowing] = React.useState(true)
-  Kb.useInterval(checkIsOnline, showing ? 5000 : undefined)
+  Kb.useInterval(loadIsOnline, showing ? 5000 : undefined)
 
   C.Router2.useSafeFocusEffect(
     React.useCallback(() => {
@@ -46,7 +42,7 @@ const Intro = () => {
       alignItems="center"
       style={styles.container}
     >
-      <Kb.Box2 direction="horizontal" fullWidth={true} style={styles.header}>
+      <Kb.Box2 direction="horizontal" fullWidth={true} justifyContent="flex-end" style={styles.header}>
         <InfoIcon />
       </Kb.Box2>
       {!!bannerMessage && <Kb.Banner color="blue">{bannerMessage}</Kb.Banner>}
@@ -59,12 +55,12 @@ const Intro = () => {
         centerChildren={true}
       >
         <Kb.Box2 direction="vertical" fullWidth={true} gap="small" alignItems="center">
-          <Kb.Icon type="icon-keybase-logo-64" />
+          <Kb.ImageIcon type="icon-keybase-logo-64" />
           <Kb.Text type="HeaderBig" style={styles.text}>
             Join Keybase
           </Kb.Text>
         </Kb.Box2>
-        <Kb.ButtonBar direction="column" fullWidth={Kb.Styles.isMobile} style={styles.buttonBar}>
+        <Kb.ButtonBar direction="column" fullWidth={isMobile} style={styles.buttonBar}>
           <Kb.Button label="Create account" onClick={onSignup} fullWidth={true} />
           <Kb.Button label="Log in" mode="Secondary" onClick={onLogin} fullWidth={true} />
           {isOnline ? null : (
@@ -81,21 +77,9 @@ const Intro = () => {
   )
 }
 
-const styles = Kb.Styles.styleSheetCreate(
-  () =>
+const useStyles = Kb.Styles.createStyleHook(
+  theme =>
     ({
-      banner: {
-        backgroundColor: Kb.Styles.globalColors.blue,
-        justifyContent: 'center',
-        minHeight: 40,
-        paddingBottom: Kb.Styles.globalMargins.tiny,
-        paddingLeft: Kb.Styles.isMobile ? Kb.Styles.globalMargins.small : Kb.Styles.globalMargins.xlarge,
-        paddingRight: Kb.Styles.isMobile ? Kb.Styles.globalMargins.small : Kb.Styles.globalMargins.xlarge,
-        paddingTop: Kb.Styles.globalMargins.tiny,
-        position: 'absolute',
-        top: 50,
-      },
-      bannerMessage: {color: Kb.Styles.globalColors.white},
       buttonBar: Kb.Styles.platformStyles({
         isElectron: {
           paddingBottom: Kb.Styles.globalMargins.xlarge - Kb.Styles.globalMargins.tiny, // tiny added inside buttonbar
@@ -110,10 +94,9 @@ const styles = Kb.Styles.styleSheetCreate(
         },
       }),
       container: {
-        backgroundColor: Kb.Styles.globalColors.white,
+        backgroundColor: theme.white,
       },
       header: Kb.Styles.platformStyles({
-        common: {justifyContent: 'flex-end'},
         isElectron: {padding: Kb.Styles.globalMargins.small},
         isMobile: {
           paddingRight: Kb.Styles.globalMargins.small,
@@ -121,7 +104,7 @@ const styles = Kb.Styles.styleSheetCreate(
         },
       }),
       text: {
-        color: Kb.Styles.globalColors.orange,
+        color: theme.orange,
       },
     }) as const
 )

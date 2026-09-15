@@ -92,7 +92,8 @@ func (ed encryptedData) Nonce24() (nonce [24]byte, err error) {
 // symmetric key and nonce.
 func encryptDataWithNonce(
 	data []byte, key [32]byte, nonce [24]byte, ver EncryptionVer) (
-	encryptedData, error) {
+	encryptedData, error,
+) {
 	sealedData := secretbox.Seal(nil, data, &nonce, &key)
 
 	return encryptedData{
@@ -116,7 +117,8 @@ func encryptData(data []byte, key [32]byte) (encryptedData, error) {
 // decryptData decrypts the given encrypted data with the given
 // symmetric key and nonce.
 func decryptData(
-	encryptedData encryptedData, key [32]byte, nonce [24]byte) ([]byte, error) {
+	encryptedData encryptedData, key [32]byte, nonce [24]byte,
+) ([]byte, error) {
 	switch encryptedData.Version {
 	case EncryptionSecretbox:
 		// We're good, no nonce check needed.
@@ -150,7 +152,8 @@ type EncryptedTLFCryptKeyClientHalf struct {
 func EncryptTLFCryptKeyClientHalf(
 	privateKey TLFEphemeralPrivateKey, publicKey CryptPublicKey,
 	clientHalf TLFCryptKeyClientHalf) (
-	encryptedClientHalf EncryptedTLFCryptKeyClientHalf, err error) {
+	encryptedClientHalf EncryptedTLFCryptKeyClientHalf, err error,
+) {
 	var nonce [24]byte
 	err = RandRead(nonce[:])
 	if err != nil {
@@ -189,7 +192,8 @@ type EncryptedPrivateMetadata struct {
 // EncryptEncodedPrivateMetadata encrypts an encoded PrivateMetadata
 // object.
 func EncryptEncodedPrivateMetadata(encodedPrivateMetadata []byte, key TLFCryptKey) (
-	encryptedPrivateMetadata EncryptedPrivateMetadata, err error) {
+	encryptedPrivateMetadata EncryptedPrivateMetadata, err error,
+) {
 	encryptedData, err := encryptData(encodedPrivateMetadata, key.Data())
 	if err != nil {
 		return EncryptedPrivateMetadata{}, err
@@ -202,15 +206,17 @@ func EncryptEncodedPrivateMetadata(encodedPrivateMetadata []byte, key TLFCryptKe
 // not decode it.
 func DecryptPrivateMetadata(
 	encryptedPrivateMetadata EncryptedPrivateMetadata, key TLFCryptKey) (
-	[]byte, error) {
-	if encryptedPrivateMetadata.encryptedData.Version ==
+	[]byte, error,
+) {
+	if encryptedPrivateMetadata.Version ==
 		EncryptionSecretboxWithKeyNonce {
 		// Only blocks should have v2 encryption.
 		return nil, errors.WithStack(InvalidEncryptionVer{
-			encryptedPrivateMetadata.encryptedData.Version})
+			encryptedPrivateMetadata.Version,
+		})
 	}
 
-	nonce, err := encryptedPrivateMetadata.encryptedData.Nonce24()
+	nonce, err := encryptedPrivateMetadata.Nonce24()
 	if err != nil {
 		return nil, err
 	}
@@ -228,7 +234,8 @@ type EncryptedBlock struct {
 func EncryptPaddedEncodedBlock(
 	paddedEncodedBlock []byte, tlfCryptKey TLFCryptKey,
 	blockServerHalf BlockCryptKeyServerHalf, ver EncryptionVer) (
-	encryptedBlock EncryptedBlock, err error) {
+	encryptedBlock EncryptedBlock, err error,
+) {
 	var ed encryptedData
 	switch ver {
 	case EncryptionSecretbox:
@@ -255,10 +262,11 @@ func EncryptPaddedEncodedBlock(
 // DecryptBlock decrypts a block, but does not unpad or decode it.
 func DecryptBlock(
 	encryptedBlock EncryptedBlock, tlfCryptKey TLFCryptKey,
-	blockServerHalf BlockCryptKeyServerHalf) ([]byte, error) {
-	switch encryptedBlock.encryptedData.Version {
+	blockServerHalf BlockCryptKeyServerHalf,
+) ([]byte, error) {
+	switch encryptedBlock.Version {
 	case EncryptionSecretbox:
-		nonce, err := encryptedBlock.encryptedData.Nonce24()
+		nonce, err := encryptedBlock.Nonce24()
 		if err != nil {
 			return nil, err
 		}
@@ -271,7 +279,7 @@ func DecryptBlock(
 			encryptedBlock.encryptedData, key.cryptKey(), key.nonce())
 	default:
 		return nil, errors.WithStack(
-			InvalidEncryptionVer{encryptedBlock.encryptedData.Version})
+			InvalidEncryptionVer{encryptedBlock.Version})
 	}
 }
 
@@ -282,7 +290,8 @@ type EncryptedTLFCryptKeys struct {
 
 // EncryptTLFCryptKeys encrypts a TLFCryptKey array.
 func EncryptTLFCryptKeys(codec kbfscodec.Codec, oldKeys []TLFCryptKey, key TLFCryptKey) (
-	encryptedTLFCryptKeys EncryptedTLFCryptKeys, err error) {
+	encryptedTLFCryptKeys EncryptedTLFCryptKeys, err error,
+) {
 	encodedKeys, err := codec.Encode(oldKeys)
 	if err != nil {
 		return EncryptedTLFCryptKeys{}, err
@@ -300,15 +309,16 @@ func EncryptTLFCryptKeys(codec kbfscodec.Codec, oldKeys []TLFCryptKey, key TLFCr
 // decode it.
 func DecryptTLFCryptKeys(
 	codec kbfscodec.Codec, encryptedTLFCryptKeys EncryptedTLFCryptKeys, key TLFCryptKey) (
-	[]TLFCryptKey, error) {
-	if encryptedTLFCryptKeys.encryptedData.Version ==
+	[]TLFCryptKey, error,
+) {
+	if encryptedTLFCryptKeys.Version ==
 		EncryptionSecretboxWithKeyNonce {
 		// Only blocks should have v2 encryption.
 		return nil, errors.WithStack(
-			InvalidEncryptionVer{encryptedTLFCryptKeys.encryptedData.Version})
+			InvalidEncryptionVer{encryptedTLFCryptKeys.Version})
 	}
 
-	nonce, err := encryptedTLFCryptKeys.encryptedData.Nonce24()
+	nonce, err := encryptedTLFCryptKeys.Nonce24()
 	if err != nil {
 		return nil, err
 	}
@@ -335,7 +345,8 @@ type EncryptedMerkleLeaf struct {
 
 // MakeEncryptedMerkleLeaf constructs an EncryptedMerkleLeaf.
 func MakeEncryptedMerkleLeaf(
-	version EncryptionVer, data []byte, nonce *[24]byte) EncryptedMerkleLeaf {
+	version EncryptionVer, data []byte, nonce *[24]byte,
+) EncryptedMerkleLeaf {
 	return EncryptedMerkleLeaf{
 		encryptedData{
 			Version:       version,
@@ -348,17 +359,20 @@ func MakeEncryptedMerkleLeaf(
 // PrepareMerkleLeaf verifies the correctness of the given leaf, and
 // returns its nonce.
 func PrepareMerkleLeaf(encryptedMerkleLeaf EncryptedMerkleLeaf) (
-	nonce [24]byte, err error) {
+	nonce [24]byte, err error,
+) {
 	if encryptedMerkleLeaf.Version != EncryptionSecretbox {
 		return nonce,
 			errors.WithStack(UnknownEncryptionVer{
-				Ver: encryptedMerkleLeaf.Version})
+				Ver: encryptedMerkleLeaf.Version,
+			})
 	}
 
 	if len(encryptedMerkleLeaf.Nonce) != len(nonce) {
 		return nonce,
 			errors.WithStack(InvalidNonceError{
-				Nonce: encryptedMerkleLeaf.Nonce})
+				Nonce: encryptedMerkleLeaf.Nonce,
+			})
 	}
 	copy(nonce[:], encryptedMerkleLeaf.Nonce)
 	return nonce, nil
@@ -368,7 +382,8 @@ func PrepareMerkleLeaf(encryptedMerkleLeaf EncryptedMerkleLeaf) (
 // private TLF key and ephemeral public key.
 func DecryptMerkleLeaf(
 	privateKey TLFPrivateKey, publicKey TLFEphemeralPublicKey,
-	encryptedMerkleLeaf EncryptedMerkleLeaf) ([]byte, error) {
+	encryptedMerkleLeaf EncryptedMerkleLeaf,
+) ([]byte, error) {
 	nonce, err := PrepareMerkleLeaf(encryptedMerkleLeaf)
 	if err != nil {
 		return nil, err

@@ -5,13 +5,13 @@
 package libkbfs
 
 import (
+	"context"
 	"sync"
 
 	"github.com/keybase/client/go/kbconst"
 	"github.com/keybase/client/go/kbfs/idutil"
 	"github.com/keybase/client/go/kbfs/tlf"
 	"github.com/keybase/client/go/libkb"
-	"golang.org/x/net/context"
 )
 
 // EnableAdminFeature returns true if admin features should be enabled
@@ -82,7 +82,8 @@ func setHomeTlfIdsForDbcAndFavorites(ctx context.Context, config Config, usernam
 // serviceLoggedIn should be called when a new user logs in. It
 // shouldn't be called again until after serviceLoggedOut is called.
 func serviceLoggedIn(ctx context.Context, config Config, session idutil.SessionInfo,
-	bws TLFJournalBackgroundWorkStatus) (wg *sync.WaitGroup) {
+	bws TLFJournalBackgroundWorkStatus,
+) (wg *sync.WaitGroup) {
 	wg = &sync.WaitGroup{} // To avoid returning a nil pointer.
 	log := config.MakeLogger("")
 	if jManager, err := GetJournalManager(config); err == nil {

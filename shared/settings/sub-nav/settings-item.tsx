@@ -1,4 +1,4 @@
-import * as React from 'react'
+import type * as React from 'react'
 import * as Kb from '@/common-adapters'
 
 type SettingsItemProps = {
@@ -7,18 +7,31 @@ type SettingsItemProps = {
   iconComponent?: React.ComponentType
   inProgress?: boolean
   largerBadgeMinWidthFix?: boolean
-  onClick: () => void
+  onClick: (t: string) => void
   text: string
+  type: string
   subText?: string
+  testID?: string
   textColor?: Kb.Styles.Color
-  selected?: boolean
+  selected: boolean
 }
 
-export default function SettingsItem(props: SettingsItemProps) {
+function SettingsItem(props: SettingsItemProps) {
+  const styles = useStyles()
+  const theme = Kb.Styles.useTheme()
+  const {onClick: _onClick, type, selected} = props
+  const onClick = () => {
+    _onClick(type)
+  }
   return (
     <Kb.ClickableBox
-      onClick={props.onClick}
-      style={Kb.Styles.collapseStyles([styles.item, props.selected && styles.selected] as const)}
+      onClick={onClick}
+      testID={props.testID}
+      direction="horizontal"
+      alignItems="center"
+      relative={true}
+      fullWidth={true}
+      style={Kb.Styles.collapseStyles([styles.item, selected && styles.selected] as const)}
     >
       {props.iconComponent ? (
         <props.iconComponent />
@@ -26,23 +39,23 @@ export default function SettingsItem(props: SettingsItemProps) {
         <Kb.Icon
           fontSize={24}
           type={props.icon}
-          color={Kb.Styles.globalColors.black_50}
+          color={theme.black_50}
           style={{
-            marginRight: Kb.Styles.isMobile ? Kb.Styles.globalMargins.small : Kb.Styles.globalMargins.tiny,
+            marginRight: isMobile ? Kb.Styles.globalMargins.small : Kb.Styles.globalMargins.tiny,
           }}
         />
       ) : null}
       <Kb.Box2 direction="vertical">
-        <Kb.Text2
+        <Kb.Text
           type="BodySemibold"
           style={Kb.Styles.collapseStyles([
-            props.selected ? styles.selectedText : styles.itemText,
+            selected ? styles.selectedText : styles.itemText,
             props.textColor ? {color: props.textColor} : {},
           ])}
         >
           {props.text}
-        </Kb.Text2>
-        {props.text && props.subText && <Kb.Text2 type="BodySmall">{props.subText}</Kb.Text2>}
+        </Kb.Text>
+        {props.text && props.subText && <Kb.Text type="BodySmall">{props.subText}</Kb.Text>}
       </Kb.Box2>
       {props.inProgress && <Kb.ProgressIndicator style={styles.progress} />}
       {!!props.badgeNumber && props.badgeNumber > 0 && (
@@ -51,35 +64,31 @@ export default function SettingsItem(props: SettingsItemProps) {
     </Kb.ClickableBox>
   )
 }
+export default SettingsItem
 
-const styles = Kb.Styles.styleSheetCreate(() => ({
+const useStyles = Kb.Styles.createStyleHook(theme => ({
   badge: {
     marginLeft: 6,
   },
   item: Kb.Styles.platformStyles({
     common: {
-      ...Kb.Styles.globalStyles.flexBoxRow,
-      alignItems: 'center',
-      paddingLeft: Kb.Styles.globalMargins.small,
-      paddingRight: Kb.Styles.globalMargins.small,
-      position: 'relative',
+      ...Kb.Styles.paddingH(Kb.Styles.globalMargins.small),
     },
     isElectron: {
       height: 32,
-      width: '100%',
     },
     isMobile: {
-      borderBottomColor: Kb.Styles.globalColors.black_10,
+      borderBottomColor: theme.black_10,
       borderBottomWidth: Kb.Styles.hairlineWidth,
       height: 56,
     },
   }),
   itemText: Kb.Styles.platformStyles({
     isElectron: {
-      color: Kb.Styles.globalColors.black_50,
+      color: theme.black_50,
     },
     isMobile: {
-      color: Kb.Styles.globalColors.black,
+      color: theme.black,
     },
   }),
   progress: {
@@ -87,7 +96,7 @@ const styles = Kb.Styles.styleSheetCreate(() => ({
   },
   selected: Kb.Styles.platformStyles({
     common: {
-      borderLeftColor: Kb.Styles.globalColors.blue,
+      borderLeftColor: theme.blue,
       borderLeftWidth: 3,
       borderStyle: 'solid',
     },
@@ -96,6 +105,6 @@ const styles = Kb.Styles.styleSheetCreate(() => ({
     },
   }),
   selectedText: {
-    color: Kb.Styles.globalColors.black,
+    color: theme.black,
   },
 }))

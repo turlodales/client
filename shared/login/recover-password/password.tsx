@@ -1,15 +1,16 @@
 import * as C from '@/constants'
-import * as React from 'react'
-import _Password from '@/settings/password'
+import {UpdatePassword} from '@/settings/password'
+import {submitRecoverPasswordPassword} from './flow'
 
-const Password = () => {
-  const error = C.useRecoverState(s => s.passwordError)
-  const waiting = C.Waiting.useAnyWaiting(C.RecoverPwd.waitingKey)
-  const submitPassword = C.useRecoverState(s => s.dispatch.dynamic.submitPassword)
+type Props = {route: {params: {error?: string}}}
+
+const Password = ({route}: Props) => {
+  const {error} = route.params
+  const waiting = C.Waiting.useAnyWaiting(C.waitingKeyRecoverPassword)
   const onSave = (p: string) => {
-    submitPassword?.(p)
+    submitRecoverPasswordPassword(p)
   }
-  return <_Password error={error} hasRandomPW={false} onSave={onSave} waitingForResponse={waiting} />
+  return <UpdatePassword error={error ?? ''} onSave={onSave} waitingForResponse={waiting} />
 }
 
 export default Password

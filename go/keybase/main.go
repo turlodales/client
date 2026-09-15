@@ -4,6 +4,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -24,7 +25,6 @@ import (
 	"github.com/keybase/client/go/service"
 	"github.com/keybase/client/go/uidmap"
 	"github.com/keybase/go-framed-msgpack-rpc/rpc"
-	"golang.org/x/net/context"
 )
 
 var cmd libcmdline.Command
@@ -82,7 +82,7 @@ func main() {
 	}
 	if err != nil {
 		// if errParseArgs, the error was already output (along with usage)
-		if err != errParseArgs {
+		if !errors.Is(err, errParseArgs) {
 			g.Log.Errorf("%s", stripFieldsFromAppStatusError(err).Error())
 		}
 		if g.ExitCode == keybase1.ExitCode_OK {
@@ -381,7 +381,6 @@ func configureProcesses(g *libkb.GlobalContext, cl *libcmdline.CommandLine, cmd 
 }
 
 func configureLogging(g *libkb.GlobalContext, cl *libcmdline.CommandLine) error {
-
 	g.Log.Debug("+ configureLogging")
 	defer func() {
 		g.Log.Debug("- configureLogging")
@@ -496,14 +495,14 @@ func startProfile(g *libkb.GlobalContext) {
 			g.Log.Debug("dumping periodic memory profile")
 			f, err := os.CreateTemp("", "keybase_memprofile")
 			if err != nil {
-				g.Log.Debug("could not create memory profile: ", err)
+				g.Log.Debug("could not create memory profile: %v", err)
 				continue
 			}
 
 			debug.FreeOSMemory()
 			runtime.GC() // get up-to-date statistics
 			if err := pprof.WriteHeapProfile(f); err != nil {
-				g.Log.Debug("could not write memory profile: ", err)
+				g.Log.Debug("could not write memory profile: %v", err)
 				continue
 			}
 			f.Close()

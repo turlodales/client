@@ -5,6 +5,7 @@ package service
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -16,8 +17,6 @@ import (
 	"runtime/trace"
 	"sync"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/keybase/cli"
 	"github.com/keybase/client/go/avatars"
@@ -89,6 +88,12 @@ type Service struct {
 	loginSuccess    bool
 	oneshotUsername string
 	oneshotPaperkey string
+
+	// Closed after the first real startup login attempt (offline or online)
+	// finishes, so RPCs that report login state (GetBootstrapStatus) can wait
+	// for it instead of racing a login that runs off the Init path on mobile.
+	initialLoginAttemptDone chan struct{}
+	initialLoginAttemptOnce sync.Once
 }
 
 type Shutdowner interface {
@@ -115,6 +120,8 @@ func NewService(g *libkb.GlobalContext, isDaemon bool) *Service {
 		walletState:      stellar.NewWalletState(g, remote.NewRemoteNet(g)),
 		offlineRPCCache:  offline.NewRPCCache(g),
 		httpSrv:          manager.NewSrv(g),
+
+		initialLoginAttemptDone: make(chan struct{}),
 	}
 }
 
@@ -150,7 +157,7 @@ func (d *Service) RegisterProtocols(srv *rpc.Server, xp rpc.Transporter, connID 
 		keybase1.NotifyCtlProtocol(NewNotifyCtlHandler(xp, connID, g)),
 		keybase1.PGPProtocol(NewPGPHandler(xp, connID, g)),
 		keybase1.PprofProtocol(NewPprofHandler(xp, g)),
-		keybase1.ReachabilityProtocol(newReachabilityHandler(xp, g, d.reachability)),
+		keybase1.ReachabilityProtocol(newReachabilityHandler(xp, g, d)),
 		keybase1.RevokeProtocol(NewRevokeHandler(xp, g)),
 		keybase1.ProveProtocol(NewProveHandler(xp, g)),
 		keybase1.SaltpackProtocol(NewSaltpackHandler(xp, g)),
@@ -189,7 +196,6 @@ func (d *Service) RegisterProtocols(srv *rpc.Server, xp rpc.Transporter, connID 
 		keybase1.UserSearchProtocol(NewUserSearchHandler(xp, g, contactsProv)),
 		keybase1.BotProtocol(NewBotHandler(xp, g)),
 		keybase1.FeaturedBotProtocol(NewFeaturedBotHandler(xp, g)),
-		keybase1.WotProtocol(NewWebOfTrustHandler(xp, g)),
 	}
 	appStateHandler := newAppStateHandler(xp, g)
 	protocols = append(protocols, keybase1.AppStateProtocol(appStateHandler))
@@ -235,7 +241,7 @@ func (d *Service) Handle(c net.Conn) {
 	// err is always non-nil.
 	err := server.Err()
 	cl <- err
-	if err != io.EOF {
+	if !errors.Is(err, io.EOF) {
 		d.G().Log.Warning("Run error: %s", err)
 	}
 
@@ -245,7 +251,6 @@ func (d *Service) Handle(c net.Conn) {
 func (d *Service) Run() (err error) {
 	mctx := libkb.NewMetaContextBackground(d.G()).WithLogTag("SVC")
 	defer func() {
-
 		d.stopProfile()
 
 		if d.startCh != nil {
@@ -255,7 +260,7 @@ func (d *Service) Run() (err error) {
 		if err != nil {
 			mctx.Info("Service#Run() exiting with error %s (code %d)", err.Error(), d.G().ExitCode)
 		} else {
-			mctx.Debug("Service#Run() clean exit with code %d", d.G().ExitCode)
+			mctx.Info("Service#Run() exiting (code %d)", d.G().ExitCode)
 		}
 	}()
 
@@ -305,12 +310,11 @@ func (d *Service) Run() (err error) {
 		return
 	}
 
-	if err = d.G().LocalDb.ForceOpen(); err != nil {
-		return err
-	}
-	if err = d.G().LocalChatDb.ForceOpen(); err != nil {
-		return err
-	}
+	// Open both local DBs concurrently. They are at different paths so there
+	// is no lock contention between them. Any DB call that arrives before an
+	// open finishes will block on sync.Once inside doWhileOpenAndNukeIfCorrupted.
+	go func() { _ = d.G().LocalDb.ForceOpen() }()
+	go func() { _ = d.G().LocalChatDb.ForceOpen() }()
 
 	var l net.Listener
 	if l, err = d.ConfigRPCServer(); err != nil {
@@ -415,6 +419,50 @@ func (d *Service) purgeOldChatAttachmentData() {
 	}
 }
 
+// A share is what launches the app, so a blind sweep here could delete the
+// payload for the share currently on screen. Anything this old is from a
+// previous run.
+const incomingShareMaxAge = 24 * time.Hour
+
+// The iOS share extension writes payloads into the app group's cache and is
+// gone before the app reads them, so nothing on either side owns deleting them.
+// They sit outside GetCacheDir (that is the app sandbox, this is the group
+// container), so purgeOldChatAttachmentData never sees them.
+func (d *Service) purgeOldIncomingShareData() {
+	dir := IncomingShareFolder(d.G().Env.GetMobileSharedHome())
+	if dir == "" {
+		return
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			d.G().Log.Debug("purgeOldIncomingShareData: read dir: %s", err)
+		}
+		return
+	}
+	cutoff := time.Now().Add(-incomingShareMaxAge)
+	for _, entry := range entries {
+		// manifest.json lives alongside the payload dirs and is the live handoff
+		// to the app; only the directories are ours to remove.
+		if !entry.IsDir() {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		// Writing the processed copy into the payload dir bumps its mtime, so a
+		// share still being worked on keeps renewing its lease.
+		if info.ModTime().After(cutoff) {
+			continue
+		}
+		p := filepath.Join(dir, entry.Name())
+		if err := os.RemoveAll(p); err != nil {
+			d.G().Log.Debug("purgeOldIncomingShareData: failed to remove %s: %s", p, err)
+		}
+	}
+}
+
 func (d *Service) startChatModules() {
 	kuid := d.G().Env.GetUID()
 	if !kuid.IsNil() {
@@ -439,6 +487,7 @@ func (d *Service) startChatModules() {
 		g.PushShutdownHook(d.stopChatModules)
 	}
 	d.purgeOldChatAttachmentData()
+	d.purgeOldIncomingShareData()
 }
 
 func (d *Service) stopChatModules(m libkb.MetaContext) error {
@@ -543,6 +592,9 @@ func (d *Service) SetupChatModules(ri func() chat1.RemoteInterface) {
 	g.LiveLocationTracker = maps.NewLiveLocationTracker(g)
 	g.BotCommandManager = bots.NewCachingBotCommandManager(g, ri, chat.CreateNameInfoSource)
 	g.UIInboxLoader = chat.NewUIInboxLoader(g)
+	if loader, ok := g.UIInboxLoader.(*chat.UIInboxLoader); ok {
+		g.AddLogoutHook(loader, "chat/UIInboxLoader")
+	}
 	g.UIThreadLoader = chat.NewUIThreadLoader(g, ri)
 	g.ParticipantsSource = chat.NewCachingParticipantSource(g, ri)
 	g.EmojiSource = chat.NewDevConvEmojiSource(g, ri)
@@ -657,7 +709,6 @@ func (d *Service) addGlobalHooks() {
 }
 
 func (d *Service) StartLoopbackServer(loginMode libkb.LoginAttempt) error {
-
 	ctx := context.Background()
 
 	var l net.Listener
@@ -666,6 +717,12 @@ func (d *Service) StartLoopbackServer(loginMode libkb.LoginAttempt) error {
 	if err = d.GetExclusiveLock(); err != nil {
 		return err
 	}
+
+	// Open both local DBs concurrently. They are at different paths so there
+	// is no lock contention between them. Any DB call that arrives before an
+	// open finishes will block on sync.Once inside doWhileOpenAndNukeIfCorrupted.
+	go func() { _ = d.G().LocalDb.ForceOpen() }()
+	go func() { _ = d.G().LocalChatDb.ForceOpen() }()
 
 	if l, err = d.G().MakeLoopbackServer(); err != nil {
 		return err
@@ -1183,7 +1240,7 @@ func (d *Service) getPaperKey(mctx libkb.MetaContext) (key string, err error) {
 	mctx.Info("Reading paperkey from standard input in oneshot mode")
 
 	key, err = bufio.NewReader(os.Stdin).ReadString('\n')
-	if err == io.EOF && len(key) > 0 {
+	if errors.Is(err, io.EOF) && len(key) > 0 {
 		err = nil
 	}
 	if len(key) < 5 {
@@ -1342,7 +1399,26 @@ func (d *Service) configurePath() {
 // If that fails for any reason, LoginProvisionedDevice is used, which should get
 // around any issue where the session.json file is out of date or missing since the
 // last time the service started.
+// awaitInitialLoginAttempt blocks until the first startup login attempt has
+// finished (however it went), the context is done, or maxWait elapses. Used
+// by RPCs whose answer depends on login state so they don't race the login
+// that runs off the Init path on mobile.
+func (d *Service) awaitInitialLoginAttempt(m libkb.MetaContext, maxWait time.Duration) {
+	select {
+	case <-d.initialLoginAttemptDone:
+	case <-m.Ctx().Done():
+		m.Debug("awaitInitialLoginAttempt: context done: %v", m.Ctx().Err())
+	case <-time.After(maxWait):
+		m.Debug("awaitInitialLoginAttempt: gave up after %v", maxWait)
+	}
+}
+
 func (d *Service) tryLogin(ctx context.Context, mode libkb.LoginAttempt) {
+	if mode != libkb.LoginAttemptNone {
+		// Signal on every exit path; sync.Once makes repeat calls no-ops.
+		defer d.initialLoginAttemptOnce.Do(func() { close(d.initialLoginAttemptDone) })
+	}
+
 	d.loginAttemptMu.Lock()
 	defer d.loginAttemptMu.Unlock()
 
@@ -1415,10 +1491,11 @@ func (d *Service) tryLogin(ctx context.Context, mode libkb.LoginAttempt) {
 func (d *Service) startProfile() {
 	cpu := os.Getenv("KEYBASE_CPUPROFILE")
 	if cpu != "" {
-		f, err := os.Create(cpu)
+		f, err := os.Create(cpu) //nolint:gosec // G703: path is KEYBASE_CPUPROFILE from the environment
 		if err != nil {
 			d.G().Log.Warning("error creating cpu profile: %s", err)
 		} else {
+			defer f.Close()
 			d.G().Log.Debug("+ starting service cpu profile in %s", cpu)
 			err := pprof.StartCPUProfile(f)
 			if err != nil {
@@ -1429,7 +1506,7 @@ func (d *Service) startProfile() {
 
 	tr := os.Getenv("KEYBASE_SVCTRACE")
 	if tr != "" {
-		f, err := os.Create(tr)
+		f, err := os.Create(tr) //nolint:gosec // G703: path is KEYBASE_SVCTRACE from the environment
 		if err != nil {
 			d.G().Log.Warning("error creating service trace: %s", err)
 		} else {
@@ -1457,7 +1534,7 @@ func (d *Service) stopProfile() {
 	if mem == "" {
 		return
 	}
-	f, err := os.Create(mem)
+	f, err := os.Create(mem) //nolint:gosec // G703: path is KEYBASE_MEMPROFILE from the environment
 	if err != nil {
 		d.G().Log.Warning("could not create memory profile: %s", err)
 		return

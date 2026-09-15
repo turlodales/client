@@ -1,205 +1,203 @@
+import './team-row.css'
 import * as C from '@/constants'
 import * as Kb from '@/common-adapters'
-import * as React from 'react'
-import * as Container from '@/util/container'
+import * as TestIDs from '@/tests/e2e/shared/test-ids'
 import type * as T from '@/constants/types'
+import logger from '@/logger'
 import TeamMenu from '../team/menu-container'
 import {pluralize} from '@/util/string'
 import {Activity} from '../common'
+import RoleCrown from '../common/role-crown'
 
-type Props = {
-  firstItem: boolean
-  showChat?: boolean // default true
-  teamID: T.Teams.TeamID
+export type TeamRowItem = {
+  activityLevel: T.Teams.ActivityLevel
+  badgeCount: number
+  id: T.Teams.TeamID
+  isNew: boolean
+  teamMeta: T.Teams.TeamMeta
 }
 
-const TeamRow = React.memo(function TeamRow(props: Props) {
-  const {firstItem, showChat = true, teamID} = props
-  const nav = Container.useSafeNavigation()
-  const teamMeta = C.useTeamsState(s => C.Teams.getTeamMeta(s, teamID))
-  // useActivityLevels in ../container ensures these are loaded
-  const activityLevel = C.useTeamsState(s => s.activityLevels.teams.get(teamID) || 'none')
+type Props = TeamRowItem & {
+  showChat?: boolean // default true
+}
 
-  const onViewTeam = () => nav.safeNavigateAppend({props: {teamID}, selected: 'team'})
+const TeamRow = function TeamRow(props: Props) {
+  const styles = useStyles()
+  const {activityLevel, badgeCount, id: teamID, isNew, showChat = true, teamMeta} = props
+  const navigateAppend = C.Router2.navigateAppend
+
+  if (__DEV__ && teamMeta.id !== teamID) {
+    logger.warn(`TeamRow ID mismatch: props.id=${teamID} teamMeta.id=${teamMeta.id}`)
+  }
+
+  const onViewTeam = () => navigateAppend({name: 'team', params: {teamID}})
 
   const activity = <Activity level={activityLevel} />
 
-  const previewConversation = C.useChatState(s => s.dispatch.previewConversation)
+  const previewConversation = C.Router2.previewConversation
   const onChat = () => previewConversation({reason: 'teamRow', teamname: teamMeta.teamname})
 
-  const makePopup = React.useCallback(
-    (p: Kb.Popup2Parms) => {
-      const {attachTo, hidePopup} = p
-      return <TeamMenu teamID={teamID} attachTo={attachTo} onHidden={hidePopup} visible={true} />
-    },
-    [teamID]
-  )
+  const makePopup = (p: Kb.Popup2Parms) => {
+    const {attachTo, hidePopup} = p
+    return <TeamMenu teamID={teamID} attachTo={attachTo} onHidden={hidePopup} visible={true} />
+  }
   const {popup, popupAnchor, showPopup} = Kb.usePopup2(makePopup)
 
-  const teamIDToResetUsers = C.useTeamsState(s => s.teamIDToResetUsers)
-  const badgeCount = C.useTeamsState(s =>
-    C.Teams.getTeamRowBadgeCount(s.newTeamRequests, teamIDToResetUsers, teamID)
-  )
-  const isNew = C.useTeamsState(s => s.newTeams.has(teamID))
+  const crownIcon =
+    teamMeta.role === 'owner' || teamMeta.role === 'admin' ? (
+      <Kb.Box2 direction="vertical" style={styles.crownIconBox} centerChildren={true}>
+        <RoleCrown role={teamMeta.role} sizeType="Tiny" style={styles.crownIcon} />
+      </Kb.Box2>
+    ) : null
 
-  const crownIconType: Kb.IconType | undefined =
-    teamMeta.role === 'owner'
-      ? 'iconfont-crown-owner'
-      : teamMeta.role === 'admin'
-        ? 'iconfont-crown-admin'
-        : undefined
-  const crownIcon = crownIconType ? (
-    <Kb.Box2 direction="vertical" style={styles.crownIconBox} centerChildren={true}>
-      <Kb.Icon
-        type={crownIconType}
-        sizeType="Tiny"
-        style={Kb.Styles.collapseStyles([
-          styles.crownIcon,
-          teamMeta.role === 'admin' && styles.darkerAdminIcon,
-        ])}
-      />
+  const avatarBlock = (
+    <Kb.Box2 direction="vertical" style={styles.avatarOuter} centerChildren={true}>
+      <Kb.Box2 direction="vertical" relative={true} style={styles.avatarRelative}>
+        <Kb.Avatar size={32} teamname={teamMeta.teamname} isTeam={true} />
+        {!!badgeCount && <Kb.Badge badgeNumber={badgeCount} badgeStyle={styles.badge} />}
+        {crownIcon}
+      </Kb.Box2>
     </Kb.Box2>
-  ) : null
+  )
+
+  const nameAndMemberCount = (
+    <>
+      <Kb.Box2 direction="horizontal" gap="xtiny" alignSelf="flex-start" alignItems="center">
+        <Kb.Text type="BodySemibold" lineClamp={1} ellipsizeMode="middle">
+          {teamMeta.teamname}
+        </Kb.Text>
+        {teamMeta.isOpen && <Kb.Meta variant="open" />}
+      </Kb.Box2>
+      <Kb.Box2 direction="horizontal" alignItems="center" gap="tiny" alignSelf="flex-start">
+        {isNew && <Kb.Meta variant="new" />}
+        <Kb.Text type="BodySmall">
+          {teamMeta.memberCount.toLocaleString()} {pluralize('member', teamMeta.memberCount)}
+        </Kb.Text>
+      </Kb.Box2>
+    </>
+  )
 
   return (
     <>
-      <Kb.ListItem2
-        type="Small"
-        firstItem={firstItem}
-        onClick={onViewTeam}
-        icon={
-          <Kb.Box2
-            direction="vertical"
-            fullHeight={true}
-            centerChildren={true}
-            style={styles.avatarContainer}
-          >
-            <Kb.Avatar size={32} teamname={teamMeta.teamname} isTeam={true} />
-            {!!badgeCount && <Kb.Badge badgeNumber={badgeCount} badgeStyle={styles.badge} />}
-            {crownIcon}
+      <Kb.ClickableBox onClick={onViewTeam} testID={TestIDs.TEAMS_ROW} className={isMobile ? undefined : 'teamRow'} direction="horizontal" fullWidth={true} alignItems="center" style={styles.rowStyle}>
+        <Kb.Divider style={styles.divider} />
+        {avatarBlock}
+        {isMobile ? (
+          <Kb.Box2 direction="vertical" flex={1} justifyContent="center" style={styles.bodyMobile}>
+            {nameAndMemberCount}
+            {activity}
           </Kb.Box2>
-        }
-        style={styles.white}
-        innerStyle={styles.white}
-        height={Kb.Styles.isPhone ? 72 : undefined}
-        body={
-          <Kb.Box2 direction="horizontal" fullHeight={true} fullWidth={true} style={styles.bodyContainer}>
-            <Kb.Box2 direction="horizontal" fullHeight={true} alignItems="center" style={styles.bodyLeft}>
-              <Kb.Box2
-                direction="vertical"
-                fullHeight={true}
-                alignItems="flex-start"
-                style={styles.bodyLeftText}
-              >
-                <Kb.Box2 direction="horizontal" gap="xtiny" alignSelf="flex-start" alignItems="center">
-                  <Kb.Text2 type="BodySemibold" lineClamp={1} ellipsizeMode="middle">
-                    {teamMeta.teamname}
-                  </Kb.Text2>
-                  {teamMeta.isOpen && (
-                    <Kb.Meta
-                      title="open"
-                      backgroundColor={Kb.Styles.globalColors.green}
-                      style={styles.alignSelfCenter}
-                    />
-                  )}
-                </Kb.Box2>
-                <Kb.Box2 direction="horizontal" alignItems="center" gap="tiny" alignSelf="flex-start">
-                  {isNew && (
-                    <Kb.Meta
-                      title="new"
-                      backgroundColor={Kb.Styles.globalColors.orange}
-                      style={styles.alignSelfCenter}
-                    />
-                  )}
-                  <Kb.Text fixOverdraw={true} type="BodySmall">
-                    {teamMeta.memberCount.toLocaleString()} {pluralize('member', teamMeta.memberCount)}
-                  </Kb.Text>
-                </Kb.Box2>
-                {Kb.Styles.isPhone && activity}
-              </Kb.Box2>
+        ) : (
+          <Kb.Box2 direction="horizontal" flex={1} alignItems="center" style={styles.bodyDesktop}>
+            <Kb.Box2 direction="vertical" flex={1} justifyContent="center" style={styles.bodyLeft}>
+              {nameAndMemberCount}
             </Kb.Box2>
-            {!Kb.Styles.isPhone && (
-              <Kb.Box2 direction="horizontal" fullHeight={true} alignItems="center" style={styles.bodyRight}>
-                {activity}
-              </Kb.Box2>
-            )}
+            <Kb.Box2 direction="horizontal" alignItems="center" style={styles.bodyRight}>
+              {activity}
+            </Kb.Box2>
           </Kb.Box2>
-        }
-        action={
-          <Kb.Box2 direction="horizontal" gap={Kb.Styles.isPhone ? 'tiny' : 'xtiny'}>
-            {showChat && (
-              <Kb.Button
-                type="Dim"
-                onClick={onChat}
-                disabled={!teamMeta.isMember}
-                mode="Secondary"
-                small={true}
-                icon="iconfont-chat"
-                tooltip={!teamMeta.isMember ? 'You are not a member of this team.' : ''}
-              />
-            )}
-            <Kb.Button
+        )}
+        <Kb.Box2
+          direction="horizontal"
+          className={isMobile ? undefined : 'fade'}
+          gap={isMobile ? 'tiny' : 'xtiny'}
+          alignItems="center"
+          style={isMobile ? styles.actionMobile : styles.action}
+        >
+          {showChat && (
+            <Kb.IconButton
               type="Dim"
-              onClick={showPopup}
+              onClick={onChat}
+              disabled={!teamMeta.isMember}
               mode="Secondary"
               small={true}
-              icon="iconfont-ellipsis"
-              ref={popupAnchor}
+              icon="iconfont-chat"
+              tooltip={isMobile ? undefined : !teamMeta.isMember ? 'You are not a member of this team.' : ''}
             />
-          </Kb.Box2>
-        }
-        onlyShowActionOnHover="fade"
-      />
+          )}
+          <Kb.IconButton
+            type="Dim"
+            onClick={showPopup}
+            mode="Secondary"
+            small={true}
+            icon="iconfont-ellipsis"
+            ref={popupAnchor}
+          />
+        </Kb.Box2>
+      </Kb.ClickableBox>
       {popup}
     </>
   )
-})
+}
 
-const styles = Kb.Styles.styleSheetCreate(() => ({
-  alignSelfCenter: {
-    alignSelf: 'center',
+const smallHeight = isMobile ? 56 : 48
+const smallIconWidth = 64
+
+const useStyles = Kb.Styles.createStyleHook(theme => ({
+  action: {
+    flexShrink: 0,
+    marginRight: 8,
+    minHeight: smallHeight,
   },
-  avatarContainer: Kb.Styles.platformStyles({
+  actionMobile: {
+    flexShrink: 0,
+    marginRight: 8,
+  },
+  avatarOuter: Kb.Styles.platformStyles({
     common: {
-      marginTop: Kb.Styles.globalMargins.xxtiny,
-      position: 'relative',
+      minHeight: smallHeight,
+      width: smallIconWidth,
     },
-    isPhone: {marginTop: Kb.Styles.globalMargins.small},
+    isPhone: {minHeight: 72},
   }),
+  avatarRelative: Kb.Styles.size(32),
   badge: {
     position: 'absolute',
     right: -5,
     top: -5,
   },
-  bodyContainer: {
-    paddingBottom: Kb.Styles.globalMargins.tiny,
-    paddingTop: Kb.Styles.globalMargins.tiny,
+  bodyDesktop: {
+    ...Kb.Styles.paddingV(Kb.Styles.globalMargins.tiny),
+    flexGrow: 1,
+    minHeight: smallHeight,
   },
   bodyLeft: {
-    flex: 1,
     paddingRight: Kb.Styles.globalMargins.tiny,
   },
-  bodyLeftText: {justifyContent: 'center'},
+  bodyMobile: {
+    ...Kb.Styles.paddingV(Kb.Styles.globalMargins.tiny),
+    minHeight: 72,
+  },
   bodyRight: {
     flex: 0.7,
   },
+  rowStyle: Kb.Styles.platformStyles({
+    common: {
+      backgroundColor: theme.white,
+      flexShrink: 0,
+      position: 'relative',
+    },
+    isElectron: {minHeight: smallHeight},
+    isPhone: {minHeight: 72},
+  }),
   crownIcon: Kb.Styles.platformStyles({common: {fontSize: 10}, isMobile: {left: 0.5, position: 'relative'}}),
   crownIconBox: Kb.Styles.platformStyles({
     common: {
-      backgroundColor: Kb.Styles.globalColors.white,
+      backgroundColor: theme.white,
       borderRadius: 100,
-      height: 17,
+      ...Kb.Styles.size(17),
       position: 'absolute',
-      width: 17,
+      bottom: -5,
+      right: -5,
     },
-    isElectron: {bottom: -5, right: -5},
-    isMobile: {bottom: 4, right: -5},
   }),
-  darkerAdminIcon: {color: Kb.Styles.globalColors.greyDark},
-  openMeta: {
-    alignSelf: 'center',
+  divider: {
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
   },
-  white: {backgroundColor: Kb.Styles.globalColors.white},
-}))
+
+}) as const)
 
 export default TeamRow

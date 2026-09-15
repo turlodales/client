@@ -1,6 +1,7 @@
 package attachments
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -11,12 +12,12 @@ import (
 	"github.com/keybase/client/go/protocol/chat1"
 	"github.com/keybase/client/go/protocol/gregor1"
 	"github.com/keybase/go-framed-msgpack-rpc/rpc"
-	"golang.org/x/net/context"
 )
 
 func SinkFromFilename(ctx context.Context, g *globals.Context, uid gregor1.UID,
 	convID chat1.ConversationID, messageID chat1.MessageID,
-	parentDir string, useArbitraryName bool) (string, io.WriteCloser, error) {
+	parentDir string, useArbitraryName bool,
+) (string, io.WriteCloser, error) {
 	var sink io.WriteCloser
 	var err error
 	const openFlag int = os.O_RDWR | os.O_CREATE | os.O_TRUNC
@@ -53,8 +54,8 @@ func SinkFromFilename(ctx context.Context, g *globals.Context, uid gregor1.UID,
 
 func Download(ctx context.Context, g *globals.Context, uid gregor1.UID,
 	convID chat1.ConversationID, messageID chat1.MessageID, sink io.WriteCloser, showPreview bool,
-	progress func(int64, int64), ri func() chat1.RemoteInterface) (err error) {
-
+	progress func(int64, int64), ri func() chat1.RemoteInterface,
+) (err error) {
 	obj, err := AssetFromMessage(ctx, g, uid, convID, messageID, showPreview)
 	if err != nil {
 		return err

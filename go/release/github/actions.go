@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"slices"
 	"strconv"
 	"time"
 )
@@ -78,7 +79,7 @@ func Upload(token string, repo string, tag string, name string, file string) err
 	return nil
 }
 
-// DownloadSource dowloads source from repo tag
+// DownloadSource downloads source from repo tag
 func DownloadSource(token string, repo string, tag string) error {
 	url := githubAPIURL + fmt.Sprintf("/repos/keybase/%s/tarball/%s", repo, tag)
 	name := fmt.Sprintf("%s-%s.tar.gz", repo, tag)
@@ -176,12 +177,7 @@ func LatestCommit(token string, repo string, contexts []string) (*Commit, error)
 }
 
 func stringInSlice(str string, list []string) bool {
-	for _, s := range list {
-		if s == str {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(list, str)
 }
 
 // CIStatuses lists statuses for CI

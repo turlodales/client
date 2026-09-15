@@ -8,31 +8,39 @@
     }
   }
 
-  &.highlighted {
-    .separator-text {
-      .darkMode &,
-      .darkMode & span {
-        color: rgba(0, 0, 0, 0.85) !important;
-      }
+  /* Once the fade has played, swap to the static end state and drop the animation. LegendList
+     reorders container elements in the DOM (useDOMOrder, debounced 500ms) to keep DOM order
+     matching visual order, and a DOM move restarts CSS animations on the moved subtree — which
+     replays this fade from transparent, reading as a blink. Nothing to restart, nothing to blink. */
+  &.highlighted.highlight-settled {
+    &,
+    &:hover,
+    &.WrapperMessage-hoverColor,
+    &.WrapperMessage-hoverColor:hover {
+      animation: none;
+      background-color: var(--color-yellowOrYellowAlt);
+      border-radius: 4px;
+      box-shadow: 4px 4px 5px 1px rgb(0 0 0 / 38%);
     }
-    &:hover {
-      .explodingTimeContainer {
-        .darkMode & {
-          background-color: rgba(255, 255, 255, 0.85) !important;
-        }
-      }
-      .explodingTimeText {
-        .darkMode & {
-          color: rgba(0, 0, 0, 0.85) !important;
-        }
-      }
+  }
+}
 
-      .explodingTimeIcon {
-        .darkMode & {
-          color: rgba(255, 255, 255, 0.85) !important;
-        }
-      }
-    }
+@media (prefers-color-scheme: dark) {
+  .WrapperMessage.highlighted .separator-text,
+  .WrapperMessage.highlighted .separator-text span {
+    color: rgba(0, 0, 0, 0.85) !important;
+  }
+
+  .WrapperMessage.highlighted:hover .explodingTimeContainer {
+    background-color: rgba(255, 255, 255, 0.85) !important;
+  }
+
+  .WrapperMessage.highlighted:hover .explodingTimeText {
+    color: rgba(0, 0, 0, 0.85) !important;
+  }
+
+  .WrapperMessage.highlighted:hover .explodingTimeIcon {
+    color: rgba(255, 255, 255, 0.85) !important;
   }
 }
 
@@ -49,12 +57,21 @@
   }
 }
 
+/* LegendList 3.3.3 dropped the data-index attribute from its item containers, so target the
+   container as the div whose direct child is the WrapperMessage instead */
+.chat-message-list div:has(> .WrapperMessage-hoverBox:hover) {
+  contain: layout style !important;
+  overflow: visible !important;
+  z-index: 1;
+}
+
 .WrapperMessage-hoverBox {
   padding: 3px 16px 3px 0;
   display: flex;
   flex-direction: column;
   position: relative;
   width: 100%;
+  contain: style;
   .WrapperMessage-buttons {
     display: none;
     flex-direction: row;
@@ -69,9 +86,6 @@
   &:hover {
     .WrapperMessage-emojiButton {
       box-shadow: 0 1px 1px 0 var(--color-black_10);
-      .darkMode & .WrapperMessage-emojiButton {
-        box-shadow: none;
-      }
       &.noShadow,
       &:active {
         box-shadow: none;
@@ -102,9 +116,16 @@
 .WrapperMessage-hoverColor {
   &:hover {
     background-color: var(--color-blueLighter2);
-    .darkMode & {
-      background-color: var(--color-blueLighter3);
-    }
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .WrapperMessage-hoverColor:hover {
+    background-color: var(--color-blueLighter3);
+  }
+
+  .WrapperMessage-hoverBox:hover .WrapperMessage-emojiButton {
+    box-shadow: none;
   }
 }
 
@@ -121,11 +142,15 @@
   min-height: 26px;
   &.active {
     background-color: var(--color-blueLighter2);
-    .darkMode & {
-      background-color: var(--color-blueLighter3);
-    }
   }
 }
+
+@media (prefers-color-scheme: dark) {
+  .WrapperMessage-decorated.active {
+    background-color: var(--color-blueLighter3);
+  }
+}
+
 .WrapperMessage-author {
   padding-left: 0;
   padding-top: 8px;
@@ -134,15 +159,19 @@
 .ReplyBox {
   &:hover {
     background-color: white;
-    .darkMode & {
-      background-color: var(--color-blackOrBlack);
-    }
     .text_BodySmall {
       color: var(--color-blackOrBlack) !important;
-      .darkMode & {
-        color: var(--color-whiteOrWhite) !important;
-      }
     }
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .ReplyBox:hover {
+    background-color: var(--color-blackOrBlack);
+  }
+
+  .ReplyBox:hover .text_BodySmall {
+    color: var(--color-whiteOrWhite) !important;
   }
 }
 

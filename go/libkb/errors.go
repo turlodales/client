@@ -61,7 +61,6 @@ func ProofErrorToState(pe ProofError) keybase1.ProofState {
 	default:
 		return keybase1.ProofState_TEMP_FAILURE
 	}
-
 }
 
 type ProofErrorImpl struct {
@@ -69,7 +68,7 @@ type ProofErrorImpl struct {
 	Desc   string
 }
 
-func NewProofError(s keybase1.ProofStatus, d string, a ...interface{}) *ProofErrorImpl {
+func NewProofError(s keybase1.ProofStatus, d string, a ...any) *ProofErrorImpl {
 	// Don't do string interpolation if there are no substitution arguments.
 	// Fixes double-interpolation when deserializing an object.
 	if len(a) == 0 {
@@ -119,7 +118,7 @@ func (t TorSessionRequiredError) Error() string {
 	return "We can't send out PII in Tor-Strict mode; but it's needed for this operation"
 }
 
-func NewProofAPIError(s keybase1.ProofStatus, u string, d string, a ...interface{}) *ProofAPIError {
+func NewProofAPIError(s keybase1.ProofStatus, u string, d string, a ...any) *ProofAPIError {
 	base := NewProofError(s, d, a...)
 	return &ProofAPIError{*base, u}
 }
@@ -127,7 +126,7 @@ func NewProofAPIError(s keybase1.ProofStatus, u string, d string, a ...interface
 // =============================================================================
 
 func XapiError(err error, u string) *ProofAPIError {
-	if ae, ok := err.(*APIError); ok {
+	if ae, ok := errors.AsType[*APIError](err); ok {
 		var code keybase1.ProofStatus
 		switch ae.Code / 100 {
 		case 3:
@@ -143,9 +142,9 @@ func XapiError(err error, u string) *ProofAPIError {
 		default:
 			code = keybase1.ProofStatus_HTTP_OTHER
 		}
-		return NewProofAPIError(code, u, ae.Msg)
+		return NewProofAPIError(code, u, "%s", ae.Msg)
 	}
-	return NewProofAPIError(keybase1.ProofStatus_INTERNAL_ERROR, u, err.Error())
+	return NewProofAPIError(keybase1.ProofStatus_INTERNAL_ERROR, u, "%s", err.Error())
 }
 
 // =============================================================================
@@ -186,21 +185,23 @@ func (e AssertionParseError) Error() string {
 	return e.err
 }
 
-func NewAssertionParseError(s string, a ...interface{}) AssertionParseError {
+func NewAssertionParseError(s string, a ...any) AssertionParseError {
 	return AssertionParseError{
 		reason: AssertionParseErrorReasonGeneric,
 		err:    fmt.Sprintf(s, a...),
 	}
 }
-func NewAssertionParseErrorWithReason(reason AssertionParseErrorReason, s string, a ...interface{}) AssertionParseError {
+
+func NewAssertionParseErrorWithReason(reason AssertionParseErrorReason, s string, a ...any) AssertionParseError {
 	return AssertionParseError{
 		reason: reason,
 		err:    fmt.Sprintf(s, a...),
 	}
 }
+
 func IsAssertionParseErrorWithReason(err error, reason AssertionParseErrorReason) bool {
-	aerr, ok := err.(AssertionParseError)
-	return ok && aerr.reason == reason
+	var aerr AssertionParseError
+	return errors.As(err, &aerr) && aerr.reason == reason
 }
 
 // =============================================================================
@@ -213,7 +214,7 @@ func (e AssertionCheckError) Error() string {
 	return e.err
 }
 
-func NewAssertionCheckError(s string, a ...interface{}) AssertionCheckError {
+func NewAssertionCheckError(s string, a ...any) AssertionCheckError {
 	return AssertionCheckError{
 		err: fmt.Sprintf(s, a...),
 	}
@@ -229,7 +230,7 @@ func (e NeedInputError) Error() string {
 	return e.err
 }
 
-func NewNeedInputError(s string, a ...interface{}) AssertionParseError {
+func NewNeedInputError(s string, a ...any) AssertionParseError {
 	return AssertionParseError{
 		err: fmt.Sprintf(s, a...),
 	}
@@ -261,8 +262,7 @@ func (e WrongKeyError) Error() string {
 
 // =============================================================================
 
-type UnexpectedKeyError struct {
-}
+type UnexpectedKeyError struct{}
 
 func (e UnexpectedKeyError) Error() string {
 	return "Found a key or fingerprint when one wasn't expected"
@@ -329,8 +329,8 @@ func (e NotFoundError) Error() string {
 }
 
 func IsNotFoundError(err error) bool {
-	_, ok := err.(NotFoundError)
-	return ok
+	var nfe NotFoundError
+	return errors.As(err, &nfe)
 }
 
 func NewNotFoundError(s string) error {
@@ -359,8 +359,8 @@ func (u NoKeyError) Error() string {
 }
 
 func IsNoKeyError(err error) bool {
-	_, ok := err.(NoKeyError)
-	return ok
+	var nke NoKeyError
+	return errors.As(err, &nke)
 }
 
 type NoSyncedPGPKeyError struct{}
@@ -371,8 +371,7 @@ func (e NoSyncedPGPKeyError) Error() string {
 
 // =============================================================================
 
-type NoSecretKeyError struct {
-}
+type NoSecretKeyError struct{}
 
 func (u NoSecretKeyError) Error() string {
 	return "No secret key available"
@@ -380,8 +379,7 @@ func (u NoSecretKeyError) Error() string {
 
 // =============================================================================
 
-type NoPaperKeysError struct {
-}
+type NoPaperKeysError struct{}
 
 func (u NoPaperKeysError) Error() string {
 	return "No paper keys available"
@@ -502,13 +500,10 @@ type AppStatusError struct {
 // If the error is an AppStatusError, returns its code.
 // Otherwise returns (SCGeneric, false).
 func GetAppStatusCode(err error) (code keybase1.StatusCode, ok bool) {
-	code = keybase1.StatusCode_SCGeneric
-	switch err := err.(type) {
-	case AppStatusError:
-		return keybase1.StatusCode(err.Code), true
-	default:
-		return code, false
+	if ase, ok := errors.AsType[AppStatusError](err); ok {
+		return keybase1.StatusCode(ase.Code), true
 	}
+	return keybase1.StatusCode_SCGeneric, false
 }
 
 func (a AppStatusError) IsBadField(s string) bool {
@@ -548,30 +543,25 @@ func (a AppStatusError) WithDesc(desc string) AppStatusError {
 }
 
 func IsAppStatusCode(err error, code keybase1.StatusCode) bool {
-	switch err := err.(type) {
-	case AppStatusError:
-		return err.Code == int(code)
-	default:
-		return false
-	}
+	var ase AppStatusError
+	return errors.As(err, &ase) && ase.Code == int(code)
 }
 
 func IsEphemeralRetryableError(err error) bool {
-	switch err := err.(type) {
-	case AppStatusError:
-		switch keybase1.StatusCode(err.Code) {
-		case keybase1.StatusCode_SCSigWrongKey,
-			keybase1.StatusCode_SCSigOldSeqno,
-			keybase1.StatusCode_SCEphemeralKeyBadGeneration,
-			keybase1.StatusCode_SCEphemeralKeyUnexpectedBox,
-			keybase1.StatusCode_SCEphemeralKeyMissingBox,
-			keybase1.StatusCode_SCEphemeralKeyWrongNumberOfKeys,
-			keybase1.StatusCode_SCTeambotKeyBadGeneration,
-			keybase1.StatusCode_SCTeambotKeyOldBoxedGeneration:
-			return true
-		default:
-			return false
-		}
+	var ase AppStatusError
+	if !errors.As(err, &ase) {
+		return false
+	}
+	switch keybase1.StatusCode(ase.Code) {
+	case keybase1.StatusCode_SCSigWrongKey,
+		keybase1.StatusCode_SCSigOldSeqno,
+		keybase1.StatusCode_SCEphemeralKeyBadGeneration,
+		keybase1.StatusCode_SCEphemeralKeyUnexpectedBox,
+		keybase1.StatusCode_SCEphemeralKeyMissingBox,
+		keybase1.StatusCode_SCEphemeralKeyWrongNumberOfKeys,
+		keybase1.StatusCode_SCTeambotKeyBadGeneration,
+		keybase1.StatusCode_SCTeambotKeyOldBoxedGeneration:
+		return true
 	default:
 		return false
 	}
@@ -694,7 +684,7 @@ func (e ServerChainError) Error() string {
 	return e.msg
 }
 
-func NewServerChainError(d string, a ...interface{}) ServerChainError {
+func NewServerChainError(d string, a ...any) ServerChainError {
 	return ServerChainError{fmt.Sprintf(d, a...)}
 }
 
@@ -729,6 +719,7 @@ type InvalidHostnameError struct {
 func (e InvalidHostnameError) Error() string {
 	return "Invalid hostname: " + e.h
 }
+
 func NewInvalidHostnameError(h string) InvalidHostnameError {
 	return InvalidHostnameError{h: h}
 }
@@ -756,6 +747,7 @@ type ProtocolSchemeMismatch struct {
 func (h ProtocolSchemeMismatch) Error() string {
 	return h.msg
 }
+
 func NewProtocolSchemeMismatch(msg string) ProtocolSchemeMismatch {
 	return ProtocolSchemeMismatch{msg: msg}
 }
@@ -768,6 +760,7 @@ type ProtocolDowngradeError struct {
 func (h ProtocolDowngradeError) Error() string {
 	return h.msg
 }
+
 func NewProtocolDowngradeError(msg string) ProtocolDowngradeError {
 	return ProtocolDowngradeError{msg: msg}
 }
@@ -1233,7 +1226,7 @@ func (r ReverseSigError) Error() string {
 	return fmt.Sprintf("Error in reverse signature: %s", r.msg)
 }
 
-func NewReverseSigError(msgf string, a ...interface{}) ReverseSigError {
+func NewReverseSigError(msgf string, a ...any) ReverseSigError {
 	return ReverseSigError{msg: fmt.Sprintf(msgf, a...)}
 }
 
@@ -1446,7 +1439,7 @@ func (e UntrackError) Error() string {
 	return fmt.Sprintf("Unfollow error: %s", e.err)
 }
 
-func NewUntrackError(d string, a ...interface{}) UntrackError {
+func NewUntrackError(d string, a ...any) UntrackError {
 	return UntrackError{
 		err: fmt.Sprintf(d, a...),
 	}
@@ -1460,6 +1453,10 @@ type APINetError struct {
 
 func (e APINetError) Error() string {
 	return fmt.Sprintf("API network error: %s", e.Err)
+}
+
+func (e APINetError) Unwrap() error {
+	return e.Err
 }
 
 // =============================================================================
@@ -1489,6 +1486,10 @@ func (e DecryptionError) Error() string {
 		return "Decryption error"
 	}
 	return fmt.Sprintf("Decryption error: %+v", e.Cause)
+}
+
+func (e DecryptionError) Unwrap() error {
+	return e.Cause.Err
 }
 
 // =============================================================================
@@ -1624,8 +1625,7 @@ func (e IdentifyFailedError) Error() string {
 
 // =============================================================================
 
-type IdentifiesFailedError struct {
-}
+type IdentifiesFailedError struct{}
 
 func (e IdentifiesFailedError) Error() string {
 	return "one or more identifies failed"
@@ -1669,12 +1669,9 @@ func (e IdentifySummaryError) Problems() []string {
 }
 
 func IsIdentifyProofError(err error) bool {
-	switch err.(type) {
-	case ProofError, IdentifySummaryError:
-		return true
-	default:
-		return false
-	}
+	var pe ProofError
+	var ise IdentifySummaryError
+	return errors.As(err, &pe) || errors.As(err, &ise)
 }
 
 // =============================================================================
@@ -1745,8 +1742,7 @@ func (e InvalidArgumentError) Error() string {
 	return fmt.Sprintf("invalid argument: %s", e.Msg)
 }
 
-type RetryExhaustedError struct {
-}
+type RetryExhaustedError struct{}
 
 func (e RetryExhaustedError) Error() string {
 	return "Prompt attempts exhausted."
@@ -1807,13 +1803,13 @@ func (e ResolutionError) Error() string {
 }
 
 func IsResolutionError(err error) bool {
-	_, ok := err.(ResolutionError)
-	return ok
+	var re ResolutionError
+	return errors.As(err, &re)
 }
 
 func IsResolutionNotFoundError(err error) bool {
-	rerr, ok := err.(ResolutionError)
-	if !ok {
+	var rerr ResolutionError
+	if !errors.As(err, &rerr) {
 		return false
 	}
 	return rerr.Kind == ResolutionErrorNotFound
@@ -1941,17 +1937,14 @@ func IsExecError(err error) bool {
 		return false
 	}
 
-	switch err.(type) {
-	case DirExecError:
-		return true
-	case FileExecError:
-		return true
-	case *exec.Error:
-		return true
-	case *os.PathError:
-		return true
-	}
-	return false
+	var dirExecErr DirExecError
+	var fileExecErr FileExecError
+	var execErr *exec.Error
+	var pathErr *os.PathError
+	return errors.As(err, &dirExecErr) ||
+		errors.As(err, &fileExecErr) ||
+		errors.As(err, &execErr) ||
+		errors.As(err, &pathErr)
 }
 
 // =============================================================================
@@ -2023,8 +2016,7 @@ func (e ChatMessageCollisionError) Error() string {
 
 // =============================================================================
 
-type ChatCollisionError struct {
-}
+type ChatCollisionError struct{}
 
 func (e ChatCollisionError) Error() string {
 	return "conversation id collision"
@@ -2136,7 +2128,8 @@ func (e ChatAlreadyDeletedError) IsImmediateFail() (chat1.OutboxErrorType, bool)
 // =============================================================================
 
 type ChatBadConversationError struct {
-	Msg string
+	Msg    string
+	ConvID chat1.ConversationID
 }
 
 func (e ChatBadConversationError) Error() string {
@@ -2343,7 +2336,7 @@ func (e PerUserKeyImportError) Error() string {
 	return fmt.Sprintf("per-user-key import error: %s", e.msg)
 }
 
-func NewPerUserKeyImportError(format string, args ...interface{}) PerUserKeyImportError {
+func NewPerUserKeyImportError(format string, args ...any) PerUserKeyImportError {
 	return PerUserKeyImportError{
 		msg: fmt.Sprintf(format, args...),
 	}
@@ -2395,6 +2388,19 @@ type BadSessionError struct {
 
 func (e BadSessionError) Error() string {
 	return fmt.Sprintf("bad session: %s", e.Desc)
+}
+
+// BadClockError is returned when the server rejects a NIST because the
+// client's clock is too far from the server's (outside the plausibility
+// window). A NIST signs the client's local time, so every regenerated token
+// fails identically until the user fixes their clock; treating this as a
+// terminal (non-retryable) auth error prevents a tight reconnect/auth loop.
+type BadClockError struct {
+	Desc string
+}
+
+func (e BadClockError) Error() string {
+	return fmt.Sprintf("bad clock: %s", e.Desc)
 }
 
 type LoginStateTimeoutError struct {
@@ -2451,7 +2457,7 @@ func (e ImplicitTeamDisplayNameError) Error() string {
 	return fmt.Sprintf("Error parsing implicit team name: %s", e.msg)
 }
 
-func NewImplicitTeamDisplayNameError(format string, args ...interface{}) ImplicitTeamDisplayNameError {
+func NewImplicitTeamDisplayNameError(format string, args ...any) ImplicitTeamDisplayNameError {
 	return ImplicitTeamDisplayNameError{fmt.Sprintf(format, args...)}
 }
 
@@ -2663,7 +2669,7 @@ type RecipientNotFoundError struct {
 
 func NewRecipientNotFoundError(message string) error {
 	return RecipientNotFoundError{
-		error: fmt.Errorf(message),
+		error: errors.New(message),
 	}
 }
 
@@ -2704,8 +2710,7 @@ func (e UserReverifyNeededError) Error() string {
 
 // =============================================================================
 
-type OfflineError struct {
-}
+type OfflineError struct{}
 
 func NewOfflineError() error {
 	return OfflineError{}
@@ -2742,8 +2747,7 @@ func (e InvalidStellarAccountIDError) Verbose() string {
 
 // =============================================================================
 
-type ResetWithActiveDeviceError struct {
-}
+type ResetWithActiveDeviceError struct{}
 
 func (e ResetWithActiveDeviceError) Error() string {
 	return "You cannot reset your account from a logged-in device."
@@ -2794,6 +2798,10 @@ func (e AppOutdatedError) Error() string {
 		return fmt.Sprintf("AppOutdatedError: %v", e.cause.Error())
 	}
 	return "AppOutdatedError"
+}
+
+func (e AppOutdatedError) Unwrap() error {
+	return e.cause
 }
 
 // ============================================================================
@@ -2916,7 +2924,7 @@ func (e HiddenChainDataMissingError) Error() string {
 	return fmt.Sprintf("hidden chain data missing error: %s", e.note)
 }
 
-func NewHiddenChainDataMissingError(format string, args ...interface{}) HiddenChainDataMissingError {
+func NewHiddenChainDataMissingError(format string, args ...any) HiddenChainDataMissingError {
 	return HiddenChainDataMissingError{fmt.Sprintf(format, args...)}
 }
 
@@ -2944,7 +2952,7 @@ type HiddenMerkleError struct {
 	t HiddenMerkleErrorType
 }
 
-func NewHiddenMerkleError(t HiddenMerkleErrorType, format string, args ...interface{}) HiddenMerkleError {
+func NewHiddenMerkleError(t HiddenMerkleErrorType, format string, args ...any) HiddenMerkleError {
 	return HiddenMerkleError{
 		t: t,
 		m: fmt.Sprintf(format, args...),

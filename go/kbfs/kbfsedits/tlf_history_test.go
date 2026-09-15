@@ -18,7 +18,8 @@ import (
 )
 
 func checkTlfHistory(t *testing.T, th *TlfHistory, expected writersByRevision,
-	loggedInUser string) {
+	loggedInUser string,
+) {
 	writersWhoNeedMore := th.Recompute(loggedInUser)
 	history := th.getHistory(loggedInUser) // should use cached history.
 	require.Len(t, history, len(expected))
@@ -45,7 +46,8 @@ type nextNotification struct {
 func (nn *nextNotification) makeWithType(
 	filename string, nt NotificationOpType, uid keybase1.UID,
 	params *NotificationParams, now time.Time,
-	entryType EntryType) NotificationMessage {
+	entryType EntryType,
+) NotificationMessage {
 	n := NotificationMessage{
 		Version:           NotificationV2,
 		Revision:          nn.nextRevision,
@@ -65,7 +67,8 @@ func (nn *nextNotification) makeWithType(
 
 func (nn *nextNotification) make(
 	filename string, nt NotificationOpType, uid keybase1.UID,
-	params *NotificationParams, now time.Time) NotificationMessage {
+	params *NotificationParams, now time.Time,
+) NotificationMessage {
 	return nn.makeWithType(filename, nt, uid, params, now, EntryTypeFile)
 }
 
@@ -264,7 +267,7 @@ func TestTlfHistoryNeedsMoreThenComplete(t *testing.T) {
 
 	var aliceMessages []string
 	nn := nextNotification{1, 0, tlfID, nil}
-	for i := 0; i < maxEditsPerWriter; i++ {
+	for i := range maxEditsPerWriter {
 		event := nn.make(
 			strconv.Itoa(i), NotificationCreate, aliceUID, nil, time.Time{})
 		allExpected = append(allExpected, event)
@@ -304,7 +307,7 @@ func TestTlfHistoryTrimming(t *testing.T) {
 
 	var aliceMessages []string
 	nn := nextNotification{1, 0, tlfID, nil}
-	for i := 0; i < maxEditsPerWriter+2; i++ {
+	for i := range maxEditsPerWriter + 2 {
 		event := nn.make(strconv.Itoa(i), NotificationCreate, aliceUID, nil,
 			time.Time{})
 		allExpected = append(allExpected, event)
@@ -364,10 +367,13 @@ func TestTlfHistoryWithUnflushed(t *testing.T) {
 		aliceName, []NotificationMessage{aliceWrite2, aliceWrite3})
 
 	expected := writersByRevision{
-		{aliceName, []NotificationMessage{
-			aliceWrite3,
-			aliceWrite2,
-			aliceWrite1},
+		{
+			aliceName,
+			[]NotificationMessage{
+				aliceWrite3,
+				aliceWrite2,
+				aliceWrite1,
+			},
 			nil,
 		},
 	}
@@ -375,9 +381,12 @@ func TestTlfHistoryWithUnflushed(t *testing.T) {
 
 	th.FlushRevision(2)
 	expected = writersByRevision{
-		{aliceName, []NotificationMessage{
-			aliceWrite3,
-			aliceWrite1},
+		{
+			aliceName,
+			[]NotificationMessage{
+				aliceWrite3,
+				aliceWrite1,
+			},
 			nil,
 		},
 		{bobName, []NotificationMessage{bobWrite2}, nil},
@@ -475,7 +484,7 @@ func TestTlfHistoryRenameDirAndReuseNameForFile(t *testing.T) {
 			OldFilename: "/k/p/a,b/x",
 		}, time.Time{}, EntryTypeFile)
 	aliceMessages = append(aliceMessages, nn.encode(t))
-	aliceCreateA.Filename = "/k/p/a,b/a"
+	aliceCreateA.Filename = "/k/p/a,b/a" //nolint:govet // unusedwrite: Test data setup, field will be read later in test assertions
 
 	// Alice modifies file "a".
 	aliceModifyA := nn.make(
@@ -518,11 +527,13 @@ func TestTlfHistoryDeleteHistory(t *testing.T) {
 	bobMessages = append(bobMessages, nn.encode(t))
 
 	expected := writersByRevision{
-		{bobName,
+		{
+			bobName,
 			[]NotificationMessage{bobWrite},
 			[]NotificationMessage{bobDeleteB},
 		},
-		{aliceName,
+		{
+			aliceName,
 			[]NotificationMessage{aliceWrite},
 			[]NotificationMessage{aliceDeleteA},
 		},
@@ -564,8 +575,8 @@ func TestTlfHistoryDeleteHistory(t *testing.T) {
 	sort.Sort(allAliceExpected)
 	sort.Sort(allBobExpected)
 
-	expected[0].notifications = allBobExpected[:maxEditsPerWriter]
-	expected[1].notifications = allAliceExpected[:maxEditsPerWriter]
+	expected[0].notifications = allBobExpected[:maxEditsPerWriter]   //nolint:gosec // G602: Test setup ensures sufficient length
+	expected[1].notifications = allAliceExpected[:maxEditsPerWriter] //nolint:gosec // G602: Test setup ensures sufficient length
 	rev, err = th.AddNotifications(aliceName, aliceMessages)
 	require.NoError(t, err)
 	require.Equal(t, allAliceExpected[0].Revision, rev)
@@ -580,12 +591,13 @@ func TestTlfHistoryDeleteHistory(t *testing.T) {
 	aliceMessages = append(aliceMessages, nn.encode(t))
 
 	expected = writersByRevision{
-		{aliceName,
+		{
+			aliceName,
 			append([]NotificationMessage{aliceRecreateA},
-				allAliceExpected[:maxEditsPerWriter-1]...),
+				allAliceExpected[:maxEditsPerWriter-1]...), //nolint:gosec // G602: Test setup ensures sufficient length
 			[]NotificationMessage{aliceDeleteE},
 		},
-		expected[0],
+		expected[0], //nolint:gosec // G602: Test setup ensures sufficient length
 	}
 	rev, err = th.AddNotifications(aliceName, aliceMessages)
 	require.NoError(t, err)
@@ -603,11 +615,12 @@ func TestTlfHistoryDeleteHistory(t *testing.T) {
 	sort.Sort(allAliceDeletesExpected)
 
 	expected = writersByRevision{
-		{aliceName,
+		{
+			aliceName,
 			[]NotificationMessage{aliceRecreateA, aliceWrite},
-			allAliceDeletesExpected[:maxDeletesPerWriter],
+			allAliceDeletesExpected[:maxDeletesPerWriter], //nolint:gosec // G602: Test setup ensures sufficient length
 		},
-		expected[1],
+		expected[1], //nolint:gosec // G602: Test setup ensures sufficient length
 	}
 	rev, err = th.AddNotifications(aliceName, aliceMessages)
 	require.NoError(t, err)
@@ -663,7 +676,8 @@ func TestTlfHistoryComplexRename(t *testing.T) {
 	fooCreate.Filename = "/k/p/a/a/d/foo"
 
 	expected := writersByRevision{
-		{aliceName,
+		{
+			aliceName,
 			[]NotificationMessage{fooCreate},
 			nil,
 		},

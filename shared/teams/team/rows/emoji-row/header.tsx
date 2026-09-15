@@ -1,6 +1,7 @@
 import * as Kb from '@/common-adapters'
 
 const EmojiHeader = () => {
+  const styles = useStyles()
   return (
     <>
       <Kb.Box2 direction="horizontal" fullWidth={true} alignItems="center" style={styles.containerNew}>
@@ -20,7 +21,7 @@ const EmojiHeader = () => {
   )
 }
 
-const styles = Kb.Styles.styleSheetCreate(() => ({
+const useStyles = Kb.Styles.createStyleHook(() => ({
   containerNew: {
     ...Kb.Styles.padding(Kb.Styles.globalMargins.small, Kb.Styles.globalMargins.small, 6),
   },
@@ -29,8 +30,7 @@ const styles = Kb.Styles.styleSheetCreate(() => ({
     width: 130 + Kb.Styles.globalMargins.small,
   },
   divider: {
-    marginLeft: Kb.Styles.globalMargins.small,
-    marginRight: Kb.Styles.globalMargins.small,
+    ...Kb.Styles.marginH(Kb.Styles.globalMargins.small),
     maxHeight: 2,
     minHeight: 2,
   },
@@ -38,7 +38,6 @@ const styles = Kb.Styles.styleSheetCreate(() => ({
     marginRight: Kb.Styles.globalMargins.medium + Kb.Styles.globalMargins.xtiny,
     width: 72 - Kb.Styles.globalMargins.small,
   },
-  text: {padding: Kb.Styles.globalMargins.xtiny},
   username: {
     marginRight: Kb.Styles.globalMargins.large + Kb.Styles.globalMargins.small, // width of icon button + gap + padding
     width: 210,

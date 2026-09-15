@@ -1,37 +1,59 @@
 import * as C from '@/constants'
+import {isBigTeam as getIsBigTeam} from '@/constants/chat/helpers'
+import * as Teams from '@/constants/teams'
+import * as Chat from '@/constants/chat'
 import * as T from '@/constants/types'
 import * as Kb from '@/common-adapters'
-import * as React from 'react'
-import {TeamJourney, type Action} from '.'
 import {renderWelcomeMessage} from './util'
 import {useAllChannelMetas} from '@/teams/common/channel-hooks'
+import {setMemberPublicity} from '@/teams/actions'
+import {useTeamsListMap} from '@/teams/use-teams-list'
+import {useInboxLayoutState} from '@/chat/inbox/layout-state'
+import {
+  useConversationThreadDismissJourneycard,
+  useConversationThreadID,
+  useConversationThreadMessage,
+  useThreadMeta,
+} from '../../../thread-context'
 
-type OwnProps = {
-  ordinal: T.Chat.Ordinal
-}
+type Action = {label: string; onClick: () => void} | 'wave'
+type OwnProps = {ordinal: T.Chat.Ordinal}
 
-type Props = {
-  canShowcase: boolean
-  cannotWrite: boolean
-  channelname: string
-  message: T.Chat.MessageJourneycard
-  onAddPeopleToTeam: () => void
-  onBrowseChannels: () => void
-  onCreateChatChannels: () => void
-  onDismiss: () => void
-  onGoToChannel: (channelname: string) => void
-  onPublishTeam: () => void
-  onScrollBack: () => void
-  onShowTeam: () => void
-  onAuthorClick: () => void
-  teamID: T.Teams.TeamID
-  teamname: string
-  isBigTeam: boolean
-  welcomeMessage?: T.RPCChat.WelcomeMessageDisplay
-}
+const emptyJourney = Chat.makeMessageJourneycard({})
 
-const TeamJourneyContainer = (props: Props) => {
-  const {message} = props
+const TeamJourneyConnected = (ownProps: OwnProps) => {
+  const styles = useStyles()
+  const {ordinal} = ownProps
+  const m = useConversationThreadMessage(ordinal)
+  const message = m?.type === 'journeycard' ? m : emptyJourney
+  const conv = useThreadMeta(
+    C.useShallow(m => ({
+      cannotWrite: m.cannotWrite,
+      channelname: m.channelname,
+      teamID: m.teamID,
+      teamname: m.teamname,
+      tlfname: m.tlfname,
+    }))
+  )
+  const {cannotWrite, channelname, teamname, teamID} = conv
+  const welcomeMessage = {display: '', raw: '', set: false}
+  const teamMetaByID = useTeamsListMap()
+  const teamMeta = teamMetaByID.get(teamID) ?? Teams.makeTeamMeta({id: teamID})
+  const canShowcase = teamMeta.allowPromote || teamMeta.role === 'admin' || teamMeta.role === 'owner'
+  const isBigTeam = useInboxLayoutState(s => getIsBigTeam(s.layout, teamID))
+  const navigateAppend = C.Router2.navigateAppend
+  const dismissJourneycard = useConversationThreadDismissJourneycard()
+  const onAuthorClick = () => navigateAppend({name: 'team', params: {teamID}})
+  const onBrowseChannels = () => navigateAppend({name: 'teamAddToChannels', params: {teamID}})
+  const onDismiss = () => dismissJourneycard(message.cardType, message.ordinal)
+  const onGoToChannel = (channelName: string) =>
+    C.Router2.previewConversation({channelname: channelName, reason: 'journeyCardPopular', teamname})
+  const onPublishTeam = () => {
+    navigateAppend({name: 'profileShowcaseTeamOffer', params: {}})
+    setMemberPublicity(teamID, true)
+  }
+
+  const conversationIDKey = useConversationThreadID()
   const {cardType} = message
   let textComponent: React.ReactNode
   let image: Kb.IconType | undefined
@@ -40,7 +62,7 @@ const TeamJourneyContainer = (props: Props) => {
   const dontCallRPC =
     cardType !== T.RPCChat.JourneycardType.popularChannels &&
     cardType !== T.RPCChat.JourneycardType.msgNoAnswer
-  const {channelMetas} = useAllChannelMetas(props.teamID, dontCallRPC)
+  const {channelMetas} = useAllChannelMetas(teamID, dontCallRPC)
   // Take the top three channels with most recent activity.
   const joinableStatuses = new Set<T.Chat.ConversationMeta['membershipType']>([
     // keep in sync with journey_card_manager.go
@@ -48,41 +70,37 @@ const TeamJourneyContainer = (props: Props) => {
     'youAreReset' as const,
   ])
   const otherChannelsBase = [...channelMetas.values()]
-    .filter(info => info.channelname !== props.channelname)
+    .filter(info => info.channelname !== channelname)
     .sort((x, y) => y.timestamp - x.timestamp)
 
   switch (cardType) {
     case T.RPCChat.JourneycardType.welcome:
       image = 'icon-illustration-welcome-96'
-      if (!props.cannotWrite) {
+      if (!cannotWrite) {
         actions.push('wave')
       }
-      if (props.isBigTeam) {
-        actions.push({label: 'Browse channels', onClick: props.onBrowseChannels})
+      if (isBigTeam) {
+        actions.push({label: 'Browse channels', onClick: onBrowseChannels})
       }
-      if (props.canShowcase) {
-        actions.push({label: 'Publish team on your profile', onClick: props.onPublishTeam})
+      if (canShowcase) {
+        actions.push({label: 'Publish team on your profile', onClick: onPublishTeam})
       }
-      if (props.welcomeMessage) {
-        textComponent = renderWelcomeMessage(props.welcomeMessage, props.cannotWrite)
-      } else {
-        textComponent = <Kb.ProgressIndicator />
-      }
+      textComponent = renderWelcomeMessage(welcomeMessage, cannotWrite)
       break
     case T.RPCChat.JourneycardType.popularChannels:
       {
         const otherChannelsForPopular = otherChannelsBase
           .filter(({membershipType}) => joinableStatuses.has(membershipType))
-          .slice(0, C.isMobile ? 2 : 3)
+          .slice(0, isMobile ? 2 : 3)
           .map(info => info.channelname)
         actions = otherChannelsForPopular.map(chan => ({
           label: `#${chan}`,
-          onClick: () => props.onGoToChannel(chan),
+          onClick: () => onGoToChannel(chan),
         }))
         textComponent = (
           <Kb.Box2 direction="vertical">
             <Kb.Text type="BodySmall">
-              You are in <Kb.Text type="BodySmallBold">#{props.channelname}</Kb.Text>.
+              You are in <Kb.Text type="BodySmallBold">#{channelname}</Kb.Text>.
             </Kb.Text>
             <Kb.Text type="BodySmall">
               {otherChannelsForPopular.length
@@ -104,72 +122,168 @@ const TeamJourneyContainer = (props: Props) => {
       return null
   }
 
-  return props.teamname ? (
-    <TeamJourney
-      actions={actions}
-      image={image}
-      onAuthorClick={props.onAuthorClick}
-      teamname={props.teamname}
-      textComponent={textComponent}
-      onDismiss={props.onDismiss}
-      mode="chat"
-    />
-  ) : null
+  if (!teamname) return null
+
+  const deactivateButtons = false
+
+  const contentHorizontalPadStyle = styles.contentHorizontalPadChat as Kb.Styles.StylesCrossPlatform
+
+  return (
+    <>
+      <TeamJourneyHeader
+        teamname={teamname}
+        onAuthorClick={onAuthorClick}
+        onDismiss={onDismiss}
+        deactivateButtons={deactivateButtons}
+      />
+      <Kb.Box2
+        key="content"
+        direction="vertical"
+        fullWidth={true}
+        style={Kb.Styles.collapseStyles([styles.content, image ? styles.contentWithImage : null])}
+      >
+        <Kb.Box2 direction="horizontal" fullWidth={true} style={contentHorizontalPadStyle}>
+          <Kb.Box2 direction="horizontal" style={image ? styles.text : undefined} alignSelf="flex-start">
+            {textComponent}
+          </Kb.Box2>
+          {!!image && <Kb.ImageIcon style={styles.image} type={image} />}
+        </Kb.Box2>
+        <Kb.ScrollView horizontal={true} showsHorizontalScrollIndicator={false}>
+          <Kb.Box2
+            direction="horizontal"
+            fullWidth={true}
+            alignItems="flex-start"
+            gap="tiny"
+            style={Kb.Styles.collapseStyles([styles.actionsBox, contentHorizontalPadStyle] as const)}
+          >
+            {actions.map(action =>
+              action === 'wave' ? (
+                <Kb.WaveButton
+                  key="wave"
+                  conversationIDKey={conversationIDKey}
+                  tlfName={conv.tlfname}
+                  small={true}
+                  style={styles.buttonSpace}
+                  disabled={!!deactivateButtons}
+                />
+              ) : (
+                <Kb.Button
+                  key={action.label}
+                  small={true}
+                  type="Default"
+                  mode="Secondary"
+                  label={action.label}
+                  onClick={action.onClick}
+                  disabled={!!deactivateButtons}
+                  style={styles.buttonSpace}
+                />
+              )
+            )}
+          </Kb.Box2>
+        </Kb.ScrollView>
+      </Kb.Box2>
+    </>
+  )
 }
 
-const emptyJourney = C.Chat.makeMessageJourneycard({})
-
-const TeamJourneyConnected = (ownProps: OwnProps) => {
-  const {ordinal} = ownProps
-  const m = C.useChatContext(s => s.messageMap.get(ordinal))
-  const message = m?.type === 'journeycard' ? m : emptyJourney
-  const conv = C.useChatContext(s => s.meta)
-  const {cannotWrite, channelname, teamname, teamID} = conv
-  const welcomeMessage = {display: '', raw: '', set: false}
-  const _teamID = teamID
-  const canShowcase = C.useTeamsState(s => C.Teams.canShowcase(s, teamID))
-  const isBigTeam = C.useChatState(s => C.Chat.isBigTeam(s, teamID))
-  const startAddMembersWizard = C.useTeamsState(s => s.dispatch.startAddMembersWizard)
-  const _onAddPeopleToTeam = (teamID: T.Teams.TeamID) => startAddMembersWizard(teamID)
-  const navigateAppend = C.useRouterState(s => s.dispatch.navigateAppend)
-  const _onAuthorClick = (teamID: T.Teams.TeamID) => navigateAppend({props: {teamID}, selected: 'team'})
-  const _onCreateChannel = (teamID: string) =>
-    navigateAppend({props: {teamID}, selected: 'chatCreateChannel'})
-  const dismissJourneycard = C.useChatContext(s => s.dispatch.dismissJourneycard)
-  const _onDismiss = (cardType: T.RPCChat.JourneycardType, ordinal: T.Chat.Ordinal) =>
-    dismissJourneycard(cardType, ordinal)
-  const previewConversation = C.useChatState(s => s.dispatch.previewConversation)
-  const _onGoToChannel = (channelname: string, teamname: string) =>
-    previewConversation({channelname, reason: 'journeyCardPopular', teamname})
-  const manageChatChannels = C.useTeamsState(s => s.dispatch.manageChatChannels)
-  const _onManageChannels = (teamID: string) => manageChatChannels(teamID)
-
-  const setMemberPublicity = C.useTeamsState(s => s.dispatch.setMemberPublicity)
-  const _onPublishTeam = (teamID: string) => {
-    navigateAppend('profileShowcaseTeamOffer')
-    setMemberPublicity(teamID, true)
-  }
-  const _onShowTeam = (teamID: T.Teams.TeamID) => navigateAppend({props: {teamID}, selected: 'team'})
-  const props = {
-    canShowcase,
-    cannotWrite,
-    channelname,
-    isBigTeam,
-    message,
-    onAddPeopleToTeam: () => _onAddPeopleToTeam(_teamID),
-    onAuthorClick: () => _onAuthorClick(_teamID),
-    onBrowseChannels: () => _onManageChannels(_teamID),
-    onCreateChatChannels: () => _onCreateChannel(_teamID),
-    onDismiss: () => _onDismiss(message.cardType, message.ordinal),
-    onGoToChannel: (channelName: string) => _onGoToChannel(channelName, teamname),
-    onPublishTeam: () => _onPublishTeam(_teamID),
-    onScrollBack: () => console.log('onScrollBack'),
-    onShowTeam: () => _onShowTeam(_teamID),
-    teamID: _teamID,
-    teamname,
-    welcomeMessage,
-  }
-  return <TeamJourneyContainer {...props} />
+type HeaderProps = {
+  teamname: string
+  onAuthorClick: () => void
+  onDismiss: () => void
+  deactivateButtons?: boolean
 }
+const TeamJourneyHeader = (props: HeaderProps) => {
+  const styles = useStyles()
+  const theme = Kb.Styles.useTheme()
+  const {teamname, onAuthorClick, deactivateButtons, onDismiss} = props
+  const avatarStyle = styles.avatarChat
+  return (
+    <Kb.Box2 key="author" direction="horizontal" fullWidth={true} alignItems="flex-start" alignSelf="flex-start" style={styles.authorContainer} gap="tiny">
+      <Kb.Avatar
+        size={32}
+        isTeam={true}
+        teamname={teamname}
+        style={avatarStyle}
+        onClick={deactivateButtons ? undefined : onAuthorClick}
+      />
+      <Kb.Box2
+        direction="horizontal"
+        gap="xtiny"
+        fullWidth={false}
+        alignSelf="flex-start"
+        style={styles.bottomLine}
+      >
+        <Kb.Text
+          style={styles.teamnameText}
+          type="BodySmallBold"
+          onClick={deactivateButtons ? undefined : onAuthorClick}
+          className={deactivateButtons ? '' : 'hover-underline'}
+        >
+          {teamname}
+        </Kb.Text>
+        <Kb.Text type="BodyTiny">• System message</Kb.Text>
+      </Kb.Box2>
+      {!isMobile && !deactivateButtons && (
+        <Kb.Icon type="iconfont-close" color={theme.black_20} onClick={onDismiss} fontSize={12} />
+      )}
+    </Kb.Box2>
+  )
+}
+
+const buttonSpace = 6
+
+const useStyles = Kb.Styles.createStyleHook(
+  theme =>
+    ({
+      actionsBox: Kb.Styles.platformStyles({
+        common: {marginTop: Kb.Styles.globalMargins.tiny - buttonSpace},
+        isElectron: {flexWrap: 'wrap'},
+      }),
+      authorContainer: Kb.Styles.platformStyles({
+        common: {
+          height: Kb.Styles.globalMargins.mediumLarge,
+        },
+        isMobile: {marginTop: 8},
+      }),
+      avatarChat: Kb.Styles.platformStyles({
+        isElectron: {
+          marginLeft: Kb.Styles.globalMargins.small,
+          marginTop: Kb.Styles.globalMargins.xtiny,
+        },
+        isMobile: {marginLeft: Kb.Styles.globalMargins.tiny},
+      }),
+      bottomLine: {
+        ...Kb.Styles.globalStyles.flexGrow,
+        alignItems: 'baseline',
+      },
+      buttonSpace: {marginTop: buttonSpace},
+      content: Kb.Styles.platformStyles({
+        isMobile: {paddingBottom: 3},
+      }),
+      contentHorizontalPadChat: Kb.Styles.platformStyles({
+        isElectron: {
+          paddingLeft:
+            // Space for below the avatar
+            Kb.Styles.globalMargins.tiny + // right margin
+            Kb.Styles.globalMargins.small + // left margin
+            Kb.Styles.globalMargins.mediumLarge, // avatar
+          paddingRight: Kb.Styles.globalMargins.tiny,
+        },
+        isMobile: {
+          paddingLeft:
+            // Space for below the avatar
+            Kb.Styles.globalMargins.tiny + // right margin
+            Kb.Styles.globalMargins.tiny + // left margin
+            Kb.Styles.globalMargins.mediumLarge, // avatar
+        },
+      }),
+      contentWithImage: {minHeight: 70},
+      image: Kb.Styles.platformStyles({
+        isElectron: {marginTop: -33},
+      }),
+      teamnameText: {color: theme.black},
+      text: {maxWidth: isMobile ? '70%' : 320},
+    }) as const
+)
 
 export default TeamJourneyConnected

@@ -1,14 +1,15 @@
 package client
 
 import (
+	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/keybase/client/go/chat/utils"
 	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/protocol/chat1"
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
-	"golang.org/x/net/context"
 )
 
 type chatNotificationConfig struct {
@@ -136,13 +137,7 @@ func (d *chatNotificationDisplay) matchFilters(convID chat1.ConversationID) bool
 		// No filters - every message is relayed.
 		return true
 	}
-	for _, v := range d.filtersNormalized {
-		if convID.Eq(v) {
-			return true
-		}
-	}
-	// None of our filters matched.
-	return false
+	return slices.ContainsFunc(d.filtersNormalized, convID.Eq)
 }
 
 func (d *chatNotificationDisplay) NewChatActivity(ctx context.Context, arg chat1.NewChatActivityArg) error {
@@ -211,9 +206,11 @@ func (d *chatNotificationDisplay) ChatJoinedConversation(ctx context.Context, ar
 func (d *chatNotificationDisplay) ChatIdentifyUpdate(context.Context, keybase1.CanonicalTLFNameAndIDWithBreaks) error {
 	return nil
 }
+
 func (d *chatNotificationDisplay) ChatTLFFinalize(context.Context, chat1.ChatTLFFinalizeArg) error {
 	return nil
 }
+
 func (d *chatNotificationDisplay) ChatTLFResolve(context.Context, chat1.ChatTLFResolveArg) error {
 	return nil
 }
@@ -221,72 +218,97 @@ func (d *chatNotificationDisplay) ChatInboxStale(context.Context, keybase1.UID) 
 func (d *chatNotificationDisplay) ChatThreadsStale(context.Context, chat1.ChatThreadsStaleArg) error {
 	return nil
 }
+
 func (d *chatNotificationDisplay) ChatTypingUpdate(context.Context, []chat1.ConvTypingUpdate) error {
 	return nil
 }
+
 func (d *chatNotificationDisplay) ChatLeftConversation(context.Context, chat1.ChatLeftConversationArg) error {
 	return nil
 }
+
 func (d *chatNotificationDisplay) ChatResetConversation(context.Context, chat1.ChatResetConversationArg) error {
 	return nil
 }
+
 func (d *chatNotificationDisplay) ChatInboxSyncStarted(context.Context, keybase1.UID) error {
 	return nil
 }
+
 func (d *chatNotificationDisplay) ChatInboxSynced(context.Context, chat1.ChatInboxSyncedArg) error {
 	return nil
 }
+
 func (d *chatNotificationDisplay) ChatSetConvRetention(context.Context, chat1.ChatSetConvRetentionArg) error {
 	return nil
 }
+
 func (d *chatNotificationDisplay) ChatSetTeamRetention(context.Context, chat1.ChatSetTeamRetentionArg) error {
 	return nil
 }
+
 func (d *chatNotificationDisplay) ChatSetConvSettings(context.Context, chat1.ChatSetConvSettingsArg) error {
 	return nil
 }
+
 func (d *chatNotificationDisplay) ChatSubteamRename(context.Context, chat1.ChatSubteamRenameArg) error {
 	return nil
 }
+
 func (d *chatNotificationDisplay) ChatKBFSToImpteamUpgrade(context.Context, chat1.ChatKBFSToImpteamUpgradeArg) error {
 	return nil
 }
+
 func (d *chatNotificationDisplay) ChatAttachmentUploadStart(context.Context, chat1.ChatAttachmentUploadStartArg) error {
 	return nil
 }
+
 func (d *chatNotificationDisplay) ChatAttachmentUploadProgress(context.Context, chat1.ChatAttachmentUploadProgressArg) error {
 	return nil
 }
+
 func (d *chatNotificationDisplay) ChatAttachmentDownloadProgress(context.Context,
-	chat1.ChatAttachmentDownloadProgressArg) error {
+	chat1.ChatAttachmentDownloadProgressArg,
+) error {
 	return nil
 }
+
 func (d *chatNotificationDisplay) ChatAttachmentDownloadComplete(context.Context,
-	chat1.ChatAttachmentDownloadCompleteArg) error {
+	chat1.ChatAttachmentDownloadCompleteArg,
+) error {
 	return nil
 }
+
 func (d chatNotificationDisplay) ChatArchiveProgress(context.Context, chat1.ChatArchiveProgressArg) error {
 	return nil
 }
+
 func (d chatNotificationDisplay) ChatArchiveComplete(context.Context, chat1.ArchiveJobID) error {
 	return nil
 }
+
 func (d *chatNotificationDisplay) ChatPaymentInfo(context.Context, chat1.ChatPaymentInfoArg) error {
 	return nil
 }
+
 func (d *chatNotificationDisplay) ChatRequestInfo(context.Context, chat1.ChatRequestInfoArg) error {
 	return nil
 }
+
 func (d *chatNotificationDisplay) ChatPromptUnfurl(context.Context, chat1.ChatPromptUnfurlArg) error {
 	return nil
 }
+
 func (d *chatNotificationDisplay) ChatConvUpdate(context.Context, chat1.ChatConvUpdateArg) error {
 	return nil
 }
+
 func (d *chatNotificationDisplay) ChatWelcomeMessageLoaded(context.Context, chat1.ChatWelcomeMessageLoadedArg) error {
 	return nil
 }
+
 func (d *chatNotificationDisplay) ChatParticipantsInfo(context.Context,
-	map[chat1.ConvIDStr][]chat1.UIParticipant) error {
+	map[chat1.ConvIDStr][]chat1.UIParticipant,
+) error {
 	return nil
 }

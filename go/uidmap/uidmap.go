@@ -1,6 +1,7 @@
 package uidmap
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -10,7 +11,6 @@ import (
 	lru "github.com/hashicorp/golang-lru"
 	"github.com/keybase/client/go/libkb"
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
-	"golang.org/x/net/context"
 )
 
 type UIDMap struct {
@@ -89,7 +89,6 @@ func isStale(g libkb.UIDMapperContext, m keybase1.FullNamePackage, dur time.Dura
 }
 
 func (u *UIDMap) findFullNameLocally(ctx context.Context, g libkb.UIDMapperContext, uid keybase1.UID, fullNameFreshness time.Duration) (ret *keybase1.FullNamePackage, status mapStatus) {
-
 	var staleFullName *keybase1.FullNamePackage
 	var staleExpired time.Duration
 
@@ -140,6 +139,7 @@ func (u *UIDMap) findFullNameLocally(ctx context.Context, g libkb.UIDMapperConte
 	}
 
 	u.fullNameCache.Add(uid, tmp)
+	ret = &tmp
 	return ret, foundOnDisk
 }
 
@@ -240,17 +240,13 @@ func (u *UIDMap) lookupFromServerBatch(ctx context.Context, g libkb.UIDMapperCon
 }
 
 func (u *UIDMap) lookupFromServer(ctx context.Context, g libkb.UIDMapperContext, uids []keybase1.UID, networkTimeBudget time.Duration) ([]libkb.UsernamePackage, error) {
-
 	start := g.GetClock().Now()
 	end := start.Add(networkTimeBudget)
 
 	g.GetLog().CDebugf(ctx, "looking up %d uids from server", len(uids))
 	var ret []libkb.UsernamePackage
 	for i := 0; i < len(uids); i += batchSize {
-		high := i + batchSize
-		if high > len(uids) {
-			high = len(uids)
-		}
+		high := min(i+batchSize, len(uids))
 		inb := uids[i:high]
 		var budget time.Duration
 
@@ -281,7 +277,6 @@ func (u *UIDMap) lookupFromServer(ctx context.Context, g libkb.UIDMapperContext,
 // of busting. Will return true if the cached value was up-to-date, and false
 // otherwise.
 func (u *UIDMap) InformOfEldestSeqno(ctx context.Context, g libkb.UIDMapperContext, uv keybase1.UserVersion) (isCurrent bool, err error) {
-
 	// No entry/exit tracing, or common-case tracing, in this function since otherwise
 	// the spam is overwhelming.
 
@@ -356,8 +351,9 @@ func (u *UIDMap) InformOfEldestSeqno(ctx context.Context, g libkb.UIDMapperConte
 // also the error.
 func (u *UIDMap) MapUIDsToUsernamePackages(ctx context.Context, g libkb.UIDMapperContext,
 	uids []keybase1.UID, fullNameFreshness, networkTimeBudget time.Duration,
-	forceNetworkForFullNames bool) (res []libkb.UsernamePackage, err error) {
-
+	forceNetworkForFullNames bool,
+) (res []libkb.UsernamePackage, err error) {
+	defer libkb.CTrace(ctx, g.GetLog(), "UIDMap.MapUIDsToUsernamePackages", &err, g.GetClock())()
 	u.Lock()
 	defer u.Unlock()
 
@@ -491,7 +487,8 @@ func (u *UIDMap) ClearUIDAtEldestSeqno(ctx context.Context, g libkb.UIDMapperCon
 }
 
 func (u *UIDMap) MapUIDsToUsernamePackagesOffline(ctx context.Context, g libkb.UIDMapperContext,
-	uids []keybase1.UID, fullNameFreshness time.Duration) (res []libkb.UsernamePackage, err error) {
+	uids []keybase1.UID, fullNameFreshness time.Duration,
+) (res []libkb.UsernamePackage, err error) {
 	// Like MapUIDsToUsernamePackages, but never makes any network calls,
 	// returns only cached values. UIDs that were not cached at all result in
 	// default UsernamePackage, caller has to check if the result is present
@@ -513,8 +510,8 @@ func (u *UIDMap) MapUIDsToUsernamePackagesOffline(ctx context.Context, g libkb.U
 }
 
 func MapUIDsReturnMap(ctx context.Context, u libkb.UIDMapper, g libkb.UIDMapperContext, uids []keybase1.UID, fullNameFreshness time.Duration,
-	networkTimeBudget time.Duration, forceNetworkForFullNames bool) (res map[keybase1.UID]libkb.UsernamePackage, err error) {
-
+	networkTimeBudget time.Duration, forceNetworkForFullNames bool,
+) (res map[keybase1.UID]libkb.UsernamePackage, err error) {
 	var uidList []keybase1.UID
 	uidSet := map[keybase1.UID]bool{}
 
@@ -539,7 +536,8 @@ func MapUIDsReturnMap(ctx context.Context, u libkb.UIDMapper, g libkb.UIDMapperC
 }
 
 func MapUIDsReturnMapMctx(mctx libkb.MetaContext, uids []keybase1.UID, fullNameFreshness time.Duration, networkTimeBudget time.Duration,
-	forceNetworkForFullNames bool) (res map[keybase1.UID]libkb.UsernamePackage, err error) {
+	forceNetworkForFullNames bool,
+) (res map[keybase1.UID]libkb.UsernamePackage, err error) {
 	// Same as MapUIDsReturnMap, but takes less arguments because of mctx,
 	// which encapsulates ctx, g, and u (g.UIDMapper).
 	g := mctx.G()
@@ -563,7 +561,6 @@ func (o *OfflineUIDMap) MapUIDsToUsernamePackages(ctx context.Context, g libkb.U
 }
 
 func (o *OfflineUIDMap) SetTestingNoCachingMode(enabled bool) {
-
 }
 
 func (o *OfflineUIDMap) ClearUIDFullName(ctx context.Context, g libkb.UIDMapperContext, uid keybase1.UID) error {

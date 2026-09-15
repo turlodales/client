@@ -16,9 +16,7 @@ import (
 )
 
 func TestUpgrade(t *testing.T) {
-	configDir, err := os.MkdirTemp(".", "kbpagesconfig-editor-test-")
-	require.NoError(t, err)
-	defer os.RemoveAll(configDir)
+	configDir := t.TempDir()
 	kbpConfigPath := filepath.Join(configDir, config.DefaultConfigFilename)
 
 	t.Logf("creating config with bcrypt pass at %s", kbpConfigPath)
@@ -30,9 +28,9 @@ func TestUpgrade(t *testing.T) {
 	v1.Users = make(map[string]string)
 	v1.Users["alice"] = string(bcryptHash)
 
-	f1, err := os.Create(kbpConfigPath)
+	f1, err := os.Create(kbpConfigPath) //nolint:gosec // G304: Test file with known path
 	require.NoError(t, err)
-	defer f1.Close()
+	defer func() { _ = f1.Close() }()
 	err = v1.Encode(f1, true)
 	require.NoError(t, err)
 
@@ -53,9 +51,9 @@ func TestUpgrade(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Logf("testing new config is upgraded and still works")
-	f2, err := os.Open(kbpConfigPath)
+	f2, err := os.Open(kbpConfigPath) //nolint:gosec // G304: Test file with known path
 	require.NoError(t, err)
-	defer f2.Close()
+	defer func() { _ = f2.Close() }()
 
 	cfg, err := config.ParseConfig(f2)
 	require.NoError(t, err)

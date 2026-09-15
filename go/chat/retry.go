@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"context"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -14,7 +15,6 @@ import (
 	"github.com/keybase/client/go/protocol/gregor1"
 	"github.com/keybase/clockwork"
 	"github.com/keybase/go-codec/codec"
-	context "golang.org/x/net/context"
 )
 
 type FetchType int
@@ -25,9 +25,11 @@ const (
 	FullInboxLoad
 )
 
-const fetchInitialInterval = 3 * time.Second
-const fetchMultiplier = 1.5
-const fetchMaxAttempts = 100
+const (
+	fetchInitialInterval = 3 * time.Second
+	fetchMultiplier      = 1.5
+	fetchMaxAttempts     = 100
+)
 
 type ConversationRetry struct {
 	globals.Contextified
@@ -243,8 +245,8 @@ func (f *FetchRetrier) nextAttemptTime(attempts int, lastAttempt time.Time) time
 }
 
 func (f *FetchRetrier) spawnRetrier(ctx context.Context, uid gregor1.UID, desc types.RetryDescription,
-	control *retrierControl) {
-
+	control *retrierControl,
+) {
 	attempts := 1
 	nextTime := f.nextAttemptTime(attempts, f.clock.Now())
 	ctx = globals.BackgroundChatCtx(ctx, f.G())
@@ -294,7 +296,7 @@ func (f *FetchRetrier) spawnRetrier(ctx context.Context, uid gregor1.UID, desc t
 
 // Failure indicates a failure of type kind has happened when loading a conversation.
 func (f *FetchRetrier) Failure(ctx context.Context, uid gregor1.UID, desc types.RetryDescription) {
-	defer f.Trace(ctx, nil, fmt.Sprintf("Failure(%s)", desc))()
+	defer f.Trace(ctx, nil, "Failure(%s)", desc)()
 	f.Lock()
 	defer f.Unlock()
 	if !f.running {
@@ -313,7 +315,7 @@ func (f *FetchRetrier) Failure(ctx context.Context, uid gregor1.UID, desc types.
 // Success indicates a success of type kind loading a conversation. This effectively removes
 // that conversation from the retry queue.
 func (f *FetchRetrier) Success(ctx context.Context, uid gregor1.UID, desc types.RetryDescription) {
-	defer f.Trace(ctx, nil, fmt.Sprintf("Success(%s)", desc))()
+	defer f.Trace(ctx, nil, "Success(%s)", desc)()
 	f.Lock()
 	defer f.Unlock()
 	key := f.key(uid, desc)
@@ -360,7 +362,8 @@ func (f *FetchRetrier) Force(ctx context.Context) {
 }
 
 func (f *FetchRetrier) Rekey(ctx context.Context, name string, membersType chat1.ConversationMembersType,
-	public bool) {
+	public bool,
+) {
 	nameInfo, err := CreateNameInfoSource(ctx, f.G(), membersType).LookupID(ctx, name, public)
 	if err != nil {
 		f.Debug(ctx, "Rekey: failed to load name info for: %s msg %s", name, err)

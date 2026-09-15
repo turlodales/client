@@ -1,9 +1,8 @@
-import * as React from 'react'
 import * as Kb from '@/common-adapters'
 import type * as T from '@/constants/types'
 
 export type Props = {
-  attachTo?: React.RefObject<Kb.MeasureRef>
+  attachTo?: React.RefObject<Kb.MeasureRef | null>
   onHidden: () => void
   participants?: ReadonlyArray<T.RPCChat.UICoinFlipParticipant>
   visible: boolean
@@ -12,7 +11,9 @@ export type Props = {
 const items: Kb.MenuItems = []
 
 const CoinFlipParticipants = (props: Props) => {
+  const styles = useStyles()
   const {attachTo, onHidden, participants, visible} = props
+  const howThisWorksUrlProps = Kb.useClickURL('https://keybase.io/coin-flip')
   const header = (
     <Kb.Box2 direction="vertical" fullWidth={true}>
       <Kb.Box2 direction="vertical" centerChildren={true} style={styles.container}>
@@ -26,6 +27,8 @@ const CoinFlipParticipants = (props: Props) => {
             colorFollowing={true}
             key={`${p.username}${p.deviceName}`}
             horizontal={true}
+            onClick="profile"
+            withProfileCardPopup={false}
             username={p.username}
             metaOne={p.deviceName}
             containerStyle={styles.participants}
@@ -34,7 +37,7 @@ const CoinFlipParticipants = (props: Props) => {
       </Kb.ScrollView>
       <Kb.Divider />
       <Kb.Box2 direction="vertical" style={styles.container} centerChildren={true}>
-        <Kb.Text type="BodySmallPrimaryLink" onClickURL="https://keybase.io/coin-flip">
+        <Kb.Text type="BodySmallPrimaryLink" {...howThisWorksUrlProps}>
           How this works
         </Kb.Text>
       </Kb.Box2>
@@ -53,13 +56,12 @@ const CoinFlipParticipants = (props: Props) => {
   )
 }
 
-const styles = Kb.Styles.styleSheetCreate(
+const useStyles = Kb.Styles.createStyleHook(
   () =>
     ({
       container: Kb.Styles.platformStyles({
         isElectron: {
-          paddingBottom: Kb.Styles.globalMargins.tiny,
-          paddingTop: Kb.Styles.globalMargins.tiny,
+          ...Kb.Styles.paddingV(Kb.Styles.globalMargins.tiny),
         },
         isMobile: {
           paddingBottom: Kb.Styles.globalMargins.xtiny,
@@ -68,18 +70,11 @@ const styles = Kb.Styles.styleSheetCreate(
       }),
       partContainer: {
         maxHeight: 200,
-        paddingLeft: Kb.Styles.globalMargins.small,
-        paddingRight: Kb.Styles.globalMargins.small,
+        ...Kb.Styles.paddingH(Kb.Styles.globalMargins.small),
       },
       participants: {
-        marginBottom: Kb.Styles.globalMargins.tiny,
-        marginTop: Kb.Styles.globalMargins.tiny,
+        ...Kb.Styles.marginV(Kb.Styles.globalMargins.tiny),
       },
-      title: Kb.Styles.platformStyles({
-        isElectron: {
-          paddingTop: Kb.Styles.globalMargins.xtiny,
-        },
-      }),
     }) as const
 )
 

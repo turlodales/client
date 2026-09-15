@@ -3,16 +3,17 @@
 // license that can be found in the LICENSE file.
 //
 //go:build !windows
-// +build !windows
 
 package libfuse
 
 import (
+	"context"
+
 	"bazil.org/fuse"
 	"bazil.org/fuse/fs"
+
 	"github.com/keybase/client/go/kbfs/libfs"
 	"github.com/keybase/client/go/kbfs/libkbfs"
-	"golang.org/x/net/context"
 )
 
 // UnstageFile represents a write-only file when any write of at least
@@ -27,7 +28,7 @@ var _ fs.Node = (*UnstageFile)(nil)
 // Attr implements the fs.Node interface for UnstageFile.
 func (f *UnstageFile) Attr(ctx context.Context, a *fuse.Attr) error {
 	a.Size = 0
-	a.Mode = 0222
+	a.Mode = 0o222
 	return nil
 }
 
@@ -37,7 +38,8 @@ var _ fs.HandleWriter = (*UnstageFile)(nil)
 
 // Write implements the fs.HandleWriter interface for UnstageFile.
 func (f *UnstageFile) Write(ctx context.Context, req *fuse.WriteRequest,
-	resp *fuse.WriteResponse) (err error) {
+	resp *fuse.WriteResponse,
+) (err error) {
 	defer func() { err = f.folder.processError(ctx, libkbfs.WriteMode, err) }()
 	size, err := libfs.UnstageForTesting(
 		ctx, f.folder.fs.log, f.folder.fs.config,

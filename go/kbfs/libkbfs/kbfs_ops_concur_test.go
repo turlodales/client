@@ -6,6 +6,7 @@ package libkbfs
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"runtime"
@@ -27,7 +28,6 @@ import (
 	"github.com/keybase/client/go/protocol/keybase1"
 	"github.com/keybase/go-framed-msgpack-rpc/rpc"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/context"
 )
 
 // CounterLock keeps track of the number of lock attempts
@@ -55,20 +55,23 @@ func (cl *CounterLock) GetCount() int {
 }
 
 func kbfsOpsConcurInit(t *testing.T, users ...kbname.NormalizedUsername) (
-	*ConfigLocal, keybase1.UID, context.Context, context.CancelFunc) {
+	*ConfigLocal, keybase1.UID, context.Context, context.CancelFunc,
+) {
 	return kbfsOpsInitNoMocks(t, users...)
 }
 
 func kbfsConcurTestShutdown(
 	ctx context.Context, t *testing.T,
-	config *ConfigLocal, cancel context.CancelFunc) {
+	config *ConfigLocal, cancel context.CancelFunc,
+) {
 	kbfsTestShutdownNoMocks(ctx, t, config, cancel)
 }
 
 // TODO: Get rid of all users of this.
 func kbfsConcurTestShutdownNoCheck(
 	ctx context.Context, t *testing.T,
-	config *ConfigLocal, cancel context.CancelFunc) {
+	config *ConfigLocal, cancel context.CancelFunc,
+) {
 	kbfsTestShutdownNoMocksNoCheck(ctx, t, config, cancel)
 }
 
@@ -79,8 +82,7 @@ func TestKBFSOpsConcurDoubleMDGet(t *testing.T) {
 	config, _, ctx, cancel := kbfsOpsConcurInit(t, "test_user")
 	defer kbfsConcurTestShutdown(ctx, t, config, cancel)
 
-	onGetStalledCh, getUnstallCh, ctxStallGetForTLF :=
-		StallMDOp(ctx, config, StallableMDGetForTLF, 1)
+	onGetStalledCh, getUnstallCh, ctxStallGetForTLF := StallMDOp(ctx, config, StallableMDGetForTLF, 1)
 
 	// Initialize the MD using a different config
 	c2 := ConfigAsUser(config, "test_user")
@@ -93,7 +95,7 @@ func TestKBFSOpsConcurDoubleMDGet(t *testing.T) {
 	ops := getOps(config, rootNode.GetFolderBranch().Tlf)
 	ops.mdWriterLock = kbfssync.MakeLeveledMutex(
 		kbfssync.MutexLevel(fboMDWriter), cl)
-	for i := 0; i < n; i++ {
+	for range n {
 		go func() {
 			_, _, _, err := ops.getRootNode(ctxStallGetForTLF)
 			c <- err
@@ -112,7 +114,7 @@ func TestKBFSOpsConcurDoubleMDGet(t *testing.T) {
 	// Now let the first one complete.  The second one should find the
 	// MD in the cache, and thus never call MDOps.Get().
 	close(getUnstallCh)
-	for i := 0; i < n; i++ {
+	for range n {
 		err := <-c
 		require.NoError(t, err, "Got an error doing concurrent MD gets: err=(%s)", err)
 	}
@@ -123,8 +125,7 @@ func TestKBFSOpsConcurReadDuringSync(t *testing.T) {
 	config, _, ctx, cancel := kbfsOpsConcurInit(t, "test_user")
 	defer kbfsConcurTestShutdown(ctx, t, config, cancel)
 
-	onPutStalledCh, putUnstallCh, putCtx :=
-		StallMDOp(ctx, config, StallableMDAfterPut, 1)
+	onPutStalledCh, putUnstallCh, putCtx := StallMDOp(ctx, config, StallableMDAfterPut, 1)
 
 	// create and write to a file
 	rootNode := GetRootNodeOrBust(ctx, t, config, "test_user", tlf.Private)
@@ -150,9 +151,8 @@ func TestKBFSOpsConcurReadDuringSync(t *testing.T) {
 	buf := make([]byte, 1)
 	nr, err := kbfsOps.Read(ctx, fileNode, buf, 0)
 	require.NoError(t, err, "Couldn't read data: %v\n", err)
-	if nr != 1 || !bytes.Equal(data, buf) {
-		t.Errorf("Got wrong data %v; expected %v", buf, data)
-	}
+	require.Equal(t, int64(1), nr, "Got wrong data %v; expected %v", buf, data)
+	require.Equal(t, data, buf, "Got wrong data %v; expected %v", buf, data)
 
 	// now unblock Sync and make sure there was no error
 	close(putUnstallCh)
@@ -161,7 +161,8 @@ func TestKBFSOpsConcurReadDuringSync(t *testing.T) {
 }
 
 func testCalcNumFileBlocks(
-	dataLen int, bsplitter *kbfsdata.BlockSplitterSimple) int {
+	dataLen int, bsplitter *kbfsdata.BlockSplitterSimple,
+) int {
 	nChildBlocks := 1 + dataLen/int(bsplitter.MaxSize())
 	nFileBlocks := nChildBlocks
 	for nChildBlocks > 1 {
@@ -178,12 +179,12 @@ func testCalcNumFileBlocks(
 
 // Test that writes can happen concurrently with a sync
 func testKBFSOpsConcurWritesDuringSync(t *testing.T,
-	initialWriteBytes int, nOneByteWrites int, nFiles int) {
+	initialWriteBytes int, nOneByteWrites int, nFiles int,
+) {
 	config, _, ctx, cancel := kbfsOpsConcurInit(t, "test_user")
 	defer kbfsConcurTestShutdown(ctx, t, config, cancel)
 
-	onPutStalledCh, putUnstallCh, putCtx :=
-		StallMDOp(ctx, config, StallableMDAfterPut, 1)
+	onPutStalledCh, putUnstallCh, putCtx := StallMDOp(ctx, config, StallableMDAfterPut, 1)
 
 	// Use the smallest possible block size.
 	bsplitter, err := kbfsdata.NewBlockSplitterSimple(20, 8*1024, config.Codec())
@@ -195,7 +196,7 @@ func testKBFSOpsConcurWritesDuringSync(t *testing.T,
 
 	fileNodes := make([]Node, nFiles)
 	kbfsOps := config.KBFSOps()
-	for i := 0; i < nFiles; i++ {
+	for i := range nFiles {
 		name := fmt.Sprintf("file%d", i)
 		fileNode, _, err := kbfsOps.CreateFile(
 			ctx, rootNode, testPPS(name), false, NoExcl)
@@ -206,7 +207,7 @@ func testKBFSOpsConcurWritesDuringSync(t *testing.T,
 	expectedData := make([][]byte, len(fileNodes))
 	for i, fileNode := range fileNodes {
 		data := make([]byte, initialWriteBytes)
-		for j := 0; j < initialWriteBytes; j++ {
+		for j := range initialWriteBytes {
 			data[j] = byte(initialWriteBytes * (i + 1))
 		}
 		err = kbfsOps.Write(ctx, fileNode, data, 0)
@@ -225,11 +226,11 @@ func testKBFSOpsConcurWritesDuringSync(t *testing.T,
 	select {
 	case <-onPutStalledCh:
 	case <-ctx.Done():
-		t.Fatalf("Timeout waiting for stall")
+		require.FailNow(t, "Timeout waiting for stall")
 	}
 
 	for i, fileNode := range fileNodes {
-		for j := 0; j < nOneByteWrites; j++ {
+		for j := range nOneByteWrites {
 			// now make sure we can write the file and see the new
 			// byte we wrote
 			newData := []byte{byte(nOneByteWrites * (j + 2))}
@@ -244,7 +245,7 @@ func testKBFSOpsConcurWritesDuringSync(t *testing.T,
 			expectedData[i] = append(expectedData[i], newData...)
 			if nr != int64(j+1+initialWriteBytes) ||
 				!bytes.Equal(expectedData[i], buf) {
-				t.Errorf("Got wrong data %v; expected %v", buf, expectedData[i])
+				require.Failf(t, "", "Got wrong data %v; expected %v", buf, expectedData[i])
 			}
 		}
 	}
@@ -263,8 +264,7 @@ func testKBFSOpsConcurWritesDuringSync(t *testing.T,
 		require.NoError(t, err, "Couldn't read data: %v\n", err)
 		if nr != int64(totalSize) ||
 			!bytes.Equal(expectedData[i], buf2) {
-			t.Errorf("2nd read: Got wrong data %v; expected %v",
-				buf2, expectedData[i])
+			require.Failf(t, "", "2nd read: Got wrong data %v; expected %v", buf2, expectedData[i])
 		}
 	}
 
@@ -284,18 +284,17 @@ func testKBFSOpsConcurWritesDuringSync(t *testing.T,
 
 	for _, fileNode := range fileNodes {
 		if ei, err := kbfsOps.Stat(ctx, fileNode); err != nil {
-			t.Fatalf("Couldn't stat: %v", err)
-		} else if g, e := ei.Size, uint64(totalSize); g != e {
-			t.Fatalf("Unexpected size: %d vs %d", g, e)
+			require.NoError(t, err,
+				"Couldn't stat: %v", err)
+		} else if g, e := ei.Size, uint64(totalSize); g != e { //nolint:gosec // G115: Test data with bounded values
+			require.FailNow(t, fmt.Sprintf("Unexpected size: %d vs %d", g, e))
 		}
 	}
 
 	// Make sure there are no dirty blocks left at the end of the test.
 	dbcs := config.DirtyBlockCache().(*kbfsdata.DirtyBlockCacheStandard)
 	numDirtyBlocks := dbcs.Size()
-	if numDirtyBlocks != 0 {
-		t.Errorf("%d dirty blocks left after final sync", numDirtyBlocks)
-	}
+	require.Equal(t, 0, numDirtyBlocks, "%d dirty blocks left after final sync", numDirtyBlocks)
 }
 
 // Test that a write can happen concurrently with a sync
@@ -331,8 +330,7 @@ func TestKBFSOpsConcurDeferredDoubleWritesDuringSync(t *testing.T) {
 	config, _, ctx, cancel := kbfsOpsConcurInit(t, "test_user")
 	defer kbfsConcurTestShutdown(ctx, t, config, cancel)
 
-	onPutStalledCh, putUnstallCh, putCtx :=
-		StallMDOp(ctx, config, StallableMDAfterPut, 1)
+	onPutStalledCh, putUnstallCh, putCtx := StallMDOp(ctx, config, StallableMDAfterPut, 1)
 
 	// Use the smallest possible block size.
 	bsplitter, err := kbfsdata.NewBlockSplitterSimple(20, 8*1024, config.Codec())
@@ -348,7 +346,7 @@ func TestKBFSOpsConcurDeferredDoubleWritesDuringSync(t *testing.T) {
 	require.NoError(t, err, "Couldn't create file: %v", err)
 	var data []byte
 	// Write 2 blocks worth of data
-	for i := 0; i < 30; i++ {
+	for i := range 30 {
 		data = append(data, byte(i))
 	}
 	err = kbfsOps.Write(ctx, fileNode, data, 0)
@@ -395,12 +393,8 @@ func TestKBFSOpsConcurDeferredDoubleWritesDuringSync(t *testing.T) {
 	gotData := make([]byte, 40)
 	nr, err := kbfsOps.Read(ctx, fileNode, gotData, 0)
 	require.NoError(t, err, "Couldn't read data: %v", err)
-	if nr != int64(len(gotData)) {
-		t.Errorf("Only read %d bytes", nr)
-	}
-	if !bytes.Equal(expectedData, gotData) {
-		t.Errorf("Read wrong data.  Expected %v, got %v", expectedData, gotData)
-	}
+	require.Equal(t, int64(len(gotData)), nr, "Only read %d bytes", nr)
+	require.True(t, bytes.Equal(expectedData, gotData), "Read wrong data.  Expected %v, got %v", expectedData, gotData)
 
 	// Final sync
 	err = kbfsOps.SyncAll(ctx, fileNode.GetFolderBranch())
@@ -409,19 +403,13 @@ func TestKBFSOpsConcurDeferredDoubleWritesDuringSync(t *testing.T) {
 	gotData = make([]byte, 40)
 	nr, err = kbfsOps.Read(ctx, fileNode, gotData, 0)
 	require.NoError(t, err, "Couldn't read data: %v", err)
-	if nr != int64(len(gotData)) {
-		t.Errorf("Only read %d bytes", nr)
-	}
-	if !bytes.Equal(expectedData, gotData) {
-		t.Errorf("Read wrong data.  Expected %v, got %v", expectedData, gotData)
-	}
+	require.Equal(t, int64(len(gotData)), nr, "Only read %d bytes", nr)
+	require.True(t, bytes.Equal(expectedData, gotData), "Read wrong data.  Expected %v, got %v", expectedData, gotData)
 
 	// Make sure there are no dirty blocks left at the end of the test.
 	dbcs := config.DirtyBlockCache().(*kbfsdata.DirtyBlockCacheStandard)
 	numDirtyBlocks := dbcs.Size()
-	if numDirtyBlocks != 0 {
-		t.Errorf("%d dirty blocks left after final sync", numDirtyBlocks)
-	}
+	require.Equal(t, 0, numDirtyBlocks, "%d dirty blocks left after final sync", numDirtyBlocks)
 }
 
 // Test that a block write can happen concurrently with a block
@@ -445,10 +433,8 @@ func TestKBFSOpsConcurBlockReadWrite(t *testing.T) {
 	err = kbfsOps.SyncAll(ctx, rootNode.GetFolderBranch())
 	require.NoError(t, err, "Couldn't sync file: %v", err)
 
-	onReadStalledCh, readUnstallCh, ctxStallRead :=
-		StallBlockOp(ctx, config, StallableBlockGet, 1)
-	onWriteStalledCh, writeUnstallCh, ctxStallWrite :=
-		StallBlockOp(ctx, config, StallableBlockGet, 1)
+	onReadStalledCh, readUnstallCh, ctxStallRead := StallBlockOp(ctx, config, StallableBlockGet, 1)
+	onWriteStalledCh, writeUnstallCh, ctxStallWrite := StallBlockOp(ctx, config, StallableBlockGet, 1)
 
 	var wg sync.WaitGroup
 
@@ -484,12 +470,8 @@ func TestKBFSOpsConcurBlockReadWrite(t *testing.T) {
 	// Do these in the main goroutine since t isn't goroutine
 	// safe, and do these after wg.Wait() since we only know
 	// they're set after the goroutines exit.
-	if readErr != nil {
-		t.Errorf("Couldn't get children: %v", readErr)
-	}
-	if writeErr != nil {
-		t.Errorf("Couldn't write file: %v", writeErr)
-	}
+	require.NoError(t, readErr, "Couldn't get children: %v", readErr)
+	require.NoError(t, writeErr, "Couldn't write file: %v", writeErr)
 }
 
 // mdRecordingKeyManager records the last KeyMetadata argument seen
@@ -513,14 +495,16 @@ func (km *mdRecordingKeyManager) setLastKMD(kmd libkey.KeyMetadata) {
 }
 
 func (km *mdRecordingKeyManager) GetTLFCryptKeyForEncryption(
-	ctx context.Context, kmd libkey.KeyMetadata) (kbfscrypto.TLFCryptKey, error) {
+	ctx context.Context, kmd libkey.KeyMetadata,
+) (kbfscrypto.TLFCryptKey, error) {
 	km.setLastKMD(kmd)
 	return km.delegate.GetTLFCryptKeyForEncryption(ctx, kmd)
 }
 
 func (km *mdRecordingKeyManager) GetTLFCryptKeyForMDDecryption(
 	ctx context.Context, kmdToDecrypt, kmdWithKeys libkey.KeyMetadata) (
-	kbfscrypto.TLFCryptKey, error) {
+	kbfscrypto.TLFCryptKey, error,
+) {
 	km.setLastKMD(kmdToDecrypt)
 	return km.delegate.GetTLFCryptKeyForMDDecryption(ctx,
 		kmdToDecrypt, kmdWithKeys)
@@ -528,28 +512,32 @@ func (km *mdRecordingKeyManager) GetTLFCryptKeyForMDDecryption(
 
 func (km *mdRecordingKeyManager) GetTLFCryptKeyForBlockDecryption(
 	ctx context.Context, kmd libkey.KeyMetadata, blockPtr kbfsdata.BlockPointer) (
-	kbfscrypto.TLFCryptKey, error) {
+	kbfscrypto.TLFCryptKey, error,
+) {
 	km.setLastKMD(kmd)
 	return km.delegate.GetTLFCryptKeyForBlockDecryption(ctx, kmd, blockPtr)
 }
 
 func (km *mdRecordingKeyManager) GetFirstTLFCryptKey(
 	ctx context.Context, kmd libkey.KeyMetadata) (
-	kbfscrypto.TLFCryptKey, error) {
+	kbfscrypto.TLFCryptKey, error,
+) {
 	km.setLastKMD(kmd)
 	return km.delegate.GetFirstTLFCryptKey(ctx, kmd)
 }
 
 func (km *mdRecordingKeyManager) GetTLFCryptKeyOfAllGenerations(
 	ctx context.Context, kmd libkey.KeyMetadata) (
-	keys []kbfscrypto.TLFCryptKey, err error) {
+	keys []kbfscrypto.TLFCryptKey, err error,
+) {
 	km.setLastKMD(kmd)
 	return km.delegate.GetTLFCryptKeyOfAllGenerations(ctx, kmd)
 }
 
 func (km *mdRecordingKeyManager) Rekey(
 	ctx context.Context, md *RootMetadata, promptPaper bool) (
-	bool, *kbfscrypto.TLFCryptKey, error) {
+	bool, *kbfscrypto.TLFCryptKey, error,
+) {
 	km.setLastKMD(md)
 	return km.delegate.Rekey(ctx, md, promptPaper)
 }
@@ -587,12 +575,9 @@ func TestKBFSOpsConcurBlockSyncWrite(t *testing.T) {
 
 	fbo := kbfsOps.(*KBFSOpsStandard).getOpsNoAdd(
 		ctx, rootNode.GetFolderBranch())
-	if fbo.blocks.GetState(lState) != dirtyState {
-		t.Fatal("Unexpectedly not in dirty state")
-	}
+	require.Equal(t, dirtyState, fbo.blocks.GetState(lState), "Unexpectedly not in dirty state")
 
-	onSyncStalledCh, syncUnstallCh, ctxStallSync :=
-		StallBlockOp(ctx, config, StallableBlockPut, 1)
+	onSyncStalledCh, syncUnstallCh, ctxStallSync := StallBlockOp(ctx, config, StallableBlockPut, 1)
 
 	var wg sync.WaitGroup
 
@@ -612,8 +597,7 @@ func TestKBFSOpsConcurBlockSyncWrite(t *testing.T) {
 
 	deferredWriteCount := fbo.blocks.getDeferredWriteCountForTest(lState)
 	if deferredWriteCount != 1 {
-		t.Errorf("Unexpected deferred write count %d",
-			deferredWriteCount)
+		require.Failf(t, "", "Unexpected deferred write count %d", deferredWriteCount)
 	}
 
 	// Unstall the sync.
@@ -624,18 +608,14 @@ func TestKBFSOpsConcurBlockSyncWrite(t *testing.T) {
 	// Do this in the main goroutine since it isn't goroutine safe,
 	// and do this after wg.Wait() since we only know it's set
 	// after the goroutine exits.
-	if syncErr != nil {
-		t.Errorf("Couldn't sync: %v", syncErr)
-	}
+	require.NoError(t, syncErr, "Couldn't sync: %v", syncErr)
 
 	md, err := fbo.getMDForRead(ctx, lState, mdReadNeedIdentify)
 	require.NoError(t, err, "Couldn't get MD: %v", err)
 
 	lastKMD := km.getLastKMD()
 
-	if md.ReadOnlyRootMetadata != lastKMD {
-		t.Error("Last MD seen by key manager != head")
-	}
+	require.Equal(t, lastKMD, md.ReadOnlyRootMetadata, "Last MD seen by key manager != head")
 }
 
 // Test that a sync can happen concurrently with a truncate. This is a
@@ -670,12 +650,9 @@ func TestKBFSOpsConcurBlockSyncTruncate(t *testing.T) {
 
 	fbo := kbfsOps.(*KBFSOpsStandard).getOpsNoAdd(
 		ctx, rootNode.GetFolderBranch())
-	if fbo.blocks.GetState(lState) != dirtyState {
-		t.Fatal("Unexpectedly not in dirty state")
-	}
+	require.Equal(t, dirtyState, fbo.blocks.GetState(lState), "Unexpectedly not in dirty state")
 
-	onSyncStalledCh, syncUnstallCh, ctxStallSync :=
-		StallBlockOp(ctx, config, StallableBlockPut, 1)
+	onSyncStalledCh, syncUnstallCh, ctxStallSync := StallBlockOp(ctx, config, StallableBlockPut, 1)
 
 	// Start the sync and wait for it to stall (on getting the dir
 	// block).
@@ -686,7 +663,7 @@ func TestKBFSOpsConcurBlockSyncTruncate(t *testing.T) {
 	select {
 	case <-onSyncStalledCh:
 	case <-ctx.Done():
-		t.Fatalf("Timeout waiting for sync to stall: %v", ctx.Err())
+		require.FailNow(t, fmt.Sprintf("Timeout waiting for sync to stall: %v", ctx.Err()))
 	}
 
 	err = kbfsOps.Truncate(ctx, fileNode, 0)
@@ -694,8 +671,7 @@ func TestKBFSOpsConcurBlockSyncTruncate(t *testing.T) {
 
 	deferredWriteCount := fbo.blocks.getDeferredWriteCountForTest(lState)
 	if deferredWriteCount != 1 {
-		t.Errorf("Unexpected deferred write count %d",
-			deferredWriteCount)
+		require.Failf(t, "", "Unexpected deferred write count %d", deferredWriteCount)
 	}
 
 	// Unstall the sync.
@@ -706,11 +682,9 @@ func TestKBFSOpsConcurBlockSyncTruncate(t *testing.T) {
 	// after the goroutine exits.
 	select {
 	case syncErr := <-syncErrCh:
-		if syncErr != nil {
-			t.Errorf("Couldn't sync: %v", syncErr)
-		}
+		require.NoError(t, syncErr, "Couldn't sync: %v", syncErr)
 	case <-ctx.Done():
-		t.Fatalf("Timeout waiting for sync: %v", ctx.Err())
+		require.FailNow(t, fmt.Sprintf("Timeout waiting for sync: %v", ctx.Err()))
 	}
 
 	md, err := fbo.getMDForRead(ctx, lState, mdReadNeedIdentify)
@@ -720,9 +694,7 @@ func TestKBFSOpsConcurBlockSyncTruncate(t *testing.T) {
 	lastRMD, ok := lastKMD.(ReadOnlyRootMetadata)
 	require.True(t, ok)
 
-	if md.ReadOnlyRootMetadata != lastRMD {
-		t.Error("Last MD seen by key manager != head")
-	}
+	require.Equal(t, lastRMD, md.ReadOnlyRootMetadata, "Last MD seen by key manager != head")
 }
 
 // Tests that a file that has been truncate-extended and overwritten
@@ -735,9 +707,7 @@ func TestKBFSOpsTruncateAndOverwriteDeferredWithArchivedBlock(t *testing.T) {
 
 	bsplitter, err := kbfsdata.NewBlockSplitterSimple(
 		kbfsdata.MaxBlockSizeBytesDefault, 8*1024, config.Codec())
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	config.SetBlockSplitter(bsplitter)
 
 	// create a file.
@@ -775,9 +745,8 @@ func TestKBFSOpsTruncateAndOverwriteDeferredWithArchivedBlock(t *testing.T) {
 
 	// Wait for the archiving to finish
 	err = kbfsOps.SyncFromServer(ctx, rootNode.GetFolderBranch(), nil)
-	if err != nil {
-		t.Fatalf("Couldn't sync from server")
-	}
+	require.NoError(t, err,
+		"Couldn't sync from server")
 
 	fileNode2, _, err := kbfsOps.CreateFile(
 		ctx, rootNode, testPPS("b"), false, NoExcl)
@@ -799,8 +768,7 @@ func TestKBFSOpsTruncateAndOverwriteDeferredWithArchivedBlock(t *testing.T) {
 
 	oldBServer := config.BlockServer()
 	defer config.SetBlockServer(oldBServer)
-	onSyncStalledCh, syncUnstallCh, ctxStallSync :=
-		StallBlockOp(ctx, config, StallableBlockPut, 1)
+	onSyncStalledCh, syncUnstallCh, ctxStallSync := StallBlockOp(ctx, config, StallableBlockPut, 1)
 
 	// Start the sync and wait for it to stall (on getting the dir
 	// block).
@@ -811,7 +779,7 @@ func TestKBFSOpsTruncateAndOverwriteDeferredWithArchivedBlock(t *testing.T) {
 	select {
 	case <-onSyncStalledCh:
 	case <-ctx.Done():
-		t.Fatalf("Timeout waiting for sync to stall: %v", ctx.Err())
+		require.FailNow(t, fmt.Sprintf("Timeout waiting for sync to stall: %v", ctx.Err()))
 	}
 
 	err = kbfsOps.Write(ctx, fileNode2, data[1:4], 0)
@@ -834,20 +802,16 @@ func TestKBFSOpsTruncateAndOverwriteDeferredWithArchivedBlock(t *testing.T) {
 	// after the goroutine exits.
 	select {
 	case syncErr := <-syncErrCh:
-		if syncErr != nil {
-			t.Errorf("Couldn't sync: %v", syncErr)
-		}
+		require.NoError(t, syncErr, "Couldn't sync: %v", syncErr)
 	case <-ctx.Done():
-		t.Fatalf("Timeout waiting for sync: %v", ctx.Err())
+		require.FailNow(t, fmt.Sprintf("Timeout waiting for sync: %v", ctx.Err()))
 	}
 
 	select {
 	case writeErr := <-writeErrCh:
-		if writeErr != nil {
-			t.Errorf("Couldn't write file: %v", writeErr)
-		}
+		require.NoError(t, writeErr, "Couldn't write file: %v", writeErr)
 	case <-ctx.Done():
-		t.Fatalf("Timeout waiting for write: %v", ctx.Err())
+		require.FailNow(t, fmt.Sprintf("Timeout waiting for write: %v", ctx.Err()))
 	}
 
 	err = kbfsOps.SyncAll(ctx, fileNode2.GetFolderBranch())
@@ -936,14 +900,15 @@ func TestKBFSOpsConcurWriteDuringFolderUpdate(t *testing.T) {
 
 	// Now sync the original file and see make sure the write survived
 	if err := kbfsOps.SyncAll(ctx, fileNode.GetFolderBranch()); err != nil {
-		t.Fatalf("Couldn't sync: %v", err)
+		require.NoError(t, err,
+			"Couldn't sync: %v", err)
 	}
 
 	de, err := kbfsOps.Stat(ctx, fileNode)
 	require.NoError(t, err, "Couldn't stat file: %v", err)
-	if g, e := de.Size, len(data); g != uint64(e) {
-		t.Errorf("Got wrong size %d; expected %d", g, e)
-	}
+	e := len(data)
+	g := de.Size
+	require.Equal(t, uint64(e), g, "Got wrong size %d; expected %d", g, e)
 }
 
 // Test that a write can happen concurrently with a sync when there
@@ -952,8 +917,7 @@ func TestKBFSOpsConcurWriteDuringSyncMultiBlocks(t *testing.T) {
 	config, _, ctx, cancel := kbfsOpsConcurInit(t, "test_user")
 	defer kbfsConcurTestShutdown(ctx, t, config, cancel)
 
-	onPutStalledCh, putUnstallCh, putCtx :=
-		StallMDOp(ctx, config, StallableMDAfterPut, 1)
+	onPutStalledCh, putUnstallCh, putCtx := StallMDOp(ctx, config, StallableMDAfterPut, 1)
 
 	// Make the blocks small, with multiple levels of indirection, but
 	// make the unembedded size large, so we don't create thousands of
@@ -988,8 +952,7 @@ func TestKBFSOpsConcurWriteDuringSyncMultiBlocks(t *testing.T) {
 	numCleanBlocks := config.BlockCache().(*kbfsdata.BlockCacheStandard).
 		NumCleanTransientBlocks()
 	if numCleanBlocks != 7 {
-		t.Errorf("Unexpected number of cached clean blocks: %d\n",
-			numCleanBlocks)
+		require.Failf(t, "", "Unexpected number of cached clean blocks: %d\n", numCleanBlocks)
 	}
 
 	// write to the first block
@@ -1017,9 +980,8 @@ func TestKBFSOpsConcurWriteDuringSyncMultiBlocks(t *testing.T) {
 	nr, err := kbfsOps.Read(ctx, fileNode, buf, 0)
 	require.NoError(t, err, "Couldn't read data: %v\n", err)
 	expectedData := []byte{11, 12, 3, 4, 5, 6, 7, 8, 9, 20}
-	if nr != 10 || !bytes.Equal(expectedData, buf) {
-		t.Errorf("Got wrong data %v; expected %v", buf, expectedData)
-	}
+	require.Equal(t, int64(10), nr, "Got wrong data %v; expected %v", buf, expectedData)
+	require.Equal(t, expectedData, buf, "Got wrong data %v; expected %v", buf, expectedData)
 
 	// now unstall Sync and make sure there was no error
 	close(putUnstallCh)
@@ -1031,14 +993,12 @@ func TestKBFSOpsConcurWriteDuringSyncMultiBlocks(t *testing.T) {
 	buf2 := make([]byte, 10)
 	nr, err = kbfsOps.Read(ctx, fileNode, buf2, 0)
 	require.NoError(t, err, "Couldn't read data: %v\n", err)
-	if nr != 10 || !bytes.Equal(expectedData, buf2) {
-		t.Errorf("2nd read: Got wrong data %v; expected %v", buf2, expectedData)
-	}
+	require.Equal(t, int64(10), nr, "2nd read: Got wrong data %v; expected %v", buf2, expectedData)
+	require.Equal(t, expectedData, buf2, "2nd read: Got wrong data %v; expected %v", buf2, expectedData)
 
 	// Final sync to clean up
-	if err := kbfsOps.SyncAll(ctx, fileNode.GetFolderBranch()); err != nil {
-		t.Errorf("Couldn't sync the final write")
-	}
+	err = kbfsOps.SyncAll(ctx, fileNode.GetFolderBranch())
+	require.NoError(t, err, "Couldn't sync the final write")
 }
 
 type stallingBServer struct {
@@ -1089,7 +1049,8 @@ func (fc *stallingBServer) Get(
 	ctx context.Context, tlfID tlf.ID, id kbfsblock.ID,
 	context kbfsblock.Context, cacheType DiskBlockCacheType) (
 	buf []byte, serverHalf kbfscrypto.BlockCryptKeyServerHalf,
-	err error) {
+	err error,
+) {
 	err = fc.maybeWaitOnChannel(ctx)
 	if err != nil {
 		return nil, kbfscrypto.BlockCryptKeyServerHalf{}, err
@@ -1108,7 +1069,8 @@ func (fc *stallingBServer) Put(
 	ctx context.Context, tlfID tlf.ID, id kbfsblock.ID,
 	context kbfsblock.Context,
 	buf []byte, serverHalf kbfscrypto.BlockCryptKeyServerHalf,
-	cacheType DiskBlockCacheType) (err error) {
+	cacheType DiskBlockCacheType,
+) (err error) {
 	err = fc.maybeWaitOnChannel(ctx)
 	if err != nil {
 		return err
@@ -1181,7 +1143,7 @@ func TestKBFSOpsConcurWriteParallelBlocksCanceled(t *testing.T) {
 	ctx2, cancel2 := context.WithCancel(ctx)
 	go func() {
 		// let the first initialBlocks blocks through.
-		for i := 0; i < initialBlocks; i++ {
+		for range initialBlocks {
 			select {
 			case <-readyChan:
 			case <-ctx.Done():
@@ -1189,7 +1151,7 @@ func TestKBFSOpsConcurWriteParallelBlocksCanceled(t *testing.T) {
 			}
 		}
 
-		for i := 0; i < initialBlocks; i++ {
+		for range initialBlocks {
 			select {
 			case goChan <- struct{}{}:
 			case <-ctx.Done():
@@ -1197,7 +1159,7 @@ func TestKBFSOpsConcurWriteParallelBlocksCanceled(t *testing.T) {
 			}
 		}
 
-		for i := 0; i < initialBlocks; i++ {
+		for range initialBlocks {
 			select {
 			case <-finishChan:
 			case <-ctx.Done():
@@ -1211,7 +1173,7 @@ func TestKBFSOpsConcurWriteParallelBlocksCanceled(t *testing.T) {
 		nowNBlocks = b.numBlocks()
 
 		// Let each parallel block worker block on readyChan.
-		for i := 0; i < maxParallelBlockPuts; i++ {
+		for range maxParallelBlockPuts {
 			select {
 			case <-readyChan:
 			case <-ctx.Done():
@@ -1233,19 +1195,16 @@ func TestKBFSOpsConcurWriteParallelBlocksCanceled(t *testing.T) {
 	}()
 
 	err = kbfsOps.SyncAll(ctx2, fileNode.GetFolderBranch())
-	if err != context.Canceled {
-		t.Errorf("Sync did not get canceled error: %v", err)
-	}
+	require.ErrorIs(t, err, context.Canceled, "Sync did not get canceled error: %v", err)
 	if nowNBlocks != prevNBlocks+2 {
-		t.Errorf("Unexpected number of blocks; prev = %d, now = %d",
-			prevNBlocks, nowNBlocks)
+		require.Failf(t, "", "Unexpected number of blocks; prev = %d, now = %d", prevNBlocks, nowNBlocks)
 	}
 
 	// Make sure there are no more workers, i.e. the extra blocks
 	// aren't sent to the server.
 	select {
 	case <-readyChan:
-		t.Error("Worker unexpectedly ready")
+		require.Fail(t, "Worker unexpectedly ready")
 	default:
 	}
 
@@ -1258,12 +1217,14 @@ func TestKBFSOpsConcurWriteParallelBlocksCanceled(t *testing.T) {
 	b = newStallingBServer(log)
 	config.SetBlockServer(b)
 	if err := kbfsOps.SyncAll(ctx, fileNode.GetFolderBranch()); err != nil {
-		t.Fatalf("Second sync failed: %v", err)
+		require.NoError(t, err,
+			"Second sync failed: %v", err)
 	}
 
 	if _, _, err := kbfsOps.CreateFile(
 		ctx, rootNode, testPPS("b"), false, NoExcl); err != nil {
-		t.Fatalf("Couldn't create file after sync: %v", err)
+		require.NoError(t, err,
+			"Couldn't create file after sync: %v", err)
 	}
 
 	// Avoid checking state when using a fake block server.
@@ -1325,7 +1286,8 @@ func TestKBFSOpsConcurWriteParallelBlocksError(t *testing.T) {
 		Do(func(ctx context.Context, tlfID tlf.ID, id kbfsblock.ID,
 			context kbfsblock.Context, buf []byte,
 			serverHalf kbfscrypto.BlockCryptKeyServerHalf,
-			_ DiskBlockCacheType) {
+			_ DiskBlockCacheType,
+		) {
 			errPtrChan <- kbfsdata.BlockPointer{
 				ID:      id,
 				Context: context,
@@ -1338,7 +1300,8 @@ func TestKBFSOpsConcurWriteParallelBlocksError(t *testing.T) {
 		Do(func(ctx context.Context, tlfID tlf.ID, id kbfsblock.ID,
 			context kbfsblock.Context, buf []byte,
 			serverHalf kbfscrypto.BlockCryptKeyServerHalf,
-			_ DiskBlockCacheType) {
+			_ DiskBlockCacheType,
+		) {
 			<-proceedChan
 		}).After(c).Return(nil)
 	b.EXPECT().RemoveBlockReferences(gomock.Any(), gomock.Any(), gomock.Any()).
@@ -1352,9 +1315,7 @@ func TestKBFSOpsConcurWriteParallelBlocksError(t *testing.T) {
 	}()
 
 	err = kbfsOps.SyncAll(ctx, fileNode.GetFolderBranch())
-	if err != putErr {
-		t.Errorf("Sync did not get the expected error: %v", err)
-	}
+	require.Equal(t, putErr, err, "Sync did not get the expected error: %v", err)
 
 	// wait for proceedChan to close, so we know the errPtr has been set
 	<-proceedChan
@@ -1364,9 +1325,8 @@ func TestKBFSOpsConcurWriteParallelBlocksError(t *testing.T) {
 	// still be read or sync'd later.
 	err = config.BlockCache().DeletePermanent(errPtr.ID)
 	require.NoError(t, err)
-	if _, err := config.BlockCache().Get(errPtr); err == nil {
-		t.Errorf("Failed block put for %v left block in cache", errPtr)
-	}
+	_, err = config.BlockCache().Get(errPtr)
+	require.Error(t, err, "Failed block put for %v left block in cache", errPtr)
 
 	// State checking won't happen on the mock block server since we
 	// leave ourselves in a dirty state.
@@ -1383,8 +1343,7 @@ func testKBFSOpsMultiBlockWriteDuringRetriedSync(t *testing.T, nFiles int) {
 
 	oldBServer := config.BlockServer()
 	defer config.SetBlockServer(oldBServer)
-	onSyncStalledCh, syncUnstallCh, ctxStallSync :=
-		StallBlockOp(ctx, config, StallableBlockPut, 1)
+	onSyncStalledCh, syncUnstallCh, ctxStallSync := StallBlockOp(ctx, config, StallableBlockPut, 1)
 
 	// create and write to a file
 	rootNode := GetRootNodeOrBust(ctx, t, config, "test_user", tlf.Private)
@@ -1398,7 +1357,7 @@ func testKBFSOpsMultiBlockWriteDuringRetriedSync(t *testing.T, nFiles int) {
 
 	firstData := make([]byte, 30)
 	// Write 2 blocks worth of data
-	for i := 0; i < 30; i++ {
+	for i := range 30 {
 		firstData[i] = byte(i)
 	}
 
@@ -1431,7 +1390,7 @@ func testKBFSOpsMultiBlockWriteDuringRetriedSync(t *testing.T, nFiles int) {
 		require.NoError(t, err, "Couldn't create file: %v", err)
 		data := make([]byte, 30)
 		// Write 2 blocks worth of data
-		for j := 0; j < 30; j++ {
+		for j := range 30 {
 			data[j] = byte(j + 30*i)
 		}
 		err = kbfsOps.Write(ctx, fileNode, data, 0)
@@ -1448,7 +1407,7 @@ func testKBFSOpsMultiBlockWriteDuringRetriedSync(t *testing.T, nFiles int) {
 	select {
 	case <-onSyncStalledCh:
 	case <-ctx.Done():
-		t.Fatalf("Timeout waiting to stall")
+		require.FailNow(t, "Timeout waiting to stall")
 	}
 
 	// Now write the second block.
@@ -1467,19 +1426,13 @@ func testKBFSOpsMultiBlockWriteDuringRetriedSync(t *testing.T, nFiles int) {
 	gotData := make([]byte, 30)
 	nr, err := kbfsOps.Read(ctx, fileNode2, gotData, 0)
 	require.NoError(t, err, "Couldn't read data: %v", err)
-	if nr != int64(len(gotData)) {
-		t.Errorf("Only read %d bytes", nr)
-	}
-	if !bytes.Equal(firstData, gotData) {
-		t.Errorf("Read wrong data.  Expected %v, got %v", firstData, gotData)
-	}
+	require.Equal(t, int64(len(gotData)), nr, "Only read %d bytes", nr)
+	require.True(t, bytes.Equal(firstData, gotData), "Read wrong data.  Expected %v, got %v", firstData, gotData)
 
 	// Make sure there are no dirty blocks left at the end of the test.
 	dbcs := config.DirtyBlockCache().(*kbfsdata.DirtyBlockCacheStandard)
 	numDirtyBlocks := dbcs.Size()
-	if numDirtyBlocks != 0 {
-		t.Errorf("%d dirty blocks left after final sync", numDirtyBlocks)
-	}
+	require.Equal(t, 0, numDirtyBlocks, "%d dirty blocks left after final sync", numDirtyBlocks)
 }
 
 // When writes happen on a multi-block file concurrently with a sync,
@@ -1513,8 +1466,7 @@ func testKBFSOpsMultiBlockWriteWithRetryAndError(t *testing.T, nFiles int) {
 
 	oldBServer := config.BlockServer()
 	defer config.SetBlockServer(oldBServer)
-	onSyncStalledCh, syncUnstallCh, ctxStallSync :=
-		StallBlockOp(ctx, config, StallableBlockPut, nFileBlocks)
+	onSyncStalledCh, syncUnstallCh, ctxStallSync := StallBlockOp(ctx, config, StallableBlockPut, nFileBlocks)
 	ctxStallSync, cancel2 := context.WithCancel(ctxStallSync)
 
 	t.Log("Create and write to a file: file0")
@@ -1528,7 +1480,7 @@ func testKBFSOpsMultiBlockWriteWithRetryAndError(t *testing.T, nFiles int) {
 	var data []byte
 
 	t.Log("Write 2 blocks worth of data")
-	for i := 0; i < 30; i++ {
+	for i := range 30 {
 		data = append(data, byte(i))
 	}
 	err = kbfsOps.Write(ctx, fileNodes[0], data, 0)
@@ -1586,7 +1538,7 @@ func testKBFSOpsMultiBlockWriteWithRetryAndError(t *testing.T, nFiles int) {
 		require.NoError(t, err, "Couldn't create file: %v", err)
 		data := make([]byte, 30)
 		// Write 2 blocks worth of data
-		for j := 0; j < 30; j++ {
+		for j := range 30 {
 			data[j] = byte(j + 30*i)
 		}
 		err = kbfsOps.Write(ctx, fileNode, data, 0)
@@ -1606,7 +1558,7 @@ func testKBFSOpsMultiBlockWriteWithRetryAndError(t *testing.T, nFiles int) {
 	select {
 	case <-onSyncStalledCh:
 	case <-ctx.Done():
-		t.Fatal(ctx.Err())
+		require.FailNow(t, fmt.Sprint(ctx.Err()))
 	}
 
 	t.Log("Dirty the last block and extend it, so the one that was sent as " +
@@ -1616,7 +1568,7 @@ func testKBFSOpsMultiBlockWriteWithRetryAndError(t *testing.T, nFiles int) {
 	select {
 	case syncUnstallCh <- struct{}{}:
 	case <-ctx.Done():
-		t.Fatal(ctx.Err())
+		require.FailNow(t, fmt.Sprint(ctx.Err()))
 	}
 
 	t.Log("Wait for the rest of the first set of blocks to finish " +
@@ -1626,12 +1578,12 @@ func testKBFSOpsMultiBlockWriteWithRetryAndError(t *testing.T, nFiles int) {
 		select {
 		case <-onSyncStalledCh:
 		case <-ctx.Done():
-			t.Fatal(ctx.Err())
+			require.FailNow(t, fmt.Sprint(ctx.Err()))
 		}
 		select {
 		case syncUnstallCh <- struct{}{}:
 		case <-ctx.Done():
-			t.Fatal(ctx.Err())
+			require.FailNow(t, fmt.Sprint(ctx.Err()))
 		}
 	}
 
@@ -1639,16 +1591,14 @@ func testKBFSOpsMultiBlockWriteWithRetryAndError(t *testing.T, nFiles int) {
 	select {
 	case <-onSyncStalledCh:
 	case <-ctx.Done():
-		t.Fatal(ctx.Err())
+		require.FailNow(t, fmt.Sprint(ctx.Err()))
 	}
 	cancel2()
 
 	t.Log("Unstall the sync.")
 	close(syncUnstallCh)
 	err = <-errChan
-	if err != context.Canceled {
-		t.Errorf("Sync got an unexpected error: %v", err)
-	}
+	require.ErrorIs(t, err, context.Canceled, "Sync got an unexpected error: %v", err)
 
 	t.Log("finish the sync.")
 	err = kbfsOps.SyncAll(ctx, fileNode2.GetFolderBranch())
@@ -1657,23 +1607,24 @@ func testKBFSOpsMultiBlockWriteWithRetryAndError(t *testing.T, nFiles int) {
 	gotData := make([]byte, 50)
 	nr, err := kbfsOps.Read(ctx, fileNode2, gotData, 0)
 	require.NoError(t, err, "Couldn't read data: %v", err)
-	if nr != int64(len(gotData)) {
-		t.Errorf("Only read %d bytes", nr)
-	}
+	require.Equal(t, int64(len(gotData)), nr, "Only read %d bytes", nr)
 	expectedData := make([]byte, 0, 45)
 	expectedData = append(expectedData, data[0:20]...)
 	expectedData = append(expectedData, data[10:30]...)
 	expectedData = append(expectedData, data[10:20]...)
-	if !bytes.Equal(expectedData, gotData) {
-		t.Errorf("Read wrong data.  Expected %v, got %v", expectedData, gotData)
-	}
+	require.True(t, bytes.Equal(expectedData, gotData), "Read wrong data.  Expected %v, got %v", expectedData, gotData)
 
 	t.Log("Make sure there are no dirty blocks left at the end of the test.")
 	dbcs := config.DirtyBlockCache().(*kbfsdata.DirtyBlockCacheStandard)
 	numDirtyBlocks := dbcs.Size()
-	if numDirtyBlocks != 0 {
-		t.Errorf("%d dirty blocks left after final sync", numDirtyBlocks)
-	}
+	require.Equal(t, 0, numDirtyBlocks, "%d dirty blocks left after final sync", numDirtyBlocks)
+
+	// Wait for any background block deletion tasks to complete before
+	// shutting down the MDServer, to avoid goroutine logging after the
+	// test completes.
+	err = ops.fbm.waitForDeletingBlocks(ctx)
+	require.NoError(t, err, "Error waiting for deleting blocks: %v", err)
+
 	// Shutdown the MDServer to disable state checking at the end of the test,
 	// since we hacked stuff a bit by deleting blocks manually rather than
 	// allowing them to be garbage collected.
@@ -1701,15 +1652,12 @@ func TestKBFSOpsCanceledCreateNoError(t *testing.T) {
 	config, _, ctx, cancel := kbfsOpsConcurInit(t, "test_user")
 	defer kbfsConcurTestShutdown(ctx, t, config, cancel)
 
-	onPutStalledCh, putUnstallCh, putCtx :=
-		StallMDOp(context.Background(), config, StallableMDPut, 1)
+	onPutStalledCh, putUnstallCh, putCtx := StallMDOp(context.Background(), config, StallableMDPut, 1)
 
 	putCtx, cancel2 := context.WithCancel(putCtx)
 
 	putCtx, err := libcontext.NewContextWithCancellationDelayer(putCtx)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	rootNode := GetRootNodeOrBust(ctx, t, config, "test_user", tlf.Private)
 
@@ -1726,7 +1674,7 @@ func TestKBFSOpsCanceledCreateNoError(t *testing.T) {
 	select {
 	case <-onPutStalledCh:
 	case <-ctx.Done():
-		t.Fatal(ctx.Err())
+		require.FailNow(t, fmt.Sprint(ctx.Err()))
 	}
 	cancel2()
 	close(putUnstallCh)
@@ -1735,7 +1683,7 @@ func TestKBFSOpsCanceledCreateNoError(t *testing.T) {
 	select {
 	case err = <-errChan:
 	case <-ctx.Done():
-		t.Fatal(ctx.Err())
+		require.FailNow(t, fmt.Sprint(ctx.Err()))
 	}
 	require.NoError(t, err, "Create returned error: %v", err)
 	ctx2 := libcontext.BackgroundContextWithCancellationDelayer()
@@ -1745,7 +1693,8 @@ func TestKBFSOpsCanceledCreateNoError(t *testing.T) {
 	}()
 	if _, _, err = kbfsOps.Lookup(
 		ctx2, rootNode, testPPS("a")); err != nil {
-		t.Fatalf("Lookup returned error: %v", err)
+		require.NoError(t, err,
+			"Lookup returned error: %v", err)
 	}
 }
 
@@ -1761,15 +1710,12 @@ func TestKBFSOpsCanceledCreateDelayTimeoutErrors(t *testing.T) {
 	// happen much faster. This way we can avoid time.Sleep.
 	config.SetDelayedCancellationGracePeriod(0)
 
-	onPutStalledCh, putUnstallCh, putCtx :=
-		StallMDOp(context.Background(), config, StallableMDPut, 1)
+	onPutStalledCh, putUnstallCh, putCtx := StallMDOp(context.Background(), config, StallableMDPut, 1)
 
 	putCtx, cancel2 := context.WithCancel(putCtx)
 
 	putCtx, err := libcontext.NewContextWithCancellationDelayer(putCtx)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	rootNode := GetRootNodeOrBust(ctx, t, config, "test_user", tlf.Private)
 
@@ -1786,20 +1732,20 @@ func TestKBFSOpsCanceledCreateDelayTimeoutErrors(t *testing.T) {
 	select {
 	case <-onPutStalledCh:
 	case <-ctx.Done():
-		t.Fatal(ctx.Err())
+		require.FailNow(t, fmt.Sprint(ctx.Err()))
 	}
 	cancel2()
 
 	select {
 	case <-ctx.Done():
-		t.Fatal(ctx.Err())
+		require.FailNow(t, fmt.Sprint(ctx.Err()))
 	case <-putCtx.Done():
 		// The cancellation delayer makes cancellation become async. This makes
 		// sure ctx is actually canceled before unstalling.
 	case <-time.After(time.Second):
 		// We have a grace period of 0s. This is too long; something must have gone
 		// wrong!
-		t.Fatalf("it took too long for cancellation to happen")
+		require.FailNow(t, "it took too long for cancellation to happen")
 	}
 
 	close(putUnstallCh)
@@ -1808,12 +1754,11 @@ func TestKBFSOpsCanceledCreateDelayTimeoutErrors(t *testing.T) {
 	select {
 	case err = <-errChan:
 	case <-ctx.Done():
-		t.Fatal(ctx.Err())
+		require.FailNow(t, fmt.Sprint(ctx.Err()))
 	}
-	if err != context.Canceled {
-		t.Fatalf("Create didn't fail after grace period after cancellation."+
+	require.ErrorIs(t, err, context.Canceled,
+		"Create didn't fail after grace period after cancellation."+
 			" Got %v; expecting context.Canceled", err)
-	}
 
 	ctx2 := libcontext.BackgroundContextWithCancellationDelayer()
 	defer func() {
@@ -1824,7 +1769,8 @@ func TestKBFSOpsCanceledCreateDelayTimeoutErrors(t *testing.T) {
 	// CheckConfigAndShutdown doesn't get stuck
 	if _, _, err = kbfsOps.CreateFile(ctx2,
 		rootNode, testPPS("b"), false, NoExcl); err != nil {
-		t.Fatalf("throwaway op failed: %v", err)
+		require.NoError(t, err,
+			"throwaway op failed: %v", err)
 	}
 }
 
@@ -1833,8 +1779,7 @@ func TestKBFSOpsConcurCanceledSyncSucceeds(t *testing.T) {
 	config, _, ctx, cancel := kbfsOpsConcurInit(t, "test_user")
 	defer kbfsConcurTestShutdown(ctx, t, config, cancel)
 
-	onPutStalledCh, putUnstallCh, putCtx :=
-		StallMDOp(ctx, config, StallableMDAfterPut, 1)
+	onPutStalledCh, putUnstallCh, putCtx := StallMDOp(ctx, config, StallableMDAfterPut, 1)
 
 	// Use the smallest possible block size.
 	bsplitter, err := kbfsdata.NewBlockSplitterSimple(20, 8*1024, config.Codec())
@@ -1852,7 +1797,7 @@ func TestKBFSOpsConcurCanceledSyncSucceeds(t *testing.T) {
 	require.NoError(t, err, "Couldn't sync file: %v", err)
 
 	data := make([]byte, 30)
-	for i := 0; i < 30; i++ {
+	for i := range 30 {
 		data[i] = 1
 	}
 	err = kbfsOps.Write(ctx, fileNode, data, 0)
@@ -1876,26 +1821,23 @@ func TestKBFSOpsConcurCanceledSyncSucceeds(t *testing.T) {
 
 	// We expect a canceled error
 	err = <-errChan
-	if err != context.Canceled {
-		t.Fatalf("No expected canceled error: %v", err)
-	}
+	require.ErrorIs(t, err, context.Canceled,
+		"No expected canceled error: %v", err)
 
 	// Flush the file.  This will result in conflict resolution, and
 	// an extra copy of the file, but that's ok for now.
 	if err := kbfsOps.SyncAll(ctx, fileNode.GetFolderBranch()); err != nil {
-		t.Fatalf("Couldn't sync: %v", err)
+		require.NoError(t, err,
+			"Couldn't sync: %v", err)
 	}
-	if len(ops.fbm.blocksToDeleteChan) == 0 {
-		t.Fatalf("No blocks to delete after error")
-	}
+	require.NotEmpty(t, ops.fbm.blocksToDeleteChan, "No blocks to delete after error")
 
 	unpauseDeleting <- struct{}{}
 
 	err = ops.fbm.waitForDeletingBlocks(ctx)
 	require.NoError(t, err)
-	if len(ops.fbm.blocksToDeleteChan) > 0 {
-		t.Fatalf("Blocks left to delete after sync")
-	}
+	require.Empty(t, ops.fbm.blocksToDeleteChan,
+		"Blocks left to delete after sync")
 
 	// The first put actually succeeded, so SyncFromServer and make
 	// sure it worked.
@@ -1905,12 +1847,8 @@ func TestKBFSOpsConcurCanceledSyncSucceeds(t *testing.T) {
 	gotData := make([]byte, 30)
 	nr, err := kbfsOps.Read(ctx, fileNode, gotData, 0)
 	require.NoError(t, err, "Couldn't read data: %v", err)
-	if nr != int64(len(gotData)) {
-		t.Errorf("Only read %d bytes", nr)
-	}
-	if !bytes.Equal(data, gotData) {
-		t.Errorf("Read wrong data.  Expected %v, got %v", data, gotData)
-	}
+	require.Equal(t, int64(len(gotData)), nr, "Only read %d bytes", nr)
+	require.True(t, bytes.Equal(data, gotData), "Read wrong data.  Expected %v, got %v", data, gotData)
 }
 
 // Test that when a Sync that is canceled during a successful MD put,
@@ -1921,8 +1859,7 @@ func TestKBFSOpsConcurCanceledSyncFailsAfterCanceledSyncSucceeds(t *testing.T) {
 	config, _, ctx, cancel := kbfsOpsConcurInit(t, "test_user")
 	defer kbfsConcurTestShutdown(ctx, t, config, cancel)
 
-	onPutStalledCh, putUnstallCh, putCtx :=
-		StallMDOp(ctx, config, StallableMDAfterPut, 1)
+	onPutStalledCh, putUnstallCh, putCtx := StallMDOp(ctx, config, StallableMDAfterPut, 1)
 
 	// Use the smallest possible block size.
 	bsplitter, err := kbfsdata.NewBlockSplitterSimple(20, 8*1024, config.Codec())
@@ -1940,7 +1877,7 @@ func TestKBFSOpsConcurCanceledSyncFailsAfterCanceledSyncSucceeds(t *testing.T) {
 	require.NoError(t, err, "Couldn't sync file: %v", err)
 
 	data := make([]byte, 30)
-	for i := 0; i < 30; i++ {
+	for i := range 30 {
 		data[i] = 1
 	}
 	err = kbfsOps.Write(ctx, fileNode, data, 0)
@@ -1960,13 +1897,11 @@ func TestKBFSOpsConcurCanceledSyncFailsAfterCanceledSyncSucceeds(t *testing.T) {
 
 	// We expect a canceled error
 	err = <-errChan
-	if err != context.Canceled {
-		t.Fatalf("No expected canceled error: %v", err)
-	}
+	require.ErrorIs(t, err, context.Canceled,
+		"No expected canceled error: %v", err)
 
 	// Cancel this one after it succeeds.
-	onUnmergedPutStalledCh, unmergedPutUnstallCh, putUnmergedCtx :=
-		StallMDOp(ctx, config, StallableMDAfterPutUnmerged, 1)
+	onUnmergedPutStalledCh, unmergedPutUnstallCh, putUnmergedCtx := StallMDOp(ctx, config, StallableMDAfterPutUnmerged, 1)
 
 	// Flush the file again, which will result in an unmerged put,
 	// which we will also cancel.
@@ -1983,23 +1918,23 @@ func TestKBFSOpsConcurCanceledSyncFailsAfterCanceledSyncSucceeds(t *testing.T) {
 	// We expect a canceled error, or possibly a nil error since we
 	// ignore the PutUnmerged error internally.
 	err = <-errChan
-	if err != context.Canceled && err != nil {
-		t.Fatalf("No expected canceled error: %v", err)
+	if err != nil {
+		require.ErrorIs(t, err, context.Canceled, "No expected canceled error: %v", err)
 	}
 
 	// Now finally flush the file again, which will result in a
 	// conflict file.
 	if err := kbfsOps.SyncAll(ctx, fileNode.GetFolderBranch()); err != nil {
-		t.Fatalf("Couldn't sync: %v", err)
+		require.NoError(t, err,
+			"Couldn't sync: %v", err)
 	}
 
 	// Wait for all the deletes to go through.
 	ops := getOps(config, rootNode.GetFolderBranch().Tlf)
 	err = ops.fbm.waitForDeletingBlocks(ctx)
 	require.NoError(t, err)
-	if len(ops.fbm.blocksToDeleteChan) > 0 {
-		t.Fatalf("Blocks left to delete after sync")
-	}
+	require.Empty(t, ops.fbm.blocksToDeleteChan,
+		"Blocks left to delete after sync")
 
 	// Wait for CR to finish
 	err = kbfsOps.SyncFromServer(ctx, rootNode.GetFolderBranch(), nil)
@@ -2037,7 +1972,7 @@ func TestKBFSOpsTruncateWithDupBlockCanceled(t *testing.T) {
 
 	var data []byte
 	// Write some data
-	for i := 0; i < 30; i++ {
+	for i := range 30 {
 		data = append(data, byte(i))
 	}
 	err = kbfsOps.Write(ctx, fileNode2, data, 0)
@@ -2057,8 +1992,7 @@ func TestKBFSOpsTruncateWithDupBlockCanceled(t *testing.T) {
 
 	oldBServer := config.BlockServer()
 	defer config.SetBlockServer(oldBServer)
-	onSyncStalledCh, syncUnstallCh, ctxStallSync :=
-		StallBlockOp(cancelCtx, config, StallableBlockPut, 1)
+	onSyncStalledCh, syncUnstallCh, ctxStallSync := StallBlockOp(cancelCtx, config, StallableBlockPut, 1)
 
 	go func() {
 		errChan <- kbfsOps.SyncAll(ctxStallSync, fileNode2.GetFolderBranch())
@@ -2069,9 +2003,7 @@ func TestKBFSOpsTruncateWithDupBlockCanceled(t *testing.T) {
 	// Unstall the sync.
 	close(syncUnstallCh)
 	err = <-errChan
-	if err != context.Canceled {
-		t.Errorf("Sync got wrong error: %v", err)
-	}
+	require.ErrorIs(t, err, context.Canceled, "Sync got wrong error: %v", err)
 
 	// Final sync
 	err = kbfsOps.SyncAll(ctx, fileNode2.GetFolderBranch())
@@ -2083,7 +2015,8 @@ type blockOpsOverQuota struct {
 }
 
 func (booq *blockOpsOverQuota) Put(ctx context.Context, tlfID tlf.ID,
-	blockPtr kbfsdata.BlockPointer, readyBlockData kbfsdata.ReadyBlockData) error {
+	blockPtr kbfsdata.BlockPointer, readyBlockData kbfsdata.ReadyBlockData,
+) error {
 	return kbfsblock.ServerErrorOverQuota{
 		Throttled: true,
 	}
@@ -2116,8 +2049,7 @@ func TestKBFSOpsErrorOnBlockedWriteDuringSync(t *testing.T) {
 
 	config.SetBlockOps(&blockOpsOverQuota{BlockOps: config.BlockOps()})
 
-	onSyncStalledCh, syncUnstallCh, ctxStallSync :=
-		StallBlockOp(ctx, config, StallableBlockPut, 1)
+	onSyncStalledCh, syncUnstallCh, ctxStallSync := StallBlockOp(ctx, config, StallableBlockPut, 1)
 
 	// Block the Sync
 	// Sync the initial two data blocks
@@ -2163,16 +2095,16 @@ func TestKBFSOpsErrorOnBlockedWriteDuringSync(t *testing.T) {
 	syncErr := <-syncErrCh
 	writeErr := <-writeErrCh
 	if _, ok := syncErr.(kbfsblock.ServerErrorOverQuota); !ok {
-		t.Fatalf("Unexpected sync err: %v", syncErr)
+		require.True(t, ok,
+			"Unexpected sync err: %v", syncErr)
 	}
-	if writeErr != syncErr {
-		t.Fatalf("Unexpected write err: %v", writeErr)
-	}
+	require.Equal(t, syncErr, writeErr, "Unexpected write err: %v", writeErr)
 
 	// Finish the sync to clear out the byte counts
 	config.SetBlockOps(realBlockOps)
 	if err := kbfsOps.SyncAll(ctx, fileNode.GetFolderBranch()); err != nil {
-		t.Fatalf("Couldn't finish sync: %v", err)
+		require.NoError(t, err,
+			"Couldn't finish sync: %v", err)
 	}
 }
 
@@ -2204,7 +2136,8 @@ type stallingNodeCache struct {
 }
 
 func (snc *stallingNodeCache) UpdatePointer(
-	oldRef kbfsdata.BlockRef, newPtr kbfsdata.BlockPointer) NodeID {
+	oldRef kbfsdata.BlockRef, newPtr kbfsdata.BlockPointer,
+) NodeID {
 	select {
 	case <-snc.doStallUpdate:
 		<-snc.unstallUpdate
@@ -2265,7 +2198,8 @@ func TestKBFSOpsLookupSyncRace(t *testing.T) {
 	// u2 syncs and then disables updates.
 	if err := kbfsOps2.SyncFromServer(
 		ctx, rootNode2.GetFolderBranch(), nil); err != nil {
-		t.Fatal("Couldn't sync user 2 from server")
+		require.NoError(t, err,
+			"Couldn't sync user 2 from server")
 	}
 	_, err = DisableUpdatesForTesting(config2, rootNode2.GetFolderBranch())
 	require.NoError(t, err, "Couldn't disable updates: %v", err)
@@ -2275,7 +2209,8 @@ func TestKBFSOpsLookupSyncRace(t *testing.T) {
 	err = kbfsOps1.Write(ctx, fileNodeA1, data, 0)
 	require.NoError(t, err, "Couldn't write file: %v", err)
 	if err := kbfsOps1.SyncAll(ctx, fileNodeA1.GetFolderBranch()); err != nil {
-		t.Fatalf("Couldn't finish sync: %v", err)
+		require.NoError(t, err,
+			"Couldn't finish sync: %v", err)
 	}
 
 	// u2 tries to lookup the file, which will block until we drain
@@ -2287,32 +2222,32 @@ func TestKBFSOpsLookupSyncRace(t *testing.T) {
 		defer wg.Done()
 		var err error
 		fileNodeA2, _, err = kbfsOps2.Lookup(ctx, rootNode2, testPPS("a"))
-		require.NoError(t, err, "Couldn't lookup a: %v", err)
+		if err != nil {
+			t.Errorf("Couldn't lookup a: %v", err)
+		}
 	}()
 	// Wait for the lookup to block.
 	select {
 	case <-beforePathsCalled:
 	case <-ctx.Done():
-		t.Fatal("Timeout while waiting for lookup to block")
+		require.FailNow(t, "Timeout while waiting for lookup to block")
 	}
 
 	// u2 starts to sync but the sync is stalled while holding the
 	// block lock.
 	doStallUpdate <- struct{}{}
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		if err := kbfsOps2.SyncFromServer(
 			ctx, rootNode2.GetFolderBranch(), nil); err != nil {
 			t.Errorf("Couldn't sync user 2 from server: %v", err)
 		}
-	}()
+	})
 
 	// Unblock the lookup.
 	select {
 	case <-afterPathCalled:
 	case <-ctx.Done():
-		t.Fatal("Timeout while waiting for afterPathCalled")
+		require.FailNow(t, "Timeout while waiting for afterPathCalled")
 	}
 
 	// Wait for the sync to block and let the sync succeed (which will
@@ -2325,7 +2260,7 @@ func TestKBFSOpsLookupSyncRace(t *testing.T) {
 	select {
 	case unstallUpdate <- struct{}{}:
 	case <-ctx.Done():
-		t.Fatal("Timeout while waiting for sync to block")
+		require.FailNow(t, "Timeout while waiting for sync to block")
 	}
 	wg.Wait()
 
@@ -2337,12 +2272,8 @@ func TestKBFSOpsLookupSyncRace(t *testing.T) {
 	ops2.blocks.nodeCache = snc.NodeCache
 	nr, err := kbfsOps2.Read(ctx, fileNodeA2, gotData, 0)
 	require.NoError(t, err, "Couldn't read data: %v", err)
-	if nr != int64(len(gotData)) {
-		t.Errorf("Only read %d bytes", nr)
-	}
-	if !bytes.Equal(data, gotData) {
-		t.Errorf("Read wrong data.  Expected %v, got %v", data, gotData)
-	}
+	require.Equal(t, int64(len(gotData)), nr, "Only read %d bytes", nr)
+	require.True(t, bytes.Equal(data, gotData), "Read wrong data.  Expected %v, got %v", data, gotData)
 }
 
 // Test that a Sync of a multi-block file that fails twice, and then
@@ -2351,8 +2282,7 @@ func TestKBFSOpsConcurMultiblockOverwriteWithCanceledSync(t *testing.T) {
 	config, _, ctx, cancel := kbfsOpsConcurInit(t, "test_user")
 	defer kbfsConcurTestShutdown(ctx, t, config, cancel)
 
-	onPutStalledCh, putUnstallCh, putCtx :=
-		StallMDOp(ctx, config, StallableMDPut, 1)
+	onPutStalledCh, putUnstallCh, putCtx := StallMDOp(ctx, config, StallableMDPut, 1)
 
 	// Use the smallest possible block size.
 	bsplitter, err := kbfsdata.NewBlockSplitterSimple(20, 8*1024, config.Codec())
@@ -2368,7 +2298,7 @@ func TestKBFSOpsConcurMultiblockOverwriteWithCanceledSync(t *testing.T) {
 	require.NoError(t, err, "Couldn't create file: %v", err)
 
 	data := make([]byte, 30)
-	for i := 0; i < 30; i++ {
+	for i := range 30 {
 		data[i] = 1
 	}
 	err = kbfsOps.Write(ctx, fileNode, data, 0)
@@ -2379,7 +2309,7 @@ func TestKBFSOpsConcurMultiblockOverwriteWithCanceledSync(t *testing.T) {
 
 	// Over write the data to cause the leaf blocks to be unreferenced.
 	data2 := make([]byte, 30)
-	for i := 0; i < 30; i++ {
+	for i := range 30 {
 		data2[i] = byte(i + 30)
 	}
 	err = kbfsOps.Write(ctx, fileNode, data2, 0)
@@ -2399,19 +2329,17 @@ func TestKBFSOpsConcurMultiblockOverwriteWithCanceledSync(t *testing.T) {
 
 	// We expect a canceled error
 	err = <-errChan
-	if err != context.Canceled {
-		t.Fatalf("No expected canceled error: %v", err)
-	}
+	require.ErrorIs(t, err, context.Canceled,
+		"No expected canceled error: %v", err)
 
 	data3 := make([]byte, 30)
-	for i := 0; i < 30; i++ {
+	for i := range 30 {
 		data3[i] = byte(i + 60)
 	}
 	err = kbfsOps.Write(ctx, fileNode, data3, 0)
 	require.NoError(t, err, "Couldn't write file: %v", err)
 
-	onPutStalledCh, putUnstallCh, putCtx =
-		StallMDOp(ctx, config, StallableMDPut, 1)
+	onPutStalledCh, putUnstallCh, putCtx = StallMDOp(ctx, config, StallableMDPut, 1)
 
 	// Cancel it again.
 	cancelCtx, cancel = context.WithCancel(putCtx)
@@ -2426,12 +2354,11 @@ func TestKBFSOpsConcurMultiblockOverwriteWithCanceledSync(t *testing.T) {
 
 	// We expect a canceled error
 	err = <-errChan
-	if err != context.Canceled {
-		t.Fatalf("No expected canceled error: %v", err)
-	}
+	require.ErrorIs(t, err, context.Canceled,
+		"No expected canceled error: %v", err)
 
 	data4 := make([]byte, 30)
-	for i := 0; i < 30; i++ {
+	for i := range 30 {
 		data4[i] = byte(i + 90)
 	}
 	err = kbfsOps.Write(ctx, fileNode, data4, 0)
@@ -2439,18 +2366,15 @@ func TestKBFSOpsConcurMultiblockOverwriteWithCanceledSync(t *testing.T) {
 
 	// Flush the file again.
 	if err := kbfsOps.SyncAll(ctx, fileNode.GetFolderBranch()); err != nil {
-		t.Fatalf("Couldn't sync: %v", err)
+		require.NoError(t, err,
+			"Couldn't sync: %v", err)
 	}
 
 	gotData := make([]byte, 30)
 	nr, err := kbfsOps.Read(ctx, fileNode, gotData, 0)
 	require.NoError(t, err, "Couldn't read data: %v", err)
-	if nr != int64(len(gotData)) {
-		t.Errorf("Only read %d bytes", nr)
-	}
-	if !bytes.Equal(data4, gotData) {
-		t.Errorf("Read wrong data.  Expected %v, got %v", data4, gotData)
-	}
+	require.Equal(t, int64(len(gotData)), nr, "Only read %d bytes", nr)
+	require.True(t, bytes.Equal(data4, gotData), "Read wrong data.  Expected %v, got %v", data4, gotData)
 }
 
 // Test that during a sync of a directory, a non-syncing file can be
@@ -2471,8 +2395,7 @@ func TestKBFSOpsConcurWriteOfNonsyncedFileDuringSync(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Log("Create a second file, but stall the SyncAll")
-	onPutStalledCh, putUnstallCh, putCtx :=
-		StallMDOp(ctx, config, StallableMDAfterPut, 1)
+	onPutStalledCh, putUnstallCh, putCtx := StallMDOp(ctx, config, StallableMDAfterPut, 1)
 
 	fileB := "b"
 	fileBNode, _, err := kbfsOps.CreateFile(

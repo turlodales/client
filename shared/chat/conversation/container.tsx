@@ -1,16 +1,52 @@
 import * as C from '@/constants'
-import * as React from 'react'
+import * as Chat from '@/constants/chat'
 import Normal from './normal/container'
 import NoConversation from './no-conversation'
 import Error from './error'
 import YouAreReset from './you-are-reset'
 import Rekey from './rekey/container'
+import type {ThreadSearchRouteProps} from './thread-search-route'
+import type * as T from '@/constants/types'
+import {BadgeHeaderUpdater} from './header-area'
+import {useConversationMetadataReload} from './data-hooks'
+import {LiveConversationThreadProvider, useConversationThreadID, useThreadMeta} from './thread-context'
 
-const Conversation = React.memo(function Conversation() {
-  const type = C.useChatContext(s => {
-    const meta = s.meta
-    switch (s.id) {
-      case C.Chat.noConversationIDKey:
+type Props = ThreadSearchRouteProps & {
+  conversationIDKey?: T.Chat.ConversationIDKey
+}
+
+const Conversation = function Conversation(props: Props) {
+  const conversationIDKey = props.conversationIDKey ?? Chat.noConversationIDKey
+  // BadgeHeaderUpdater stays outside the keyed provider: the pendingWaiting →
+  // real-conv switch is a setParams on this same screen, and the updater's
+  // title-was-empty tracking must survive that switch to repaint the native
+  // header (a remounted instance would see the title content as already
+  // present and never fire).
+  return (
+    <>
+      <BadgeHeaderUpdater conversationIDKey={conversationIDKey} />
+      <LiveConversationThreadProvider key={conversationIDKey} id={conversationIDKey}>
+        <ConversationInner />
+      </LiveConversationThreadProvider>
+    </>
+  )
+}
+
+const ConversationInner = function ConversationInner() {
+  const conversationIDKey = useConversationThreadID()
+  // Single owner of the meta/participants reload listeners for this screen; the
+  // header/banner/input consumers read via the reload-free selector hooks.
+  useConversationMetadataReload(conversationIDKey)
+  const meta = useThreadMeta(
+    C.useShallow(m => ({
+      membershipType: m.membershipType,
+      rekeyers: m.rekeyers,
+      trustedState: m.trustedState,
+    }))
+  )
+  const type = (() => {
+    switch (conversationIDKey) {
+      case Chat.noConversationIDKey:
         return 'noConvo'
       default:
         if (meta.membershipType === 'youAreReset') {
@@ -23,8 +59,7 @@ const Conversation = React.memo(function Conversation() {
           return 'normal'
         }
     }
-  })
-
+  })()
   switch (type) {
     case 'error':
       return <Error />
@@ -39,7 +74,7 @@ const Conversation = React.memo(function Conversation() {
       // On iOS it is less noticeable because screen transitions slide away to
       // the right, though it is visible for a small amount of time.
       // To solve this we render a blank screen on mobile conversation views with "noConvo"
-      return C.isPhone ? null : <NoConversation />
+      return C.isPhone ? <></> : <NoConversation />
     case 'normal':
       return <Normal />
     case 'youAreReset':
@@ -49,6 +84,6 @@ const Conversation = React.memo(function Conversation() {
     default:
       return <NoConversation />
   }
-})
+}
 
 export default Conversation

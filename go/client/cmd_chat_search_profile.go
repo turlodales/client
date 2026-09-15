@@ -2,11 +2,11 @@
 // this source code is governed by the included BSD license.
 
 //go:build !production
-// +build !production
 
 package client
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 
@@ -15,7 +15,6 @@ import (
 	"github.com/keybase/client/go/libkb"
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 	isatty "github.com/mattn/go-isatty"
-	"golang.org/x/net/context"
 )
 
 type CmdChatProfileSearch struct {

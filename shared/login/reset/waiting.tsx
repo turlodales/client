@@ -1,39 +1,44 @@
 import * as React from 'react'
 import * as Kb from '@/common-adapters'
 import {SignupScreen} from '@/signup/common'
+import {QuestionBody} from '../common'
 import {addTicker, removeTicker} from '@/util/second-timer'
 import * as C from '@/constants'
-import * as Container from '@/util/container'
+import {useConfigState} from '@/stores/config'
+import {useSafeNavigation} from '@/util/safe-navigation'
+import {enterResetPipeline} from './account-reset'
 import {formatDurationForAutoreset as formatDuration} from '@/util/timestamp'
 
-type Props = {pipelineStarted: boolean}
+type Props = {endTime?: number; pipelineStarted: boolean; username: string}
 
 const formatTimeLeft = (endTime: number) => {
   return formatDuration(endTime - Date.now())
 }
 
-const Waiting = (props: Props) => {
-  const {pipelineStarted} = props
-  const endTime = C.useAutoResetState(s => s.endTime)
+const Waiting = ({endTime: routeEndTime, pipelineStarted, username}: Props) => {
+  const styles = useStyles()
+  const theme = Kb.Styles.useTheme()
+  const badgeEndTime = useConfigState(s => s.badgeState?.resetState.endTime ?? 0)
+  const endTime = badgeEndTime || routeEndTime || 0
   const [formattedTime, setFormattedTime] = React.useState('a bit')
   const [hasSentAgain, setHasSentAgain] = React.useState(false)
   const [sendAgainSuccess, setSendAgainSuccess] = React.useState(false)
-  const nav = Container.useSafeNavigation()
-  const onClose = React.useCallback(() => nav.safeNavigateAppend('login', true), [nav])
-  const resetAccount = C.useAutoResetState(s => s.dispatch.resetAccount)
-  const onSendAgain = React.useCallback(() => {
+  const nav = useSafeNavigation()
+  const onClose = () => nav.safeNavigateAppend({name: 'login', params: {}}, true)
+  const onSendAgain = () => {
     setHasSentAgain(true)
     setSendAgainSuccess(false)
-    resetAccount()
-  }, [resetAccount])
-  const _sendAgainWaiting = C.Waiting.useAnyWaiting(C.AutoReset.enterPipelineWaitingKey)
+    enterResetPipeline({username})
+  }
+  const _sendAgainWaiting = C.Waiting.useAnyWaiting(C.waitingKeyAutoresetEnterPipeline)
   const sendAgainWaiting = hasSentAgain && _sendAgainWaiting
-  const prevSendAgainWaiting = Container.usePrevious(sendAgainWaiting)
+  const prevSendAgainWaitingRef = React.useRef(sendAgainWaiting)
   React.useEffect(() => {
-    if (prevSendAgainWaiting !== undefined && prevSendAgainWaiting && !sendAgainWaiting) {
+    if (prevSendAgainWaitingRef.current && !sendAgainWaiting) {
       setSendAgainSuccess(true)
     }
-  }, [prevSendAgainWaiting, sendAgainWaiting])
+    prevSendAgainWaitingRef.current = sendAgainWaiting
+  }, [sendAgainWaiting])
 
   React.useEffect(() => {
     if (!pipelineStarted) {
@@ -45,7 +50,7 @@ const Waiting = (props: Props) => {
         setFormattedTime(newFormattedTime)
       }
       if (endTime < Date.now()) {
-        nav.safeNavigateAppend('resetEnterPassword', true)
+        nav.safeNavigateAppend({name: 'resetEnterPassword', params: {username}}, true)
       }
     }
 
@@ -53,7 +58,7 @@ const Waiting = (props: Props) => {
     return function cleanup() {
       removeTicker(tickerID)
     }
-  }, [endTime, setFormattedTime, formattedTime, pipelineStarted, nav])
+  }, [endTime, setFormattedTime, formattedTime, pipelineStarted, nav, username])
 
   return (
     <SignupScreen
@@ -68,36 +73,30 @@ const Waiting = (props: Props) => {
       }
       buttons={[{label: 'Close', onClick: onClose, type: 'Dim'}]}
     >
-      <Kb.Box2
-        direction="vertical"
-        gap="medium"
-        fullWidth={true}
-        fullHeight={true}
-        centerChildren={true}
-        style={styles.topGap}
+      <QuestionBody
+        icon={
+          <Kb.Icon
+            type={pipelineStarted ? 'iconfont-wave-2' : 'iconfont-mailbox'}
+            color={theme.black}
+            fontSize={24}
+          />
+        }
       >
-        <Kb.Icon
-          type={pipelineStarted ? 'iconfont-wave-2' : 'iconfont-mailbox'}
-          color={Kb.Styles.globalColors.black}
-          fontSize={24}
-        />
         <Kb.Box2 direction="vertical" centerChildren={true} gap="small">
           <Kb.Text type="Header" center={true}>
             {pipelineStarted ? `Check back in ${formattedTime}` : 'Check your email or phone.'}
           </Kb.Text>
           {pipelineStarted ? (
-            <Kb.Box2 direction="vertical" centerChildren={true}>
-              <Kb.Text type="Body" style={styles.mainText} center={true}>
-                The reset has been initiated. For security reasons, nothing will happen in the next{' '}
-                {formattedTime}. We will notify you once you can proceed with the reset.
-              </Kb.Text>
-            </Kb.Box2>
+            <Kb.Text type="Body" style={styles.mainText} center={true}>
+              The reset has been initiated. For security reasons, nothing will happen in the next{' '}
+              {formattedTime}. We will notify you once you can proceed with the reset.
+            </Kb.Text>
           ) : (
             <Kb.Box2 direction="vertical" centerChildren={true}>
               <Kb.Text type="Body" style={styles.mainText} center={true}>
                 We are sending instructions to your email address or phone number.
               </Kb.Text>
-              <Kb.Box2 direction="horizontal" centerChildren={true} style={styles.positionRelative}>
+              <Kb.Box2 direction="horizontal" centerChildren={true} relative={true}>
                 <Kb.Text type="BodyPrimaryLink" onClick={sendAgainWaiting ? undefined : onSendAgain}>
                   Send again
                 </Kb.Text>
@@ -110,29 +109,20 @@ const Waiting = (props: Props) => {
             </Kb.Box2>
           )}
         </Kb.Box2>
-      </Kb.Box2>
+      </QuestionBody>
     </SignupScreen>
   )
 }
 
 export default Waiting
 
-const styles = Kb.Styles.styleSheetCreate(() => ({
+const useStyles = Kb.Styles.createStyleHook(theme => ({
   mainText: {
     ...Kb.Styles.padding(0, Kb.Styles.globalMargins.xsmall),
     maxWidth: 300,
   },
-  positionRelative: {
-    position: 'relative',
-  },
   progressContainer: {
     ...Kb.Styles.globalStyles.fillAbsolute,
-    backgroundColor: Kb.Styles.globalColors.white_40OrBlack_60,
+    backgroundColor: theme.white_40OrBlack_60,
   },
-  topGap: Kb.Styles.platformStyles({
-    isMobile: {
-      justifyContent: 'flex-start',
-      marginTop: '20%',
-    },
-  }),
 }))

@@ -3,6 +3,7 @@ package teams
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -79,12 +80,12 @@ type dummyAuditor struct{}
 
 func (d dummyAuditor) AuditTeam(m libkb.MetaContext, id keybase1.TeamID, isPublic bool,
 	headMerkleSeqno keybase1.Seqno, chain map[keybase1.Seqno]keybase1.LinkID, hiddenChain map[keybase1.Seqno]keybase1.LinkID,
-	maxSeqno keybase1.Seqno, maxHiddenSeqno keybase1.Seqno, lastMerkleRoot *libkb.MerkleRoot, auditMode keybase1.AuditMode) error {
+	maxSeqno keybase1.Seqno, maxHiddenSeqno keybase1.Seqno, lastMerkleRoot *libkb.MerkleRoot, auditMode keybase1.AuditMode,
+) error {
 	return nil
 }
 
 type Auditor struct {
-
 	// single-flight lock on TeamID
 	locktab *libkb.LockTable
 
@@ -126,8 +127,8 @@ func NewAuditorAndInstall(g *libkb.GlobalContext) {
 // Seqno for which chain[s] is defined.
 func (a *Auditor) AuditTeam(m libkb.MetaContext, id keybase1.TeamID, isPublic bool, headMerkleSeqno keybase1.Seqno, chain map[keybase1.Seqno]keybase1.LinkID,
 	hiddenChain map[keybase1.Seqno]keybase1.LinkID, maxSeqno keybase1.Seqno, maxHiddenSeqno keybase1.Seqno,
-	lastMerkleRoot *libkb.MerkleRoot, auditMode keybase1.AuditMode) (err error) {
-
+	lastMerkleRoot *libkb.MerkleRoot, auditMode keybase1.AuditMode,
+) (err error) {
 	m = m.WithLogTag("AUDIT")
 	defer m.Trace(fmt.Sprintf("Auditor#AuditTeam(%+v)", id), &err)()
 	defer m.PerfTrace(fmt.Sprintf("Auditor#AuditTeam(%+v)", id), &err)()
@@ -198,7 +199,6 @@ func (a *Auditor) getFromDisk(m libkb.MetaContext, id keybase1.TeamID) (*keybase
 }
 
 func (a *Auditor) getFromCache(m libkb.MetaContext, id keybase1.TeamID, lru *lru.Cache) (*keybase1.AuditHistory, error) {
-
 	ret := a.getFromLRU(m, id, lru)
 	if ret != nil {
 		return ret, nil
@@ -253,8 +253,8 @@ func maxMerkleProbeInAuditHistory(h *keybase1.AuditHistory) keybase1.Seqno {
 	// doing probes). So keep going backwards until we hit the first non-0
 	// maxMerkleProbe. Remember, maxMerkleProbe is the maximum merkle seqno
 	// probed in the last audit.
-	for i := len(h.Audits) - 1; i >= 0; i-- {
-		if mmp := h.Audits[i].MaxMerkleProbe; mmp >= keybase1.Seqno(0) {
+	for _, v := range slices.Backward(h.Audits) {
+		if mmp := v.MaxMerkleProbe; mmp >= keybase1.Seqno(0) {
 			return mmp
 		}
 	}
@@ -279,7 +279,8 @@ func makeHistory(history *keybase1.AuditHistory, id keybase1.TeamID) *keybase1.A
 
 // doPostProbes probes the sequence timeline _after_ the team was created.
 func (a *Auditor) doPostProbes(m libkb.MetaContext, history *keybase1.AuditHistory, probeID int, headMerkleSeqno keybase1.Seqno, latestMerkleSeqno keybase1.Seqno, chain map[keybase1.Seqno]keybase1.LinkID,
-	hiddenChain map[keybase1.Seqno]keybase1.LinkID, maxChainSeqno keybase1.Seqno, maxHiddenSeqno keybase1.Seqno, auditMode keybase1.AuditMode) (numProbes int, maxMerkleProbe keybase1.Seqno, probeTuples []probeTuple, err error) {
+	hiddenChain map[keybase1.Seqno]keybase1.LinkID, maxChainSeqno keybase1.Seqno, maxHiddenSeqno keybase1.Seqno, auditMode keybase1.AuditMode,
+) (numProbes int, maxMerkleProbe keybase1.Seqno, probeTuples []probeTuple, err error) {
 	defer m.Trace("Auditor#doPostProbes", &err)()
 
 	var low keybase1.Seqno
@@ -434,7 +435,7 @@ func (a *Auditor) scheduleProbes(m libkb.MetaContext, previousProbes map[keybase
 		currentProbes[s] = true
 	}
 	currentProbesWanted := n - len(probesToRetry)
-	for i := 0; i < currentProbesWanted; i++ {
+	for range currentProbesWanted {
 		x, err := randSeqno(m, left, right)
 		if err != nil {
 			return nil, err
@@ -551,7 +552,6 @@ func (a *Auditor) holdOffSinceJustCreated(m libkb.MetaContext, history *keybase1
 }
 
 func (a *Auditor) auditLocked(m libkb.MetaContext, id keybase1.TeamID, headMerkleSeqno keybase1.Seqno, chain map[keybase1.Seqno]keybase1.LinkID, hiddenChain map[keybase1.Seqno]keybase1.LinkID, maxChainSeqno keybase1.Seqno, maxHiddenSeqno keybase1.Seqno, lastMerkleRoot *libkb.MerkleRoot, auditMode keybase1.AuditMode) (err error) {
-
 	defer m.Trace(fmt.Sprintf("Auditor#auditLocked(%v,%s)", id, auditMode), &err)()
 
 	lru := a.getLRU()
@@ -624,7 +624,7 @@ func (a *Auditor) auditLocked(m libkb.MetaContext, id keybase1.TeamID, headMerkl
 		return err
 	}
 
-	numPostProbes, maxMerkleProbe, postProbeTuples, err := a.doPostProbes(m, history, newAuditIndex, headMerkleSeqno, *(lastMerkleRoot.Seqno()), chain, hiddenChain, maxChainSeqno, maxHiddenSeqno, auditMode)
+	numPostProbes, maxMerkleProbe, postProbeTuples, err := a.doPostProbes(m, history, newAuditIndex, headMerkleSeqno, *lastMerkleRoot.Seqno(), chain, hiddenChain, maxChainSeqno, maxHiddenSeqno, auditMode)
 	if err != nil {
 		history.PostProbesToRetry = getMerkleSeqnosFromProbes(postProbeTuples)
 		err2 := a.putToCache(m, id, lru, history)
@@ -684,7 +684,6 @@ func getMerkleSeqnosFromProbes(probeTuples []probeTuple) (seqnos []keybase1.Seqn
 }
 
 func (a *Auditor) newLRU(m libkb.MetaContext) {
-
 	a.lruMutex.Lock()
 	defer a.lruMutex.Unlock()
 

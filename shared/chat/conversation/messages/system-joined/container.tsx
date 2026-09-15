@@ -1,52 +1,74 @@
-import * as C from '@/constants'
-import * as React from 'react'
-import Joined from '.'
 import type * as T from '@/constants/types'
+import * as C from '@/constants'
+import * as Kb from '@/common-adapters'
+import UserNotice from '../user-notice'
+import {getAddedUsernames} from '../system-users-added-to-conv/container'
+import {formatTimeForChat} from '@/util/timestamp'
+import {useThreadMeta} from '../../thread-context'
 
 type OwnProps = {message: T.Chat.MessageSystemJoined}
 
-const JoinedContainer = React.memo(function JoinedContainer(p: OwnProps) {
+function JoinedContainer(p: OwnProps) {
+  const styles = useStyles()
   const {message} = p
   const {joiners, author, leavers, timestamp} = message
+  const {channelname, teamType, teamname} = useThreadMeta(
+    C.useShallow(m => ({channelname: m.channelname, teamType: m.teamType, teamname: m.teamname}))
+  )
+  const joiners2 = !joiners?.length && !leavers?.length ? [author] : joiners
+  const isBigTeam = teamType === 'big'
+  const multiProps = {channelname, isBigTeam, teamname, timestamp}
+  return (
+    <Kb.Box2 direction="vertical" style={styles.container} fullWidth={true} alignSelf="flex-start">
+      {joiners2?.length ? <MultiUserJoinedNotice {...multiProps} who={joiners2} join={true} /> : null}
+      {leavers?.length ? <MultiUserJoinedNotice {...multiProps} who={leavers} join={false} /> : null}
+    </Kb.Box2>
+  )
+}
 
-  const meta = C.useChatContext(s => s.meta)
-  const {channelname, teamType, teamname, teamID} = meta
+const MultiUserJoinedNotice = (p: {
+  who: ReadonlyArray<string>
+  join: boolean
+  isBigTeam: boolean
+  channelname: string
+  teamname: string
+  timestamp: number
+}) => {
+  const styles = useStyles()
+  const {who, join, isBigTeam, channelname, teamname, timestamp} = p
 
-  const you = C.useCurrentUserState(s => s.username)
-  const authorIsYou = you === author
+  const shorten = isMobile && who.length > 1
+  const joinStr = ` ${join ? 'joined' : 'left'}${shorten ? '' : isBigTeam ? ` #${channelname}` : ` ${teamname}`}`
 
-  const manageChatChannels = C.useTeamsState(s => s.dispatch.manageChatChannels)
-  const onManageChannels = React.useCallback(() => {
-    manageChatChannels(teamID)
-  }, [manageChatChannels, teamID])
-  const showInfoPanel = C.useChatContext(s => s.dispatch.showInfoPanel)
-  const onManageNotifications = React.useCallback(() => {
-    showInfoPanel(true, 'settings')
-  }, [showInfoPanel])
-  const showUserProfile = C.useProfileState(s => s.dispatch.showUserProfile)
-  const onAuthorClick = (username: string) => {
-    showUserProfile(username)
-  }
+  const ts = timestamp ? (
+    <Kb.Text type="BodyTiny" style={styles.timestamp}>
+      {' ' + formatTimeForChat(timestamp)}
+    </Kb.Text>
+  ) : null
 
-  const joiners2 = React.useMemo(() => {
-    return !joiners?.length && !leavers?.length ? [author] : joiners
-  }, [joiners, leavers, author])
+  return (
+    <Kb.Box2 direction="vertical" fullWidth={true} alignSelf="flex-start" relative={true}>
+      <UserNotice>
+        <Kb.Box2 direction="horizontal" gap="xtiny" fullWidth={true} alignSelf="flex-start" relative={true}>
+          <Kb.Text type="Body">•</Kb.Text>
+          <Kb.Text type="BodySmall" lineClamp={2} title={who.join(', ')}>
+            {getAddedUsernames(who)}
+            {joinStr}
+            {shorten ? null : ts}
+          </Kb.Text>
+          <Kb.AvatarLine usernames={who} maxShown={3} size={16} layout="horizontal" alignSelf="flex-start" />
+        </Kb.Box2>
+      </UserNotice>
+    </Kb.Box2>
+  )
+}
 
-  const props = {
-    author,
-    authorIsYou,
-    channelname,
-    isAdHoc: teamType === 'adhoc',
-    isBigTeam: teamType === 'big',
-    joiners: joiners2,
-    leavers,
-    onAuthorClick,
-    onManageChannels,
-    onManageNotifications,
-    teamname,
-    timestamp,
-  }
-  return <Joined {...props} />
-})
+const useStyles = Kb.Styles.createStyleHook(
+  () =>
+    ({
+      container: {marginLeft: -40, paddingBottom: 4},
+      timestamp: Kb.Styles.platformStyles({isElectron: {lineHeight: 19}}),
+    }) as const
+)
 
 export default JoinedContainer

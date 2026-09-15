@@ -55,7 +55,7 @@ func (c *randomEvictedCache) entrySize(key Measurable, value Measurable) int {
 }
 
 func (c *randomEvictedCache) evictOneLocked() {
-	i := int(rand.Int63()) % len(c.keys)
+	i := int(rand.Int63()) % len(c.keys) //nolint:gosec // G404: Cache eviction selection, not security-sensitive
 	last := len(c.keys) - 1
 	var toRemove memoizedMeasurable
 	toRemove, c.keys[i] = c.keys[i], c.keys[last]
@@ -64,7 +64,7 @@ func (c *randomEvictedCache) evictOneLocked() {
 	c.keys = c.keys[:last]
 }
 
-// Get impelments the Cache interface.
+// Get implements the Cache interface.
 func (c *randomEvictedCache) Get(key Measurable) (data Measurable, ok bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -93,8 +93,13 @@ func (c *randomEvictedCache) Add(key Measurable, data Measurable) {
 	for c.cachedBytes > c.maxBytes {
 		c.evictOneLocked()
 	}
+	// Check before writing so we know whether to add a c.keys slot.
+	// The key survives if it was already present and not randomly evicted above.
+	_, survived := c.data[key]
 	c.data[key] = memoizedData
-	c.keys = append(c.keys, memoizedKey)
+	if !survived {
+		c.keys = append(c.keys, memoizedKey)
+	}
 }
 
 // lruEvictedCache is a thin layer wrapped around
@@ -123,7 +128,7 @@ func NewLRUEvictedCache(maxBytes int) Cache {
 		maxBytes: maxBytes,
 	}
 	c.data = &lru.Cache{
-		OnEvicted: func(key lru.Key, value interface{}) {
+		OnEvicted: func(key lru.Key, value any) {
 			// No locking is needed in this function because we do them in
 			// public methods Get/Add, and RemoveOldest() is only called in the
 			// Add method.
@@ -137,7 +142,7 @@ func NewLRUEvictedCache(maxBytes int) Cache {
 	return c
 }
 
-// Get impelments the Cache interface.
+// Get implements the Cache interface.
 func (c *lruEvictedCache) Get(key Measurable) (data Measurable, ok bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()

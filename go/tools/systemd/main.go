@@ -1,10 +1,12 @@
 //go:build linux && !android
-// +build linux,!android
 
 package main
 
-import "fmt"
-import "github.com/keybase/client/go/systemd"
+import (
+	"fmt"
+
+	"github.com/keybase/client/go/systemd"
+)
 
 func main() {
 	fmt.Println("IsUserSystemdRunning() ->", systemd.IsUserSystemdRunning())

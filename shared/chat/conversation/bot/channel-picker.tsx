@@ -1,12 +1,14 @@
 import * as React from 'react'
 import * as Kb from '@/common-adapters'
-import * as Styles from '@/styles'
 import type * as T from '@/constants/types'
 import {makeInsertMatcher} from '@/util/string'
 
 type Props = {
-  channelMetas: Map<T.Chat.ConversationIDKey, T.Chat.ConversationMeta>
+  allSelected: boolean
+  channelMetas: ReadonlyMap<T.Chat.ConversationIDKey, T.Chat.ConversationMeta>
+  channelsKnown: boolean
   installInConvs: ReadonlyArray<string>
+  setAllSelected: (all: boolean) => void
   setChannelPickerScreen: (show: boolean) => void
   setInstallInConvs: (convs: ReadonlyArray<string>) => void
   setDisableDone: (disable: boolean) => void
@@ -15,11 +17,11 @@ type Props = {
 }
 
 const getChannels = (
-  channelMetas: Map<T.Chat.ConversationIDKey, T.Chat.ConversationMeta>,
+  channelMetas: ReadonlyMap<T.Chat.ConversationIDKey, T.Chat.ConversationMeta>,
   searchText: string
 ) => {
   const matcher = makeInsertMatcher(searchText)
-  const regex = new RegExp(searchText, 'i')
+  const lowerSearch = searchText.toLowerCase()
   return [...channelMetas.values()]
     .filter(({channelname, description}) => {
       if (!searchText) {
@@ -27,8 +29,9 @@ const getChannels = (
       }
       return (
         // match channel name for search as subsequence (like the identity modal)
-        // match channel desc by strict substring (less noise in results)
-        channelname.search(matcher) !== -1 || description.search(regex) !== -1
+        // match channel desc by strict substring (less noise in results). not a regex:
+        // typing '(' would throw during render
+        channelname.search(matcher) !== -1 || description.toLowerCase().includes(lowerSearch)
       )
     })
     .sort((a, b) => a.channelname.localeCompare(b.channelname))
@@ -49,47 +52,48 @@ type RowProps = {
   onToggle: () => void
   selected: boolean
 }
-const Row = ({description, disabled, name, onToggle, selected}: RowProps) => (
-  <Kb.ListItem2
-    type="Small"
-    firstItem={false}
-    body={
-      <Kb.Box2 direction="vertical" style={Styles.collapseStyles([{flex: 1}, disabled && {opacity: 0.4}])}>
-        <Kb.Box2 direction="horizontal" alignSelf="flex-start">
-          <Kb.Text lineClamp={1} type="Body" style={styles.channelHash}>
-            #
-          </Kb.Text>
-          <Kb.Text type="Body" style={styles.channelText}>
-            {name}
-          </Kb.Text>
+const Row = ({description, disabled, name, onToggle, selected}: RowProps) => {
+  const styles = useStyles()
+  const theme = Kb.Styles.useTheme()
+  return (
+    <Kb.ListItem
+      type="Small"
+      firstItem={false}
+      body={
+        <Kb.Box2 direction="vertical" flex={1} style={disabled ? {opacity: 0.4} : undefined}>
+          <Kb.Box2 direction="horizontal" alignSelf="flex-start">
+            <Kb.Text lineClamp={1} type="Body" style={styles.channelHash}>
+              #
+            </Kb.Text>
+            <Kb.Text type="Body" style={styles.channelText}>
+              {name}
+            </Kb.Text>
+          </Kb.Box2>
+          {!!description && (
+            <Kb.Text type="Body" lineClamp={1} style={{color: theme.black_50}}>
+              {description}
+            </Kb.Text>
+          )}
         </Kb.Box2>
-        {!!description && (
-          <Kb.Text type="Body" lineClamp={1} style={{color: Styles.globalColors.black_50}}>
-            {description}
-          </Kb.Text>
-        )}
-      </Kb.Box2>
-    }
-    onClick={disabled ? undefined : onToggle}
-    action={
-      <Kb.CheckCircle
-        checked={selected}
-        onCheck={disabled ? undefined : onToggle}
-        disabled={disabled}
-        disabledColor={selected ? Styles.globalColors.black_20OrWhite_20 : undefined}
-      />
-    }
-  />
-)
+      }
+      onClick={disabled ? undefined : onToggle}
+      action={
+        <Kb.CheckCircle
+          checked={selected}
+          onCheck={disabled ? undefined : onToggle}
+          disabled={disabled}
+          disabledColor={selected ? theme.black_20OrWhite_20 : undefined}
+        />
+      }
+    />
+  )
+}
 const ChannelPicker = (props: Props) => {
-  const {installInConvs, setInstallInConvs, setDisableDone} = props
-  const [allSelected, setAllSelected] = React.useState(installInConvs.length === 0)
+  const styles = useStyles()
+  const theme = Kb.Styles.useTheme()
+  const {allSelected, channelMetas, channelsKnown, installInConvs} = props
+  const {setAllSelected, setDisableDone, setInstallInConvs, teamName} = props
   const [searchText, setSearchText] = React.useState('')
-  React.useEffect(() => {
-    if (allSelected) {
-      setInstallInConvs([])
-    }
-  }, [allSelected, setInstallInConvs])
 
   React.useEffect(() => {
     if (!allSelected && installInConvs.length === 0) {
@@ -99,10 +103,7 @@ const ChannelPicker = (props: Props) => {
     setDisableDone(false)
   }, [allSelected, installInConvs, setDisableDone])
 
-  const channels = React.useMemo(
-    () => getChannels(props.channelMetas, searchText),
-    [props.channelMetas, searchText]
-  )
+  const channels = getChannels(channelMetas, searchText)
   const rows = channels.map(meta => (
     <Row
       disabled={allSelected}
@@ -115,21 +116,26 @@ const ChannelPicker = (props: Props) => {
   ))
 
   return (
-    <Kb.Box2 direction="vertical" fullWidth={true}>
+    <Kb.Box2 direction="vertical" fullWidth={true} style={styles.container}>
       <Kb.Box2 direction="horizontal" fullWidth={true}>
         <Kb.SearchFilter
           size="full-width"
           icon="iconfont-search"
-          placeholderText={`Search channels in ${props.teamName}`}
+          placeholderText={`Search channels in ${teamName}`}
           placeholderCentered={true}
           onChange={setSearchText}
           style={styles.searchFilter}
           focusOnMount={true}
         />
       </Kb.Box2>
+      {!channelsKnown ? (
+        <Kb.Box2 direction="vertical" style={styles.rowsContainer} centerChildren={true}>
+          <Kb.ProgressIndicator type="Large" />
+        </Kb.Box2>
+      ) : (
       <Kb.ScrollView style={styles.rowsContainer}>
-        <Kb.Box2 direction="horizontal" style={{backgroundColor: Styles.globalColors.blueGrey}}>
-          <Kb.ListItem2
+        <Kb.Box2 direction="horizontal" style={{backgroundColor: theme.blueGrey}}>
+          <Kb.ListItem
             type="Small"
             firstItem={true}
             body={<Kb.Text type="BodyBold">All channels</Kb.Text>}
@@ -139,44 +145,44 @@ const ChannelPicker = (props: Props) => {
         </Kb.Box2>
         {rows}
       </Kb.ScrollView>
+      )}
     </Kb.Box2>
   )
 }
 
-const styles = Styles.styleSheetCreate(
-  () =>
+const useStyles = Kb.Styles.createStyleHook(
+  theme =>
     ({
-      channelCheckbox: {
-        marginRight: Styles.globalMargins.tiny,
-        paddingTop: 0,
-      },
       channelHash: {
         alignSelf: 'center',
-        color: Styles.globalColors.black_50,
+        color: theme.black_50,
         flexShrink: 0,
-        marginRight: Styles.globalMargins.xtiny,
+        marginRight: Kb.Styles.globalMargins.xtiny,
       },
-      channelText: Styles.platformStyles({
+      channelText: Kb.Styles.platformStyles({
         isElectron: {
           wordBreak: 'break-all',
         },
       }),
-      rowsContainer: Styles.platformStyles({
+      // the rows have to scroll inside the modal instead of growing it
+      container: {
+        flexGrow: 1,
+        flexShrink: 1,
+        minHeight: 0,
+      },
+      rowsContainer: {
+        ...Kb.Styles.padding(0, Kb.Styles.globalMargins.small),
+        flexGrow: 1,
+        flexShrink: 1,
+        minHeight: 0,
+      },
+      searchFilter: Kb.Styles.platformStyles({
         common: {
-          ...Styles.padding(0, Styles.globalMargins.small),
+          marginBottom: Kb.Styles.globalMargins.xsmall,
+          marginTop: Kb.Styles.globalMargins.tiny,
         },
         isElectron: {
-          minHeight: 370,
-        },
-      }),
-      searchFilter: Styles.platformStyles({
-        common: {
-          marginBottom: Styles.globalMargins.xsmall,
-          marginTop: Styles.globalMargins.tiny,
-        },
-        isElectron: {
-          marginLeft: Styles.globalMargins.small,
-          marginRight: Styles.globalMargins.small,
+          ...Kb.Styles.marginH(Kb.Styles.globalMargins.small),
         },
       }),
     }) as const

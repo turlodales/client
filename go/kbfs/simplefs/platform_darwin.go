@@ -8,7 +8,9 @@ package simplefs
 #cgo LDFLAGS: -framework Foundation -framework CoreServices -lobjc
 
 #include <Foundation/Foundation.h>
-void quarantineFile(const char* inFilename) {
+// Name must stay package-specific: chat/attachments has an identical shim, and
+// go/bind links both into one binary, so a shared name is a duplicate symbol.
+void simpleFSQuarantineFile(const char* inFilename) {
 	NSError* error = NULL;
 	NSString* filename = [NSString stringWithUTF8String:inFilename];
 	NSURL* url = [NSURL fileURLWithPath:filename];
@@ -20,17 +22,17 @@ void quarantineFile(const char* inFilename) {
 }
 */
 import "C"
-import (
-	"unsafe"
 
-	"golang.org/x/net/context"
+import (
+	"context"
+	"unsafe"
 )
 
 // Quarantine is for adding the mark of the web.
 func Quarantine(ctx context.Context, path string) error {
 	cpath := C.CString(path)
 	defer C.free(unsafe.Pointer(cpath))
-	C.quarantineFile(cpath)
+	C.simpleFSQuarantineFile(cpath)
 	return nil
 }
 

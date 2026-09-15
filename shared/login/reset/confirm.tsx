@@ -2,20 +2,54 @@ import * as C from '@/constants'
 import * as React from 'react'
 import * as Kb from '@/common-adapters'
 import * as T from '@/constants/types'
+import {useNavigation} from '@react-navigation/native'
+import {submitResetPrompt} from './account-reset'
 
-const ConfirmReset = () => {
-  const hasWallet = C.useAutoResetState(s => s.hasWallet)
-  const error = C.useAutoResetState(s => s.error)
-  const submitResetPassword = C.useRecoverState(s => s.dispatch.dynamic.submitResetPassword)
-  const onContinue = React.useCallback(() => {
-    submitResetPassword?.(T.RPCGen.ResetPromptResponse.confirmReset)
-  }, [submitResetPassword])
-  const onCancelReset = React.useCallback(() => {
-    submitResetPassword?.(T.RPCGen.ResetPromptResponse.cancelReset)
-  }, [submitResetPassword])
-  const onClose = React.useCallback(() => {
-    submitResetPassword?.(T.RPCGen.ResetPromptResponse.nothing)
-  }, [submitResetPassword])
+type Props = {route: {params: {hasWallet: boolean; resetKey: string}}}
+
+const ConfirmReset = ({route}: Props) => {
+  const styles = useStyles()
+  const theme = Kb.Styles.useTheme()
+  const {hasWallet, resetKey} = route.params
+  const navigation = useNavigation()
+  const resolvedRef = React.useRef(false)
+  const resolvePrompt = React.useCallback(
+    (action: T.RPCGen.ResetPromptResponse) => {
+      if (resolvedRef.current) {
+        return
+      }
+      resolvedRef.current = true
+      submitResetPrompt(resetKey, action)
+    },
+    [resetKey]
+  )
+
+  React.useEffect(() => {
+    const onBack = () => {
+      resolvePrompt(T.RPCGen.ResetPromptResponse.nothing)
+    }
+    navigation.setOptions(
+      isIOS
+        ? ({unstable_headerLeftItems: () => [Kb.nativeBackHeaderItem(onBack)]} as object)
+        : {headerLeft: () => <Kb.HeaderLeftButton onPress={onBack} />}
+    )
+  }, [navigation, resolvePrompt])
+
+  React.useEffect(() => {
+    return navigation.addListener('beforeRemove', () => {
+      resolvePrompt(T.RPCGen.ResetPromptResponse.nothing)
+    })
+  }, [navigation, resolvePrompt])
+
+  const onContinue = () => {
+    resolvePrompt(T.RPCGen.ResetPromptResponse.confirmReset)
+  }
+  const onCancelReset = () => {
+    resolvePrompt(T.RPCGen.ResetPromptResponse.cancelReset)
+  }
+  const onClose = () => {
+    resolvePrompt(T.RPCGen.ResetPromptResponse.nothing)
+  }
 
   const [checks, setChecks] = React.useState({
     checkData: false,
@@ -31,41 +65,17 @@ const ConfirmReset = () => {
   }
 
   return (
-    <Kb.Modal
-      header={Kb.Styles.isMobile ? {title: 'Account reset'} : undefined}
-      fullscreen={true}
-      footer={{
-        content: (
-          <Kb.ButtonBar direction="column" fullWidth={true} style={styles.buttonBar}>
-            <Kb.WaitingButton
-              disabled={disabled}
-              label="Yes, reset account"
-              onClick={onContinue}
-              type="Danger"
-              fullWidth={true}
-              waitingKey={C.AutoReset.actuallyResetWaitingKey}
-            />
-            <Kb.Button label="Close" onClick={onClose} type="Dim" fullWidth={true} />
-          </Kb.ButtonBar>
-        ),
-        style: styles.footer,
-      }}
-      banners={
-        error ? (
-          <Kb.Banner color="red" key="errors">
-            <Kb.BannerParagraph bannerColor="red" content={error} />
-          </Kb.Banner>
-        ) : null
-      }
-    >
+    <>
       <Kb.Box2
         direction="vertical"
         fullWidth={true}
         gap="medium"
         alignItems="center"
+        alignSelf="center"
+        padding="medium"
         style={styles.container}
       >
-        <Kb.Icon type="iconfont-skull" sizeType="Big" color={Kb.Styles.globalColors.black} />
+        <Kb.Icon type="iconfont-skull" sizeType="Big" color={theme.black} />
         <Kb.Box2 direction="vertical" fullWidth={true} gap="small" alignItems="center">
           <Kb.Text type="Header">Go ahead with reset?</Kb.Text>
           <Kb.Box2 direction="vertical" fullWidth={true} gap="xsmall" alignItems="flex-start">
@@ -92,7 +102,7 @@ const ConfirmReset = () => {
                 labelComponent={
                   <Kb.Text type="Body" style={Kb.Styles.globalStyles.flexOne}>
                     You will <Kb.Text type="BodyExtrabold">lose access to your wallet funds</Kb.Text> if you
-                    haven't backed up your Stellar private keys outside of Keybase.
+                    haven&apos;t backed up your Stellar private keys outside of Keybase.
                   </Kb.Text>
                 }
                 checked={checkWallet}
@@ -114,19 +124,28 @@ const ConfirmReset = () => {
           </Kb.Text>
         </Kb.Box2>
       </Kb.Box2>
-    </Kb.Modal>
+      <Kb.ModalFooter style={styles.footer}>
+        <Kb.ButtonBar direction="column" fullWidth={true} style={styles.buttonBar}>
+          <Kb.WaitingButton
+            disabled={disabled}
+            label="Yes, reset account"
+            onClick={onContinue}
+            type="Danger"
+            fullWidth={true}
+            waitingKey={C.waitingKeyAutoresetActuallyReset}
+          />
+          <Kb.Button label="Close" onClick={onClose} type="Dim" fullWidth={true} />
+        </Kb.ButtonBar>
+      </Kb.ModalFooter>
+    </>
   )
 }
 
-const styles = Kb.Styles.styleSheetCreate(() => ({
+const useStyles = Kb.Styles.createStyleHook(() => ({
   buttonBar: {
     alignItems: 'center',
   },
   container: Kb.Styles.platformStyles({
-    common: {
-      alignSelf: 'center',
-      padding: Kb.Styles.globalMargins.medium,
-    },
     isElectron: {
       width: 368 + Kb.Styles.globalMargins.medium * 2,
     },

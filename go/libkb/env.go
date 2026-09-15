@@ -22,79 +22,130 @@ import (
 
 type NullConfiguration struct{}
 
-func (n NullConfiguration) GetHome() string                                                { return "" }
-func (n NullConfiguration) GetMobileSharedHome() string                                    { return "" }
-func (n NullConfiguration) GetServerURI() (string, error)                                  { return "", nil }
-func (n NullConfiguration) GetConfigFilename() string                                      { return "" }
-func (n NullConfiguration) GetUpdaterConfigFilename() string                               { return "" }
-func (n NullConfiguration) GetGUIConfigFilename() string                                   { return "" }
-func (n NullConfiguration) GetDeviceCloneStateFilename() string                            { return "" }
-func (n NullConfiguration) GetSessionFilename() string                                     { return "" }
-func (n NullConfiguration) GetDbFilename() string                                          { return "" }
-func (n NullConfiguration) GetChatDbFilename() string                                      { return "" }
-func (n NullConfiguration) GetPvlKitFilename() string                                      { return "" }
-func (n NullConfiguration) GetParamProofKitFilename() string                               { return "" }
-func (n NullConfiguration) GetExternalURLKitFilename() string                              { return "" }
-func (n NullConfiguration) GetProveBypass() (bool, bool)                                   { return false, false }
-func (n NullConfiguration) GetUsername() NormalizedUsername                                { return NormalizedUsername("") }
-func (n NullConfiguration) GetEmail() string                                               { return "" }
-func (n NullConfiguration) GetProxy() string                                               { return "" }
-func (n NullConfiguration) GetProxyType() string                                           { return "" }
-func (n NullConfiguration) IsCertPinningEnabled() bool                                     { return true }
-func (n NullConfiguration) GetGpgHome() string                                             { return "" }
-func (n NullConfiguration) GetBundledCA(h string) string                                   { return "" }
-func (n NullConfiguration) GetUserCacheMaxAge() (time.Duration, bool)                      { return 0, false }
-func (n NullConfiguration) GetProofCacheSize() (int, bool)                                 { return 0, false }
-func (n NullConfiguration) GetProofCacheLongDur() (time.Duration, bool)                    { return 0, false }
-func (n NullConfiguration) GetProofCacheMediumDur() (time.Duration, bool)                  { return 0, false }
-func (n NullConfiguration) GetProofCacheShortDur() (time.Duration, bool)                   { return 0, false }
-func (n NullConfiguration) GetLinkCacheSize() (int, bool)                                  { return 0, false }
-func (n NullConfiguration) GetLinkCacheCleanDur() (time.Duration, bool)                    { return 0, false }
-func (n NullConfiguration) GetUPAKCacheSize() (int, bool)                                  { return 0, false }
-func (n NullConfiguration) GetUIDMapFullNameCacheSize() (int, bool)                        { return 0, false }
-func (n NullConfiguration) GetPayloadCacheSize() (int, bool)                               { return 0, false }
-func (n NullConfiguration) GetMerkleKIDs() []string                                        { return nil }
-func (n NullConfiguration) GetCodeSigningKIDs() []string                                   { return nil }
-func (n NullConfiguration) GetPinentry() string                                            { return "" }
-func (n NullConfiguration) GetUID() (ret keybase1.UID)                                     { return }
-func (n NullConfiguration) GetGpg() string                                                 { return "" }
-func (n NullConfiguration) GetGpgOptions() []string                                        { return nil }
-func (n NullConfiguration) GetPGPFingerprint() *PGPFingerprint                             { return nil }
-func (n NullConfiguration) GetSecretKeyringTemplate() string                               { return "" }
-func (n NullConfiguration) GetSalt() []byte                                                { return nil }
-func (n NullConfiguration) GetSocketFile() string                                          { return "" }
-func (n NullConfiguration) GetPidFile() string                                             { return "" }
-func (n NullConfiguration) GetStandalone() (bool, bool)                                    { return false, false }
-func (n NullConfiguration) GetLocalRPCDebug() string                                       { return "" }
-func (n NullConfiguration) GetTimers() string                                              { return "" }
-func (n NullConfiguration) GetDeviceID() keybase1.DeviceID                                 { return "" }
+func (n NullConfiguration) GetHome() string { return "" }
+
+func (n NullConfiguration) GetMobileSharedHome() string { return "" }
+
+func (n NullConfiguration) GetServerURI() (string, error) { return "", nil }
+
+func (n NullConfiguration) GetConfigFilename() string { return "" }
+
+func (n NullConfiguration) GetUpdaterConfigFilename() string { return "" }
+
+func (n NullConfiguration) GetGUIConfigFilename() string { return "" }
+
+func (n NullConfiguration) GetDeviceCloneStateFilename() string { return "" }
+
+func (n NullConfiguration) GetSessionFilename() string { return "" }
+
+func (n NullConfiguration) GetDbFilename() string { return "" }
+
+func (n NullConfiguration) GetChatDbFilename() string { return "" }
+
+func (n NullConfiguration) GetPvlKitFilename() string { return "" }
+
+func (n NullConfiguration) GetParamProofKitFilename() string { return "" }
+
+func (n NullConfiguration) GetExternalURLKitFilename() string { return "" }
+
+func (n NullConfiguration) GetProveBypass() (bool, bool) { return false, false }
+
+func (n NullConfiguration) GetUsername() NormalizedUsername { return NormalizedUsername("") }
+
+func (n NullConfiguration) GetEmail() string { return "" }
+
+func (n NullConfiguration) GetProxy() string { return "" }
+
+func (n NullConfiguration) GetProxyType() string { return "" }
+
+func (n NullConfiguration) IsCertPinningEnabled() bool { return true }
+
+func (n NullConfiguration) GetGpgHome() string { return "" }
+
+func (n NullConfiguration) GetBundledCA(h string) string { return "" }
+
+func (n NullConfiguration) GetUserCacheMaxAge() (time.Duration, bool) { return 0, false }
+
+func (n NullConfiguration) GetProofCacheSize() (int, bool) { return 0, false }
+
+func (n NullConfiguration) GetProofCacheLongDur() (time.Duration, bool) { return 0, false }
+
+func (n NullConfiguration) GetProofCacheMediumDur() (time.Duration, bool) { return 0, false }
+
+func (n NullConfiguration) GetProofCacheShortDur() (time.Duration, bool) { return 0, false }
+
+func (n NullConfiguration) GetLinkCacheSize() (int, bool) { return 0, false }
+
+func (n NullConfiguration) GetLinkCacheCleanDur() (time.Duration, bool) { return 0, false }
+
+func (n NullConfiguration) GetUPAKCacheSize() (int, bool) { return 0, false }
+
+func (n NullConfiguration) GetUIDMapFullNameCacheSize() (int, bool) { return 0, false }
+
+func (n NullConfiguration) GetPayloadCacheSize() (int, bool) { return 0, false }
+
+func (n NullConfiguration) GetMerkleKIDs() []string { return nil }
+
+func (n NullConfiguration) GetCodeSigningKIDs() []string { return nil }
+
+func (n NullConfiguration) GetPinentry() string { return "" }
+
+func (n NullConfiguration) GetUID() (ret keybase1.UID) { return }
+
+func (n NullConfiguration) GetGpg() string { return "" }
+
+func (n NullConfiguration) GetGpgOptions() []string { return nil }
+
+func (n NullConfiguration) GetPGPFingerprint() *PGPFingerprint { return nil }
+
+func (n NullConfiguration) GetSecretKeyringTemplate() string { return "" }
+
+func (n NullConfiguration) GetSalt() []byte { return nil }
+
+func (n NullConfiguration) GetSocketFile() string { return "" }
+
+func (n NullConfiguration) GetPidFile() string { return "" }
+
+func (n NullConfiguration) GetStandalone() (bool, bool) { return false, false }
+
+func (n NullConfiguration) GetLocalRPCDebug() string { return "" }
+
+func (n NullConfiguration) GetTimers() string { return "" }
+
+func (n NullConfiguration) GetDeviceID() keybase1.DeviceID { return "" }
+
 func (n NullConfiguration) GetDeviceIDForUsername(un NormalizedUsername) keybase1.DeviceID { return "" }
-func (n NullConfiguration) GetDeviceIDForUID(u keybase1.UID) keybase1.DeviceID             { return "" }
-func (n NullConfiguration) GetProxyCACerts() ([]string, error)                             { return nil, nil }
+
+func (n NullConfiguration) GetDeviceIDForUID(u keybase1.UID) keybase1.DeviceID { return "" }
+
+func (n NullConfiguration) GetProxyCACerts() ([]string, error) { return nil, nil }
+
 func (n NullConfiguration) GetUsernameForUID(u keybase1.UID) NormalizedUsername {
 	return NormalizedUsername("")
 }
+
 func (n NullConfiguration) GetUIDForUsername(u NormalizedUsername) keybase1.UID {
 	return keybase1.UID("")
 }
-func (n NullConfiguration) GetStayLoggedOut() (bool, bool)                  { return false, false }
-func (n NullConfiguration) GetAutoFork() (bool, bool)                       { return false, false }
-func (n NullConfiguration) GetRunMode() (RunMode, error)                    { return NoRunMode, nil }
-func (n NullConfiguration) GetNoAutoFork() (bool, bool)                     { return false, false }
-func (n NullConfiguration) GetLogFile() string                              { return "" }
-func (n NullConfiguration) GetEKLogFile() string                            { return "" }
-func (n NullConfiguration) GetPerfLogFile() string                          { return "" }
-func (n NullConfiguration) GetGUILogFile() string                           { return "" }
-func (n NullConfiguration) GetUseDefaultLogFile() (bool, bool)              { return false, false }
-func (n NullConfiguration) GetUseRootConfigFile() (bool, bool)              { return false, false }
-func (n NullConfiguration) GetLogPrefix() string                            { return "" }
-func (n NullConfiguration) GetScraperTimeout() (time.Duration, bool)        { return 0, false }
-func (n NullConfiguration) GetAPITimeout() (time.Duration, bool)            { return 0, false }
-func (n NullConfiguration) GetTorMode() (TorMode, error)                    { return TorNone, nil }
-func (n NullConfiguration) GetTorHiddenAddress() string                     { return "" }
-func (n NullConfiguration) GetTorProxy() string                             { return "" }
-func (n NullConfiguration) GetUpdatePreferenceAuto() (bool, bool)           { return false, false }
-func (n NullConfiguration) GetUpdatePreferenceSnoozeUntil() keybase1.Time   { return keybase1.Time(0) }
+func (n NullConfiguration) GetStayLoggedOut() (bool, bool)                { return false, false }
+func (n NullConfiguration) GetAutoFork() (bool, bool)                     { return false, false }
+func (n NullConfiguration) GetRunMode() (RunMode, error)                  { return NoRunMode, nil }
+func (n NullConfiguration) GetNoAutoFork() (bool, bool)                   { return false, false }
+func (n NullConfiguration) GetLogFile() string                            { return "" }
+func (n NullConfiguration) GetEKLogFile() string                          { return "" }
+func (n NullConfiguration) GetPerfLogFile() string                        { return "" }
+func (n NullConfiguration) GetGUILogFile() string                         { return "" }
+func (n NullConfiguration) GetUseDefaultLogFile() (bool, bool)            { return false, false }
+func (n NullConfiguration) GetUseRootConfigFile() (bool, bool)            { return false, false }
+func (n NullConfiguration) GetLogPrefix() string                          { return "" }
+func (n NullConfiguration) GetScraperTimeout() (time.Duration, bool)      { return 0, false }
+func (n NullConfiguration) GetAPITimeout() (time.Duration, bool)          { return 0, false }
+func (n NullConfiguration) GetTorMode() (TorMode, error)                  { return TorNone, nil }
+func (n NullConfiguration) GetTorHiddenAddress() string                   { return "" }
+func (n NullConfiguration) GetTorProxy() string                           { return "" }
+func (n NullConfiguration) GetUpdatePreferenceAuto() (bool, bool)         { return false, false }
+func (n NullConfiguration) GetUpdatePreferenceSnoozeUntil() keybase1.Time { return keybase1.Time(0) }
+
 func (n NullConfiguration) GetUpdateLastChecked() keybase1.Time             { return keybase1.Time(0) }
 func (n NullConfiguration) GetUpdatePreferenceSkip() string                 { return "" }
 func (n NullConfiguration) GetUpdateURL() string                            { return "" }
@@ -154,6 +205,7 @@ func (n NullConfiguration) GetBool(string, bool) (bool, bool) { return false, fa
 func (n NullConfiguration) GetAllUsernames() (NormalizedUsername, []NormalizedUsername, error) {
 	return NormalizedUsername(""), nil, nil
 }
+
 func (n NullConfiguration) GetAllUserConfigs() (*UserConfig, []UserConfig, error) {
 	return nil, nil, nil
 }
@@ -163,12 +215,15 @@ func (n NullConfiguration) GetDebugJourneycard() (bool, bool) { return false, fa
 func (n NullConfiguration) GetDisplayRawUntrustedOutput() (bool, bool) {
 	return false, false
 }
+
 func (n NullConfiguration) GetLogFormat() string {
 	return ""
 }
+
 func (n NullConfiguration) GetAPIDump() (bool, bool) {
 	return false, false
 }
+
 func (n NullConfiguration) GetNoPinentry() (bool, bool) {
 	return false, false
 }
@@ -176,7 +231,8 @@ func (n NullConfiguration) GetNoPinentry() (bool, bool) {
 func (n NullConfiguration) GetStringAtPath(string) (string, bool) {
 	return "", false
 }
-func (n NullConfiguration) GetInterfaceAtPath(string) (interface{}, error) {
+
+func (n NullConfiguration) GetInterfaceAtPath(string) (any, error) {
 	return nil, nil
 }
 
@@ -244,7 +300,7 @@ type TestParameters struct {
 	// easiest to skip the audit in those cases.
 	TeamSkipAudit bool
 
-	// NoGregor is on if we want to test the service without any gregor conection
+	// NoGregor is on if we want to test the service without any gregor connection
 	NoGregor bool
 
 	// TeamAuditParams can be customized if we want to control the behavior
@@ -378,7 +434,8 @@ func (e *Env) GetMountDirDefault() string {
 			panic("Invalid run mode")
 		}
 		return filepath.Join(volumes, fmt.Sprintf(
-			"%s (%s)", runmodeName, username))
+			"%s (%s)", runmodeName, username,
+		))
 	case keybase1.RuntimeGroup_LINUXLIKE:
 		return filepath.Join(e.GetRuntimeDir(), "kbfs")
 	// kbfsdokan depends on an empty default
@@ -579,7 +636,7 @@ func (e *Env) GetDuration(def time.Duration, flist ...func() (time.Duration, boo
 }
 
 func (e *Env) GetServerURI() (string, error) {
-	// appveyor and os x travis CI set server URI, so need to
+	// Some CI environments set server URI, so need to
 	// check for test flag here in order for production api endpoint
 	// tests to pass.
 	if e.Test.UseProductionRunMode {
@@ -826,7 +883,8 @@ func (e *Env) GetDebugJourneycard() bool {
 }
 
 func (e *Env) GetDebug() bool {
-	return e.GetBool(false,
+	return e.GetBool(
+		false,
 		func() (bool, bool) { return e.Test.GetDebug() },
 		func() (bool, bool) { return e.cmd.GetDebug() },
 		func() (bool, bool) { return e.getEnvBool("KEYBASE_DEBUG") },
@@ -835,7 +893,8 @@ func (e *Env) GetDebug() bool {
 }
 
 func (e *Env) GetDisplayRawUntrustedOutput() bool {
-	return e.GetBool(false,
+	return e.GetBool(
+		false,
 		func() (bool, bool) { return e.cmd.GetDisplayRawUntrustedOutput() },
 		func() (bool, bool) { return e.getEnvBool("KEYBASE_DISPLAY_RAW_UNTRUSTED_OUTPUT") },
 		func() (bool, bool) { return e.GetConfig().GetDisplayRawUntrustedOutput() },
@@ -845,7 +904,8 @@ func (e *Env) GetDisplayRawUntrustedOutput() bool {
 func (e *Env) GetAutoFork() bool {
 	// On !Darwin, we auto-fork by default
 	def := (runtime.GOOS != "darwin")
-	return e.GetNegBool(def,
+	return e.GetNegBool(
+		def,
 		[]NegBoolFunc{
 			{
 				neg: false,
@@ -872,7 +932,8 @@ func (e *Env) GetAutoFork() bool {
 }
 
 func (e *Env) GetStandalone() bool {
-	return e.GetBool(false,
+	return e.GetBool(
+		false,
 		func() (bool, bool) { return e.cmd.GetStandalone() },
 		func() (bool, bool) { return e.getEnvBool("KEYBASE_STANDALONE") },
 		func() (bool, bool) { return e.GetConfig().GetStandalone() },
@@ -901,14 +962,16 @@ func (e *Env) GetServiceType() string {
 }
 
 func (e *Env) GetAPIDump() bool {
-	return e.GetBool(false,
+	return e.GetBool(
+		false,
 		func() (bool, bool) { return e.cmd.GetAPIDump() },
 		func() (bool, bool) { return e.getEnvBool("KEYBASE_API_DUMP") },
 	)
 }
 
 func (e *Env) GetAllowRoot() bool {
-	return e.GetBool(false,
+	return e.GetBool(
+		false,
 		func() (bool, bool) { return e.getEnvBool("KEYBASE_ALLOW_ROOT") },
 	)
 }
@@ -967,7 +1030,8 @@ func (e *Env) GetGregorURI() string {
 }
 
 func (e *Env) GetGregorSaveInterval() time.Duration {
-	return e.GetDuration(time.Minute,
+	return e.GetDuration(
+		time.Minute,
 		func() (time.Duration, bool) { return e.getEnvDuration("KEYBASE_PUSH_SAVE_INTERVAL") },
 		func() (time.Duration, bool) { return e.GetConfig().GetGregorSaveInterval() },
 		func() (time.Duration, bool) { return e.cmd.GetGregorSaveInterval() },
@@ -975,7 +1039,8 @@ func (e *Env) GetGregorSaveInterval() time.Duration {
 }
 
 func (e *Env) GetGregorDisabled() bool {
-	return e.GetBool(false,
+	return e.GetBool(
+		false,
 		func() (bool, bool) { return e.Test.GetNoGregor() },
 		func() (bool, bool) { return e.cmd.GetGregorDisabled() },
 		func() (bool, bool) { return getEnvBool("KEYBASE_PUSH_DISABLED") },
@@ -984,13 +1049,15 @@ func (e *Env) GetGregorDisabled() bool {
 }
 
 func (e *Env) GetSecretStorePrimingDisabled() bool {
-	return e.GetBool(false,
+	return e.GetBool(
+		false,
 		func() (bool, bool) { return e.Test.GetSecretStorePrimingDisabled() },
 	)
 }
 
 func (e *Env) GetBGIdentifierDisabled() bool {
-	return e.GetBool(true,
+	return e.GetBool(
+		true,
 		func() (bool, bool) { return e.cmd.GetBGIdentifierDisabled() },
 		func() (bool, bool) { return getEnvBool("KEYBASE_BG_IDENTIFIER_DISABLED") },
 		func() (bool, bool) { return e.GetConfig().GetBGIdentifierDisabled() },
@@ -998,7 +1065,8 @@ func (e *Env) GetBGIdentifierDisabled() bool {
 }
 
 func (e *Env) GetGregorPingInterval() time.Duration {
-	return e.GetDuration(10*time.Second,
+	return e.GetDuration(
+		10*time.Second,
 		func() (time.Duration, bool) { return e.getEnvDuration("KEYBASE_PUSH_PING_INTERVAL") },
 		func() (time.Duration, bool) { return e.GetConfig().GetGregorPingInterval() },
 		func() (time.Duration, bool) { return e.cmd.GetGregorPingInterval() },
@@ -1006,7 +1074,8 @@ func (e *Env) GetGregorPingInterval() time.Duration {
 }
 
 func (e *Env) GetGregorPingTimeout() time.Duration {
-	return e.GetDuration(5*time.Second,
+	return e.GetDuration(
+		5*time.Second,
 		func() (time.Duration, bool) { return e.getEnvDuration("KEYBASE_PUSH_PING_TIMEOUT") },
 		func() (time.Duration, bool) { return e.GetConfig().GetGregorPingTimeout() },
 		func() (time.Duration, bool) { return e.cmd.GetGregorPingTimeout() },
@@ -1014,7 +1083,8 @@ func (e *Env) GetGregorPingTimeout() time.Duration {
 }
 
 func (e *Env) GetChatDelivererInterval() time.Duration {
-	return e.GetDuration(5*time.Second,
+	return e.GetDuration(
+		5*time.Second,
 		func() (time.Duration, bool) { return e.getEnvDuration("KEYBASE_CHAT_DELIVERER_INTERVAL") },
 		func() (time.Duration, bool) { return e.GetConfig().GetChatDelivererInterval() },
 		func() (time.Duration, bool) { return e.cmd.GetChatDelivererInterval() },
@@ -1022,7 +1092,8 @@ func (e *Env) GetChatDelivererInterval() time.Duration {
 }
 
 func (e *Env) GetAttachmentHTTPStartPort() int {
-	return e.GetInt(16423,
+	return e.GetInt(
+		16423,
 		e.cmd.GetAttachmentHTTPStartPort,
 		func() (int, bool) { return e.getEnvInt("KEYBASE_ATTACHMENT_HTTP_START") },
 		e.GetConfig().GetAttachmentHTTPStartPort,
@@ -1030,7 +1101,8 @@ func (e *Env) GetAttachmentHTTPStartPort() int {
 }
 
 func (e *Env) GetAttachmentDisableMulti() bool {
-	return e.GetBool(false,
+	return e.GetBool(
+		false,
 		e.cmd.GetAttachmentDisableMulti,
 		func() (bool, bool) { return e.getEnvBool("KEYBASE_ATTACHMENT_DISABLE_MULTI") },
 		e.GetConfig().GetAttachmentDisableMulti,
@@ -1038,7 +1110,8 @@ func (e *Env) GetAttachmentDisableMulti() bool {
 }
 
 func (e *Env) GetDisableTeamAuditor() bool {
-	return e.GetBool(false,
+	return e.GetBool(
+		false,
 		e.cmd.GetDisableTeamAuditor,
 		func() (bool, bool) { return e.getEnvBool("KEYBASE_DISABLE_TEAM_AUDITOR") },
 		e.GetConfig().GetDisableTeamAuditor,
@@ -1048,7 +1121,8 @@ func (e *Env) GetDisableTeamAuditor() bool {
 }
 
 func (e *Env) GetDisableTeamBoxAuditor() bool {
-	return e.GetBool(false,
+	return e.GetBool(
+		false,
 		e.cmd.GetDisableTeamBoxAuditor,
 		func() (bool, bool) { return e.getEnvBool("KEYBASE_DISABLE_TEAM_BOX_AUDITOR") },
 		e.GetConfig().GetDisableTeamBoxAuditor,
@@ -1058,7 +1132,8 @@ func (e *Env) GetDisableTeamBoxAuditor() bool {
 }
 
 func (e *Env) GetDisableEKBackgroundKeygen() bool {
-	return e.GetBool(false,
+	return e.GetBool(
+		false,
 		e.cmd.GetDisableEKBackgroundKeygen,
 		func() (bool, bool) { return e.getEnvBool("KEYBASE_DISABLE_EK_BACKGROUND_KEYGEN") },
 		e.GetConfig().GetDisableEKBackgroundKeygen,
@@ -1066,7 +1141,8 @@ func (e *Env) GetDisableEKBackgroundKeygen() bool {
 }
 
 func (e *Env) GetDisableMerkleAuditor() bool {
-	return e.GetBool(false,
+	return e.GetBool(
+		false,
 		e.cmd.GetDisableMerkleAuditor,
 		func() (bool, bool) { return e.getEnvBool("KEYBASE_DISABLE_MERKLE_AUDITOR") },
 		e.GetConfig().GetDisableMerkleAuditor,
@@ -1076,7 +1152,8 @@ func (e *Env) GetDisableMerkleAuditor() bool {
 }
 
 func (e *Env) GetDisableSearchIndexer() bool {
-	return e.GetBool(false,
+	return e.GetBool(
+		false,
 		e.cmd.GetDisableSearchIndexer,
 		func() (bool, bool) { return e.getEnvBool("KEYBASE_DISABLE_SEARCH_INDEXER") },
 		e.GetConfig().GetDisableSearchIndexer,
@@ -1086,7 +1163,8 @@ func (e *Env) GetDisableSearchIndexer() bool {
 }
 
 func (e *Env) GetDisableBgConvLoader() bool {
-	return e.GetBool(false,
+	return e.GetBool(
+		false,
 		e.cmd.GetDisableBgConvLoader,
 		func() (bool, bool) { return e.getEnvBool("KEYBASE_DISABLE_BG_CONV_LOADER") },
 		e.GetConfig().GetDisableBgConvLoader,
@@ -1096,7 +1174,8 @@ func (e *Env) GetDisableBgConvLoader() bool {
 }
 
 func (e *Env) GetEnableBotLiteMode() bool {
-	return e.GetBool(false,
+	return e.GetBool(
+		false,
 		e.cmd.GetEnableBotLiteMode,
 		func() (bool, bool) { return e.getEnvBool("KEYBASE_ENABLE_BOT_LITE_MODE") },
 		e.GetConfig().GetEnableBotLiteMode,
@@ -1104,7 +1183,8 @@ func (e *Env) GetEnableBotLiteMode() bool {
 }
 
 func (e *Env) GetExtraNetLogging() bool {
-	return e.GetBool(false,
+	return e.GetBool(
+		false,
 		e.cmd.GetExtraNetLogging,
 		func() (bool, bool) { return e.getEnvBool("KEYBASE_EXTRA_NET_LOGGING") },
 		e.GetConfig().GetExtraNetLogging,
@@ -1130,7 +1210,8 @@ func (e *Env) GetEmail() string {
 }
 
 func (e *Env) GetStayLoggedOut() bool {
-	return e.GetBool(false,
+	return e.GetBool(
+		false,
 		func() (bool, bool) { return e.GetConfig().GetStayLoggedOut() },
 	)
 }
@@ -1152,7 +1233,7 @@ func (e *Env) GetProxyType() ProxyType {
 		// Tor mode is enabled. Tor mode is implemented via a socks proxy
 		return Socks
 	}
-	var proxyTypeStr = e.GetString(
+	proxyTypeStr := e.GetString(
 		func() string { return e.cmd.GetProxyType() },
 		func() string { return os.Getenv("PROXY_TYPE") },
 		func() string { return e.GetConfig().GetProxyType() },
@@ -1224,7 +1305,6 @@ func (e *Env) GetPinentry() string {
 }
 
 func (e *Env) GetNoPinentry() bool {
-
 	isno := func(s string) (bool, bool) {
 		s = strings.ToLower(s)
 		if s == "0" || s == "no" || s == "n" || s == "none" {
@@ -1233,7 +1313,8 @@ func (e *Env) GetNoPinentry() bool {
 		return false, false
 	}
 
-	return e.GetBool(false,
+	return e.GetBool(
+		false,
 		func() (bool, bool) { return isno(e.cmd.GetPinentry()) },
 		func() (bool, bool) { return isno(os.Getenv("KEYBASE_PINENTRY")) },
 		func() (bool, bool) { return e.GetConfig().GetNoPinentry() },
@@ -1254,7 +1335,8 @@ func (e *Env) GetBundledCA(host string) string {
 }
 
 func (e *Env) GetUserCacheMaxAge() time.Duration {
-	return e.GetDuration(UserCacheMaxAge,
+	return e.GetDuration(
+		UserCacheMaxAge,
 		func() (time.Duration, bool) { return e.cmd.GetUserCacheMaxAge() },
 		func() (time.Duration, bool) { return e.getEnvDuration("KEYBASE_USER_CACHE_MAX_AGE") },
 		func() (time.Duration, bool) { return e.GetConfig().GetUserCacheMaxAge() },
@@ -1262,7 +1344,8 @@ func (e *Env) GetUserCacheMaxAge() time.Duration {
 }
 
 func (e *Env) GetAPITimeout() time.Duration {
-	return e.GetDuration(HTTPDefaultTimeout,
+	return e.GetDuration(
+		HTTPDefaultTimeout,
 		func() (time.Duration, bool) { return e.cmd.GetAPITimeout() },
 		func() (time.Duration, bool) { return e.getEnvDuration("KEYBASE_API_TIMEOUT") },
 		func() (time.Duration, bool) { return e.GetConfig().GetAPITimeout() },
@@ -1270,7 +1353,8 @@ func (e *Env) GetAPITimeout() time.Duration {
 }
 
 func (e *Env) GetScraperTimeout() time.Duration {
-	return e.GetDuration(HTTPDefaultScraperTimeout,
+	return e.GetDuration(
+		HTTPDefaultScraperTimeout,
 		func() (time.Duration, bool) { return e.cmd.GetScraperTimeout() },
 		func() (time.Duration, bool) { return e.getEnvDuration("KEYBASE_SCRAPER_TIMEOUT") },
 		func() (time.Duration, bool) { return e.GetConfig().GetScraperTimeout() },
@@ -1278,14 +1362,17 @@ func (e *Env) GetScraperTimeout() time.Duration {
 }
 
 func (e *Env) GetLocalTrackMaxAge() time.Duration {
-	return e.GetDuration(LocalTrackMaxAge,
+	return e.GetDuration(
+		LocalTrackMaxAge,
 		func() (time.Duration, bool) { return e.cmd.GetLocalTrackMaxAge() },
 		func() (time.Duration, bool) { return e.getEnvDuration("KEYBASE_LOCAL_TRACK_MAX_AGE") },
 		func() (time.Duration, bool) { return e.GetConfig().GetLocalTrackMaxAge() },
 	)
 }
+
 func (e *Env) GetProofCacheSize() int {
-	return e.GetInt(ProofCacheSize,
+	return e.GetInt(
+		ProofCacheSize,
 		e.cmd.GetProofCacheSize,
 		func() (int, bool) { return e.getEnvInt("KEYBASE_PROOF_CACHE_SIZE") },
 		e.GetConfig().GetProofCacheSize,
@@ -1293,28 +1380,32 @@ func (e *Env) GetProofCacheSize() int {
 }
 
 func (e *Env) GetProofCacheLongDur() time.Duration {
-	return e.GetDuration(ProofCacheLongDur,
+	return e.GetDuration(
+		ProofCacheLongDur,
 		func() (time.Duration, bool) { return e.getEnvDuration("KEYBASE_PROOF_CACHE_LONG_DUR") },
 		e.GetConfig().GetProofCacheLongDur,
 	)
 }
 
 func (e *Env) GetProofCacheMediumDur() time.Duration {
-	return e.GetDuration(ProofCacheMediumDur,
+	return e.GetDuration(
+		ProofCacheMediumDur,
 		func() (time.Duration, bool) { return e.getEnvDuration("KEYBASE_PROOF_CACHE_MEDIUM_DUR") },
 		e.GetConfig().GetProofCacheMediumDur,
 	)
 }
 
 func (e *Env) GetProofCacheShortDur() time.Duration {
-	return e.GetDuration(ProofCacheShortDur,
+	return e.GetDuration(
+		ProofCacheShortDur,
 		func() (time.Duration, bool) { return e.getEnvDuration("KEYBASE_PROOF_CACHE_SHORT_DUR") },
 		e.GetConfig().GetProofCacheShortDur,
 	)
 }
 
 func (e *Env) GetLinkCacheSize() int {
-	return e.GetInt(LinkCacheSize,
+	return e.GetInt(
+		LinkCacheSize,
 		e.cmd.GetLinkCacheSize,
 		func() (int, bool) { return e.getEnvInt("KEYBASE_LINK_CACHE_SIZE") },
 		e.GetConfig().GetLinkCacheSize,
@@ -1322,7 +1413,8 @@ func (e *Env) GetLinkCacheSize() int {
 }
 
 func (e *Env) GetUPAKCacheSize() int {
-	return e.GetInt(UPAKCacheSize,
+	return e.GetInt(
+		UPAKCacheSize,
 		e.cmd.GetUPAKCacheSize,
 		func() (int, bool) { return e.getEnvInt("KEYBASE_UPAK_CACHE_SIZE") },
 		e.GetConfig().GetUPAKCacheSize,
@@ -1330,7 +1422,8 @@ func (e *Env) GetUPAKCacheSize() int {
 }
 
 func (e *Env) GetUIDMapFullNameCacheSize() int {
-	return e.GetInt(UIDMapFullNameCacheSize,
+	return e.GetInt(
+		UIDMapFullNameCacheSize,
 		e.cmd.GetUIDMapFullNameCacheSize,
 		func() (int, bool) { return e.getEnvInt("KEYBASE_UID_MAP_FULL_NAME_CACHE_SIZE") },
 		e.GetConfig().GetUIDMapFullNameCacheSize,
@@ -1338,7 +1431,8 @@ func (e *Env) GetUIDMapFullNameCacheSize() int {
 }
 
 func (e *Env) GetLevelDBNumFiles() int {
-	return e.GetInt(LevelDBNumFiles,
+	return e.GetInt(
+		LevelDBNumFiles,
 		e.cmd.GetLevelDBNumFiles,
 		func() (int, bool) { return e.getEnvInt("KEYBASE_LEVELDB_NUM_FILES") },
 		e.GetConfig().GetLevelDBNumFiles,
@@ -1346,7 +1440,8 @@ func (e *Env) GetLevelDBNumFiles() int {
 }
 
 func (e *Env) GetLevelDBWriteBufferMB() int {
-	return e.GetInt(LevelDBWriteBufferMB,
+	return e.GetInt(
+		LevelDBWriteBufferMB,
 		e.cmd.GetLevelDBWriteBufferMB,
 		func() (int, bool) { return e.getEnvInt("KEYBASE_LEVELDB_WRITE_BUFFER_MB") },
 		e.GetConfig().GetLevelDBWriteBufferMB,
@@ -1354,14 +1449,16 @@ func (e *Env) GetLevelDBWriteBufferMB() int {
 }
 
 func (e *Env) GetLinkCacheCleanDur() time.Duration {
-	return e.GetDuration(LinkCacheCleanDur,
+	return e.GetDuration(
+		LinkCacheCleanDur,
 		func() (time.Duration, bool) { return e.getEnvDuration("KEYBASE_LINK_CACHE_CLEAN_DUR") },
 		e.GetConfig().GetLinkCacheCleanDur,
 	)
 }
 
 func (e *Env) GetPayloadCacheSize() int {
-	return e.GetInt(PayloadCacheSize,
+	return e.GetInt(
+		PayloadCacheSize,
 		e.cmd.GetPayloadCacheSize,
 		func() (int, bool) { return e.getEnvInt("KEYBASE_PAYLOAD_CACHE_SIZE") },
 		e.GetConfig().GetPayloadCacheSize,
@@ -1418,7 +1515,8 @@ func (e *Env) GetAppType() AppType {
 }
 
 func (e *Env) IsMobileExtension() bool {
-	return e.GetBool(false,
+	return e.GetBool(
+		false,
 		func() (bool, bool) { return e.cmd.IsMobileExtension() },
 		func() (bool, bool) { return e.getEnvBool("KEYBASE_MOBILE_EXTENSION") },
 		func() (bool, bool) { return e.GetConfig().IsMobileExtension() },
@@ -1426,7 +1524,8 @@ func (e *Env) IsMobileExtension() bool {
 }
 
 func (e *Env) GetSlowGregorConn() bool {
-	return e.GetBool(false,
+	return e.GetBool(
+		false,
 		func() (bool, bool) { return e.cmd.GetSlowGregorConn() },
 		func() (bool, bool) { return e.getEnvBool("KEYBASE_SLOW_GREGOR_CONN") },
 		func() (bool, bool) { return e.GetConfig().GetSlowGregorConn() },
@@ -1434,7 +1533,8 @@ func (e *Env) GetSlowGregorConn() bool {
 }
 
 func (e *Env) GetReadDeletedSigChain() bool {
-	return e.GetBool(false,
+	return e.GetBool(
+		false,
 		func() (bool, bool) { return e.cmd.GetReadDeletedSigChain() },
 		func() (bool, bool) { return e.getEnvBool("KEYBASE_READ_DELETED_SIGCHAIN") },
 		func() (bool, bool) { return e.GetConfig().GetReadDeletedSigChain() },
@@ -1675,7 +1775,8 @@ func (e *Env) GetGUILogFile() string {
 }
 
 func (e *Env) GetUseDefaultLogFile() bool {
-	return e.GetBool(false,
+	return e.GetBool(
+		false,
 		e.cmd.GetUseDefaultLogFile,
 		func() (bool, bool) { return e.getEnvBool("KEYBASE_USE_DEFAULT_LOG_FILE") },
 	)
@@ -1724,7 +1825,7 @@ func (e *Env) GetTorProxy() string {
 }
 
 func (e *Env) GetStoredSecretAccessGroup() string {
-	var override = e.GetBool(
+	override := e.GetBool(
 		false,
 		func() (bool, bool) { return e.GetConfig().GetSecurityAccessGroupOverride() },
 	)
@@ -2012,7 +2113,8 @@ func (e *Env) GetUpdateDefaultInstructions() (string, error) {
 }
 
 func (e *Env) RunningInCI() bool {
-	return e.GetBool(false,
+	return e.GetBool(
+		false,
 		func() (bool, bool) { return e.getEnvBool("KEYBASE_RUN_CI") },
 	)
 }
@@ -2030,21 +2132,24 @@ func (e *Env) ModelessWantsSystemd() bool {
 func (e *Env) ForceSecretStoreFile() bool {
 	// By default use system-provided secret store (like MacOS Keychain), but
 	// allow users to fall back to file-based store for testing and debugging.
-	return e.GetBool(false,
+	return e.GetBool(
+		false,
 		func() (bool, bool) { return e.getEnvBool("KEYBASE_SECRET_STORE_FILE") },
 		func() (bool, bool) { return e.GetConfig().GetForceSecretStoreFile() },
 	)
 }
 
 func (e *Env) GetRuntimeStatsEnabled() bool {
-	return e.GetBool(false,
+	return e.GetBool(
+		false,
 		func() (bool, bool) { return e.getEnvBool("KEYBASE_RUNTIME_STATS_ENABLED") },
 		func() (bool, bool) { return e.GetConfig().GetRuntimeStatsEnabled() },
 	)
 }
 
 func (e *Env) GetRememberPassphrase(username NormalizedUsername) bool {
-	return e.GetBool(true,
+	return e.GetBool(
+		true,
 		func() (bool, bool) { return e.cmd.GetRememberPassphrase(username) },
 		func() (bool, bool) { return e.GetConfig().GetRememberPassphrase(username) },
 	)
@@ -2074,7 +2179,8 @@ func IsAndroid() bool {
 }
 
 func (e *Env) AllowPTrace() bool {
-	return e.GetBool(false,
+	return e.GetBool(
+		false,
 		func() (bool, bool) { return e.getEnvBool("KEYBASE_ALLOW_PTRACE") },
 	)
 }
@@ -2098,6 +2204,7 @@ func (e *Env) GetLogFileConfig(filename string) *logger.LogFileConfig {
 		MaxKeepFiles: maxKeepFiles,
 	}
 }
+
 func (e *Env) GetForceLinuxKeyring() bool {
 	return e.GetBool(false,
 		func() (bool, bool) { return e.cmd.GetForceLinuxKeyring() },

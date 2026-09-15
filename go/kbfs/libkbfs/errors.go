@@ -152,6 +152,10 @@ func (e NeedSelfRekeyError) Error() string {
 		tlfhandle.BuildCanonicalPathForTlfName(tlf.Private, e.Tlf), e.Err)
 }
 
+func (e NeedSelfRekeyError) Unwrap() error {
+	return e.Err
+}
+
 // ToStatus exports error to status
 func (e NeedSelfRekeyError) ToStatus() keybase1.Status {
 	kv := keybase1.StringKVPair{
@@ -180,6 +184,10 @@ func (e NeedOtherRekeyError) Error() string {
 		"directory %s, ask one of the other directory participants to "+
 		"log into Keybase to grant you access automatically: %+v",
 		tlfhandle.BuildCanonicalPathForTlfName(tlf.Private, e.Tlf), e.Err)
+}
+
+func (e NeedOtherRekeyError) Unwrap() error {
+	return e.Err
 }
 
 // ToStatus exports error to status
@@ -257,6 +265,10 @@ func (e BlockDecodeError) Error() string {
 	return fmt.Sprintf("Decode error for a block: %v", e.decodeErr)
 }
 
+func (e BlockDecodeError) Unwrap() error {
+	return e.decodeErr
+}
+
 // BadCryptoError indicates that KBFS performed a bad crypto operation.
 type BadCryptoError struct {
 	ID kbfsblock.ID
@@ -304,6 +316,10 @@ func (e MDMismatchError) Error() string {
 		e.Revision, e.Dir, e.TlfID, e.Err)
 }
 
+func (e MDMismatchError) Unwrap() error {
+	return e.Err
+}
+
 // NoSuchMDError indicates that there is no MD object for the given
 // folder, revision, and merged status.
 type NoSuchMDError struct {
@@ -348,8 +364,7 @@ func (e NewDataVersionError) Error() string {
 // OutdatedVersionError indicates that we have encountered some new
 // data version we don't understand, and the user should be prompted
 // to upgrade.
-type OutdatedVersionError struct {
-}
+type OutdatedVersionError struct{}
 
 // Error implements the error interface for OutdatedVersionError.
 func (e OutdatedVersionError) Error() string {
@@ -399,8 +414,7 @@ func (e InconsistentEncodedSizeError) Error() string {
 // MDWriteNeededInRequest indicates that the system needs MD write
 // permissions to successfully complete an operation, so it should
 // retry in mdWrite mode.
-type MDWriteNeededInRequest struct {
-}
+type MDWriteNeededInRequest struct{}
 
 // Error implements the error interface for MDWriteNeededInRequest
 func (e MDWriteNeededInRequest) Error() string {
@@ -525,8 +539,7 @@ func (e KeyHalfMismatchError) Error() string {
 
 // MDServerDisconnected indicates the MDServer has been disconnected for clients waiting
 // on an update channel.
-type MDServerDisconnected struct {
-}
+type MDServerDisconnected struct{}
 
 // Error implements the error interface for MDServerDisconnected.
 func (e MDServerDisconnected) Error() string {
@@ -548,8 +561,7 @@ func (e MDUpdateInvertError) Error() string {
 
 // NotPermittedWhileDirtyError indicates that some operation failed
 // because of outstanding dirty files, and may be retried later.
-type NotPermittedWhileDirtyError struct {
-}
+type NotPermittedWhileDirtyError struct{}
 
 // Error implements the error interface for NotPermittedWhileDirtyError.
 func (e NotPermittedWhileDirtyError) Error() string {
@@ -626,7 +638,8 @@ func (e RekeyPermissionError) Error() string {
 // NewRekeyPermissionError constructs a RekeyPermissionError for the given
 // directory and user.
 func NewRekeyPermissionError(
-	dir *tlfhandle.Handle, username kbname.NormalizedUsername) error {
+	dir *tlfhandle.Handle, username kbname.NormalizedUsername,
+) error {
 	dirname := dir.GetCanonicalPath()
 	return RekeyPermissionError{username, dirname}
 }
@@ -641,8 +654,7 @@ func (e RekeyIncompleteError) Error() string {
 
 // TimeoutError is just a replacement for context.DeadlineExceeded
 // with a more friendly error string.
-type TimeoutError struct {
-}
+type TimeoutError struct{}
 
 func (e TimeoutError) Error() string {
 	return "Operation timed out"
@@ -676,8 +688,7 @@ func (e NoSuchFolderListError) Error() string {
 
 // UnexpectedUnmergedPutError indicates that we tried to do an
 // unmerged put when that was disallowed.
-type UnexpectedUnmergedPutError struct {
-}
+type UnexpectedUnmergedPutError struct{}
 
 // Error implements the error interface for UnexpectedUnmergedPutError
 func (e UnexpectedUnmergedPutError) Error() string {
@@ -722,8 +733,7 @@ func (e IncompatibleHandleError) Error() string {
 }
 
 // UnmergedError indicates that fbo is on an unmerged local revision
-type UnmergedError struct {
-}
+type UnmergedError struct{}
 
 // Error implements the error interface for UnmergedError.
 func (e UnmergedError) Error() string {
@@ -732,8 +742,7 @@ func (e UnmergedError) Error() string {
 
 // ExclOnUnmergedError happens when an operation with O_EXCL set when fbo is on
 // an unmerged local revision
-type ExclOnUnmergedError struct {
-}
+type ExclOnUnmergedError struct{}
 
 // Error implements the error interface for ExclOnUnmergedError.
 func (e ExclOnUnmergedError) Error() string {
@@ -774,6 +783,10 @@ func (e RekeyConflictError) Error() string {
 	return fmt.Sprintf("Conflict during a rekey, not retrying: %v", e.Err)
 }
 
+func (e RekeyConflictError) Unwrap() error {
+	return e.Err
+}
+
 // UnmergedSelfConflictError indicates that we hit a conflict on the
 // unmerged branch, so a previous MD PutUnmerged we thought had
 // failed, had actually succeeded.
@@ -784,6 +797,10 @@ type UnmergedSelfConflictError struct {
 // Error implements the error interface for UnmergedSelfConflictError.
 func (e UnmergedSelfConflictError) Error() string {
 	return fmt.Sprintf("Unmerged self conflict: %v", e.Err)
+}
+
+func (e UnmergedSelfConflictError) Unwrap() error {
+	return e.Err
 }
 
 // blockNonExistentError is returned when a block doesn't exist. This

@@ -3,21 +3,22 @@ import * as Kb from '@/common-adapters'
 import * as React from 'react'
 import type {ButtonType} from '@/common-adapters/button'
 import {SignupScreen} from '@/signup/common'
+import {cancelRecoverPassword, submitRecoverPasswordPaperKey} from './flow'
 
-const PaperKey = () => {
-  const error = C.useRecoverState(s => s.paperKeyError)
-  const cancel = C.useRecoverState(s => s.dispatch.dynamic.cancel)
-  const submitPaperKey = C.useRecoverState(s => s.dispatch.dynamic.submitPaperKey)
+type Props = {route: {params: {error?: string}}}
+
+const PaperKey = ({route}: Props) => {
+  const styles = useStyles()
+  const {error} = route.params
   const onBack = () => {
-    cancel?.()
+    cancelRecoverPassword()
   }
-  const props = {error, onBack}
   const [paperKey, setPaperKey] = React.useState('')
-  const onSubmit = React.useCallback(() => {
+  const onSubmit = () => {
     if (paperKey) {
-      submitPaperKey?.(paperKey)
+      submitRecoverPasswordPaperKey(paperKey)
     }
-  }, [paperKey, submitPaperKey])
+  }
 
   return (
     <SignupScreen
@@ -27,58 +28,56 @@ const PaperKey = () => {
           label: 'Continue',
           onClick: onSubmit,
           type: 'Default' as ButtonType,
-          waitingKey: C.RecoverPwd.waitingKey,
+          waitingKey: C.waitingKeyRecoverPassword,
         },
       ]}
-      onBack={props.onBack}
+      onBack={onBack}
       title="Recover password"
     >
       <Kb.Box2 alignItems="center" direction="vertical" fullHeight={true} fullWidth={true} gap="small">
         <Kb.Box2
           direction="vertical"
           fullWidth={true}
+          flex={1}
           style={styles.contents}
-          centerChildren={!Kb.Styles.isAndroid /* android keyboardAvoiding doesnt work well */}
-          gap={Kb.Styles.isMobile ? 'tiny' : 'medium'}
+          centerChildren={!isAndroid /* android keyboardAvoiding doesnt work well */}
+          gap={isMobile ? 'tiny' : 'medium'}
         >
-          <Kb.Box2 direction="vertical" gap="tiny" centerChildren={true} gapEnd={true}>
-            <Kb.Icon type="icon-paper-key-96" />
-          </Kb.Box2>
-          <Kb.Box2 direction="vertical" style={styles.inputContainer} fullWidth={true}>
-            <Kb.LabeledInput
-              autoFocus={true}
-              multiline={true}
-              rowsMax={3}
-              hoverPlaceholder="Ex: garage blue three..."
-              placeholder="Type your paper key"
-              textType="Header"
-              style={styles.input}
-              onEnterKeyDown={onSubmit}
-              onChangeText={paperKey => setPaperKey(paperKey)}
-              value={paperKey}
-            />
-          </Kb.Box2>
-          {!!props.error && <Kb.Text type="BodySmallError">{props.error}</Kb.Text>}
+          <Kb.ImageIcon type="icon-paper-key-96" style={styles.icon} />
+          <Kb.Input3
+            autoFocus={true}
+            multiline={true}
+            rowsMax={3}
+            placeholder="Type your paper key"
+            textType="Header"
+            containerStyle={styles.inputContainer2}
+            inputStyle={styles.inputText}
+            onEnterKeyDown={onSubmit}
+            onChangeText={paperKey => setPaperKey(paperKey)}
+            value={paperKey}
+          />
+          {!!error && <Kb.Text type="BodySmallError">{error}</Kb.Text>}
         </Kb.Box2>
       </Kb.Box2>
     </SignupScreen>
   )
 }
 
-const styles = Kb.Styles.styleSheetCreate(() => ({
+const useStyles = Kb.Styles.createStyleHook(theme => ({
   contents: {
-    flexGrow: 1,
-    maxWidth: Kb.Styles.isMobile ? '100%' : 460,
-    width: '100%',
+    maxWidth: isMobile ? '100%' : 460,
   },
-  input: {
-    ...Kb.Styles.globalStyles.fontTerminal,
-    color: Kb.Styles.globalColors.black,
+  icon: {
+    // parent Box2 is alignItems stretch on android (centerChildren off there)
+    alignSelf: 'center',
+    marginBottom: Kb.Styles.globalMargins.tiny,
+  },
+  inputContainer2: {
     marginTop: 10,
-    width: '100%',
   },
-  inputContainer: {
-    width: '100%',
+  inputText: {
+    ...Kb.Styles.globalStyles.fontTerminal,
+    color: theme.black,
   },
 }))
 export default PaperKey

@@ -28,7 +28,8 @@ func makeDummySender() *dummySender {
 }
 
 func (s *dummySender) SendUnfurlNonblock(ctx context.Context, convID chat1.ConversationID,
-	msg chat1.MessagePlaintext, clientPrev chat1.MessageID, outboxID chat1.OutboxID) (chat1.OutboxID, error) {
+	msg chat1.MessagePlaintext, clientPrev chat1.MessageID, outboxID chat1.OutboxID,
+) (chat1.OutboxID, error) {
 	s.ch <- msg
 	return outboxID, nil
 }
@@ -52,7 +53,8 @@ func makeDummyActivityNotifier() *dummyActivityNotifier {
 }
 
 func (d *dummyActivityNotifier) PromptUnfurl(ctx context.Context, uid gregor1.UID,
-	convID chat1.ConversationID, msgID chat1.MessageID, domain string) {
+	convID chat1.ConversationID, msgID chat1.MessageID, domain string,
+) {
 	d.ch <- promptNotification{
 		uid:    uid,
 		convID: convID,
@@ -75,8 +77,8 @@ func TestUnfurler(t *testing.T) {
 	store := attachments.NewStoreTesting(g, nil)
 	s3signer := &ptsigner{}
 	notifier := makeDummyActivityNotifier()
-	g.ChatContext.ActivityNotifier = notifier
-	g.ChatContext.MessageDeliverer = dummyDeliverer{}
+	g.ActivityNotifier = notifier
+	g.MessageDeliverer = dummyDeliverer{}
 	sender := makeDummySender()
 	ri := func() chat1.RemoteInterface { return paramsRemote{} }
 	storage := newMemConversationBackedStorage()
@@ -115,17 +117,17 @@ func TestUnfurler(t *testing.T) {
 		require.Equal(t, uid, n.uid)
 		require.Equal(t, convID, n.convID)
 		require.Equal(t, fromMsg.GetMessageID(), n.msgID)
-		require.Equal(t, "0.1", n.domain)
+		require.Equal(t, "127.0.0.1", n.domain)
 	case <-time.After(20 * time.Second):
 		require.Fail(t, "no notifications")
 	}
-	require.NoError(t, settings.WhitelistAdd(context.TODO(), uid, "0.1"))
+	require.NoError(t, settings.WhitelistAdd(context.TODO(), uid, "127.0.0.1"))
 
 	// ensure we try to prefetch once per url in the msgText once we're whitelisted
 	numPrefetched = unfurler.Prefetch(context.TODO(), uid, convID, strings.Repeat(msgBody, 5))
 	require.Equal(t, 1, numPrefetched)
 
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		unfurler.UnfurlAndSend(context.TODO(), uid, convID, fromMsg)
 	}
 	var outboxID chat1.OutboxID
@@ -171,6 +173,6 @@ func TestUnfurler(t *testing.T) {
 	unfurler.Complete(context.TODO(), outboxID)
 	status, _, err = unfurler.Status(context.TODO(), outboxID)
 	require.Error(t, err)
-	require.IsType(t, libkb.NotFoundError{}, err)
+	require.ErrorAs(t, err, new(libkb.NotFoundError))
 	require.Equal(t, types.UnfurlerTaskStatusFailed, status)
 }

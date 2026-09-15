@@ -175,7 +175,7 @@ func TestAttachmentGalleryLinks(t *testing.T) {
 		}, nil)
 	require.NoError(t, err)
 	require.True(t, last)
-	require.Equal(t, 2, len(nm))
+	require.Len(t, nm, 2)
 
 	nm, last, err = gallery.NextMessages(ctx, uid, conv.Id, m1Res.MessageID+1, 1,
 		attachments.NextMessageOptions{
@@ -185,7 +185,7 @@ func TestAttachmentGalleryLinks(t *testing.T) {
 		}, nil)
 	require.NoError(t, err)
 	require.False(t, last)
-	require.Equal(t, 1, len(nm))
+	require.Len(t, nm, 1)
 
 	nm, last, err = gallery.NextMessages(ctx, uid, conv.Id, m1Res.MessageID, 2,
 		attachments.NextMessageOptions{
@@ -195,8 +195,7 @@ func TestAttachmentGalleryLinks(t *testing.T) {
 		}, nil)
 	require.NoError(t, err)
 	require.True(t, last)
-	require.Equal(t, 1, len(nm))
-
+	require.Len(t, nm, 1)
 }
 
 func TestAttachmentGalleryPagination(t *testing.T) {
@@ -226,7 +225,7 @@ func TestAttachmentGalleryPagination(t *testing.T) {
 		}))
 	require.NoError(t, err)
 	consumeNewMsgRemote(t, listener, chat1.MessageType_ATTACHMENT)
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		_, err = postLocalForTest(t, ctc, users[0], conv,
 			chat1.NewMessageBodyWithText(chat1.MessageText{
 				Body: "MIKE",
@@ -260,7 +259,7 @@ func TestAttachmentGalleryPagination(t *testing.T) {
 		}, nil)
 	require.NoError(t, err)
 	require.False(t, last)
-	require.Equal(t, 2, len(nm))
+	require.Len(t, nm, 2)
 
 	nm, last, err = gallery.NextMessages(ctx, uid, conv.Id, m2Res.MessageID+1, 2,
 		attachments.NextMessageOptions{
@@ -268,7 +267,7 @@ func TestAttachmentGalleryPagination(t *testing.T) {
 			AssetTypes: []chat1.AssetMetadataType{chat1.AssetMetadataType_IMAGE, chat1.AssetMetadataType_VIDEO},
 		}, nil)
 	require.NoError(t, err)
-	require.Equal(t, 2, len(nm))
+	require.Len(t, nm, 2)
 	require.False(t, last)
 
 	nm, last, err = gallery.NextMessages(ctx, uid, conv.Id, m0Res.MessageID, 2,
@@ -277,7 +276,7 @@ func TestAttachmentGalleryPagination(t *testing.T) {
 			AssetTypes: []chat1.AssetMetadataType{chat1.AssetMetadataType_IMAGE, chat1.AssetMetadataType_VIDEO},
 		}, nil)
 	require.NoError(t, err)
-	require.Zero(t, len(nm))
+	require.Empty(t, nm)
 	require.True(t, last)
 
 	nm, last, err = gallery.NextMessages(ctx, uid, conv.Id, m3Res.MessageID+1, 5,
@@ -286,6 +285,6 @@ func TestAttachmentGalleryPagination(t *testing.T) {
 			AssetTypes: []chat1.AssetMetadataType{chat1.AssetMetadataType_IMAGE, chat1.AssetMetadataType_VIDEO},
 		}, nil)
 	require.NoError(t, err)
-	require.Equal(t, 3, len(nm))
+	require.Len(t, nm, 3)
 	require.True(t, last)
 }

@@ -6,6 +6,7 @@ package libkb
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
@@ -21,8 +22,6 @@ import (
 	"time"
 
 	"github.com/keybase/go-framed-msgpack-rpc/rpc"
-	"github.com/keybase/go-framed-msgpack-rpc/rpc/resinit"
-	"golang.org/x/net/context"
 )
 
 type ClientConfig struct {
@@ -85,7 +84,6 @@ func ShortCA(raw string) string {
 func genClientConfigForInternalAPI(g *GlobalContext) (*ClientConfig, error) {
 	e := g.Env
 	serverURI, err := e.GetServerURI()
-
 	if err != nil {
 		return nil, err
 	}
@@ -123,8 +121,7 @@ func genClientConfigForInternalAPI(g *GlobalContext) (*ClientConfig, error) {
 			err = fmt.Errorf("In parsing CAs for %s: %s", host, err)
 			return nil, err
 		}
-		g.Log.Debug(fmt.Sprintf("Using special root CA for %s: %s",
-			host, ShortCA(rawCA)))
+		g.Log.Debug("Using special root CA for %s: %s", host, ShortCA(rawCA))
 	}
 
 	// If we're using proxies, they might have their own CAs.
@@ -144,9 +141,9 @@ func genClientConfigForScrapers(e *Env) (*ClientConfig, error) {
 }
 
 func NewClient(g *GlobalContext, config *ClientConfig, needCookie bool) (*Client, error) {
-	extraLog := func(ctx context.Context, msg string, args ...interface{}) {}
+	extraLog := func(ctx context.Context, msg string, args ...any) {}
 	if g.Env.GetExtraNetLogging() {
-		extraLog = func(ctx context.Context, msg string, args ...interface{}) {
+		extraLog = func(ctx context.Context, msg string, args ...any) {
 			if ctx == nil {
 				g.Log.Debug(msg, args...)
 			} else {
@@ -165,7 +162,6 @@ func NewClient(g *GlobalContext, config *ClientConfig, needCookie bool) (*Client
 	dialer := net.Dialer{
 		Timeout:   30 * time.Second,
 		KeepAlive: 30 * time.Second,
-		DualStack: true,
 	}
 	xprt := http.Transport{
 		// Don't change this without re-testing proxy support. Currently the client supports proxies through
@@ -177,19 +173,13 @@ func NewClient(g *GlobalContext, config *ClientConfig, needCookie bool) (*Client
 		IdleConnTimeout:       90 * time.Second,
 		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
+		ForceAttemptHTTP2:     true,
 	}
 
 	xprt.DialContext = func(ctx context.Context, network, addr string) (c net.Conn, err error) {
 		c, err = dialer.DialContext(ctx, network, addr)
 		if err != nil {
 			extraLog(ctx, "api.Client:%v transport.Dial err=%v", needCookie, err)
-			// If we get a DNS error, it could be because glibc has cached an
-			// old version of /etc/resolv.conf. The res_init() libc function
-			// busts that cache and keeps us from getting stuck in a state
-			// where DNS requests keep failing even though the network is up.
-			// This is similar to what the Rust standard library does:
-			// https://github.com/rust-lang/rust/blob/028569ab1b/src/libstd/sys_common/net.rs#L186-L190
-			resinit.ResInitIfDNSError(err)
 			return c, err
 		}
 		if err = rpc.DisableSigPipe(c); err != nil {
@@ -200,7 +190,10 @@ func NewClient(g *GlobalContext, config *ClientConfig, needCookie bool) (*Client
 	}
 
 	if config != nil && config.RootCAs != nil {
-		xprt.TLSClientConfig = &tls.Config{RootCAs: config.RootCAs}
+		xprt.TLSClientConfig = &tls.Config{
+			RootCAs:    config.RootCAs,
+			MinVersion: tls.VersionTLS12,
+		}
 	}
 
 	xprt.Proxy = MakeProxy(env)
@@ -223,15 +216,12 @@ func NewClient(g *GlobalContext, config *ClientConfig, needCookie bool) (*Client
 		}
 	}
 
-	var timeout time.Duration
-	if config == nil || config.Timeout == 0 {
-		timeout = HTTPDefaultTimeout
-	} else {
-		timeout = config.Timeout
-	}
-
+	// Don't set client-level timeout - let per-request context timeouts control this.
+	// This allows different endpoints to have different timeouts via APIArg.InitialTimeout.
+	// The doRetry() function ensures all requests get a context timeout, falling back to
+	// config.Timeout (from KEYBASE_API_TIMEOUT env var or config file), then HTTPDefaultTimeout.
 	ret := &Client{
-		cli:    &http.Client{Timeout: timeout},
+		cli:    &http.Client{Timeout: 0},
 		config: config,
 	}
 	if jar != nil {
@@ -277,7 +267,8 @@ type InstrumentedBody struct {
 var _ io.ReadCloser = (*InstrumentedBody)(nil)
 
 func NewInstrumentedBody(mctx MetaContext, record *rpc.NetworkInstrumenter, body io.ReadCloser, uncompressed bool,
-	gzipGetter func(io.Writer) (*gzip.Writer, func())) *InstrumentedBody {
+	gzipGetter func(io.Writer) (*gzip.Writer, func()),
+) *InstrumentedBody {
 	return &InstrumentedBody{
 		MetaContextified: NewMetaContextified(mctx),
 		record:           record,
@@ -342,7 +333,7 @@ func NewInstrumentedRoundTripper(g *GlobalContext, tagger func(*http.Request) st
 		RoundTripper: xprt,
 		tagger:       tagger,
 		gzipPool: sync.Pool{
-			New: func() interface{} {
+			New: func() any {
 				return gzip.NewWriter(io.Discard)
 			},
 		},

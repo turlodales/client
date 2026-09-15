@@ -39,7 +39,6 @@ func getEnv(k string) (val string, err error) {
 }
 
 func unTriplesec(key []byte, ciphertext []byte) (ret []byte, err error) {
-
 	if len(ciphertext) < 28 {
 		return nil, fmt.Errorf("encrypted data must be at least 28 bytes long")
 	}
@@ -109,7 +108,7 @@ func openFile() (file io.ReadCloser, err error) {
 	if len(os.Args) != 2 {
 		return nil, fmt.Errorf("Usage: %s <file-to-sign>", os.Args[0])
 	}
-	return os.Open(os.Args[1])
+	return os.Open(os.Args[1]) //nolint:gosec // G703: CLI tool opens the path the user passed
 }
 
 func sign(key saltpack.SigningSecretKey, file io.ReadCloser) error {

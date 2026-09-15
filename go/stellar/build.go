@@ -156,7 +156,7 @@ func BuildPaymentLocal(mctx libkb.MetaContext, arg stellar1.BuildPaymentLocalArg
 		secretNote bool
 		publicMemo bool
 	}{}
-	log := func(format string, args ...interface{}) {
+	log := func(format string, args ...any) {
 		mctx.Debug("bpl: "+format, args...)
 	}
 
@@ -467,9 +467,11 @@ func BuildPaymentLocal(mctx libkb.MetaContext, arg stellar1.BuildPaymentLocalArg
 
 type reviewButtonState string
 
-const reviewButtonSpinning = "spinning"
-const reviewButtonEnabled = "enabled"
-const reviewButtonDisabled = "disabled"
+const (
+	reviewButtonSpinning = "spinning"
+	reviewButtonEnabled  = "enabled"
+	reviewButtonDisabled = "disabled"
+)
 
 func ReviewPaymentLocal(mctx libkb.MetaContext, stellarUI stellar1.UiInterface, arg stellar1.ReviewPaymentLocalArg) (err error) {
 	tracer := mctx.G().CTimeTracer(mctx.Ctx(), "ReviewPaymentLocal", true)
@@ -650,7 +652,8 @@ func ReviewPaymentLocal(mctx libkb.MetaContext, stellarUI stellar1.UiInterface, 
 func identifyForReview(mctx libkb.MetaContext, assertion string,
 	successCh chan<- struct{},
 	trackFailCh chan<- struct{},
-	errCh chan<- error) {
+	errCh chan<- error,
+) {
 	// Goroutines that are blocked on otherwise unreachable channels are not GC'd.
 	// So use ctx to clean up.
 	sendSuccess := func() {
@@ -771,7 +774,7 @@ func BuildRequestLocal(mctx libkb.MetaContext, arg stellar1.BuildRequestLocalArg
 		amount     bool
 		secretNote bool
 	}{}
-	log := func(format string, args ...interface{}) {
+	log := func(format string, args ...any) {
 		mctx.Debug("brl: "+format, args...)
 	}
 
@@ -872,7 +875,7 @@ type buildPaymentAmountResult struct {
 var zeroOrNoAmountRE = regexp.MustCompile(`^0*\.?0*$`)
 
 func buildPaymentAmountHelper(mctx libkb.MetaContext, bpc BuildPaymentCache, arg buildPaymentAmountArg) (res buildPaymentAmountResult) {
-	log := func(format string, args ...interface{}) {
+	log := func(format string, args ...any) {
 		mctx.Debug("bpl: "+format, args...)
 	}
 	res.asset = stellar1.AssetNative()
@@ -882,7 +885,7 @@ func buildPaymentAmountHelper(mctx libkb.MetaContext, bpc BuildPaymentCache, arg
 		res.sendingIntentionXLM = false
 		convertAmountOutside := "0"
 
-		if zeroOrNoAmountRE.MatchString(arg.Amount) {
+		if zeroOrNoAmountRE.MatchString(arg.Amount) { // nolint
 			// Zero or no amount given. Still convert for 0.
 		} else {
 			amount, err := stellarnet.ParseAmount(arg.Amount)
@@ -946,7 +949,7 @@ func buildPaymentAmountHelper(mctx libkb.MetaContext, bpc BuildPaymentCache, arg
 		}
 		// Amount is of asset.
 		useAmount := "0"
-		if zeroOrNoAmountRE.MatchString(arg.Amount) {
+		if zeroOrNoAmountRE.MatchString(arg.Amount) { // nolint
 			// Zero or no amount given.
 		} else {
 			amountInt64, err := stellarnet.ParseStellarAmount(arg.Amount)
@@ -1046,7 +1049,7 @@ func SubtractFeeSoft(mctx libkb.MetaContext, availableStr string, baseFee uint64
 		mctx.Debug("error parsing available balance: %v", err)
 		return availableStr
 	}
-	available -= int64(baseFee)
+	available -= int64(baseFee) //nolint:gosec // G115: Stellar base fee is a small bounded value, safe to convert
 	if available < 0 {
 		available = 0
 	}
@@ -1057,7 +1060,7 @@ func SubtractFeeSoft(mctx libkb.MetaContext, availableStr string, baseFee uint64
 type buildPaymentEntry struct {
 	Bid     stellar1.BuildPaymentID
 	Stopped bool
-	// The processs in Slot likely holds DataLock and pointer to Data.
+	// The processes in Slot likely holds DataLock and pointer to Data.
 	Slot     *slotctx.PrioritySlot // Only one build or review call at a time.
 	DataLock sync.Mutex
 	Data     buildPaymentData

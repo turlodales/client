@@ -1,14 +1,15 @@
 import * as C from '@/constants'
 import * as Kb from '@/common-adapters'
-import * as Container from '@/util/container'
 import type * as T from '@/constants/types'
+import {useSafeNavigation} from '@/util/safe-navigation'
 
-const ButtonRow = (props: {teamID: T.Teams.TeamID}) => {
-  const nav = Container.useSafeNavigation()
+const CreateChannelRow = (props: {teamID: T.Teams.TeamID}) => {
+  const styles = useStyles()
+  const nav = useSafeNavigation()
   const onCreateChannel = () =>
-    nav.safeNavigateAppend({props: {...props, navToChatOnSuccess: false}, selected: 'chatCreateChannel'})
+    nav.safeNavigateAppend({name: 'chatCreateChannel', params: {...props, navToChatOnSuccess: false}})
 
-  const waitingKey = C.Teams.getChannelsWaitingKey(props.teamID)
+  const waitingKey = C.waitingKeyTeamsGetChannels(props.teamID)
   const waitingForGet = C.Waiting.useAnyWaiting(waitingKey)
 
   return (
@@ -19,12 +20,11 @@ const ButtonRow = (props: {teamID: T.Teams.TeamID}) => {
   )
 }
 
-const styles = Kb.Styles.styleSheetCreate(() => ({
+const useStyles = Kb.Styles.createStyleHook(theme => ({
   container: {
-    backgroundColor: Kb.Styles.globalColors.blueGrey,
-    justifyContent: 'flex-start',
+    backgroundColor: theme.blueGrey,
     ...Kb.Styles.padding(Kb.Styles.globalMargins.tiny, Kb.Styles.globalMargins.small),
   },
 }))
 
-export default ButtonRow
+export default CreateChannelRow

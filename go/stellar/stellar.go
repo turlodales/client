@@ -438,6 +438,10 @@ func LookupRecipient(m libkb.MetaContext, to stellarcommon.RecipientInput, isCLI
 			// We got an address! Fall through to the "Stellar
 			// address" path.
 			m.Debug("federation.LookupByAddress returned: %+v", nameResponse)
+			// Validate AccountID format (Stellar addresses start with 'G' and are 56 chars)
+			if nameResponse.AccountID == "" || nameResponse.AccountID[0] != 'G' || len(nameResponse.AccountID) != 56 {
+				return res, fmt.Errorf("Federation server %q returned invalid account ID: %q", domain, nameResponse.AccountID)
+			}
 			to = stellarcommon.RecipientInput(nameResponse.AccountID)
 
 			// if there is a memo, include it in the result
@@ -538,7 +542,7 @@ func getTimeboundsForSending(m libkb.MetaContext, walletState *WalletState) (*bu
 	// counting from when the server gets our signed tx.
 	deadline := serverTimes.TimeNow.Time().Add(took).Unix() + serverTimes.Timeout
 	tb := build.Timebounds{
-		MaxTime: uint64(deadline),
+		MaxTime: uint64(deadline), //nolint:gosec // G115: Unix timestamp plus timeout, safe to convert
 	}
 	m.Debug("Returning timebounds for tx: %+v", tb)
 	return &tb, nil
@@ -742,7 +746,7 @@ func sendPayment(mctx libkb.MetaContext, walletState *WalletState, sendArg SendP
 			chatSendPaymentMessageSoft(mctx, chatRecipient, rres.StellarID, "SendPayment")
 		}
 		if sendArg.QuickReturn {
-			go sendChat(mctx.WithCtx(context.Background()))
+			go sendChat(mctx.BackgroundWithLogTags())
 		} else {
 			sendChat(mctx)
 		}
@@ -890,7 +894,7 @@ func sendPathPayment(mctx libkb.MetaContext, walletState *WalletState, sendArg S
 			chatSendPaymentMessageSoft(mctx, chatRecipient, rres.StellarID, "SendPathPayment")
 		}
 		if sendArg.QuickReturn {
-			go sendChat(mctx.WithCtx(context.Background()))
+			go sendChat(mctx.BackgroundWithLogTags())
 		} else {
 			sendChat(mctx)
 		}
@@ -944,7 +948,7 @@ func SpecMiniChatPayments(mctx libkb.MetaContext, walletState *WalletState, paym
 		}
 
 		summary.Specs = make([]libkb.MiniChatPaymentSpec, len(payments))
-		for i := 0; i < len(payments); i++ {
+		for range payments {
 			ispec := <-ch
 			summary.Specs[ispec.index] = ispec.spec
 			xlmTotal += ispec.xlmAmountNumeric
@@ -1029,7 +1033,7 @@ func SendMiniChatPayments(m libkb.MetaContext, walletState *WalletState, convID 
 	resultList := make([]libkb.MiniChatPaymentResult, len(payments))
 
 	// need to submit tx one at a time, in order
-	for i := 0; i < len(prepared); i++ {
+	for i := range prepared {
 		if prepared[i] == nil {
 			// this should never happen
 			return nil, errors.New("mini chat prepare failed")
@@ -1099,7 +1103,7 @@ func PrepareMiniChatPayments(m libkb.MetaContext, walletState *WalletState, send
 
 	// prepared chan could be out of order, so sort by seqno
 	preparedList := make([]*MiniPrepared, len(payments))
-	for i := 0; i < len(payments); i++ {
+	for i := range payments {
 		preparedList[i] = <-prepared
 	}
 	sort.Slice(preparedList, func(a, b int) bool { return preparedList[a].Seqno < preparedList[b].Seqno })
@@ -1252,7 +1256,8 @@ func prepareMiniChatPaymentRelay(mctx libkb.MetaContext, remoter remote.Remoter,
 // The balance of the relay account can be claimed by either party.
 func sendRelayPayment(mctx libkb.MetaContext, walletState *WalletState,
 	from stellar1.SecretKey, recipient stellarcommon.Recipient, amount string, displayBalance DisplayBalance,
-	secretNote string, publicMemo *stellarnet.Memo, quickReturn bool, senderEntryPrimary bool, baseFee uint64) (res SendPaymentResult, err error) {
+	secretNote string, publicMemo *stellarnet.Memo, quickReturn bool, senderEntryPrimary bool, baseFee uint64,
+) (res SendPaymentResult, err error) {
 	defer mctx.Trace("Stellar.sendRelayPayment", &err)()
 	appKey, teamID, err := relays.GetKey(mctx, recipient)
 	if err != nil {
@@ -1327,7 +1332,7 @@ func sendRelayPayment(mctx libkb.MetaContext, walletState *WalletState,
 			chatSendPaymentMessageSoft(mctx, chatRecipient, rres.StellarID, "SendRelayPayment")
 		}
 		if post.QuickReturn {
-			go sendChat(mctx.WithCtx(context.Background()))
+			go sendChat(mctx.BackgroundWithLogTags())
 		} else {
 			sendChat(mctx)
 		}
@@ -1348,7 +1353,8 @@ func sendRelayPayment(mctx libkb.MetaContext, walletState *WalletState,
 // If `dir` is nil the direction is inferred.
 func Claim(mctx libkb.MetaContext, walletState *WalletState,
 	txID string, into stellar1.AccountID, dir *stellar1.RelayDirection,
-	autoClaimToken *string) (res stellar1.RelayClaimResult, err error) {
+	autoClaimToken *string,
+) (res stellar1.RelayClaimResult, err error) {
 	defer mctx.Trace("Stellar.Claim", &err)()
 	mctx.Debug("Stellar.Claim(txID:%v, into:%v, dir:%v, autoClaimToken:%v)", txID, into, dir, autoClaimToken)
 	details, err := walletState.PaymentDetailsGeneric(mctx.Ctx(), txID)
@@ -1382,7 +1388,8 @@ func Claim(mctx libkb.MetaContext, walletState *WalletState,
 
 // If `dir` is nil the direction is inferred.
 func claimPaymentWithDetail(mctx libkb.MetaContext, walletState *WalletState,
-	p stellar1.PaymentSummaryRelay, into stellar1.AccountID, dir *stellar1.RelayDirection) (res stellar1.RelayClaimResult, err error) {
+	p stellar1.PaymentSummaryRelay, into stellar1.AccountID, dir *stellar1.RelayDirection,
+) (res stellar1.RelayClaimResult, err error) {
 	if p.Claim != nil && p.Claim.TxStatus == stellar1.TransactionStatus_SUCCESS {
 		recipient, _, err := mctx.G().GetUPAKLoader().Load(libkb.NewLoadUserByUIDArg(mctx.Ctx(), mctx.G(), p.Claim.To.Uid))
 		if err != nil || recipient == nil {
@@ -1694,7 +1701,7 @@ const DefaultCurrencySetting = "USD"
 func GetAccountDisplayCurrency(mctx libkb.MetaContext, accountID stellar1.AccountID) (res string, err error) {
 	codeStr, err := remote.GetAccountDisplayCurrency(mctx.Ctx(), mctx.G(), accountID)
 	if err != nil {
-		if err != remote.ErrAccountIDMissing {
+		if !errors.Is(err, remote.ErrAccountIDMissing) {
 			return res, err
 		}
 		codeStr = "" // to be safe so it uses default below
@@ -2015,7 +2022,7 @@ func AllWalletAccounts(mctx libkb.MetaContext, remoter remote.Remoter) ([]stella
 	for _, entry := range bundle.Accounts {
 		acct, err := accountLocal(mctx, remoter, entry)
 		if err != nil {
-			if err != remote.ErrAccountIDMissing {
+			if !errors.Is(err, remote.ErrAccountIDMissing) {
 				return nil, err
 			}
 			mctx.Debug("bundle entry has empty account id: %+v", entry)

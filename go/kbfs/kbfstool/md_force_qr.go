@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -8,19 +9,18 @@ import (
 	"github.com/keybase/client/go/kbfs/kbfsmd"
 	"github.com/keybase/client/go/kbfs/libkbfs"
 	"github.com/keybase/client/go/protocol/keybase1"
-	"golang.org/x/net/context"
 )
 
 func mdForceQROne(
 	ctx context.Context, config libkbfs.Config,
-	replacements replacementMap, input string, dryRun bool) error {
+	replacements replacementMap, input string, dryRun bool,
+) error {
 	tlfStr, branchStr, startStr, stopStr, err := mdSplitInput(input)
 	if err != nil {
 		return err
 	}
 
-	_, branchID, start, stop, err :=
-		mdParseInput(ctx, config, tlfStr, branchStr, startStr, stopStr)
+	_, branchID, start, stop, err := mdParseInput(ctx, config, tlfStr, branchStr, startStr, stopStr)
 	if err != nil {
 		return err
 	}
@@ -89,7 +89,8 @@ const mdForceQRUsageStr = `Usage:
 `
 
 func mdForceQR(ctx context.Context, config libkbfs.Config,
-	args []string) (exitStatus int) {
+	args []string,
+) (exitStatus int) {
 	flags := flag.NewFlagSet("kbfs md forceQR", flag.ContinueOnError)
 	dryRun := flags.Bool("d", false, "Dry run: don't actually do anything.")
 	err := flags.Parse(args)

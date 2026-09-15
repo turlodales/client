@@ -1,13 +1,14 @@
-// Auto-generated to Go types and interfaces using avdl-compiler v1.4.10 (https://github.com/keybase/node-avdl-compiler)
+// Code generated to Go types and interfaces using avdl-compiler v1.4.10 (https://github.com/keybase/node-avdl-compiler). DO NOT EDIT.
 //   Input file: avdl/keybase1/rekey.avdl
 
 package keybase1
 
 import (
+	"context"
 	"fmt"
-	"github.com/keybase/go-framed-msgpack-rpc/rpc"
-	context "golang.org/x/net/context"
 	"time"
+
+	"github.com/keybase/go-framed-msgpack-rpc/rpc"
 )
 
 type TLF struct {
@@ -144,11 +145,11 @@ var OutcomeRevMap = map[Outcome]string{
 	2: "IGNORED",
 }
 
-func (e Outcome) String() string {
-	if v, ok := OutcomeRevMap[e]; ok {
+func (o Outcome) String() string {
+	if v, ok := OutcomeRevMap[o]; ok {
 		return v
 	}
-	return fmt.Sprintf("%v", int(e))
+	return fmt.Sprintf("%v", int(o))
 }
 
 type RevokeWarning struct {
@@ -224,11 +225,11 @@ func RekeyProtocol(i RekeyInterface) rpc.Protocol {
 		Name: "keybase.1.rekey",
 		Methods: map[string]rpc.ServeHandlerDescription{
 			"showPendingRekeyStatus": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]ShowPendingRekeyStatusArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]ShowPendingRekeyStatusArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]ShowPendingRekeyStatusArg)(nil), args)
@@ -239,11 +240,11 @@ func RekeyProtocol(i RekeyInterface) rpc.Protocol {
 				},
 			},
 			"getPendingRekeyStatus": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]GetPendingRekeyStatusArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]GetPendingRekeyStatusArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]GetPendingRekeyStatusArg)(nil), args)
@@ -254,11 +255,11 @@ func RekeyProtocol(i RekeyInterface) rpc.Protocol {
 				},
 			},
 			"debugShowRekeyStatus": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]DebugShowRekeyStatusArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]DebugShowRekeyStatusArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]DebugShowRekeyStatusArg)(nil), args)
@@ -269,11 +270,11 @@ func RekeyProtocol(i RekeyInterface) rpc.Protocol {
 				},
 			},
 			"rekeyStatusFinish": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]RekeyStatusFinishArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]RekeyStatusFinishArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]RekeyStatusFinishArg)(nil), args)
@@ -284,11 +285,11 @@ func RekeyProtocol(i RekeyInterface) rpc.Protocol {
 				},
 			},
 			"rekeySync": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]RekeySyncArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]RekeySyncArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]RekeySyncArg)(nil), args)
@@ -299,11 +300,11 @@ func RekeyProtocol(i RekeyInterface) rpc.Protocol {
 				},
 			},
 			"getRevokeWarning": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]GetRevokeWarningArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]GetRevokeWarningArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]GetRevokeWarningArg)(nil), args)
@@ -325,14 +326,14 @@ type RekeyClient struct {
 // or nothing if none were pending.
 func (c RekeyClient) ShowPendingRekeyStatus(ctx context.Context, sessionID int) (err error) {
 	__arg := ShowPendingRekeyStatusArg{SessionID: sessionID}
-	err = c.Cli.Call(ctx, "keybase.1.rekey.showPendingRekeyStatus", []interface{}{__arg}, nil, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "keybase.1.rekey.showPendingRekeyStatus", []any{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 // GetPendingRekeyStatus returns the pending ProblemSetDevices.
 func (c RekeyClient) GetPendingRekeyStatus(ctx context.Context, sessionID int) (res ProblemSetDevices, err error) {
 	__arg := GetPendingRekeyStatusArg{SessionID: sessionID}
-	err = c.Cli.Call(ctx, "keybase.1.rekey.getPendingRekeyStatus", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "keybase.1.rekey.getPendingRekeyStatus", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
@@ -340,7 +341,7 @@ func (c RekeyClient) GetPendingRekeyStatus(ctx context.Context, sessionID int) (
 // the current user.
 func (c RekeyClient) DebugShowRekeyStatus(ctx context.Context, sessionID int) (err error) {
 	__arg := DebugShowRekeyStatusArg{SessionID: sessionID}
-	err = c.Cli.Call(ctx, "keybase.1.rekey.debugShowRekeyStatus", []interface{}{__arg}, nil, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "keybase.1.rekey.debugShowRekeyStatus", []any{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
@@ -348,7 +349,7 @@ func (c RekeyClient) DebugShowRekeyStatus(ctx context.Context, sessionID int) (e
 // can be Fixed or Ignored.
 func (c RekeyClient) RekeyStatusFinish(ctx context.Context, sessionID int) (res Outcome, err error) {
 	__arg := RekeyStatusFinishArg{SessionID: sessionID}
-	err = c.Cli.Call(ctx, "keybase.1.rekey.rekeyStatusFinish", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "keybase.1.rekey.rekeyStatusFinish", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
@@ -356,13 +357,13 @@ func (c RekeyClient) RekeyStatusFinish(ctx context.Context, sessionID int) (res 
 // to assert state. Good for race-free testing, not very useful in production.
 // Force overrides a long-snooze.
 func (c RekeyClient) RekeySync(ctx context.Context, __arg RekeySyncArg) (err error) {
-	err = c.Cli.Call(ctx, "keybase.1.rekey.rekeySync", []interface{}{__arg}, nil, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "keybase.1.rekey.rekeySync", []any{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 // GetRevokeWarning computes the TLFs that will be endangered if actingDevice
 // revokes targetDevice.
 func (c RekeyClient) GetRevokeWarning(ctx context.Context, __arg GetRevokeWarningArg) (res RevokeWarning, err error) {
-	err = c.Cli.Call(ctx, "keybase.1.rekey.getRevokeWarning", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "keybase.1.rekey.getRevokeWarning", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }

@@ -1,88 +1,70 @@
-import * as C from '@/constants'
 import * as Kb from '@/common-adapters'
-import * as Container from '@/util/container'
-import {ModalTitle} from '@/teams/common'
-import * as T from '@/constants/types'
+import type * as T from '@/constants/types'
+import {makeNewTeamWizard, type NewTeamWizard} from './state'
+import CardChoice from '../../common/card-choice'
+import * as C from '@/constants'
+import {useNavigation} from '@react-navigation/native'
 
-const TeamPurpose = () => {
-  const nav = Container.useSafeNavigation()
-  const onBack = () => nav.safeNavigateUp()
-  const setTeamWizardTeamType = C.useTeamsState(s => s.dispatch.setTeamWizardTeamType)
-  const onSubmit = (teamType: T.Teams.TeamWizardTeamType) => setTeamWizardTeamType(teamType)
+type Props = {
+  wizard?: NewTeamWizard
+}
+
+const TeamPurpose = ({wizard: wizardParam}: Props) => {
+  const styles = useStyles()
+  const navigation = useNavigation('teamWizard1TeamPurpose')
+  const navigateAppend = C.Router2.navigateAppend
+  const wizard = wizardParam ?? makeNewTeamWizard()
+  const onSubmit = (teamType: T.Teams.TeamWizardTeamType) => {
+    const nextWizard = {...wizard, teamType}
+    navigation.setParams({wizard: nextWizard})
+    navigateAppend({name: 'teamWizard2TeamInfo', params: {wizard: nextWizard}})
+  }
 
   return (
-    <Kb.Modal
-      mode="DefaultFullHeight"
-      onClose={onBack}
-      header={{
-        leftButton: Kb.Styles.isMobile ? (
-          <Kb.Text type="BodyBigLink" onClick={onBack}>
-            Cancel
-          </Kb.Text>
-        ) : undefined,
-        title: <ModalTitle teamID={T.Teams.noTeamID} title="New team" />,
-      }}
-      allowOverflow={true}
-      backgroundStyle={styles.bg}
-    >
+    <>
       <Kb.Box2
         direction="vertical"
         fullWidth={true}
         style={styles.body}
-        gap={Kb.Styles.isMobile ? 'xsmall' : 'tiny'}
+        gap={isMobile ? 'xsmall' : 'tiny'}
       >
         <Kb.Text type="BodySemibold">What do you need a team for?</Kb.Text>
-        <Kb.RichButton
-          description="A small group of people, with no initial need for channels."
+        <CardChoice
           icon="icon-teams-type-squad-64"
-          onClick={() => onSubmit('friends')}
           title="Friends, family, or squad"
+          subtitle="A small group of people, with no initial need for channels."
+          onClick={() => onSubmit('friends')}
         />
-
-        <Kb.RichButton
-          description="With multiple roles and channels."
+        <CardChoice
           icon="icon-teams-type-business-64"
-          onClick={() => onSubmit('project')}
           title="A project, business or organization"
+          subtitle="With multiple roles and channels."
+          onClick={() => onSubmit('project')}
         />
-
-        <Kb.RichButton
-          description="A forum for people who share an interest or cause."
+        <CardChoice
           icon="icon-teams-type-community-64"
-          onClick={() => onSubmit('community')}
           title="A community"
+          subtitle="A forum for people who share an interest or cause."
+          onClick={() => onSubmit('community')}
         />
-
-        <Kb.RichButton
-          description="Start simple and go from there."
+        <CardChoice
           icon="icon-teams-type-notsure-64"
-          onClick={() => onSubmit('other')}
           title="Other/You're not sure"
+          subtitle="Start simple and go from there."
+          onClick={() => onSubmit('other')}
         />
       </Kb.Box2>
-    </Kb.Modal>
+    </>
   )
 }
 
-const styles = Kb.Styles.styleSheetCreate(() => ({
-  bg: Kb.Styles.platformStyles({
-    common: {backgroundColor: Kb.Styles.globalColors.blueGrey},
-    isElectron: {borderRadius: 4},
-  }),
+const useStyles = Kb.Styles.createStyleHook(() => ({
   body: Kb.Styles.platformStyles({
     common: {
       ...Kb.Styles.padding(Kb.Styles.globalMargins.small),
-      borderRadius: 4,
+      borderRadius: Kb.Styles.borderRadius,
     },
     isMobile: {...Kb.Styles.globalStyles.flexOne},
-  }),
-  container: {
-    padding: Kb.Styles.globalMargins.small,
-  },
-  wordBreak: Kb.Styles.platformStyles({
-    isElectron: {
-      wordBreak: 'break-all',
-    },
   }),
 }))
 

@@ -3,7 +3,6 @@
 // license that can be found in the LICENSE file.
 //
 //go:build !darwin && !windows
-// +build !darwin,!windows
 
 package libfuse
 
@@ -38,6 +37,7 @@ var noop = func() {}
 
 func wrapCtxWithShorterTimeoutForUnmount(
 	ctx context.Context, _ logger.Logger, _ int) (
-	newCtx context.Context, maybeUnmounting bool, cancel context.CancelFunc) {
+	newCtx context.Context, maybeUnmounting bool, cancel context.CancelFunc,
+) {
 	return ctx, false, noop
 }

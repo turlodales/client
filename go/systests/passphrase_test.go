@@ -4,13 +4,12 @@
 package systests
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"testing"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/keybase/client/go/client"
 	"github.com/keybase/client/go/engine"
@@ -51,7 +50,7 @@ func TestPassphraseChange(t *testing.T) {
 	signup.SetTest()
 
 	if err := signup.Run(); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 
 	m := libkb.NewMetaContextForTest(*tc)
@@ -64,7 +63,7 @@ func TestPassphraseChange(t *testing.T) {
 	change := client.NewCmdPassphraseChangeRunner(tc2.G)
 
 	if err := change.Run(); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 
 	_, err = libkb.VerifyPassphraseForLoggedInUser(m, newPassphrase)
@@ -73,12 +72,12 @@ func TestPassphraseChange(t *testing.T) {
 	require.Error(t, err, "old passphrase failed to verify")
 
 	if err := CtlStop(tc2.G); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 
 	// If the server failed, it's also an error
 	if err := <-stopCh; err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 }
 
@@ -251,42 +250,55 @@ var _ libkb.LoginUI = (*testRecoverUIProvision)(nil)
 func (r *testRecoverUIProvision) GetEmailOrUsername(context.Context, int) (string, error) {
 	return r.username, nil
 }
+
 func (r *testRecoverUIProvision) PromptRevokePaperKeys(context.Context, keybase1.PromptRevokePaperKeysArg) (ret bool, err error) {
 	return false, nil
 }
+
 func (r *testRecoverUIProvision) DisplayPaperKeyPhrase(context.Context, keybase1.DisplayPaperKeyPhraseArg) error {
 	return nil
 }
+
 func (r *testRecoverUIProvision) DisplayPrimaryPaperKey(context.Context, keybase1.DisplayPrimaryPaperKeyArg) error {
 	return nil
 }
+
 func (r *testRecoverUIProvision) ChooseProvisioningMethod(context.Context, keybase1.ChooseProvisioningMethodArg) (ret keybase1.ProvisionMethod, err error) {
 	return keybase1.ProvisionMethod_PASSPHRASE, nil
 }
+
 func (r *testRecoverUIProvision) ChooseGPGMethod(context.Context, keybase1.ChooseGPGMethodArg) (ret keybase1.GPGMethod, err error) {
 	return ret, nil
 }
+
 func (r *testRecoverUIProvision) SwitchToGPGSignOK(context.Context, keybase1.SwitchToGPGSignOKArg) (ret bool, err error) {
 	return ret, nil
 }
+
 func (r *testRecoverUIProvision) ChooseDeviceType(context.Context, keybase1.ChooseDeviceTypeArg) (ret keybase1.DeviceType, err error) {
 	return ret, nil
 }
+
 func (r *testRecoverUIProvision) DisplayAndPromptSecret(context.Context, keybase1.DisplayAndPromptSecretArg) (ret keybase1.SecretResponse, err error) {
 	return ret, nil
 }
+
 func (r *testRecoverUIProvision) DisplaySecretExchanged(context.Context, int) error {
 	return nil
 }
+
 func (r *testRecoverUIProvision) PromptNewDeviceName(context.Context, keybase1.PromptNewDeviceNameArg) (ret string, err error) {
 	return r.deviceName, nil
 }
+
 func (r *testRecoverUIProvision) ProvisioneeSuccess(context.Context, keybase1.ProvisioneeSuccessArg) error {
 	return nil
 }
+
 func (r *testRecoverUIProvision) ProvisionerSuccess(context.Context, keybase1.ProvisionerSuccessArg) error {
 	return nil
 }
+
 func (r *testRecoverUIProvision) ChooseDevice(ctx context.Context, arg keybase1.ChooseDeviceArg) (ret keybase1.DeviceID, err error) {
 	for _, d := range arg.Devices {
 		if d.Type == keybase1.DeviceTypeV2_PAPER {
@@ -295,25 +307,32 @@ func (r *testRecoverUIProvision) ChooseDevice(ctx context.Context, arg keybase1.
 	}
 	return "", nil
 }
+
 func (r *testRecoverUIProvision) GetPassphrase(p keybase1.GUIEntryArg, terminal *keybase1.SecretEntryArg) (res keybase1.GetPassphraseRes, err error) {
 	res.Passphrase = r.paperkey
 	return res, nil
 }
+
 func (r *testRecoverUIProvision) PromptResetAccount(_ context.Context, arg keybase1.PromptResetAccountArg) (keybase1.ResetPromptResponse, error) {
 	return keybase1.ResetPromptResponse_NOTHING, nil
 }
+
 func (r *testRecoverUIProvision) DisplayResetProgress(_ context.Context, arg keybase1.DisplayResetProgressArg) error {
 	return nil
 }
+
 func (r *testRecoverUIProvision) PromptPassphraseRecovery(_ context.Context, arg keybase1.PromptPassphraseRecoveryArg) (bool, error) {
 	return false, nil
 }
+
 func (r *testRecoverUIProvision) ExplainDeviceRecovery(_ context.Context, arg keybase1.ExplainDeviceRecoveryArg) error {
 	return nil
 }
+
 func (r *testRecoverUIProvision) ChooseDeviceToRecoverWith(_ context.Context, arg keybase1.ChooseDeviceToRecoverWithArg) (keybase1.DeviceID, error) {
 	return "", nil
 }
+
 func (r *testRecoverUIProvision) DisplayResetMessage(_ context.Context, arg keybase1.DisplayResetMessageArg) error {
 	return nil
 }
@@ -329,65 +348,86 @@ func (n *testRecoverUIRecover) Prompt(pd libkb.PromptDescriptor, s string) (ret 
 	n.G().Log.Debug("Terminal Prompt %d: %s -> %s (%v)\n", pd, s, ret, libkb.ErrToOk(err))
 	return ret, fmt.Errorf("unexpected prompt")
 }
+
 func (n *testRecoverUIRecover) PromptPassword(pd libkb.PromptDescriptor, _ string) (string, error) {
 	return "", fmt.Errorf("unexpected prompt password")
 }
+
 func (n *testRecoverUIRecover) PromptPasswordMaybeScripted(pd libkb.PromptDescriptor, _ string) (string, error) {
 	return "", fmt.Errorf("unexpected prompt password")
 }
+
 func (n *testRecoverUIRecover) Output(s string) error {
 	n.G().Log.Debug("Terminal Output: %s", s)
 	return nil
 }
+
 func (n *testRecoverUIRecover) OutputDesc(od libkb.OutputDescriptor, s string) error {
 	n.G().Log.Debug("Terminal Output %d: %s", od, s)
 	return nil
 }
-func (n *testRecoverUIRecover) Printf(f string, args ...interface{}) (int, error) {
+
+func (n *testRecoverUIRecover) Printf(f string, args ...any) (int, error) {
 	s := fmt.Sprintf(f, args...)
 	n.G().Log.Debug("Terminal Printf: %s", s)
 	return len(s), nil
 }
-func (n *testRecoverUIRecover) PrintfUnescaped(f string, args ...interface{}) (int, error) {
+
+func (n *testRecoverUIRecover) PrintfUnescaped(f string, args ...any) (int, error) {
 	s := fmt.Sprintf(f, args...)
 	n.G().Log.Debug("Terminal PrintfUnescaped: %s", s)
 	return len(s), nil
 }
+
 func (n *testRecoverUIRecover) Write(b []byte) (int, error) {
 	n.G().Log.Debug("Terminal write: %s", string(b))
 	return len(b), nil
 }
+
 func (n *testRecoverUIRecover) OutputWriter() io.Writer {
 	return n
 }
+
 func (n *testRecoverUIRecover) UnescapedOutputWriter() io.Writer {
 	return n
 }
+
 func (n *testRecoverUIRecover) ErrorWriter() io.Writer {
 	return n
 }
+
 func (n *testRecoverUIRecover) PromptYesNo(pd libkb.PromptDescriptor, s string, def libkb.PromptDefault) (ret bool, err error) {
-	n.G().Log.Debug("Terminal PromptYesNo %d: %s -> %s (%v)\n", pd, s, ret, libkb.ErrToOk(err))
+	n.G().Log.Debug("Terminal PromptYesNo %d: %s -> %t (%v)\n", pd, s, ret, libkb.ErrToOk(err))
 	return ret, fmt.Errorf("unexpected prompt yes/no")
 }
+
 func (n *testRecoverUIRecover) PromptForConfirmation(prompt string) error {
 	return nil
 }
+
 func (n *testRecoverUIRecover) Tablify(headings []string, rowfunc func() []string) {
 	libkb.Tablify(n.OutputWriter(), headings, rowfunc)
 }
+
 func (n *testRecoverUIRecover) TerminalSize() (width int, height int) {
 	return 80, 24
 }
+
 func (n *testRecoverUIRecover) GetPassphrase(p keybase1.GUIEntryArg, terminal *keybase1.SecretEntryArg) (res keybase1.GetPassphraseRes, err error) {
 	res.Passphrase = n.passphrase
 	return res, nil
 }
 
 type errorAPIMock struct {
-	*libkb.APIArgRecorder
-	realAPI     libkb.API
+	libkb.API
 	shouldError bool
+}
+
+func newErrorAPIMock(api libkb.API, shouldError bool) *errorAPIMock {
+	return &errorAPIMock{
+		API:         api,
+		shouldError: shouldError,
+	}
 }
 
 func (r *errorAPIMock) GetDecode(mctx libkb.MetaContext, arg libkb.APIArg, w libkb.APIResponseWrapper) error {
@@ -396,16 +436,27 @@ func (r *errorAPIMock) GetDecode(mctx libkb.MetaContext, arg libkb.APIArg, w lib
 			return errors.New("some api error")
 		}
 	}
-	return r.realAPI.GetDecode(mctx, arg, w)
+	return r.API.GetDecode(mctx, arg, w)
 }
 
-func (r errorAPIMock) Get(mctx libkb.MetaContext, arg libkb.APIArg) (*libkb.APIRes, error) {
+func (r *errorAPIMock) Get(mctx libkb.MetaContext, arg libkb.APIArg) (*libkb.APIRes, error) {
 	if arg.Endpoint == "user/has_random_pw" {
 		if r.shouldError {
 			return nil, errors.New("some api error")
 		}
 	}
-	return r.realAPI.Get(mctx, arg)
+	return r.API.Get(mctx, arg)
+}
+
+func TestErrorAPIMockDelegatesPost(t *testing.T) {
+	realAPI := libkb.NewAPIArgRecorderWithNullAPI()
+	fakeAPI := newErrorAPIMock(realAPI, true)
+
+	require.NotPanics(t, func() {
+		_, err := fakeAPI.Post(libkb.MetaContext{}, libkb.APIArg{})
+		require.NoError(t, err)
+	})
+	require.Equal(t, 1, realAPI.NumCalls())
 }
 
 func TestPassphraseStateGregor(t *testing.T) {
@@ -463,13 +514,10 @@ func TestPassphraseStateGregor(t *testing.T) {
 	res, err = ucli3.LoadPassphraseState(context.Background(), 0)
 	require.NoError(t, err)
 	// device not getting gregor messages will force repoll
-	require.Equal(t, res, keybase1.PassphraseState_KNOWN)
+	require.Equal(t, keybase1.PassphraseState_KNOWN, res)
 
 	ucli4 := keybase1.UserClient{Cli: dev4.cli}
-	fakeAPI := &errorAPIMock{
-		realAPI:     dev4.tctx.G.API,
-		shouldError: true,
-	}
+	fakeAPI := newErrorAPIMock(dev4.tctx.G.API, true)
 	dev4.tctx.G.API = fakeAPI
 	res, err = ucli4.LoadPassphraseState(context.Background(), 0)
 	// device has no gregor state *and* api call failed, so this will error

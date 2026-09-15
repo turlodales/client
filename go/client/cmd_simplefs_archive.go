@@ -4,13 +4,13 @@
 package client
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/keybase/cli"
 	"github.com/keybase/client/go/libcmdline"
 	"github.com/keybase/client/go/libkb"
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
-	"golang.org/x/net/context"
 )
 
 // NewCmdSimpleFSArchive creates a new cli.Command.
@@ -42,7 +42,8 @@ func NewCmdSimpleFSArchiveStart(cl *libcmdline.CommandLine, g *libkb.GlobalConte
 		Usage: "start archiving a KBFS path or git repo",
 		Action: func(c *cli.Context) {
 			cl.ChooseCommand(&CmdSimpleFSArchiveStart{
-				Contextified: libkb.NewContextified(g)}, "start", c)
+				Contextified: libkb.NewContextified(g),
+			}, "start", c)
 			cl.SetNoStandalone()
 		},
 		Flags: []cli.Flag{
@@ -66,6 +67,7 @@ func NewCmdSimpleFSArchiveStart(cl *libcmdline.CommandLine, g *libkb.GlobalConte
 		ArgumentHelp: "<archiving target>",
 	}
 }
+
 func revisionExtendedDescription(currentTLFRevision keybase1.KBFSRevision, desc *keybase1.SimpleFSArchiveJobDesc) string {
 	if currentTLFRevision == 0 {
 		return ""
@@ -90,7 +92,6 @@ func printSimpleFSArchiveJobDesc(ui libkb.TerminalUI, desc *keybase1.SimpleFSArc
 	ui.Printf("Started: %s\n", desc.StartTime.Time())
 	ui.Printf("Staging Path: %s\n", desc.StagingPath)
 	ui.Printf("Zip File Path: %s\n", desc.ZipFilePath)
-
 }
 
 // Run runs the command in client/server mode.
@@ -155,7 +156,8 @@ func NewCmdSimpleFSArchiveCancelOrDismiss(cl *libcmdline.CommandLine, g *libkb.G
 		Usage:   "cancel or dismiss a KBFS archiving job",
 		Action: func(c *cli.Context) {
 			cl.ChooseCommand(&CmdSimpleFSArchiveCancelOrDismiss{
-				Contextified: libkb.NewContextified(g)}, "dismiss", c)
+				Contextified: libkb.NewContextified(g),
+			}, "dismiss", c)
 			cl.SetNoStandalone()
 		},
 		ArgumentHelp: "<job ID>...",
@@ -206,7 +208,8 @@ func NewCmdSimpleFSArchiveStatus(cl *libcmdline.CommandLine, g *libkb.GlobalCont
 		Usage: "display the status of all archiving activities",
 		Action: func(c *cli.Context) {
 			cl.ChooseCommand(&CmdSimpleFSArchiveStatus{
-				Contextified: libkb.NewContextified(g)}, "status", c)
+				Contextified: libkb.NewContextified(g),
+			}, "status", c)
 			cl.SetNoStandalone()
 		},
 		Flags: []cli.Flag{},
@@ -242,19 +245,20 @@ func (c *CmdSimpleFSArchiveStatus) Run() error {
 		printSimpleFSArchiveJobDesc(ui, &job.Desc, currentTLFRevisions[job.Desc.JobID])
 		{
 			ui.Printf("Phase: %s ", job.Phase.String())
-			if job.Phase == keybase1.SimpleFSArchiveJobPhase_Copying {
+			switch job.Phase {
+			case keybase1.SimpleFSArchiveJobPhase_Copying:
 				percentage := int64(0)
 				if job.BytesTotal != 0 {
 					percentage = job.BytesCopied * 100 / job.BytesTotal
 				}
 				ui.Printf("(%d%%, %d / %d bytes)\n", percentage, job.BytesCopied, job.BytesTotal)
-			} else if job.Phase == keybase1.SimpleFSArchiveJobPhase_Zipping {
+			case keybase1.SimpleFSArchiveJobPhase_Zipping:
 				percentage := int64(0)
 				if job.BytesTotal != 0 {
 					percentage = job.BytesZipped * 100 / job.BytesTotal
 				}
 				ui.Printf("(%d%%, %d / %d bytes)\n", percentage, job.BytesZipped, job.BytesTotal)
-			} else {
+			default:
 				ui.Printf("\n")
 			}
 			ui.Printf("       (all phases:")
@@ -315,7 +319,8 @@ func NewCmdSimpleFSArchiveCheckArchive(cl *libcmdline.CommandLine, g *libkb.Glob
 		Usage:   "check one or more previously created KBFS archive(s)",
 		Action: func(c *cli.Context) {
 			cl.ChooseCommand(&CmdSimpleFSArchiveCheckArchive{
-				Contextified: libkb.NewContextified(g)}, "check", c)
+				Contextified: libkb.NewContextified(g),
+			}, "check", c)
 			cl.SetNoStandalone()
 		},
 		ArgumentHelp: "<KBFS archive zip file path>...",

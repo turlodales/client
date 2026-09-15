@@ -3,14 +3,82 @@ package chat
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/keybase/client/go/chat/globals"
 	"github.com/keybase/client/go/kbtest"
+	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/protocol/chat1"
 	"github.com/keybase/client/go/protocol/gregor1"
 	"github.com/keybase/client/go/protocol/keybase1"
 	"github.com/stretchr/testify/require"
 )
+
+type teamChannelParticipantsListener struct {
+	libkb.NoopNotifyListener
+	participants chan map[chat1.ConvIDStr][]chat1.UIParticipant
+}
+
+func (l *teamChannelParticipantsListener) ChatParticipantsInfo(
+	participants map[chat1.ConvIDStr][]chat1.UIParticipant,
+) {
+	l.participants <- participants
+}
+
+func TestTeamChannelSourceNotifiesParticipants(t *testing.T) {
+	useRemoteMock = false
+	defer func() { useRemoteMock = true }()
+
+	ctc := makeChatTestContext(t, "TestTeamChannelSourceNotifiesParticipants", 2)
+	defer ctc.cleanup()
+	users := ctc.users()
+	user := users[0]
+	otherUser := users[1]
+
+	general := mustCreateConversationForTest(t, ctc, user, chat1.TopicType_CHAT,
+		chat1.ConversationMembersType_TEAM, otherUser)
+	topicName := "channel1"
+	channel := mustCreateChannelForTest(t, ctc, user, chat1.TopicType_CHAT, &topicName,
+		chat1.ConversationMembersType_TEAM, otherUser)
+
+	listener := &teamChannelParticipantsListener{
+		participants: make(chan map[chat1.ConvIDStr][]chat1.UIParticipant, 10),
+	}
+	ctc.as(t, user).h.G().NotifyRouter.AddListener(listener)
+
+	uid := gregor1.UID(user.GetUID().ToBytes())
+	convs, err := ctc.world.Tcs[user.Username].Context().TeamChannelSource.GetChannelsFull(
+		ctc.as(t, user).startCtx, uid, general.Triple.Tlfid, chat1.TopicType_CHAT)
+	require.NoError(t, err)
+	require.Len(t, convs, 2)
+
+	want := map[chat1.ConvIDStr]bool{
+		general.Id.ConvIDStr(): false,
+		channel.Id.ConvIDStr(): false,
+	}
+	timeout := time.After(20 * time.Second)
+	for {
+		allFound := true
+		for _, found := range want {
+			allFound = allFound && found
+		}
+		if allFound {
+			break
+		}
+		select {
+		case participants := <-listener.participants:
+			for convID, participantList := range participants {
+				if _, ok := want[convID]; ok {
+					require.NotEmpty(t, participantList)
+					want[convID] = true
+				}
+			}
+		case <-timeout:
+			require.FailNow(t, "timed out waiting for team channel participants",
+				"received participants for: %+v", want)
+		}
+	}
+}
 
 func TestTeamChannelSource(t *testing.T) {
 	runWithMemberTypes(t, func(mt chat1.ConversationMembersType) {
@@ -56,7 +124,7 @@ func TestTeamChannelSource(t *testing.T) {
 		assertTeamChannelSource := func(g *globals.Context, uid gregor1.UID, expectedResults map[chat1.ConvIDStr]expectedResult) {
 			convs, err := g.TeamChannelSource.GetChannelsFull(ctx, uid, tlfID, chat1.TopicType_CHAT)
 			require.NoError(t, err)
-			require.Equal(t, len(expectedResults), len(convs))
+			require.Len(t, convs, len(expectedResults))
 			for _, conv := range convs {
 				expected, ok := expectedResults[conv.GetConvID().ConvIDStr()]
 				require.True(t, ok)
@@ -67,7 +135,7 @@ func TestTeamChannelSource(t *testing.T) {
 
 			mentions, err := g.TeamChannelSource.GetChannelsTopicName(ctx, uid, tlfID, chat1.TopicType_CHAT)
 			require.NoError(t, err)
-			require.Equal(t, len(expectedResults), len(mentions))
+			require.Len(t, mentions, len(expectedResults))
 			for _, mention := range mentions {
 				expected, ok := expectedResults[mention.ConvID.ConvIDStr()]
 				require.True(t, ok)
@@ -191,12 +259,12 @@ func TestTeamChannelSource(t *testing.T) {
 		assertTeamChannelSource(g2, uid2, expectedResults2)
 
 		updates := consumeNewThreadsStale(t, listener1)
-		require.Equal(t, 1, len(updates))
+		require.Len(t, updates, 1)
 		require.Equal(t, channelConvID, updates[0].ConvID, "wrong cid")
 		require.Equal(t, chat1.StaleUpdateType_CLEAR, updates[0].UpdateType)
 
 		updates = consumeNewThreadsStale(t, listener2)
-		require.Equal(t, 1, len(updates))
+		require.Len(t, updates, 1)
 		require.Equal(t, channelConvID, updates[0].ConvID, "wrong cid")
 		require.Equal(t, chat1.StaleUpdateType_CLEAR, updates[0].UpdateType)
 	})

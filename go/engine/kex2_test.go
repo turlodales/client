@@ -12,6 +12,7 @@ import (
 	"github.com/keybase/client/go/kex2"
 	"github.com/keybase/client/go/libkb"
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -41,21 +42,19 @@ func subTestKex2Provision(t *testing.T, upgradePerUserKey bool) {
 
 	var secretX kex2.Secret
 	if _, err := rand.Read(secretX[:]); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 
 	var secretY kex2.Secret
 	if _, err := rand.Read(secretY[:]); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 
 	var wg sync.WaitGroup
 
 	// start provisionee
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		err := (func() error {
+	wg.Go(func() {
+		err := func() error {
 			uis := libkb.UIs{
 				ProvisionUI: &testProvisionUI{secretCh: make(chan kex2.Secret, 1)},
 			}
@@ -76,14 +75,12 @@ func subTestKex2Provision(t *testing.T, upgradePerUserKey bool) {
 			}
 			provisionee := NewKex2Provisionee(tcY.G, device, secretY, userX.UID(), fakeSalt())
 			return RunEngine2(m, provisionee)
-		})()
-		require.NoError(t, err, "no kex2 provisionee error")
-	}()
+		}()
+		assert.NoError(t, err, "no kex2 provisionee error")
+	})
 
 	// start provisioner
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		uis := libkb.UIs{
 			SecretUI:    userX.NewSecretUI(),
 			ProvisionUI: &testProvisionUI{},
@@ -95,7 +92,7 @@ func subTestKex2Provision(t *testing.T, upgradePerUserKey bool) {
 			t.Errorf("provisioner error: %s", err)
 			return
 		}
-	}()
+	})
 
 	wg.Wait()
 }
@@ -117,21 +114,19 @@ func provisionNewDeviceKex(tcX *libkb.TestContext, userX *FakeUser) (*libkb.Test
 
 	var secretX kex2.Secret
 	if _, err := rand.Read(secretX[:]); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 
 	var secretY kex2.Secret
 	if _, err := rand.Read(secretY[:]); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 
 	var wg sync.WaitGroup
 
 	// start provisionee
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		err := (func() error {
+	wg.Go(func() {
+		err := func() error {
 			uis := libkb.UIs{
 				ProvisionUI: &testProvisionUI{secretCh: make(chan kex2.Secret, 1)},
 			}
@@ -152,14 +147,12 @@ func provisionNewDeviceKex(tcX *libkb.TestContext, userX *FakeUser) (*libkb.Test
 			}
 			provisionee := NewKex2Provisionee(tcY.G, device, secretY, userX.UID(), fakeSalt())
 			return RunEngine2(m, provisionee)
-		})()
+		}()
 		require.NoError(t, err, "kex2 provisionee")
-	}()
+	})
 
 	// start provisioner
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		uis := libkb.UIs{
 			SecretUI:    userX.NewSecretUI(),
 			ProvisionUI: &testProvisionUI{},
@@ -171,7 +164,7 @@ func provisionNewDeviceKex(tcX *libkb.TestContext, userX *FakeUser) (*libkb.Test
 			t.Errorf("provisioner error: %s", err)
 			return
 		}
-	}()
+	})
 
 	wg.Wait()
 

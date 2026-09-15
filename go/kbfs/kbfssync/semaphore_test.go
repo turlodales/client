@@ -6,6 +6,7 @@ package kbfssync
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"testing"
 	"time"
@@ -34,7 +35,7 @@ func callAcquire(ctx context.Context, s *Semaphore, n int64) acquireCall {
 func requireNoCall(t *testing.T, callCh <-chan acquireCall) {
 	select {
 	case call := <-callCh:
-		t.Fatalf("Unexpected call: %+v", call)
+		require.FailNow(t, fmt.Sprintf("Unexpected call: %+v", call))
 	default:
 	}
 }
@@ -70,7 +71,7 @@ func TestSimple(t *testing.T) {
 	case call := <-callCh:
 		require.Equal(t, acquireCall{n, 0, nil}, call)
 	case <-ctx.Done():
-		t.Fatal(ctx.Err())
+		require.FailNow(t, fmt.Sprint(ctx.Err()))
 	}
 
 	require.Equal(t, int64(0), s.Count())
@@ -111,7 +112,7 @@ func TestForceAcquire(t *testing.T) {
 	case call := <-callCh:
 		require.Equal(t, acquireCall{n, 0, nil}, call)
 	case <-ctx.Done():
-		t.Fatal(ctx.Err())
+		require.FailNow(t, fmt.Sprint(ctx.Err()))
 	}
 
 	require.Equal(t, int64(0), s.Count())
@@ -152,7 +153,7 @@ func TestCancel(t *testing.T) {
 		call.err = errors.Cause(call.err)
 		require.Equal(t, acquireCall{n, n - 1, context.Canceled}, call)
 	case <-ctx.Done():
-		t.Fatal(ctx.Err())
+		require.FailNow(t, fmt.Sprint(ctx.Err()))
 	}
 
 	require.Equal(t, n-1, s.Count())
@@ -169,7 +170,7 @@ func TestSerialRelease(t *testing.T) {
 	s := NewSemaphore()
 	acquireCount := 0
 	callCh := make(chan acquireCall, acquirerCount)
-	for i := 0; i < acquirerCount; i++ {
+	for range acquirerCount {
 		go func() {
 			call := callAcquire(ctx, s, 1)
 			acquireCount++
@@ -177,7 +178,7 @@ func TestSerialRelease(t *testing.T) {
 		}()
 	}
 
-	for i := 0; i < acquirerCount; i++ {
+	for range acquirerCount {
 		requireNoCall(t, callCh)
 
 		count := s.Release(1)
@@ -187,7 +188,7 @@ func TestSerialRelease(t *testing.T) {
 		case call := <-callCh:
 			require.Equal(t, acquireCall{1, 0, nil}, call)
 		case <-ctx.Done():
-			t.Fatal(ctx.Err())
+			require.FailNow(t, fmt.Sprint(ctx.Err()))
 		}
 
 		requireNoCall(t, callCh)
@@ -211,7 +212,7 @@ func TestAcquireDifferentSizes(t *testing.T) {
 	s := NewSemaphore()
 	acquireCount := 0
 	callCh := make(chan acquireCall, acquirerCount)
-	for i := 0; i < acquirerCount; i++ {
+	for i := range acquirerCount {
 		go func(i int) {
 			call := callAcquire(ctx, s, int64(i+1))
 			acquireCount++
@@ -219,7 +220,7 @@ func TestAcquireDifferentSizes(t *testing.T) {
 		}(i)
 	}
 
-	for i := 0; i < acquirerCount; i++ {
+	for i := range acquirerCount {
 		requireNoCall(t, callCh)
 
 		if i == 0 {
@@ -239,7 +240,7 @@ func TestAcquireDifferentSizes(t *testing.T) {
 		case call := <-callCh:
 			require.Equal(t, acquireCall{int64(i + 1), 0, nil}, call)
 		case <-ctx.Done():
-			t.Fatalf("err=%+v, i=%d", ctx.Err(), i)
+			require.FailNow(t, fmt.Sprintf("err=%+v, i=%d", ctx.Err(), i))
 		}
 
 		requireNoCall(t, callCh)

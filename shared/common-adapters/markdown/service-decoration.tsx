@@ -1,21 +1,20 @@
 import * as T from '@/constants/types'
-import * as React from 'react'
+import type * as React from 'react'
 import * as C from '@/constants'
+import {emitDeepLink} from '@/router-v2/linking'
 import * as Styles from '@/styles'
-import Channel from '../channel-container'
+import Channel from './channel'
 import KbfsPath from '@/fs/common/kbfs-path'
 import MaybeMention from './maybe-mention'
-import Mention from '../mention-container'
-import PaymentStatus from '../../chat/payments/status/container'
-import Text, {type StylesTextCrossPlatform} from '@/common-adapters/text'
+import Mention from '../mention'
+import PaymentStatus from '../../chat/payments/status'
+import Text from '@/common-adapters/text'
+import type {StylesTextCrossPlatform} from '@/common-adapters/text.shared'
+import {useClickURL} from '@/common-adapters/text-url'
 import WithTooltip from '../with-tooltip'
 import type {StyleOverride} from '.'
-import type {
-  emojiDataToRenderableEmoji as emojiDataToRenderableEmojiType,
-  renderEmoji as renderEmojiType,
-  RPCToEmojiData as RPCToEmojiDataType,
-} from '@/util/emoji'
-import {base64ToUint8Array, uint8ArrayToString} from 'uint8array-extras'
+import {RPCToEmojiData, default as Emoji} from '@/common-adapters/emoji'
+import {parseServiceDecoration} from './service-decoration-parser'
 
 const prefix = 'keybase://'
 const linkIsKeybaseLink = (link: string) => link.startsWith(prefix)
@@ -25,6 +24,34 @@ const linkStyle = Styles.platformStyles({
   isMobile: {fontWeight: undefined},
 })
 
+// Shared shell for every link decoration: same text type, hover classes and
+// [wrapStyle, linkStyle, override] style merge; behavior comes from url/onClick
+const LinkText = (p: {
+  children: React.ReactNode
+  className?: string
+  linkStyle?: StylesTextCrossPlatform | undefined
+  onClick?: () => void
+  title: string
+  url?: string
+  wrapStyle?: StylesTextCrossPlatform | undefined
+}) => {
+  const {children, className = 'hover-underline hover_contained_color_blueDark', onClick, title, url} = p
+  const {wrapStyle, linkStyle: linkStyleOverride} = p
+  const urlProps = useClickURL(url)
+  return (
+    <Text
+      className={className}
+      type="BodyPrimaryLink"
+      style={Styles.collapseStyles([wrapStyle, linkStyle, linkStyleOverride])}
+      title={title}
+      onClick={onClick}
+      {...urlProps}
+    >
+      {children}
+    </Text>
+  )
+}
+
 type KeybaseLinkProps = {
   link: string
   linkStyle?: StylesTextCrossPlatform | undefined
@@ -32,21 +59,20 @@ type KeybaseLinkProps = {
 }
 
 const KeybaseLink = (props: KeybaseLinkProps) => {
-  const handleAppLink = C.useDeepLinksState(s => s.dispatch.handleAppLink)
-  const onClick = React.useCallback(() => {
-    handleAppLink(props.link)
-  }, [handleAppLink, props.link])
-
+  const {link, linkStyle: linkStyleOverride, wrapStyle} = props
+  // Route through the linking config for keybase:// and https://keybase.io/ URLs
+  // so React Navigation handles navigation declaratively.
+  // emitDeepLink normalizes URLs and dispatches through the linking config,
+  // falling back to handleAppLink for patterns not yet in the config.
   return (
-    <Text
-      className="hover-underline hover_contained_color_blueDark"
-      type="BodyPrimaryLink"
-      style={Styles.collapseStyles([props.wrapStyle, linkStyle, props.linkStyle])}
-      title={props.link}
-      onClick={onClick}
+    <LinkText
+      title={link}
+      linkStyle={linkStyleOverride}
+      wrapStyle={wrapStyle}
+      onClick={() => emitDeepLink(link)}
     >
-      {props.link}
-    </Text>
+      {link}
+    </LinkText>
   )
 }
 
@@ -59,31 +85,30 @@ type WarningLinkProps = {
 }
 
 const WarningLink = (props: WarningLinkProps) => {
-  const {display, punycode, url} = props
-  const navigateAppend = C.useRouterState(s => s.dispatch.navigateAppend)
-  if (Styles.isMobile) {
+  const {display, punycode, url, linkStyle: linkStyleOverride, wrapStyle} = props
+  const navigateAppend = C.Router2.navigateAppend
+  if (isMobile) {
     return (
-      <Text
+      <LinkText
         className="hover-underline"
-        type="BodyPrimaryLink"
-        style={Styles.collapseStyles([props.wrapStyle, linkStyle, props.linkStyle])}
         title={display}
+        linkStyle={linkStyleOverride}
+        wrapStyle={wrapStyle}
         onClick={() =>
-          navigateAppend({props: {display, punycode, url}, selected: 'chatConfirmNavigateExternal'})
+          navigateAppend({name: 'chatConfirmNavigateExternal', params: {display, punycode, url}})
         }
       >
         {display}
-      </Text>
+      </LinkText>
     )
   }
   return (
-    <Text
+    <LinkText
       className="hover-underline"
-      type="BodyPrimaryLink"
-      style={Styles.collapseStyles([props.wrapStyle, linkStyle, props.linkStyle])}
       title={display}
-      onClickURL={url}
-      onLongPressURL={url}
+      linkStyle={linkStyleOverride}
+      wrapStyle={wrapStyle}
+      url={url}
     >
       <WithTooltip
         tooltip={punycode}
@@ -93,7 +118,7 @@ const WarningLink = (props: WarningLinkProps) => {
       >
         {display}
       </WithTooltip>
-    </Text>
+    </LinkText>
   )
 }
 
@@ -110,12 +135,8 @@ export type Props = {
 const ServiceDecoration = (p: Props) => {
   const {json, allowFontScaling, styles, styleOverride} = p
   const {disableBigEmojis, disableEmojiAnimation, messageType} = p
-  // Parse JSON to get the type of the decoration
-  let parsed: T.RPCChat.UITextDecoration
-  try {
-    const jsonString = uint8ArrayToString(base64ToUint8Array(json))
-    parsed = JSON.parse(jsonString) as T.RPCChat.UITextDecoration
-  } catch {
+  const parsed = parseServiceDecoration(json)
+  if (!parsed) {
     return null
   }
   if (parsed.typ === T.RPCChat.UITextDecorationTyp.payment && messageType === 'text') {
@@ -176,32 +197,28 @@ const ServiceDecoration = (p: Props) => {
         wrapStyle={styles['wrapStyle']}
       />
     ) : (
-      <Text
-        className="hover-underline hover_contained_color_blueDark"
-        type="BodyPrimaryLink"
-        style={Styles.collapseStyles([styles['wrapStyle'], linkStyle, styleOverride?.link])}
+      <LinkText
         title={parsed.link.url}
-        onClickURL={openUrl}
-        onLongPressURL={openUrl}
+        linkStyle={styleOverride?.link}
+        wrapStyle={styles['wrapStyle']}
+        url={openUrl}
       >
         {parsed.link.url}
-      </Text>
+      </LinkText>
     )
   } else if (parsed.typ === T.RPCChat.UITextDecorationTyp.mailto) {
     const openUrl = parsed.mailto.url.toLowerCase().startsWith('mailto:')
       ? parsed.mailto.url
       : 'mailto:' + parsed.mailto.url
     return (
-      <Text
-        className="hover-underline hover_contained_color_blueDark"
-        type="BodyPrimaryLink"
-        style={Styles.collapseStyles([styles['wrapStyle'], linkStyle, styleOverride?.mailto])}
+      <LinkText
         title={parsed.mailto.url}
-        onClickURL={openUrl}
-        onLongPressURL={openUrl}
+        linkStyle={styleOverride?.mailto}
+        wrapStyle={styles['wrapStyle']}
+        url={openUrl}
       >
         {parsed.mailto.url}
-      </Text>
+      </LinkText>
     )
   } else if (parsed.typ === T.RPCChat.UITextDecorationTyp.channelnamemention) {
     return (
@@ -230,19 +247,17 @@ const ServiceDecoration = (p: Props) => {
       />
     )
   } else if (parsed.typ === T.RPCChat.UITextDecorationTyp.emoji) {
-    const {emojiDataToRenderableEmoji, renderEmoji, RPCToEmojiData} = require('@/util/emoji') as {
-      emojiDataToRenderableEmoji: typeof emojiDataToRenderableEmojiType
-      renderEmoji: typeof renderEmojiType
-      RPCToEmojiData: typeof RPCToEmojiDataType
-    }
-    return renderEmoji({
-      customStyle: styleOverride?.customEmoji,
-      emoji: emojiDataToRenderableEmoji(RPCToEmojiData(parsed.emoji, disableEmojiAnimation)),
-      showTooltip: !parsed.emoji.isReacji,
-      size:
-        parsed.emoji.isBig && !disableBigEmojis ? 32 : parsed.emoji.isReacji && !Styles.isMobile ? 18 : 16,
-      style: styleOverride?.emoji,
-    })
+    return (
+      <Emoji
+        customStyle={styleOverride?.customEmoji}
+        emojiData={RPCToEmojiData(parsed.emoji, disableEmojiAnimation)}
+        showTooltip={!parsed.emoji.isReacji}
+        size={
+          parsed.emoji.isBig && !disableBigEmojis ? 32 : parsed.emoji.isReacji && !isMobile ? 18 : 16
+        }
+        style={styleOverride?.emoji}
+      />
+    )
   }
   return null
 }

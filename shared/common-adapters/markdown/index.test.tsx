@@ -1,0 +1,317 @@
+/** @jest-environment jsdom */
+/// <reference types="jest" />
+
+import {expect, test} from '@jest/globals'
+import {fireEvent} from '@testing-library/dom'
+import {render, screen} from '@testing-library/react'
+import * as T from '@/constants/types'
+import Markdown, {getMarkdownOutputKind, isAllEmoji, parseMarkdown, shouldUseParser} from './index'
+
+const makeServiceDecorationTag = (payload: unknown) =>
+  `$>kb$${Buffer.from(JSON.stringify(payload)).toString('base64')}$<kb$`
+
+const flattenAstText = (nodes: Array<{type: string; content?: unknown}>): string => {
+  return nodes
+    .map(node => {
+      if (node.type === 'newline') return '\n'
+      if (typeof node['content'] === 'string') return node['content']
+      if (Array.isArray(node['content'])) {
+        return flattenAstText(node['content'] as Array<{type: string; content?: unknown}>)
+      }
+      return ''
+    })
+    .join('')
+}
+
+const normalizeInlineContent = <T extends {type: string}>(nodes: Array<T>) =>
+  nodes[nodes.length - 1]?.type === 'newline' ? nodes.slice(0, -1) : nodes
+
+const paragraphContent = (input: string, options?: Parameters<typeof parseMarkdown>[1]) => {
+  const ast = parseMarkdown(input, options)
+  expect(ast[0]?.type).toBe('paragraph')
+  return normalizeInlineContent(
+    ast[0]?.['content'] as Array<{type: string; content?: unknown; raw?: string}>
+  )
+}
+
+const getNestedText = (nodes: Array<{content?: unknown}> | undefined, index: number) =>
+  ((nodes?.[index]?.['content'] as Array<{content?: string}> | undefined)?.[0]?.['content'] ?? '')
+
+const getTextAt = (nodes: Array<{content?: string}> | undefined, index: number) =>
+  nodes?.[index]?.['content'] ?? ''
+
+test('parseMarkdown wraps plain text in a paragraph', () => {
+  const content = paragraphContent('hello world')
+  expect(content).toHaveLength(1)
+  expect(content[0]).toMatchObject({content: 'hello world', type: 'text'})
+})
+
+test('parseMarkdown keeps inline newlines inside a paragraph', () => {
+  const content = paragraphContent('alpha\nbeta')
+  expect(content.map(node => node.type)).toEqual(['text', 'newline', 'text'])
+  expect(content[0]?.['content']).toBe('alpha')
+  expect(content[2]?.['content']).toBe('beta')
+})
+
+test('parseMarkdown recognizes inline markdown variants', () => {
+  const content = paragraphContent('*bold* _italic_ ~strike~ `code`')
+  expect(content.map(node => node.type)).toEqual([
+    'strong',
+    'text',
+    'em',
+    'text',
+    'del',
+    'text',
+    'inlineCode',
+  ])
+  expect((content[0]?.['content'] as Array<{content: string}>)[0]?.['content']).toBe('bold')
+  expect((content[2]?.['content'] as Array<{content: string}>)[0]?.['content']).toBe('italic')
+  expect((content[4]?.['content'] as Array<{content: string}>)[0]?.['content']).toBe('strike')
+  expect(content[6]?.['content']).toBe('code')
+})
+
+test('parseMarkdown preserves escaped formatting characters as text', () => {
+  const content = paragraphContent('\\*not bold\\*')
+  expect(content.some(node => node.type === 'strong')).toBe(false)
+  expect(flattenAstText(content)).toBe('*not bold*')
+})
+
+test('parseMarkdown only treats single backticks as inline code', () => {
+  const inline = paragraphContent('`code`')
+  expect(inline.map(node => node.type)).toEqual(['inlineCode'])
+  expect(inline[0]?.['content']).toBe('code')
+})
+
+test('Markdown falls back to raw text for unsupported double-backtick syntax', () => {
+  render(<Markdown>{'``code``'}</Markdown>)
+  expect(document.body.textContent).toContain('``code``')
+})
+
+test('parseMarkdown parses fenced code blocks', () => {
+  const ast = parseMarkdown('```foo\nbar```')
+  expect(ast).toHaveLength(1)
+  expect(ast[0]).toMatchObject({content: 'foo\nbar', type: 'fence'})
+})
+
+test('parseMarkdown parses block quotes as nested content', () => {
+  const ast = parseMarkdown('> quoted line')
+  expect(ast).toHaveLength(1)
+  expect(ast[0]?.type).toBe('blockQuote')
+  const nested = ast[0]?.['content'] as Array<{type: string; content: Array<{type: string; content: string}>}>
+  expect(nested[0]?.type).toBe('paragraph')
+  expect((nested[0]?.['content'] as Array<{content: string; type: string}> | undefined)?.[0]).toMatchObject({
+    content: 'quoted line',
+    type: 'text',
+  })
+})
+
+test('parseMarkdown stops block quotes when a line loses the quote marker', () => {
+  const ast = parseMarkdown('> quoted line\nplain line')
+  expect(ast.map(node => node.type)).toEqual(['blockQuote', 'paragraph'])
+  expect(getTextAt(ast[1]?.['content'] as Array<{content?: string}> | undefined, 0)).toBe('plain line')
+})
+
+test('parseMarkdown parses quoted fences on desktop without wrapping the preamble', () => {
+  const ast = parseMarkdown('> they wrote ```\nfoo\n```')
+  expect(ast).toHaveLength(1)
+  expect(ast[0]?.type).toBe('blockQuote')
+  const nested = ast[0]?.['content'] as Array<{type: string; content?: unknown}>
+  expect(normalizeInlineContent(nested).map(node => node.type)).toEqual(['text', 'fence'])
+  expect(nested[0]?.['content']).toBe('they wrote')
+  expect(nested[1]?.['content']).toBe('foo\n')
+})
+
+test('parseMarkdown keeps a bare quote marker line inside the same block quote', () => {
+  const ast = parseMarkdown('> one\n>\n> two')
+  expect(ast).toHaveLength(1)
+  expect(ast[0]?.type).toBe('blockQuote')
+})
+
+test('parseMarkdown trims padding around inline code', () => {
+  expect(paragraphContent('` code `')).toEqual([{content: 'code', type: 'inlineCode'}])
+})
+
+test('parseMarkdown does not backtrack on padded unterminated inline code', () => {
+  const start = Date.now()
+  parseMarkdown('`' + ' '.repeat(4000) + 'x')
+  expect(Date.now() - start).toBeLessThan(1000)
+})
+
+test('parseMarkdown keeps a fully quoted fence inside a single block quote', () => {
+  const ast = parseMarkdown('> test one\n> ```\n> hello\n> ```\n> two')
+  expect(ast).toHaveLength(1)
+  expect(ast[0]?.type).toBe('blockQuote')
+  const nested = ast[0]?.['content'] as Array<{type: string; content?: unknown}>
+  expect(nested.map(node => node.type)).toEqual(['paragraph', 'fence', 'paragraph'])
+  expect(nested[1]?.['content']).toBe('hello\n')
+  expect(getTextAt(nested[2]?.['content'] as Array<{content?: string}> | undefined, 0)).toBe('two')
+})
+
+test('parseMarkdown keeps indentation inside a fully quoted fence', () => {
+  const ast = parseMarkdown('> ```\n>   indented\n> ```')
+  const nested = ast[0]?.['content'] as Array<{type: string; content?: unknown}>
+  expect(nested[0]).toMatchObject({content: '  indented\n', type: 'fence'})
+})
+
+test('parseMarkdown handles a fully quoted fence opened after text on the same line', () => {
+  const ast = parseMarkdown('> they wrote ```\n> foo\n> ```')
+  expect(ast).toHaveLength(1)
+  const nested = ast[0]?.['content'] as Array<{type: string; content?: unknown}>
+  expect(nested.map(node => node.type)).toEqual(['paragraph', 'fence'])
+  expect(getTextAt(nested[0]?.['content'] as Array<{content?: string}> | undefined, 0)).toBe('they wrote ')
+  expect(nested[1]?.['content']).toBe('foo\n')
+})
+
+test('parseMarkdown does not create a fence for an unterminated quoted fence', () => {
+  const ast = parseMarkdown('> ```\n> hello')
+  expect(flattenAstText(ast as Array<{type: string; content?: unknown}>)).toContain('```')
+  expect(JSON.stringify(ast)).not.toContain('"fence"')
+})
+
+test('parseMarkdown wraps quoted fence preambles in paragraphs on mobile', () => {
+  const ast = parseMarkdown('> they wrote ```\nfoo\n```', {isMobile: true})
+  const nested = normalizeInlineContent(ast[0]?.['content'] as Array<{type: string; content?: unknown}>)
+  expect(nested.map(node => node.type)).toEqual(['paragraph', 'fence'])
+  expect(getTextAt(nested[0]?.['content'] as Array<{content?: string}> | undefined, 0)).toBe('they wrote')
+  expect(nested[1]?.['content']).toBe('foo\n')
+})
+
+test('parseMarkdown parses a known emoji short name', () => {
+  expect(paragraphContent(':thumbsup:')).toEqual([{content: ':thumbsup:', type: 'emoji'}])
+})
+
+test('parseMarkdown leaves an unknown emoji short name as text', () => {
+  expect(paragraphContent(':notanemoji:').every(node => node.type === 'text')).toBe(true)
+})
+
+test('parseMarkdown falls back to the bare short name for an unknown skin tone pairing', () => {
+  const content = paragraphContent(':thumbsup::skin-tone-99:')
+  expect(content[0]).toEqual({content: ':thumbsup:', type: 'emoji'})
+  expect(content.slice(1).every(node => node.type === 'text')).toBe(true)
+})
+
+// Each of these was one text node -- and so one react element -- per character.
+test('parseMarkdown does not split text into a node per character before a url', () => {
+  expect(paragraphContent('a'.repeat(2000) + '.com')).toHaveLength(1)
+  expect(paragraphContent('https://keybase.io/docs ok').length).toBeLessThan(9)
+})
+
+test('parseMarkdown keeps non-latin text in one node', () => {
+  expect(paragraphContent('こんにちは、今日はいい天気ですね')).toHaveLength(1)
+  expect(paragraphContent('привет как дела у меня всё хорошо')).toHaveLength(1)
+  expect(paragraphContent('مرحبا كيف حالك اليوم الطقس جميل')).toHaveLength(1)
+})
+
+test('parseMarkdown keeps a run of ordinary punctuation in one node', () => {
+  expect(paragraphContent('wait.... really??? no')).toHaveLength(1)
+  expect(paragraphContent('e.g. i.e. etc. v1.2.3')).toHaveLength(1)
+})
+
+test('parseMarkdown still stops the text run for every markdown marker', () => {
+  // if a marker stops counting as a stop character its rule silently stops matching
+  expect(paragraphContent('a *b* c').map(n => n.type)).toContain('strong')
+  expect(paragraphContent('a _b_ c').map(n => n.type)).toContain('em')
+  expect(paragraphContent('a ~b~ c').map(n => n.type)).toContain('del')
+  expect(paragraphContent('a `b` c').map(n => n.type)).toContain('inlineCode')
+  expect(paragraphContent('a :+1: c').map(n => n.type)).toContain('emoji')
+  expect(paragraphContent('a 👍 c').map(n => n.type)).toContain('emoji')
+  expect(paragraphContent('a !>b<! c').map(n => n.type)).toContain('spoiler')
+  expect(paragraphContent('a \\*b\\* c').every(n => n.type === 'text')).toBe(true)
+})
+
+test('parseMarkdown treats a tld only at a word end', () => {
+  expect(paragraphContent('x.comx')).toHaveLength(1)
+  expect(paragraphContent('foo.tvx')).toHaveLength(1)
+  expect(paragraphContent('notes.commercial stuff')).toHaveLength(1)
+})
+
+test('parseMarkdown parses keycap emoji', () => {
+  expect(paragraphContent('0️⃣')).toEqual([{content: ':zero:', type: 'emoji'}])
+})
+
+test('parseMarkdown parses spoilers with raw content preserved', () => {
+  const content = paragraphContent('!>secret<!')
+  expect(content.map(node => node.type)).toEqual(['spoiler'])
+  expect(content[0]?.raw).toBe('secret')
+  expect(getNestedText(content, 0)).toBe('secret')
+})
+
+test('parseMarkdown parses service decoration payloads as opaque nodes', () => {
+  const encoded = makeServiceDecorationTag({
+    link: {punycode: '', url: 'keybase://team-page/acme'},
+    typ: T.RPCChat.UITextDecorationTyp.link,
+  })
+  const content = paragraphContent(encoded)
+  expect(content.map(node => node.type)).toEqual(['serviceDecoration'])
+  expect(content[0]?.['content']).toBe(encoded.slice('$>kb$'.length, -'$<kb$'.length))
+})
+
+test('parseMarkdown recognizes emoji shortcodes and unicode emoji', () => {
+  const shortcode = paragraphContent(':wave:')
+  expect(shortcode.map(node => node.type)).toEqual(['emoji'])
+  expect(shortcode[0]?.['content']).toBe(':wave:')
+
+  const unicode = paragraphContent('🙂')
+  expect(unicode.map(node => node.type)).toEqual(['emoji'])
+})
+
+test('isAllEmoji only accepts a single line of emoji content', () => {
+  expect(isAllEmoji(parseMarkdown(':wave:'))).toBe(true)
+  expect(isAllEmoji(parseMarkdown(':wave:\n\n:wave:'))).toBe(false)
+  expect(isAllEmoji(parseMarkdown(':wave: hi'))).toBe(false)
+})
+
+test('shouldUseParser uses the fast-path cutoff for long plain inputs', () => {
+  const longPlain = 'a'.repeat(10001)
+  const longWithMarker = `${'a'.repeat(10001)}*`
+
+  expect(shouldUseParser('short text')).toBe(true)
+  expect(shouldUseParser(longPlain)).toBe(false)
+  expect(shouldUseParser(longWithMarker)).toBe(true)
+})
+
+test('parseMarkdown preserves long plain inputs through the no-markdown parser', () => {
+  const longPlain = 'a'.repeat(10001)
+  const content = paragraphContent(longPlain)
+  expect(flattenAstText(content).replace(/\n$/, '')).toBe(longPlain)
+})
+
+test('Markdown uses big emoji rendering for standalone emoji messages', () => {
+  expect(getMarkdownOutputKind(parseMarkdown(':wave:'))).toBe('bigEmoji')
+})
+
+test('Markdown renders stock emoji aliases', () => {
+  const {container} = render(<Markdown>{':thumbsup:'}</Markdown>)
+  expect(container.textContent).toContain('👍')
+})
+
+test('Markdown keeps default output for mixed emoji and text', () => {
+  expect(getMarkdownOutputKind(parseMarkdown(':wave: hi'))).toBe('default')
+})
+
+test('Markdown preview output flattens block quotes into plain text', () => {
+  render(<Markdown preview={true}>{'> quoted line'}</Markdown>)
+  expect(document.body.textContent).toContain('> quoted line')
+})
+
+test('Markdown serviceOnlyNoWrap skips only the inner service wrapper', () => {
+  const encoded = makeServiceDecorationTag({
+    link: {punycode: '', url: 'https://keybase.io'},
+    typ: T.RPCChat.UITextDecorationTyp.link,
+  })
+  const parseTree = parseMarkdown(encoded)
+
+  expect(getMarkdownOutputKind(parseTree, {serviceOnly: true})).toBe('serviceOnly')
+  expect(getMarkdownOutputKind(parseTree, {serviceOnlyNoWrap: true})).toBe('serviceOnlyNoWrap')
+})
+
+test('Markdown spoilers render masked output by default', () => {
+  render(<Markdown context="msg-1">{'!>secret<!'}</Markdown>)
+  expect(screen.getByText('••••••')).toBeTruthy()
+})
+
+test('Markdown spoilers reveal content when clicked', () => {
+  render(<Markdown context="msg-2">{'!>secret<!'}</Markdown>)
+  fireEvent.click(screen.getByTitle('Click to reveal'))
+  expect(screen.getByText('secret')).toBeTruthy()
+})

@@ -9,8 +9,10 @@ import (
 	"fmt"
 )
 
-var errExactlyOnePath = errors.New("exactly one path must be specified")
-var errAtLeastOnePath = errors.New("at least one path must be specified")
+var (
+	errExactlyOnePath = errors.New("exactly one path must be specified")
+	errAtLeastOnePath = errors.New("at least one path must be specified")
+)
 
 type cannotWriteErr struct {
 	pathStr string
@@ -22,4 +24,8 @@ func (e cannotWriteErr) Error() string {
 		return fmt.Sprintf("cannot write to %s: %v", e.pathStr, e.err)
 	}
 	return fmt.Sprintf("cannot write to %s", e.pathStr)
+}
+
+func (e cannotWriteErr) Unwrap() error {
+	return e.err
 }

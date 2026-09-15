@@ -5,12 +5,12 @@ package libkb
 
 import (
 	"bytes"
+	"crypto/ed25519"
 	"fmt"
 
 	"github.com/keybase/client/go/kbcrypto"
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 	"github.com/keybase/saltpack"
-	"golang.org/x/crypto/ed25519"
 	"golang.org/x/crypto/nacl/box"
 )
 
@@ -69,9 +69,11 @@ type naclBoxPrecomputedSharedKey [32]byte
 var _ saltpack.BoxPrecomputedSharedKey = naclBoxPrecomputedSharedKey{}
 
 func (k naclBoxPrecomputedSharedKey) Unbox(nonce saltpack.Nonce, msg []byte) (
-	[]byte, error) {
+	[]byte, error,
+) {
 	ret, ok := box.OpenAfterPrecomputation(
-		[]byte{}, msg, (*[24]byte)(&nonce), (*[32]byte)(&k))
+		[]byte{}, msg, (*[24]byte)(&nonce), (*[32]byte)(&k),
+	)
 	if !ok {
 		return nil, DecryptionError{}
 	}
@@ -88,7 +90,8 @@ type naclBoxSecretKey NaclDHKeyPair
 var _ saltpack.BoxSecretKey = naclBoxSecretKey{}
 
 func (n naclBoxSecretKey) Box(
-	receiver saltpack.BoxPublicKey, nonce saltpack.Nonce, msg []byte) []byte {
+	receiver saltpack.BoxPublicKey, nonce saltpack.Nonce, msg []byte,
+) []byte {
 	ret := box.Seal([]byte{}, msg, (*[24]byte)(&nonce),
 		(*[32]byte)(receiver.ToRawBoxKeyPointer()),
 		(*[32]byte)(n.Private))
@@ -97,7 +100,8 @@ func (n naclBoxSecretKey) Box(
 
 func (n naclBoxSecretKey) Unbox(
 	sender saltpack.BoxPublicKey, nonce saltpack.Nonce, msg []byte) (
-	[]byte, error) {
+	[]byte, error,
+) {
 	ret, ok := box.Open([]byte{}, msg, (*[24]byte)(&nonce),
 		(*[32]byte)(sender.ToRawBoxKeyPointer()),
 		(*[32]byte)(n.Private))
@@ -112,7 +116,8 @@ func (n naclBoxSecretKey) GetPublicKey() saltpack.BoxPublicKey {
 }
 
 func (n naclBoxSecretKey) Precompute(
-	sender saltpack.BoxPublicKey) saltpack.BoxPrecomputedSharedKey {
+	sender saltpack.BoxPublicKey,
+) saltpack.BoxPrecomputedSharedKey {
 	var res naclBoxPrecomputedSharedKey
 	box.Precompute((*[32]byte)(&res),
 		(*[32]byte)(sender.ToRawBoxKeyPointer()),
@@ -126,8 +131,9 @@ type naclKeyring naclBoxSecretKey
 var _ saltpack.Keyring = naclKeyring{}
 
 func (n naclKeyring) LookupBoxSecretKey(
-	kids [][]byte) (int, saltpack.BoxSecretKey) {
-	sk := (naclBoxSecretKey)(n)
+	kids [][]byte,
+) (int, saltpack.BoxSecretKey) {
+	sk := naclBoxSecretKey(n)
 	pkKid := sk.GetPublicKey().ToKID()
 	for i, kid := range kids {
 		if bytes.Equal(pkKid, kid) {

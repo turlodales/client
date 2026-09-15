@@ -1,102 +1,155 @@
 import * as C from '@/constants'
+import {ignorePromise} from '@/constants/utils'
+import * as T from '@/constants/types'
 import * as React from 'react'
 import * as Kb from '@/common-adapters'
+import logger from '@/logger'
+import {useConfigState} from '@/stores/config'
 import {formatDurationForAutoreset} from '@/util/timestamp'
+import {RPCError} from '@/util/errors'
 
 const ResetModal = () => {
-  const isResetActive = C.useAutoResetState(s => s.active)
-  return isResetActive ? <ResetModalImpl /> : null
+  const {active, endTime} = useConfigState(
+    C.useShallow(s => ({
+      active: !!s.badgeState?.resetState.active,
+      endTime: s.badgeState?.resetState.endTime ?? 0,
+    }))
+  )
+  return active ? <ResetModalImpl endTime={endTime} /> : null
 }
 
-const ResetModalImpl = () => {
-  const active = C.useAutoResetState(s => s.active)
-  const endTime = C.useAutoResetState(s => s.endTime)
-  const error = C.useAutoResetState(s => s.error)
-  const navigateUp = C.useRouterState(s => s.dispatch.navigateUp)
-  React.useEffect(() => {
-    if (!active) {
-      navigateUp()
-    }
-  }, [active, navigateUp])
-  const now = Date.now()
+const ResetModalImpl = ({endTime}: {endTime: number}) => {
+  const styles = useStyles()
+  const [dismissed, setDismissed] = React.useState(false)
+  const [error, setError] = React.useState('')
+  const [now] = React.useState(() => Date.now())
   const timeLeft = endTime - now
+  const onCancelReset = React.useCallback(() => {
+    setError('')
+    const f = async () => {
+      logger.info('Cancelled autoreset from logged-in user')
+      try {
+        await T.RPCGen.accountCancelResetRpcPromise(undefined, C.waitingKeyAutoresetCancel)
+        setDismissed(true)
+      } catch (error_) {
+        if (!(error_ instanceof RPCError)) {
+          return
+        }
+        logger.error('Error in CancelAutoreset', error_)
+        switch (error_.code) {
+          case T.RPCGen.StatusCode.scnosession:
+          case T.RPCGen.StatusCode.scnotfound:
+            setDismissed(true)
+            return
+          default:
+            setError(error_.desc)
+        }
+      }
+    }
+    ignorePromise(f())
+  }, [])
+
+  if (dismissed) {
+    return null
+  }
 
   const msg =
     timeLeft < 0
       ? 'This account is eligible to be reset.'
       : `This account will reset in ${formatDurationForAutoreset(timeLeft)}.`
 
-  const onCancelReset = C.useAutoResetState(s => s.dispatch.cancelReset)
+  const content = (
+    <>
+      <Kb.Box2 direction="horizontal" fullWidth={true} centerChildren={true} style={styles.header}>
+        <Kb.Text type={isMobile ? 'BodyBig' : 'Header'} lineClamp={1} center={true}>
+          Account reset initiated
+        </Kb.Text>
+      </Kb.Box2>
+      {error ? (
+        <Kb.Banner color="red" key="errors">
+          <Kb.BannerParagraph bannerColor="red" content={error} />
+        </Kb.Banner>
+      ) : null}
+      <Kb.Box2 fullWidth={true} direction="vertical" flex={1} style={styles.body}>
+        <Kb.Box2
+          gap="small"
+          direction="vertical"
+          fullWidth={true}
+          style={styles.textContainer}
+          centerChildren={true}
+        >
+          <Kb.ImageIcon
+            type={isMobile ? 'icon-skull-64' : 'icon-skull-48'}
+            style={styles.skullIcon}
+          />
+          <Kb.Text type="Body" center={true}>
+            {msg}
+          </Kb.Text>
+          <Kb.Text type="Body" center={true}>
+            {"But... it looks like you're already logged in. Congrats! You should cancel the reset, since "}
+            clearly you have access to your devices.
+          </Kb.Text>
+        </Kb.Box2>
+      </Kb.Box2>
+      <Kb.ModalFooter>
+        <Kb.WaitingButton
+          type="Danger"
+          fullWidth={true}
+          onClick={onCancelReset}
+          waitingKey={C.waitingKeyAutoresetCancel}
+          label="Cancel account reset"
+        />
+      </Kb.ModalFooter>
+    </>
+  )
+
+  if (!isMobile) {
+    return (
+      <Kb.Popup onHidden={() => {}} style={styles.desktopCover}>
+        <Kb.Box2 direction="vertical" style={styles.desktopModal}>
+          {content}
+        </Kb.Box2>
+      </Kb.Popup>
+    )
+  }
 
   return (
-    <Kb.SafeAreaView
-      style={{
-        backgroundColor: Kb.Styles.globalColors.white,
-        bottom: 0,
-        left: 0,
-        position: 'absolute',
-        right: 0,
-        top: 0,
-      }}
-    >
-      <Kb.Modal
-        header={{title: 'Account reset initiated'}}
-        footer={{
-          content: (
-            <Kb.WaitingButton
-              type="Danger"
-              fullWidth={true}
-              onClick={onCancelReset}
-              waitingKey={C.AutoReset.cancelResetWaitingKey}
-              label="Cancel account reset"
-            />
-          ),
-        }}
-        banners={
-          error ? (
-            <Kb.Banner color="red" key="errors">
-              <Kb.BannerParagraph bannerColor="red" content={error} />
-            </Kb.Banner>
-          ) : null
-        }
-      >
-        <Kb.Box2 fullWidth={true} direction="vertical">
-          <Kb.Box2
-            gap="small"
-            direction="vertical"
-            fullWidth={true}
-            fullHeight={true}
-            style={styles.textContainer}
-            centerChildren={true}
-          >
-            <Kb.Icon
-              type={Kb.Styles.isMobile ? 'icon-skull-64' : 'icon-skull-48'}
-              color={Kb.Styles.globalColors.black_20}
-              fontSize={48}
-            />
-            <Kb.Text type="Body" center={true}>
-              {msg}
-            </Kb.Text>
-            <Kb.Text type="Body" center={true}>
-              But... it looks like you’re already logged in. Congrats! You should cancel the reset, since
-              clearly you have access to your devices.
-            </Kb.Text>
-          </Kb.Box2>
-        </Kb.Box2>
-      </Kb.Modal>
-    </Kb.SafeAreaView>
+    <Kb.Box2 direction="vertical" centerChildren={true} style={styles.mobileOverlay}>
+      <Kb.Box2 direction="vertical" fullHeight={true} fullWidth={true} style={styles.mobileModal}>
+        {content}
+      </Kb.Box2>
+    </Kb.Box2>
   )
 }
 
-const styles = Kb.Styles.styleSheetCreate(() => ({
+const useStyles = Kb.Styles.createStyleHook(theme => ({
+  body: Kb.Styles.platformStyles({
+    isElectron: {minHeight: 220},
+  }),
+  desktopCover: {backgroundColor: theme.black_20},
+  desktopModal: {width: 420},
+  header: {
+    ...Kb.Styles.bottomDivider(theme, 48),
+  },
+  mobileModal: {
+    ...Kb.Styles.globalStyles.fillAbsolute,
+    backgroundColor: theme.white,
+  },
+  mobileOverlay: {
+    ...Kb.Styles.globalStyles.fillAbsolute,
+    backgroundColor: theme.white,
+    zIndex: 1000,
+  },
+  skullIcon: {
+    ...Kb.Styles.size(48),
+  },
   textContainer: Kb.Styles.platformStyles({
     common: {
-      paddingLeft: Kb.Styles.globalMargins.small,
-      paddingRight: Kb.Styles.globalMargins.small,
+      ...Kb.Styles.paddingH(Kb.Styles.globalMargins.small),
     },
     isElectron: {
-      paddingBottom: Kb.Styles.globalMargins.xlarge,
-      paddingTop: Kb.Styles.globalMargins.xlarge,
+      flex: 1,
+      ...Kb.Styles.paddingV(Kb.Styles.globalMargins.xlarge),
     },
   }),
 }))

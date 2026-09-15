@@ -31,14 +31,12 @@ func (p *Paragraph) Buffer(b []byte) {
 	p.data = append(p.data, b...)
 }
 
-var (
-	nl = []byte{'\n'}
-)
+var nl = []byte{'\n'}
 
 // makePad makes a whitespace pad that is l bytes long.
 func makePad(l int) []byte {
 	ret := make([]byte, l)
-	for i := 0; i < l; i++ {
+	for i := range l {
 		ret[i] = ' '
 	}
 	return ret
@@ -169,9 +167,10 @@ func (r *Renderer) RenderNode(node *html.Node) {
 	case atom.Em:
 		cp = &CpItalic
 	default:
-		if node.Data == "url" {
+		switch node.Data {
+		case "url":
 			cp = &CpUnderline
-		} else if node.Data == "color" {
+		case "color":
 			if c := GetNodeAttrVal(node, "name"); c != nil {
 				cp = GetColorCode(*c)
 			}

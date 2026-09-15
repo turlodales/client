@@ -34,8 +34,10 @@ type NodeHash interface {
 	Eq(h NodeHash) bool
 }
 
-type NodeHashShort [NodeHashLenShort]byte
-type NodeHashLong [NodeHashLenLong]byte
+type (
+	NodeHashShort [NodeHashLenShort]byte
+	NodeHashLong  [NodeHashLenLong]byte
+)
 
 // NodeHashAny incorporates either a short (256-bit) or a long (512-bit) hash.
 // It's unfortunate we need it, but I didn't see any other way to use the
@@ -48,9 +50,11 @@ type NodeHashAny struct {
 	l *NodeHashLong
 }
 
-var _ NodeHash = NodeHashShort{}
-var _ NodeHash = NodeHashLong{}
-var _ NodeHash = NodeHashAny{}
+var (
+	_ NodeHash = NodeHashShort{}
+	_ NodeHash = NodeHashLong{}
+	_ NodeHash = NodeHashAny{}
+)
 
 func (h1 NodeHashShort) Check(s string) bool {
 	h2 := sha256.Sum256([]byte(s))
@@ -454,9 +458,10 @@ func GetNodeHashVoid(w *jsonw.Wrapper, nhp *NodeHash, errp *error) {
 }
 
 func computeSetBitsBigEndian(x uint) []uint {
-	if x == 0 {
+	switch x {
+	case 0:
 		return nil
-	} else if x == 1 {
+	case 1:
 		return []uint{1}
 	}
 	// Allocate maximum array size necessary
@@ -477,8 +482,8 @@ func computeLogPatternMerkleSkips(startSeqno keybase1.Seqno, endSeqno keybase1.S
 	if endSeqno == startSeqno {
 		return ret, nil
 	}
-	end := uint(endSeqno)
-	start := uint(startSeqno)
+	end := uint(endSeqno)     //nolint:gosec // G115: Seqno values are positive and ordered (checked above), safe to convert
+	start := uint(startSeqno) //nolint:gosec // G115: Seqno values are positive and ordered (checked above), safe to convert
 	diff := end - start
 	skips := computeSetBitsBigEndian(diff)
 	curr := end
@@ -723,7 +728,6 @@ func (mc *MerkleClient) fetchAndStoreRootFromServerLocked(m MetaContext, lastRoo
 // if both mr and err are nil, this indicates the server did not send a new root
 // as lastRoot was the most recent one.
 func (mc *MerkleClient) lookupRootAndSkipSequence(m MetaContext, lastRoot *MerkleRoot, opts MerkleOpts) (mr *MerkleRoot, ss SkipSequence, apiRes *APIRes, err error) {
-
 	// c=1 invokes server-side compression
 	q := HTTPArgs{
 		"c": B{true},
@@ -745,7 +749,6 @@ func (mc *MerkleClient) lookupRootAndSkipSequence(m MetaContext, lastRoot *Merkl
 		Args:           q,
 		AppStatusCodes: []int{SCOk},
 	})
-
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -813,7 +816,7 @@ func (mc *MerkleClient) lookupLeafAndPath(m MetaContext, q HTTPArgs, root *Merkl
 func (mc *MerkleClient) lookupLeafAndPathHelper(m MetaContext, q HTTPArgs, sigHints *SigHints, root *MerkleRoot, opts MerkleOpts) (apiRes *APIRes, newRoot *MerkleRoot, err error) {
 	defer m.VTrace(VLog1, "MerkleClient#lookupLeafAndPathHelper", &err)()
 
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		apiRes, rootRefreshNeeded, err := mc.lookupLeafAndPathHelperOnce(m, q, sigHints, root, opts)
 		if err != nil {
 			return nil, nil, err
@@ -866,7 +869,6 @@ func (mc *MerkleClient) lookupLeafAndPathHelperOnce(m MetaContext, q HTTPArgs, s
 		Args:           q,
 		AppStatusCodes: []int{SCOk, SCNotFound, SCDeleted, SCMerkleUpdateRoot},
 	})
-
 	if err != nil {
 		return nil, false, err
 	}
@@ -1042,7 +1044,6 @@ func (mc *MerkleClient) readPathFromAPIRes(m MetaContext, res *APIRes, opts Merk
 }
 
 func pathStepFromJSON(jw *jsonw.Wrapper) (ps *PathStep, err error) {
-
 	var prefix string
 	pw := jw.AtKey("prefix")
 	if !pw.IsNil() {
@@ -1111,7 +1112,6 @@ func (mc *MerkleClient) firstExaminableHistoricalRootProd(m MetaContext) *keybas
 }
 
 func (mc *MerkleClient) FirstExaminableHistoricalRoot(m MetaContext) *keybase1.Seqno {
-
 	if mc.G().Env.GetRunMode() == ProductionRunMode {
 		return mc.firstExaminableHistoricalRootProd(m)
 	}
@@ -1141,14 +1141,12 @@ func (r *firstSkipRaw) GetAppStatus() *AppStatus {
 }
 
 func (mc *MerkleClient) getFirstSkipFromServer(m MetaContext) *keybase1.Seqno {
-
 	var raw firstSkipRaw
 	err := m.G().API.GetDecode(m, APIArg{
 		Endpoint:       "merkle/first_root_with_skips",
 		SessionType:    APISessionTypeNONE,
 		AppStatusCodes: []int{SCOk},
 	}, &raw)
-
 	if err != nil {
 		m.Debug("failed to fetch first skip from server: %v", err)
 		return nil
@@ -1196,14 +1194,12 @@ func (r *firstHiddenSeqnoRaw) GetAppStatus() *AppStatus {
 }
 
 func (mc *MerkleClient) getFirstMainRootWithHiddenRootHashFromServer(m MetaContext) (s keybase1.Seqno, err error) {
-
 	var raw firstHiddenSeqnoRaw
 	err = m.G().API.GetDecode(m, APIArg{
 		Endpoint:       "merkle/first_root_with_hidden",
 		SessionType:    APISessionTypeNONE,
 		AppStatusCodes: []int{SCOk},
 	}, &raw)
-
 	if err != nil {
 		m.Debug("failed to fetch first main root with hidden from server: %v", err)
 		return 0, fmt.Errorf("failed to fetch first main root with hidden from server: %v", err)
@@ -1304,7 +1300,7 @@ func (ss SkipSequence) verify(m MetaContext, thisRoot keybase1.Seqno, lastRoot k
 
 	for index := 1; index < len(ss)-1; index++ {
 		root := ss[index].seqno()
-		if keybase1.Seqno(expectedSkips[index-1]) != root {
+		if keybase1.Seqno(expectedSkips[index-1]) != root { //nolint:gosec // G115: expectedSkips are computed from seqno differences, safe to convert back
 			return MerkleClientError{fmt.Sprintf("Unexpected skip index: expected %d, got %d.", expectedSkips[index-1], root), merkleErrorWrongSkipSequence}
 		}
 	}
@@ -1350,7 +1346,6 @@ func (ss SkipSequence) verify(m MetaContext, thisRoot keybase1.Seqno, lastRoot k
 			fmt.Sprintf("Too much clock drift detected (%ds) in skip sequence", totalDrift),
 			merkleErrorTooMuchClockDrift,
 		}
-
 	}
 
 	return nil
@@ -1402,12 +1397,12 @@ func (mc *MerkleClient) verifyRootHelper(m MetaContext, newRoot *MerkleRoot, cur
 }
 
 func verifyRootSkips(rootSeqno keybase1.Seqno, skips SkipTable) error {
-	expectedSkips := computeExpectedRootSkips(uint(rootSeqno))
+	expectedSkips := computeExpectedRootSkips(uint(rootSeqno)) //nolint:gosec // G115: Seqno is positive, safe for skip computation
 	if len(expectedSkips) != len(skips) {
 		return MerkleClientError{fmt.Sprintf("Root check: wrong number of skips: expected %d, got %d.", len(expectedSkips), len(skips)), merkleErrorWrongRootSkips}
 	}
 	for _, expectedSkip := range expectedSkips {
-		seqno := keybase1.Seqno(expectedSkip)
+		seqno := keybase1.Seqno(expectedSkip) //nolint:gosec // G115: expectedSkips computed from seqno, safe to convert back
 		_, ok := skips[seqno]
 		if !ok {
 			return MerkleClientError{fmt.Sprintf("Root check: unexpected skip index: wanted %d, but did not exist.", seqno), merkleErrorWrongRootSkips}
@@ -1464,7 +1459,6 @@ func parseTriple(jw *jsonw.Wrapper) (*MerkleTriple, error) {
 	}
 
 	return &MerkleTriple{keybase1.Seqno(seqno), li, si}, nil
-
 }
 
 func parseV1(jw *jsonw.Wrapper) (user *MerkleUserLeaf, err error) {
@@ -1477,6 +1471,7 @@ func parseV1(jw *jsonw.Wrapper) (user *MerkleUserLeaf, err error) {
 	}
 	return
 }
+
 func parseV2(jw *jsonw.Wrapper) (*MerkleUserLeaf, error) {
 	user := MerkleUserLeaf{}
 
@@ -1537,7 +1532,6 @@ func parseMerkleUserLeaf(m MetaContext, jw *jsonw.Wrapper, g *GlobalContext) (us
 	}
 
 	v, err := jw.AtIndex(0).GetInt()
-
 	if err != nil {
 		return
 	}
@@ -1665,7 +1659,7 @@ func (vp *VerificationPath) verifyUser(m MetaContext, uid keybase1.UID) (user *M
 		}
 	}
 
-	if err == nil {
+	if err == nil { //nolint
 		// noop
 	} else if _, ok := err.(MerklePathNotFoundError); ok {
 		m.VLogf(VLog0, fmt.Sprintf("In checking Merkle tree: %s", err))
@@ -1693,7 +1687,7 @@ func (vp *VerificationPath) verifyTeam(m MetaContext, teamID keybase1.TeamID) (t
 		}
 	}
 
-	if err == nil {
+	if err == nil { // nolint
 		// noop
 	} else if _, ok := err.(MerklePathNotFoundError); ok {
 		m.VLogf(VLog0, fmt.Sprintf("In checking Merkle tree: %s", err))
@@ -1709,7 +1703,6 @@ func (vp *VerificationPath) verifyTeam(m MetaContext, teamID keybase1.TeamID) (t
 }
 
 func (path PathSteps) VerifyPath(curr NodeHash, uidS string) (juser *jsonw.Wrapper, err error) {
-
 	bpath := uidS
 	lastTyp := 0
 
@@ -1766,7 +1759,6 @@ func (path PathSteps) VerifyPath(curr NodeHash, uidS string) (juser *jsonw.Wrapp
 }
 
 func (mc *MerkleClient) verifySkipSequenceAndRoot(m MetaContext, ss SkipSequence, curr *MerkleRoot, prev *MerkleRoot, apiRes *APIRes, opts MerkleOpts) (err error) {
-
 	defer func() {
 		if err != nil {
 			m.VLogf(VLog0, "| Full APIRes was: %s", apiRes.Body.MarshalToDebug())
@@ -1785,7 +1777,6 @@ func (mc *MerkleClient) verifySkipSequenceAndRoot(m MetaContext, ss SkipSequence
 }
 
 func (mc *MerkleClient) LookupUser(m MetaContext, q HTTPArgs, sigHints *SigHints, opts MerkleOpts) (u *MerkleUserLeaf, err error) {
-
 	m.VLogf(VLog0, "+ MerkleClient.LookupUser(%v)", q)
 
 	if err = mc.init(m); err != nil {
@@ -1825,7 +1816,6 @@ func (mc *MerkleClient) LookupUser(m MetaContext, q HTTPArgs, sigHints *SigHints
 }
 
 func (vp *VerificationPath) verifyUserOrTeam(m MetaContext, id keybase1.UserOrTeamID) (leaf *MerkleGenericLeaf, err error) {
-
 	if id.IsUser() {
 		user, err := vp.verifyUser(m, id.AsUserOrBust())
 		if err != nil {
@@ -2033,7 +2023,6 @@ func (m *MerkleHiddenResponse) GetUncommittedSeqno() keybase1.Seqno {
 type ProcessHiddenRespFunc func(m MetaContext, teamID keybase1.TeamID, apiRes *APIRes, blindRootHash string) (*MerkleHiddenResponse, error)
 
 func (mc *MerkleClient) lookupTeam(m MetaContext, teamID keybase1.TeamID, processHiddenResponseFunc ProcessHiddenRespFunc) (leaf *MerkleTeamLeaf, hiddenResp *MerkleHiddenResponse, lastMerkleRoot *MerkleRoot, err error) {
-
 	m.VLogf(VLog0, "+ MerkleClient.LookupTeam(%v)", teamID)
 
 	var path *VerificationPath
@@ -2071,7 +2060,6 @@ func (mc *MerkleClient) lookupTeam(m MetaContext, teamID keybase1.TeamID, proces
 }
 
 func (mr *MerkleRoot) ToSigJSON() (ret *jsonw.Wrapper) {
-
 	ret = jsonw.NewDictionary()
 	_ = ret.SetKey("seqno", jsonw.NewInt(int(*mr.Seqno())))
 	_ = ret.SetKey("ctime", jsonw.NewInt64(mr.Ctime()))
@@ -2240,7 +2228,9 @@ func (mrp MerkleRootPayload) rootHash() NodeHash          { return mrp.unpacked.
 func (mrp MerkleRootPayload) legacyUIDRootHash() NodeHash { return mrp.unpacked.Body.LegacyUIDRoot }
 func (mrp MerkleRootPayload) pvlHash() string             { return mrp.unpacked.Body.PvlHash }
 func (mrp MerkleRootPayload) proofServicesHash() string   { return mrp.unpacked.Body.ProofServicesHash }
-func (mrp MerkleRootPayload) externalURLHash() string     { return mrp.unpacked.Body.ExternalURLHash }
+
+func (mrp MerkleRootPayload) externalURLHash() string { return mrp.unpacked.Body.ExternalURLHash }
+
 func (mrp MerkleRootPayload) blindMerkleRootHash() string {
 	return mrp.unpacked.Body.BlindMerkleRootHash
 }
@@ -2248,9 +2238,11 @@ func (mrp MerkleRootPayload) ctime() int64 { return mrp.unpacked.Ctime }
 func (mrp MerkleRootPayload) kbfsPrivate() (keybase1.KBFSRootHash, *keybase1.Seqno) {
 	return mrp.unpacked.Body.Kbfs.Private.Root, mrp.unpacked.Body.Kbfs.Private.Version
 }
+
 func (mrp MerkleRootPayload) kbfsPublic() (keybase1.KBFSRootHash, *keybase1.Seqno) {
 	return mrp.unpacked.Body.Kbfs.Public.Root, mrp.unpacked.Body.Kbfs.Public.Version
 }
+
 func (mrp MerkleRootPayload) kbfsPrivateTeam() (keybase1.KBFSRootHash, *keybase1.Seqno) {
 	return mrp.unpacked.Body.Kbfs.PrivateTeam.Root, mrp.unpacked.Body.Kbfs.PrivateTeam.Version
 }

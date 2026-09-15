@@ -4,6 +4,7 @@
 package libkb
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -26,8 +27,10 @@ type Identify2Cacher interface {
 	UseDiskCache() bool
 }
 
-type GetCheckTimeFunc func(keybase1.Identify2ResUPK2) keybase1.Time
-type GetCacheDurationFunc func(keybase1.Identify2ResUPK2) time.Duration
+type (
+	GetCheckTimeFunc     func(keybase1.Identify2ResUPK2) keybase1.Time
+	GetCacheDurationFunc func(keybase1.Identify2ResUPK2) time.Duration
+)
 
 // NewIdentify2Cache creates a Identify2Cache and sets the object max age to
 // maxAge.  Once a user is inserted, after maxAge duration passes,
@@ -45,7 +48,7 @@ func NewIdentify2Cache(maxAge time.Duration) *Identify2Cache {
 func (c *Identify2Cache) Get(uid keybase1.UID, gctf GetCheckTimeFunc, gcdf GetCacheDurationFunc, breaksOK bool) (*keybase1.Identify2ResUPK2, error) {
 	v, err := c.cache.Get(string(uid))
 	if err != nil {
-		if err == ramcache.ErrNotFound {
+		if errors.Is(err, ramcache.ErrNotFound) {
 			return nil, nil
 		}
 		return nil, err
@@ -77,9 +80,9 @@ func (c *Identify2Cache) Get(uid keybase1.UID, gctf GetCheckTimeFunc, gcdf GetCa
 // Insert adds a user to the cache, keyed on UID.
 func (c *Identify2Cache) Insert(up *keybase1.Identify2ResUPK2) error {
 	tmp := *up
-	copy := &tmp
-	copy.Upk.Uvv.CachedAt = keybase1.ToTime(time.Now())
-	return c.cache.Set(string(up.Upk.GetUID()), copy)
+	cp := &tmp
+	cp.Upk.Uvv.CachedAt = keybase1.ToTime(time.Now())
+	return c.cache.Set(string(up.Upk.GetUID()), cp)
 }
 
 func (c *Identify2Cache) Delete(uid keybase1.UID) error {

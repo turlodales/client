@@ -6,11 +6,11 @@ package libfs
 
 import (
 	"bytes"
+	"context"
 
 	"github.com/keybase/client/go/kbfs/data"
 	"github.com/keybase/client/go/kbfs/libkbfs"
 	"github.com/keybase/client/go/logger"
-	"golang.org/x/net/context"
 )
 
 // UnstageForTesting unstages all unmerged commits and fast-forwards
@@ -27,7 +27,8 @@ import (
 // unstage succeeds by consulting .kbfs_status.
 func UnstageForTesting(ctx context.Context, log logger.Logger,
 	config libkbfs.Config, fb data.FolderBranch,
-	data []byte) (int, error) {
+	data []byte,
+) (int, error) {
 	log.CDebugf(ctx, "UnstageForTesting(%v, %v)", fb, data)
 	if len(data) == 0 {
 		return 0, nil

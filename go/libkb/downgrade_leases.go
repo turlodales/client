@@ -4,10 +4,10 @@
 package libkb
 
 import (
+	"context"
 	"strings"
 
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
-	context "golang.org/x/net/context"
 )
 
 func kidsToString(kids []keybase1.KID) string {
@@ -111,7 +111,7 @@ func RequestDowngradeLeaseByTeam(ctx context.Context, g *GlobalContext, teamID k
 }
 
 func leaseWithMerkleRoot(ctx context.Context, g *GlobalContext, res leaseReply) (lease *Lease, mr *MerkleRoot, err error) {
-	mr, err = g.MerkleClient.FetchRootFromServerByMinSeqno(NewMetaContext(ctx, g), res.Lease.MerkleSeqno)
+	mr, err = g.MerkleClient.FetchRootFromServerByMinSeqno(NewMetaContext(ctx, g), res.MerkleSeqno)
 	if err != nil {
 		return nil, nil, err
 	}

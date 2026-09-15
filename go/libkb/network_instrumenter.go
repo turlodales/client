@@ -1,6 +1,7 @@
 package libkb
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
@@ -10,7 +11,6 @@ import (
 	humanize "github.com/dustin/go-humanize"
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 	"github.com/keybase/go-framed-msgpack-rpc/rpc"
-	context "golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -239,7 +239,7 @@ func (s *DiskInstrumentationStorage) logRecord(ctx context.Context, tag string, 
 		return
 	}
 	if _, ok := tagLogBlacklist[tag]; !ok {
-		s.G().PerfLog.CDebugf(ctx, "%s %v %s", tag, record.Dur, humanize.Bytes(uint64(record.Size)))
+		s.G().PerfLog.CDebugf(ctx, "%s %v %s", tag, record.Dur, humanize.Bytes(uint64(record.Size))) //nolint:gosec // G115: Network size is non-negative, safe to convert
 		s.G().RuntimeStats.PushPerfEvent(keybase1.PerfEvent{
 			EventType: keybase1.PerfEventType_NETWORK,
 			Message:   tag,

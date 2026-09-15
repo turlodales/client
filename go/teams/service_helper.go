@@ -1,12 +1,12 @@
 package teams
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/keybase/client/go/avatars"
 	email_utils "github.com/keybase/client/go/emails"
@@ -18,8 +18,8 @@ import (
 )
 
 func LoadTeamPlusApplicationKeys(ctx context.Context, g *libkb.GlobalContext, id keybase1.TeamID,
-	application keybase1.TeamApplication, refreshers keybase1.TeamRefreshers, includeKBFSKeys bool) (res keybase1.TeamPlusApplicationKeys, err error) {
-
+	application keybase1.TeamApplication, refreshers keybase1.TeamRefreshers, includeKBFSKeys bool,
+) (res keybase1.TeamPlusApplicationKeys, err error) {
 	team, err := Load(ctx, g, keybase1.LoadTeamArg{
 		ID:         id,
 		Public:     id.IsPublic(), // infer publicness from id
@@ -51,23 +51,16 @@ func GetAnnotatedTeam(ctx context.Context, g *libkb.GlobalContext, teamID keybas
 	settings := t.Settings()
 
 	tracer.Stage("members & invites")
-	members, annotatedInvites, err := GetAnnotatedInvitesAndMembersForUI(mctx, t)
+	members, annotatedInvites, err := annotatedTeamMembersForUI(mctx, t)
 	if err != nil {
 		return res, err
 	}
-	members = membersFilterDeletedUsers(mctx.Ctx(), mctx.G(), members)
-	members = membersHideInactiveDuplicates(mctx.Ctx(), mctx.G(), members)
 
 	var transitiveSubteamsUnverified keybase1.SubteamListResult
 	var joinRequests []keybase1.TeamJoinRequest
 	var tarsDisabled bool
 	var showcase keybase1.TeamShowcase
 	if !t.IsImplicit() {
-		if settings.Open {
-			g.Log.CDebugf(ctx, "GetAnnotatedTeam: %q is an open team, filtering reset writers and readers", t.Name().String())
-			members = keybase1.FilterInactiveReadersWriters(members)
-		}
-
 		tracer.Stage("transitive subteams")
 		transitiveSubteamsUnverified, err = ListSubteamsUnverified(mctx, t.Name())
 		if err != nil {
@@ -111,6 +104,40 @@ func GetAnnotatedTeam(ctx context.Context, g *libkb.GlobalContext, teamID keybas
 		KeyGeneration:                t.Generation(),
 		Showcase:                     showcase,
 	}, nil
+}
+
+// GetAnnotatedTeamMembers returns the member view used by the UI without
+// fetching the unrelated subteam, access-request, TAR, and showcase data in an
+// AnnotatedTeam.
+func GetAnnotatedTeamMembers(ctx context.Context, g *libkb.GlobalContext,
+	teamID keybase1.TeamID,
+) (res []keybase1.TeamMemberDetails, err error) {
+	tracer := g.CTimeTracer(ctx, "GetAnnotatedTeamMembers", true)
+	defer tracer.Finish()
+
+	t, err := GetMaybeAdminByID(ctx, g, teamID, teamID.IsPublic())
+	if err != nil {
+		return nil, err
+	}
+
+	res, _, err = annotatedTeamMembersForUI(libkb.NewMetaContext(ctx, g), t)
+	return res, err
+}
+
+func annotatedTeamMembersForUI(mctx libkb.MetaContext, t *Team) (
+	members []keybase1.TeamMemberDetails, annotatedInvites []keybase1.AnnotatedTeamInvite, err error,
+) {
+	members, annotatedInvites, err = GetAnnotatedInvitesAndMembersForUI(mctx, t)
+	if err != nil {
+		return nil, nil, err
+	}
+	members = membersFilterDeletedUsers(mctx.Ctx(), mctx.G(), members)
+	members = membersHideInactiveDuplicates(mctx.Ctx(), mctx.G(), members)
+	if t.Settings().Open {
+		mctx.Debug("GetAnnotatedTeamMembers: %q is an open team, filtering reset writers and readers", t.Name().String())
+		members = keybase1.FilterInactiveReadersWriters(members)
+	}
+	return members, annotatedInvites, nil
 }
 
 func GetAnnotatedTeamByName(ctx context.Context, g *libkb.GlobalContext, teamName string) (res keybase1.AnnotatedTeam, err error) {
@@ -298,7 +325,8 @@ func SetRoleBot(ctx context.Context, g *libkb.GlobalContext, teamname, username 
 }
 
 func SetRoleRestrictedBot(ctx context.Context, g *libkb.GlobalContext, teamname, username string,
-	botSettings keybase1.TeamBotSettings) error {
+	botSettings keybase1.TeamBotSettings,
+) error {
 	uv, err := loadUserVersionByUsername(ctx, g, username, true /* useTracking */)
 	if err != nil {
 		return err
@@ -330,8 +358,8 @@ func getUserProofsNoTracking(ctx context.Context, g *libkb.GlobalContext, userna
 }
 
 func AddMemberByID(ctx context.Context, g *libkb.GlobalContext, teamID keybase1.TeamID, username string,
-	role keybase1.TeamRole, botSettings *keybase1.TeamBotSettings, emailInviteMsg *string) (res keybase1.TeamAddMemberResult, err error) {
-
+	role keybase1.TeamRole, botSettings *keybase1.TeamBotSettings, emailInviteMsg *string,
+) (res keybase1.TeamAddMemberResult, err error) {
 	err = RetryIfPossible(ctx, g, func(ctx context.Context, _ int) error {
 		t, err := GetForTeamManagementByTeamID(ctx, g, teamID, true /*needAdmin*/)
 		if err != nil {
@@ -381,7 +409,8 @@ func AddMemberByID(ctx context.Context, g *libkb.GlobalContext, teamID keybase1.
 }
 
 func AddMember(ctx context.Context, g *libkb.GlobalContext, teamname, username string, role keybase1.TeamRole,
-	botSettings *keybase1.TeamBotSettings) (res keybase1.TeamAddMemberResult, err error) {
+	botSettings *keybase1.TeamBotSettings,
+) (res keybase1.TeamAddMemberResult, err error) {
 	team, err := Load(ctx, g, keybase1.LoadTeamArg{
 		Name:        teamname,
 		ForceRepoll: true,
@@ -406,7 +435,8 @@ type AddMembersRes struct {
 //
 // @emailInviteMsg *string is an argument used as a welcome message in email invitations sent from the server
 func AddMembers(ctx context.Context, g *libkb.GlobalContext, teamID keybase1.TeamID, users []keybase1.UserRolePair,
-	emailInviteMsg *string) (added []AddMembersRes, notAdded []keybase1.User, err error) {
+	emailInviteMsg *string,
+) (added []AddMembersRes, notAdded []keybase1.User, err error) {
 	mctx := libkb.NewMetaContext(ctx, g)
 	tracer := g.CTimeTracer(ctx, "team.AddMembers", true)
 	defer tracer.Finish()
@@ -515,7 +545,8 @@ func AddMembers(ctx context.Context, g *libkb.GlobalContext, teamID keybase1.Tea
 }
 
 func ReAddMemberAfterReset(ctx context.Context, g *libkb.GlobalContext, teamID keybase1.TeamID,
-	username string) (err error) {
+	username string,
+) (err error) {
 	defer g.CTrace(ctx, fmt.Sprintf("ReAddMemberAfterReset(%v,%v)", teamID, username), &err)()
 	err = reAddMemberAfterResetInner(ctx, g, teamID, username)
 	switch err.(type) {
@@ -529,7 +560,8 @@ func ReAddMemberAfterReset(ctx context.Context, g *libkb.GlobalContext, teamID k
 }
 
 func reAddMemberAfterResetInner(ctx context.Context, g *libkb.GlobalContext, teamID keybase1.TeamID,
-	username string) error {
+	username string,
+) error {
 	arg := libkb.NewLoadUserArg(g).
 		WithNetContext(ctx).
 		WithName(username).
@@ -670,13 +702,15 @@ func AddEmailsBulk(ctx context.Context, g *libkb.GlobalContext, teamname, emails
 }
 
 func EditMember(ctx context.Context, g *libkb.GlobalContext, teamname, username string,
-	role keybase1.TeamRole, botSettings *keybase1.TeamBotSettings) error {
+	role keybase1.TeamRole, botSettings *keybase1.TeamBotSettings,
+) error {
 	teamGetter := func() (*Team, error) { return GetForTeamManagementByStringName(ctx, g, teamname, true) }
 	return editMember(ctx, g, teamGetter, username, role, botSettings)
 }
 
 func EditMemberByID(ctx context.Context, g *libkb.GlobalContext, teamID keybase1.TeamID,
-	username string, role keybase1.TeamRole, botSettings *keybase1.TeamBotSettings) error {
+	username string, role keybase1.TeamRole, botSettings *keybase1.TeamBotSettings,
+) error {
 	teamGetter := func() (*Team, error) { return GetForTeamManagementByTeamID(ctx, g, teamID, true) }
 	return editMember(ctx, g, teamGetter, username, role, botSettings)
 }
@@ -697,10 +731,10 @@ func EditMembers(ctx context.Context, g *libkb.GlobalContext, teamID keybase1.Te
 }
 
 func editMember(ctx context.Context, g *libkb.GlobalContext, teamGetter func() (*Team, error),
-	username string, role keybase1.TeamRole, botSettings *keybase1.TeamBotSettings) error {
-
+	username string, role keybase1.TeamRole, botSettings *keybase1.TeamBotSettings,
+) error {
 	uv, err := loadUserVersionByUsername(ctx, g, username, true /* useTracking */)
-	if err == errInviteRequired {
+	if errors.Is(err, errInviteRequired) {
 		return editMemberInvite(ctx, g, teamGetter, username, role, uv, botSettings)
 	}
 	if err != nil {
@@ -743,12 +777,12 @@ func editMember(ctx context.Context, g *libkb.GlobalContext, teamGetter func() (
 
 		return t.ChangeMembership(ctx, req)
 	})
-
 }
 
 func editMemberInvite(ctx context.Context, g *libkb.GlobalContext, teamGetter func() (*Team, error),
 	username string, role keybase1.TeamRole,
-	uv keybase1.UserVersion, botSettings *keybase1.TeamBotSettings) error {
+	uv keybase1.UserVersion, botSettings *keybase1.TeamBotSettings,
+) error {
 	t, err := teamGetter()
 	if err != nil {
 		return err
@@ -771,7 +805,8 @@ func editMemberInvite(ctx context.Context, g *libkb.GlobalContext, teamGetter fu
 }
 
 func SetBotSettings(ctx context.Context, g *libkb.GlobalContext, teamname, username string,
-	botSettings keybase1.TeamBotSettings) error {
+	botSettings keybase1.TeamBotSettings,
+) error {
 	teamGetter := func() (*Team, error) {
 		return GetForTeamManagementByStringName(ctx, g, teamname, false)
 	}
@@ -780,7 +815,8 @@ func SetBotSettings(ctx context.Context, g *libkb.GlobalContext, teamname, usern
 }
 
 func SetBotSettingsByID(ctx context.Context, g *libkb.GlobalContext, teamID keybase1.TeamID,
-	username string, botSettings keybase1.TeamBotSettings) error {
+	username string, botSettings keybase1.TeamBotSettings,
+) error {
 	teamGetter := func() (*Team, error) {
 		return GetForTeamManagementByTeamID(ctx, g, teamID, false)
 	}
@@ -788,8 +824,8 @@ func SetBotSettingsByID(ctx context.Context, g *libkb.GlobalContext, teamID keyb
 }
 
 func setBotSettings(ctx context.Context, g *libkb.GlobalContext, teamGetter func() (*Team, error),
-	username string, botSettings keybase1.TeamBotSettings) error {
-
+	username string, botSettings keybase1.TeamBotSettings,
+) error {
 	uv, err := loadUserVersionByUsername(ctx, g, username, true /* useTracking */)
 	if err != nil {
 		return err
@@ -820,7 +856,8 @@ func setBotSettings(ctx context.Context, g *libkb.GlobalContext, teamGetter func
 }
 
 func GetBotSettings(ctx context.Context, g *libkb.GlobalContext,
-	teamname, username string) (res keybase1.TeamBotSettings, err error) {
+	teamname, username string,
+) (res keybase1.TeamBotSettings, err error) {
 	team, err := Load(ctx, g, keybase1.LoadTeamArg{
 		Name:        teamname,
 		ForceRepoll: true,
@@ -832,7 +869,8 @@ func GetBotSettings(ctx context.Context, g *libkb.GlobalContext,
 }
 
 func GetBotSettingsByID(ctx context.Context, g *libkb.GlobalContext, teamID keybase1.TeamID,
-	username string) (res keybase1.TeamBotSettings, err error) {
+	username string,
+) (res keybase1.TeamBotSettings, err error) {
 	team, err := Load(ctx, g, keybase1.LoadTeamArg{
 		ID:          teamID,
 		ForceRepoll: true,
@@ -844,7 +882,8 @@ func GetBotSettingsByID(ctx context.Context, g *libkb.GlobalContext, teamID keyb
 }
 
 func getBotSettings(ctx context.Context, g *libkb.GlobalContext,
-	team *Team, username string) (res keybase1.TeamBotSettings, err error) {
+	team *Team, username string,
+) (res keybase1.TeamBotSettings, err error) {
 	uv, err := loadUserVersionByUsername(ctx, g, username, true /* useTracking */)
 	if err != nil {
 		return res, err
@@ -907,7 +946,8 @@ func MemberRoleFromID(ctx context.Context, g *libkb.GlobalContext, teamID keybas
 }
 
 func RemoveMemberSingle(ctx context.Context, g *libkb.GlobalContext, teamID keybase1.TeamID,
-	member keybase1.TeamMemberToRemove) (err error) {
+	member keybase1.TeamMemberToRemove,
+) (err error) {
 	members := []keybase1.TeamMemberToRemove{member}
 	res, err := RemoveMembers(ctx, g, teamID, members, false /* NoErrorOnPartialFailure */)
 	if err != nil {
@@ -998,7 +1038,8 @@ func RemoveMembers(ctx context.Context, g *libkb.GlobalContext, teamID keybase1.
 // removeMemberFromSubtree removes member from all teams in the subtree of targetTeamID,
 // *not including* targetTeamID itself
 func removeMemberFromSubtree(mctx libkb.MetaContext, targetTeamID keybase1.TeamID,
-	assertion string) error {
+	assertion string,
+) error {
 	// We don't care about the roles; we just want the list of teams. So we can pass our
 	// own username.
 	myUsername := mctx.G().Env.GetUsername()
@@ -1252,8 +1293,10 @@ func ChangeRoles(ctx context.Context, g *libkb.GlobalContext, teamname string, r
 	})
 }
 
-var errInviteRequired = errors.New("invite required for username")
-var errUserDeleted = errors.New("user is deleted")
+var (
+	errInviteRequired = errors.New("invite required for username")
+	errUserDeleted    = errors.New("user is deleted")
+)
 
 // loadUserVersionByUsername is a wrapper around `engine.ResolveAndCheck` to
 // return UV by username or assertion. When the argument does not resolve to a
@@ -1338,7 +1381,6 @@ func makeIdentifyLiteRes(id keybase1.TeamID, name keybase1.TeamName) keybase1.Id
 }
 
 func identifyLiteByID(ctx context.Context, g *libkb.GlobalContext, utid keybase1.UserOrTeamID, id2 keybase1.TeamID) (res keybase1.IdentifyLiteRes, err error) {
-
 	var id1 keybase1.TeamID
 	if utid.Exists() {
 		id1, err = utid.AsTeam()
@@ -1375,7 +1417,6 @@ func identifyLiteByName(ctx context.Context, g *libkb.GlobalContext, name keybas
 }
 
 func IdentifyLite(ctx context.Context, g *libkb.GlobalContext, arg keybase1.IdentifyLiteArg, au libkb.AssertionURL) (res keybase1.IdentifyLiteRes, err error) {
-
 	if arg.Id.Exists() || au.IsTeamID() {
 		return identifyLiteByID(ctx, g, arg.Id, au.ToTeamID())
 	}
@@ -1565,7 +1606,7 @@ func IgnoreRequest(ctx context.Context, g *libkb.GlobalContext, teamName, userna
 	mctx := libkb.NewMetaContext(ctx, g)
 	uv, err := loadUserVersionByUsername(ctx, g, username, false /* useTracking */)
 	if err != nil {
-		if err == errInviteRequired {
+		if errors.Is(err, errInviteRequired) {
 			return libkb.NotFoundError{
 				Msg: fmt.Sprintf("No keybase user found (%s)", username),
 			}
@@ -1598,7 +1639,6 @@ func GetRootID(ctx context.Context, g *libkb.GlobalContext, id keybase1.TeamID) 
 		Public:  id.IsPublic(),
 		StaleOK: true,
 	})
-
 	if err != nil {
 		return keybase1.TeamID(""), err
 	}
@@ -1616,7 +1656,8 @@ func ChangeTeamSettings(ctx context.Context, g *libkb.GlobalContext, teamName st
 }
 
 func ChangeTeamSettingsByID(ctx context.Context, g *libkb.GlobalContext, id keybase1.TeamID,
-	settings keybase1.TeamSettings) error {
+	settings keybase1.TeamSettings,
+) error {
 	return RetryIfPossible(ctx, g, func(ctx context.Context, _ int) error {
 		t, err := GetForTeamManagementByTeamID(ctx, g, id, true)
 		if err != nil {
@@ -1769,7 +1810,8 @@ func CreateSeitanTokenV2(ctx context.Context, g *libkb.GlobalContext, teamname s
 
 func CreateInvitelink(mctx libkb.MetaContext, teamname string,
 	role keybase1.TeamRole, maxUses keybase1.TeamInviteMaxUses,
-	etime *keybase1.UnixTime) (invitelink keybase1.Invitelink, err error) {
+	etime *keybase1.UnixTime,
+) (invitelink keybase1.Invitelink, err error) {
 	t, err := GetForTeamManagementByStringName(mctx.Ctx(), mctx.G(), teamname, true)
 	if err != nil {
 		return invitelink, err
@@ -1850,10 +1892,8 @@ func CanUserPerform(ctx context.Context, g *libkb.GlobalContext, teamname string
 		if err != nil {
 			return false, err
 		}
-		for _, uv := range uvs {
-			if uv == meUV {
-				return true, nil
-			}
+		if slices.Contains(uvs, meUV) {
+			return true, nil
 		}
 		return false, nil
 	}
@@ -1886,11 +1926,9 @@ func CanUserPerform(ctx context.Context, g *libkb.GlobalContext, teamname string
 		if len(owners) > 1 {
 			return true, nil
 		}
-		for _, owner := range owners {
-			if owner == meUV {
-				g.Log.CDebugf(ctx, "hasOtherOwner: I am the sole owner")
-				return false, nil
-			}
+		if slices.Contains(owners, meUV) {
+			g.Log.CDebugf(ctx, "hasOtherOwner: I am the sole owner")
+			return false, nil
 		}
 		return true, nil
 	}
@@ -1990,7 +2028,6 @@ func TeamDebug(ctx context.Context, g *libkb.GlobalContext, teamID keybase1.Team
 }
 
 func MapImplicitTeamIDToDisplayName(ctx context.Context, g *libkb.GlobalContext, id keybase1.TeamID, isPublic bool) (folder keybase1.Folder, err error) {
-
 	team, err := Load(ctx, g, keybase1.LoadTeamArg{
 		ID:     id,
 		Public: isPublic,
@@ -2164,8 +2201,8 @@ func FindNextMerkleRootAfterRemoval(mctx libkb.MetaContext, arg keybase1.FindNex
 	}
 	var earliestDemotion int
 	var logPoint *keybase1.UserLogPoint
-	for i := len(logPoints) - 1; i >= 0; i-- {
-		if demotionPredicate(logPoints[i]) {
+	for i, logPoint0 := range slices.Backward(logPoints) {
+		if demotionPredicate(logPoint0) {
 			earliestDemotion = i
 		} else if earliestDemotion != 0 {
 			p := logPoints[earliestDemotion].DeepCopy()

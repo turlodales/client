@@ -161,21 +161,24 @@ func (e HandleExtension) String() string {
 // NewHandleExtension returns a new HandleExtension struct
 // populated with the date from the given time and conflict number.
 func NewHandleExtension(extType HandleExtensionType, num uint16, un kbname.NormalizedUsername, now time.Time) (
-	*HandleExtension, error) {
+	*HandleExtension, error,
+) {
 	return newHandleExtension(extType, num, un, now)
 }
 
 // NewTestHandleExtensionStaticTime returns a new HandleExtension struct populated with
 // a static date for testing.
 func NewTestHandleExtensionStaticTime(extType HandleExtensionType, num uint16, un kbname.NormalizedUsername) (
-	*HandleExtension, error) {
+	*HandleExtension, error,
+) {
 	now := time.Unix(HandleExtensionStaticTestDate, 0)
 	return newHandleExtension(extType, num, un, now)
 }
 
 // Helper to instantiate a HandleExtension object.
 func newHandleExtension(extType HandleExtensionType, num uint16, un kbname.NormalizedUsername, now time.Time) (
-	*HandleExtension, error) {
+	*HandleExtension, error,
+) {
 	if num == 0 {
 		return nil, errHandleExtensionInvalidNumber
 	}
@@ -218,7 +221,7 @@ func parseHandleExtension(fields []string) (*HandleExtension, error) {
 	}
 	return &HandleExtension{
 		Date:     date.UTC().Unix(),
-		Number:   uint16(num),
+		Number:   uint16(num), //nolint:gosec // G115: Extension numbers are small bounded values
 		Type:     extType,
 		Username: un,
 	}, nil
@@ -249,13 +252,14 @@ func ParseHandleExtensionSuffix(s string) ([]HandleExtension, error) {
 
 // newHandleExtensionSuffix creates a suffix string given a set of extensions.
 func newHandleExtensionSuffix(
-	extensions []HandleExtension, isBackedByTeam bool) string {
-	var suffix string
+	extensions []HandleExtension, isBackedByTeam bool,
+) string {
+	var suffix strings.Builder
 	for _, extension := range extensions {
-		suffix += HandleExtensionSep
-		suffix += extension.string(isBackedByTeam)
+		suffix.WriteString(HandleExtensionSep)
+		suffix.WriteString(extension.string(isBackedByTeam))
 	}
-	return suffix
+	return suffix.String()
 }
 
 // HandleExtensionList allows us to sort extensions by type.

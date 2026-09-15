@@ -35,15 +35,15 @@ func makeTestSCTeamSection(team *Team) SCTeamSection {
 
 func appendSigToState(t *testing.T, team *Team, state *TeamSigChainState,
 	linkType libkb.LinkType, section SCTeamSection, me keybase1.UserVersion,
-	merkleRoot *libkb.MerkleRoot) (*TeamSigChainState, error) {
-
+	merkleRoot *libkb.MerkleRoot,
+) (*TeamSigChainState, error) {
 	if state == nil {
 		state = team.chain()
 	}
 
 	// Always make a copy here, call site shouldn't have to worry about that
 	// when e.g. attempting to append multiple links to one base state to
-	// excercise different errors.
+	// exercise different errors.
 	state = state.DeepCopyToPtr()
 
 	sigMultiItem, _, err := team.sigTeamItemRaw(context.Background(), section,
@@ -93,5 +93,5 @@ func setupTestForPrechecks(t *testing.T, implicitTeam bool) (tc libkb.TestContex
 
 func requirePrecheckError(t *testing.T, err error) {
 	require.Error(t, err)
-	require.IsType(t, PrecheckAppendError{}, err)
+	require.ErrorAs(t, err, new(PrecheckAppendError))
 }

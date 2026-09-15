@@ -4,6 +4,7 @@
 package kbtest
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
@@ -13,8 +14,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-
-	"golang.org/x/net/context"
 
 	"github.com/keybase/client/go/engine"
 	"github.com/keybase/client/go/kex2"
@@ -187,7 +186,8 @@ func DeleteAccount(tc libkb.TestContext, u *FakeUser) {
 func Logout(tc libkb.TestContext) {
 	mctx := libkb.NewMetaContextForTest(tc)
 	if err := mctx.LogoutKillSecrets(); err != nil {
-		tc.T.Fatalf("logout error: %s", err)
+		require.NoError(tc.T, err,
+			"logout error: %s", err)
 	}
 }
 
@@ -245,8 +245,8 @@ func FakeSalt() []byte {
 
 // Provision a new device (in context tcY) from the active (and logged in) device in test context tcX.
 // This was adapted from engine/kex2_test.go
-// Note that it uses Errorf in goroutines, so if it fails
-// the test will not fail until later.
+// Errors from the two engine goroutines are reported after both goroutines
+// complete, on the test goroutine.
 // `tcX` is a TestContext where device X (the provisioner) is already provisioned and logged in.
 // this function will provision a new device Y inside `tcY`
 // `newDeviceType` is keybase1.DeviceTypeV2_MOBILE or keybase1.DeviceTypeV2_DESKTOP.
@@ -257,21 +257,21 @@ func ProvisionNewDeviceKex(tcX *libkb.TestContext, tcY *libkb.TestContext, userX
 
 	var secretX kex2.Secret
 	if _, err := rand.Read(secretX[:]); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 
 	var secretY kex2.Secret
 	if _, err := rand.Read(secretY[:]); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 
 	var wg sync.WaitGroup
+	provisioneeErrCh := make(chan error, 1)
+	provisionerErrCh := make(chan error, 1)
 
 	// start provisionee
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		err := (func() error {
+	wg.Go(func() {
+		err := func() error {
 			uis := libkb.UIs{
 				ProvisionUI: &TestProvisionUI{SecretCh: make(chan kex2.Secret, 1)},
 			}
@@ -292,14 +292,12 @@ func ProvisionNewDeviceKex(tcX *libkb.TestContext, tcY *libkb.TestContext, userX
 			}
 			provisionee := engine.NewKex2Provisionee(tcY.G, device, secretY, userX.GetUID(), FakeSalt())
 			return engine.RunEngine2(m, provisionee)
-		})()
-		require.NoError(t, err, "kex2 provisionee")
-	}()
+		}()
+		provisioneeErrCh <- err
+	})
 
 	// start provisioner
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		uis := libkb.UIs{
 			SecretUI:    userX.NewSecretUI(),
 			ProvisionUI: &TestProvisionUI{},
@@ -307,13 +305,12 @@ func ProvisionNewDeviceKex(tcX *libkb.TestContext, tcY *libkb.TestContext, userX
 		provisioner := engine.NewKex2Provisioner(tcX.G, secretX, nil)
 		go provisioner.AddSecret(secretY)
 		m := libkb.NewMetaContextForTest(*tcX).WithUIs(uis)
-		if err := engine.RunEngine2(m, provisioner); err != nil {
-			require.NoErrorf(t, err, "provisioner error")
-			return
-		}
-	}()
+		provisionerErrCh <- engine.RunEngine2(m, provisioner)
+	})
 
 	wg.Wait()
+	require.NoError(t, <-provisioneeErrCh, "kex2 provisionee")
+	require.NoError(t, <-provisionerErrCh, "provisioner error")
 }
 
 type TestProvisionUI struct {
@@ -387,6 +384,7 @@ func (n *TeamNotifyListener) TeamChangedByID(teamID keybase1.TeamID, latestSeqno
 		LatestHiddenSeqno: latestHiddenSeqno,
 	}
 }
+
 func (n *TeamNotifyListener) TeamChangedByName(teamName string, latestSeqno keybase1.Seqno, implicitTeam bool, changes keybase1.TeamChangeSet, latestHiddenSeqno keybase1.Seqno, source keybase1.TeamChangedSource) {
 	n.changeByNameCh <- keybase1.TeamChangedByNameArg{
 		TeamName:          teamName,
@@ -414,7 +412,7 @@ func CheckTeamMiscNotifications(tc libkb.TestContext, notifications *TeamNotifyL
 		case arg := <-notifications.changeByNameCh:
 			changeByName = arg.Changes.Misc
 		case <-time.After(500 * time.Millisecond * libkb.CITimeMultiplier(tc.G)):
-			tc.T.Fatal("no notification on teamSetSettings")
+			require.FailNow(tc.T, "no notification on teamSetSettings")
 		}
 		if changeByID && changeByName {
 			return

@@ -1,5 +1,3 @@
-@import '../../common-adapters/text.css';
-
 /* Reset */
 /* http://meyerweb.com/eric/tools/css/reset/
    v2.0 | 20110126
@@ -136,7 +134,7 @@ table {
 /* KB custom font */
 @font-face {
   font-family: 'kb';
-  src: url('../../fonts/kb.ttf') format('truetype');
+  src: url('../../fonts/electron/kb.ttf') format('truetype');
   font-weight: normal;
   font-style: normal;
   font-display: block;
@@ -146,14 +144,14 @@ table {
 @font-face {
   font-family: 'Source Code Pro';
   font-weight: 500;
-  src: url('../../fonts/SourceCodePro-Medium.ttf') format('truetype');
+  src: url('../../fonts/electron/SourceCodePro-Medium.ttf') format('truetype');
   font-display: block;
 }
 
 @font-face {
   font-family: 'Source Code Pro';
   font-weight: 600;
-  src: url('../../fonts/SourceCodePro-Semibold.ttf') format('truetype');
+  src: url('../../fonts/electron/SourceCodePro-Semibold.ttf') format('truetype');
   font-display: block;
 }
 /* End Source Code Pro */
@@ -162,7 +160,7 @@ table {
 @font-face {
   font-family: 'Keybase';
   font-weight: 500;
-  src: url('../../fonts/keybase-medium.ttf') format('truetype');
+  src: url('../../fonts/electron/keybase-medium.ttf') format('truetype');
   font-display: block;
 }
 
@@ -170,14 +168,14 @@ table {
   font-family: 'Keybase';
   font-weight: 500;
   font-style: italic;
-  src: url('../../fonts/keybase-medium-italic.ttf') format('truetype');
+  src: url('../../fonts/electron/keybase-medium-italic.ttf') format('truetype');
   font-display: block;
 }
 
 @font-face {
   font-family: 'Keybase';
   font-weight: 600;
-  src: url('../../fonts/keybase-semibold.ttf') format('truetype');
+  src: url('../../fonts/electron/keybase-semibold.ttf') format('truetype');
   font-display: block;
 }
 
@@ -185,14 +183,14 @@ table {
   font-family: 'Keybase';
   font-weight: 600;
   font-style: italic;
-  src: url('../../fonts/keybase-semibold-italic.ttf') format('truetype');
+  src: url('../../fonts/electron/keybase-semibold-italic.ttf') format('truetype');
   font-display: block;
 }
 
 @font-face {
   font-family: 'Keybase';
   font-weight: 700;
-  src: url('../../fonts/keybase-bold.ttf') format('truetype');
+  src: url('../../fonts/electron/keybase-bold.ttf') format('truetype');
   font-display: block;
 }
 
@@ -200,19 +198,20 @@ table {
   font-family: 'Keybase';
   font-weight: 700;
   font-style: italic;
-  src: url('../../fonts/keybase-bold-italic.ttf') format('truetype');
+  src: url('../../fonts/electron/keybase-bold-italic.ttf') format('truetype');
   font-display: block;
 }
 
 @font-face {
   font-family: 'Keybase';
   font-weight: 800;
-  src: url('../../fonts/keybase-extrabold.ttf') format('truetype');
+  src: url('../../fonts/electron/keybase-extrabold.ttf') format('truetype');
   font-display: block;
 }
 /* End Keybase */
 
 :root {
+  color-scheme: light dark;
   --size-xxtiny: 2px;
   --size-xtiny: 4px;
   --size-tiny: 8px;
@@ -245,7 +244,7 @@ html {
 body {
   height: 100%;
   width: 100%;
-  overflow: hidden;
+  scrollbar-gutter: stable;
 }
 
 :root {
@@ -253,12 +252,9 @@ body {
   --scrollbar-minlength: 0.5rem;
   --scrollbar-ff-width: thin;
   --scrollbar-track-color: transparent;
-  --scrollbar-color: rgba(0, 0, 0, 0.2);
-  --scrollbar-color-dark: rgba(255, 255, 255, 0.2);
-  --scrollbar-color-hover: rgba(0, 0, 0, 0.3);
-  --scrollbar-color-hover-dark: rgba(255, 255, 255, 0.3);
-  --scrollbar-color-active: rgb(0, 0, 0);
-  --scrollbar-color-active-dark: rgb(255, 255, 255, 0.5);
+  --scrollbar-color: light-dark(rgba(0, 0, 0, 0.2), rgba(255, 255, 255, 0.2));
+  --scrollbar-color-hover: light-dark(rgba(0, 0, 0, 0.3), rgba(255, 255, 255, 0.3));
+  --scrollbar-color-active: light-dark(rgb(0, 0, 0), rgb(255, 255, 255, 0.5));
 }
 
 /* Used to customize scrollbars and enable testing the auto hide behavior on os x */
@@ -272,8 +268,6 @@ body {
 .scrollbar-test {
   overscroll-behavior: contain;
   overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  -ms-overflow-style: -ms-autohiding-scrollbar;
   scrollbar-width: var(--scrollbar-ff-width);
 }
 
@@ -283,22 +277,12 @@ body {
 ::-webkit-scrollbar-thumb {
   background-color: var(--scrollbar-color);
   border-radius: 3px;
-  .darkMode & {
-    background-color: var(--scrollbar-color-dark);
-    border-radius: 3px;
-  }
 }
 ::-webkit-scrollbar-thumb:hover {
   background-color: var(--scrollbar-color-hover);
-  .darkMode & {
-    background-color: var(--scrollbar-color-hover-dark);
-  }
 }
 ::-webkit-scrollbar-thumb:active {
   background-color: var(--scrollbar-color-active);
-  .darkMode & {
-    background-color: var(--scrollbar-color-active-dark);
-  }
 }
 ::-webkit-scrollbar-thumb:vertical {
   min-height: var(--scrollbar-minlength);
@@ -307,8 +291,8 @@ body {
   min-width: var(--scrollbar-minlength);
 }
 
-input {
-  .darkMode & {
+@media (prefers-color-scheme: dark) {
+  input {
     background-color: #191919;
   }
 }
@@ -316,10 +300,8 @@ input {
 #root {
   position: absolute;
   display: flex;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  inset: 0;
+  overflow: hidden;
 }
 
 #modal-root {
@@ -336,10 +318,7 @@ input {
 .emoji-picker-emoji-box {
   border-radius: 2px;
   &:hover {
-    background-color: rgba(0, 0, 0, 0.05);
-    .darkMode & {
-      background-color: rgba(255, 255, 255, 0.15);
-    }
+    background-color: light-dark(rgba(0, 0, 0, 0.05), rgba(255, 255, 255, 0.15));
   }
 }
 
@@ -452,7 +431,8 @@ input {
 }
 
 .emoji-native {
-  font-family: 'Segoe UI Emoji', 'Segoe UI Symbol', 'Segoe UI', 'Apple Color Emoji', 'Twemoji Mozilla',
+  font-family:
+    'Segoe UI Emoji', 'Segoe UI Symbol', 'Segoe UI', 'Apple Color Emoji', 'Twemoji Mozilla',
     'Noto Color Emoji', 'Android Emoji';
 }
 
@@ -485,14 +465,8 @@ input {
   opacity: 1;
 }
 
-.lightMode {
-  background-color: #ffffff;
-  &.isWidget {
-    background-color: transparent;
-  }
-}
-.darkMode {
-  background-color: #191919;
+body {
+  background-color: light-dark(#ffffff, #191919);
   &.isWidget {
     background-color: transparent;
   }
@@ -503,14 +477,7 @@ input {
 }
 .headerTitle:hover {
   .addInviteAndLinkBox {
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-  }
-}
-.darkMode {
-  .headerTitle:hover {
-    .addInviteAndLinkBox {
-      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.8);
-    }
+    box-shadow: light-dark(0 2px 5px rgba(0, 0, 0, 0.2), 0 2px 5px rgba(0, 0, 0, 0.8));
   }
 }
 

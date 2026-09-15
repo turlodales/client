@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"maps"
 	"time"
 
 	"github.com/keybase/client/go/chat/globals"
@@ -29,7 +30,7 @@ type CachingParticipantSource struct {
 	encryptedDB *encrypteddb.EncryptedDB
 	sema        *semaphore.Weighted
 	locktab     *libkb.LockTable
-	notify      func(interface{})
+	notify      func(any)
 }
 
 var _ types.ParticipantSource = (*CachingParticipantSource)(nil)
@@ -41,21 +42,19 @@ func NewCachingParticipantSource(g *globals.Context, ri func() chat1.RemoteInter
 	dbFn := func(g *libkb.GlobalContext) *libkb.JSONLocalDb {
 		return g.LocalChatDb
 	}
-	notify, notifyCancel := libkb.ThrottleBatch(func(batchedInt interface{}) {
+	notify, notifyCancel := libkb.ThrottleBatch(func(batchedInt any) {
 		batched, _ := batchedInt.(map[chat1.ConvIDStr][]chat1.UIParticipant)
 		g.NotifyRouter.HandleChatParticipantsInfo(context.Background(), batched)
-	}, func(batchedInt, singleInt interface{}) interface{} {
+	}, func(batchedInt, singleInt any) any {
 		batched, _ := batchedInt.(map[chat1.ConvIDStr][]chat1.UIParticipant)
 		single, _ := singleInt.(map[chat1.ConvIDStr][]chat1.UIParticipant)
-		for convIDStr, parts := range single {
-			batched[convIDStr] = parts
-		}
+		maps.Copy(batched, single)
 		return batched
-	}, func() interface{} {
+	}, func() any {
 		return make(map[chat1.ConvIDStr][]chat1.UIParticipant)
 	},
 		200*time.Millisecond, true)
-	g.PushShutdownHook(func(mctx libkb.MetaContext) error {
+	g.PushShutdownHook(func(_ libkb.MetaContext) error {
 		notifyCancel()
 		return nil
 	})
@@ -71,12 +70,13 @@ func NewCachingParticipantSource(g *globals.Context, ri func() chat1.RemoteInter
 }
 
 func (s *CachingParticipantSource) Get(ctx context.Context, uid gregor1.UID,
-	convID chat1.ConversationID, dataSource types.InboxSourceDataSourceTyp) (res []gregor1.UID, err error) {
+	convID chat1.ConversationID, dataSource types.InboxSourceDataSourceTyp,
+) (res []gregor1.UID, err error) {
 	defer s.Trace(ctx, &err, "Get")()
 	ch := s.GetNonblock(ctx, uid, convID, dataSource)
 	for r := range ch {
 		if r.Err != nil {
-			return res, err
+			return res, r.Err
 		}
 		res = r.Uids
 	}
@@ -91,7 +91,8 @@ func (s *CachingParticipantSource) dbKey(uid gregor1.UID, convID chat1.Conversat
 }
 
 func (s *CachingParticipantSource) GetNonblock(ctx context.Context, uid gregor1.UID,
-	convID chat1.ConversationID, dataSource types.InboxSourceDataSourceTyp) (resCh chan types.ParticipantResult) {
+	convID chat1.ConversationID, dataSource types.InboxSourceDataSourceTyp,
+) (resCh chan types.ParticipantResult) {
 	resCh = make(chan types.ParticipantResult, 1)
 	go func(ctx context.Context) {
 		defer s.Trace(ctx, nil, "GetNonblock")()
@@ -163,7 +164,8 @@ func (s *CachingParticipantSource) GetNonblock(ctx context.Context, uid gregor1.
 }
 
 func (s *CachingParticipantSource) GetWithNotifyNonblock(ctx context.Context, uid gregor1.UID,
-	convID chat1.ConversationID, dataSource types.InboxSourceDataSourceTyp) {
+	convID chat1.ConversationID, dataSource types.InboxSourceDataSourceTyp,
+) {
 	go func(ctx context.Context) {
 		_ = s.sema.Acquire(ctx, 1)
 		defer s.sema.Release(1)

@@ -1,34 +1,6 @@
 import type * as T from '@/constants/types'
-import * as Kb from '@/common-adapters'
 import type {IconType} from '@/common-adapters/icon.constants-gen'
-import {allServices} from '@/constants/team-building'
-
-const serviceColors: {[K in T.TB.ServiceIdWithContact]: string} = {
-  get email() {
-    return Kb.Styles.isDarkMode() ? '#3663ea' : '#3663ea'
-  },
-  get facebook() {
-    return Kb.Styles.isDarkMode() ? '#3B5998' : '#3B5998'
-  },
-  get github() {
-    return Kb.Styles.isDarkMode() ? '#E7E8E8' : '#333'
-  },
-  get hackernews() {
-    return Kb.Styles.isDarkMode() ? '#FF6600' : '#FF6600'
-  },
-  get keybase() {
-    return Kb.Styles.isDarkMode() ? '#3663ea' : '#3663ea'
-  },
-  get phone() {
-    return Kb.Styles.isDarkMode() ? '#3663ea' : '#3663ea'
-  },
-  get reddit() {
-    return Kb.Styles.isDarkMode() ? '#ff4500' : '#ff4500'
-  },
-  get twitter() {
-    return Kb.Styles.isDarkMode() ? '#1DA1F2' : '#1DA1F2'
-  },
-}
+import * as TeamBuilding from '@/stores/team-building'
 
 const services: {
   [K in T.TB.ServiceIdWithContact]: {
@@ -66,13 +38,13 @@ const services: {
     searchPlaceholder: 'Hacker News',
   },
   keybase: {
-    avatarIcon: Kb.Styles.isMobile
+    avatarIcon: isMobile
       ? 'icon-placeholder-avatar-circular-48'
       : 'icon-placeholder-avatar-circular-32',
     icon: 'iconfont-contact-book',
     label: 'Keybase and contacts',
-    longLabel: Kb.Styles.isMobile ? ['Keybase &', 'Contacts'] : ['A Keybase', 'user'],
-    searchPlaceholder: Kb.Styles.isMobile ? 'Keybase & contacts' : 'Keybase',
+    longLabel: isMobile ? ['Keybase &', 'Contacts'] : ['A Keybase', 'user'],
+    searchPlaceholder: isMobile ? 'Keybase & contacts' : 'Keybase',
   },
   phone: {
     badge: true,
@@ -95,7 +67,24 @@ const services: {
   },
 }
 
-export const serviceIdToAccentColor = (service: T.TB.ServiceIdWithContact): string => serviceColors[service]
+const accentColors: {[K in T.TB.ServiceIdWithContact]: string} = {
+  email: '#3663ea',
+  facebook: '#3B5998',
+  github: '#333',
+  hackernews: '#FF6600',
+  keybase: '#3663ea',
+  phone: '#3663ea',
+  reddit: '#ff4500',
+  twitter: '#1DA1F2',
+}
+
+const darkModeAccentColors: Partial<typeof accentColors> = {
+  github: '#E7E8E8',
+}
+
+export const serviceIdToAccentColor = (service: T.TB.ServiceIdWithContact, isDarkMode: boolean): string => {
+  return (isDarkMode && darkModeAccentColors[service]) || accentColors[service]
+}
 export const serviceIdToIconFont = (service: T.TB.ServiceIdWithContact): IconType => services[service].icon
 export const serviceIdToAvatarIcon = (service: T.TB.ServiceIdWithContact): IconType =>
   services[service].avatarIcon || services[service].icon
@@ -108,4 +97,10 @@ export const serviceIdToBadge = (service: T.TB.ServiceIdWithContact): boolean =>
   services[service].badge === true
 
 export const serviceMapToArray = (services: T.TB.ServiceMap) =>
-  allServices.filter(x => x !== 'keybase' && x in services)
+  TeamBuilding.allServices.filter(x => x !== 'keybase' && x in services)
+
+export const getSearchResults = (
+  searchResults: T.Immutable<T.TB.SearchResults>,
+  searchString: string,
+  selectedService: T.TB.ServiceIdWithContact
+) => searchResults.get(searchString.trim())?.get(selectedService)

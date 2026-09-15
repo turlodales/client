@@ -1,6 +1,7 @@
 package uidmap
 
 import (
+	"context"
 	"sync"
 	"testing"
 	"time"
@@ -9,7 +10,6 @@ import (
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 	"github.com/keybase/clockwork"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/context"
 )
 
 type testPair struct {
@@ -17,23 +17,25 @@ type testPair struct {
 	username string
 }
 
-const mikem = keybase1.UID("95e88f2087e480cae28f08d81554bc00")
-const max = keybase1.UID("dbb165b7879fe7b1174df73bed0b9500")
+const (
+	mikemUID = keybase1.UID("95e88f2087e480cae28f08d81554bc00")
+	maxUID   = keybase1.UID("dbb165b7879fe7b1174df73bed0b9500")
+)
 
 func TestLookupUsernameOnly(t *testing.T) {
 	tc := libkb.SetupTest(t, "TestLookup", 1)
 	defer tc.Cleanup()
 
-	var seed = []testPair{
+	seed := []testPair{
 		{"afb5eda3154bc13c1df0189ce93ba119", "t_bob"},
 		{"00000000000000000000000000000119", ""},
 		{"295a7eea607af32040647123732bc819", "t_alice"},
 		{"00000000000000000000000000000219", ""},
 		{"9cbca30c38afba6ab02d76b206515919", "t_helen"},
 		{"00000000000000000000000000000319", ""},
-		{string(max), "max"},
+		{string(maxUID), "max"},
 		{"00000000000000000000000000000419", ""},
-		{string(mikem), "mikem"},
+		{string(mikemUID), "mikem"},
 		{"00000000000000000000000000000519", ""},
 		{"9f9611a4b7920637b1c2a839b2a0e119", "t_george"},
 		{"00000000000000000000000000000619", ""},
@@ -56,7 +58,7 @@ func TestLookupUsernameOnly(t *testing.T) {
 
 	uidMap := NewUIDMap(10)
 
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		results, err := uidMap.MapUIDsToUsernamePackages(context.TODO(), tc.G, uids, 0, 0, false)
 		require.NoError(t, err)
 		for j, test := range tests {
@@ -75,16 +77,16 @@ func TestLookupUsernameConcurrent(t *testing.T) {
 	batchSize = 7
 
 	testStuff := func() {
-		var seed = []testPair{
+		seed := []testPair{
 			{"afb5eda3154bc13c1df0189ce93ba119", "t_bob"},
 			{"00000000000000000000000000000119", ""},
 			{"295a7eea607af32040647123732bc819", "t_alice"},
 			{"00000000000000000000000000000219", ""},
 			{"9cbca30c38afba6ab02d76b206515919", "t_helen"},
 			{"00000000000000000000000000000319", ""},
-			{string(max), "max"},
+			{string(maxUID), "max"},
 			{"00000000000000000000000000000419", ""},
-			{string(mikem), "mikem"},
+			{string(mikemUID), "mikem"},
 			{"00000000000000000000000000000519", ""},
 			{"9f9611a4b7920637b1c2a839b2a0e119", "t_george"},
 			{"00000000000000000000000000000619", ""},
@@ -106,7 +108,7 @@ func TestLookupUsernameConcurrent(t *testing.T) {
 
 		uidMap := NewUIDMap(10)
 
-		for i := 0; i < 4; i++ {
+		for i := range 4 {
 			results, err := uidMap.MapUIDsToUsernamePackages(context.TODO(), tc.G, uids, 0, 0, false)
 			require.NoError(t, err)
 			for j, test := range tests {
@@ -120,17 +122,38 @@ func TestLookupUsernameConcurrent(t *testing.T) {
 
 	var wg sync.WaitGroup
 	for i := 1; i < 10; i++ {
-		wg.Add(1)
-		go func() {
+		wg.Go(func() {
 			testStuff()
-			wg.Done()
-		}()
+		})
 	}
 
 	wg.Wait()
 }
 
 const tKB = keybase1.UID("7b7248a1c09d17451f9002d9edc8df19")
+
+func TestLookupFullNameFromDisk(t *testing.T) {
+	tc := libkb.SetupTest(t, "TestLookupFullNameFromDisk", 1)
+	defer tc.Cleanup()
+
+	expected := keybase1.FullNamePackage{
+		Version:     CurrentFullNamePackageVersion,
+		FullName:    keybase1.FullName("Joe Keybaser"),
+		EldestSeqno: keybase1.Seqno(1),
+		Status:      keybase1.StatusCode_SCOk,
+		CachedAt:    keybase1.ToTime(time.Now()),
+	}
+	require.NoError(t, tc.G.GetKVStore().PutObj(usernameDBKey(tKB), nil, "t_kb"))
+	require.NoError(t, tc.G.GetKVStore().PutObj(fullNameDBKey(tKB), nil, expected))
+
+	uidMap := NewUIDMap(10)
+	results, err := uidMap.MapUIDsToUsernamePackagesOffline(
+		context.TODO(), tc.G, []keybase1.UID{tKB}, 0)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	require.Equal(t, libkb.NewNormalizedUsername("t_kb"), results[0].NormalizedUsername)
+	require.Equal(t, &expected, results[0].FullName)
+}
 
 func TestRanOutOfTime(t *testing.T) {
 	tc := libkb.SetupTest(t, "TestLookup", 1)
@@ -166,7 +189,7 @@ func TestRanOutOfTime(t *testing.T) {
 
 	// user mikem has a fullname, but we're again not giving ourselves enough time to grab it;
 	// however, he has a hard-coded UID mapping so we should be able to still grab his username
-	uids = []keybase1.UID{mikem}
+	uids = []keybase1.UID{mikemUID}
 	hit = false
 	results, err = uidMap.MapUIDsToUsernamePackages(context.TODO(), tc.G, uids, 0, time.Nanosecond, true)
 	require.Error(t, err)
@@ -186,7 +209,7 @@ func TestRanOutOfTime(t *testing.T) {
 	require.Equal(t, results[0].NormalizedUsername, libkb.NewNormalizedUsername("t_kb"))
 	require.Equal(t, results[0].FullName.FullName, keybase1.FullName("Joe Keybaser"))
 	require.Equal(t, results[0].FullName.EldestSeqno, keybase1.Seqno(1))
-	require.Equal(t, results[0].FullName.Status, keybase1.StatusCode_SCOk)
+	require.Equal(t, keybase1.StatusCode_SCOk, results[0].FullName.Status)
 	cachedAt = fakeClock.Now()
 
 	// Now we're going to simulate that the fullname resolution became expired, and there
@@ -202,7 +225,7 @@ func TestRanOutOfTime(t *testing.T) {
 	require.Equal(t, results[0].FullName.FullName, keybase1.FullName("Joe Keybaser"))
 	require.Equal(t, results[0].FullName.EldestSeqno, keybase1.Seqno(1))
 	require.Equal(t, results[0].FullName.CachedAt, keybase1.ToTime(cachedAt))
-	require.Equal(t, results[0].FullName.Status, keybase1.StatusCode_SCOk)
+	require.Equal(t, keybase1.StatusCode_SCOk, results[0].FullName.Status)
 
 	// Same as above, but give enough time to refresh the name from the server
 	hit = false
@@ -214,7 +237,7 @@ func TestRanOutOfTime(t *testing.T) {
 	require.Equal(t, results[0].FullName.FullName, keybase1.FullName("Joe Keybaser"))
 	require.Equal(t, results[0].FullName.EldestSeqno, keybase1.Seqno(1))
 	require.Equal(t, results[0].FullName.CachedAt, keybase1.ToTime(cachedAt))
-	require.Equal(t, results[0].FullName.Status, keybase1.StatusCode_SCOk)
+	require.Equal(t, keybase1.StatusCode_SCOk, results[0].FullName.Status)
 
 	// In this case, there's not enough time to make any fetches, but it doesn't matter, since our
 	// previous fetch is fresh enough. We should never even hit testBatchIterHook
@@ -228,10 +251,10 @@ func TestRanOutOfTime(t *testing.T) {
 	require.Equal(t, results[0].FullName.FullName, keybase1.FullName("Joe Keybaser"))
 	require.Equal(t, results[0].FullName.EldestSeqno, keybase1.Seqno(1))
 	require.Equal(t, results[0].FullName.CachedAt, keybase1.ToTime(cachedAt))
-	require.Equal(t, results[0].FullName.Status, keybase1.StatusCode_SCOk)
+	require.Equal(t, keybase1.StatusCode_SCOk, results[0].FullName.Status)
 
 	// Do a happy path for several users:
-	uids = []keybase1.UID{mikem, tKB, max}
+	uids = []keybase1.UID{mikemUID, tKB, maxUID}
 	results, err = uidMap.MapUIDsToUsernamePackages(context.TODO(), tc.G, uids, 0, 0, false)
 	require.NoError(t, err)
 
@@ -245,7 +268,7 @@ func TestRanOutOfTime(t *testing.T) {
 	require.Equal(t, results[1].FullName.FullName, keybase1.FullName("Joe Keybaser"))
 	require.Equal(t, results[1].FullName.CachedAt, keybase1.ToTime(cachedAt))
 	require.Equal(t, results[1].FullName.EldestSeqno, keybase1.Seqno(1))
-	require.Equal(t, results[1].FullName.Status, keybase1.StatusCode_SCOk)
+	require.Equal(t, keybase1.StatusCode_SCOk, results[1].FullName.Status)
 	require.Nil(t, results[2].FullName)
 
 	// We should get same results from offline call
@@ -263,7 +286,7 @@ func TestOfflineUIDMapNoCache(t *testing.T) {
 	defer tc.Cleanup()
 
 	uidMap := NewUIDMap(10)
-	uids := []keybase1.UID{mikem, max, tKB}
+	uids := []keybase1.UID{mikemUID, maxUID, tKB}
 
 	uidMap.testBatchIterHook = func() {
 		require.Fail(t, "unexpected network activity during offline uidmap call")
@@ -290,7 +313,7 @@ func TestDuplicateUids(t *testing.T) {
 		24*time.Hour, 10*time.Second, true)
 	require.NoError(t, err)
 
-	require.EqualValues(t, results[0].NormalizedUsername, "t_alice")
-	require.EqualValues(t, results[1].NormalizedUsername, "t_tracy")
+	require.EqualValues(t, "t_alice", results[0].NormalizedUsername)
+	require.EqualValues(t, "t_tracy", results[1].NormalizedUsername)
 	require.Equal(t, results[0], results[2])
 }

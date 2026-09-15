@@ -17,8 +17,8 @@ import (
 // SerializeToJSONFile serializes the given object as JSON and writes
 // it to the given file, making its parent directory first if
 // necessary.
-func SerializeToJSONFile(obj interface{}, path string) error {
-	err := MkdirAll(filepath.Dir(path), 0700)
+func SerializeToJSONFile(obj any, path string) error {
+	err := MkdirAll(filepath.Dir(path), 0o700)
 	if err != nil {
 		return err
 	}
@@ -28,13 +28,13 @@ func SerializeToJSONFile(obj interface{}, path string) error {
 		return errors.Wrapf(err, "failed to marshal %q as JSON", path)
 	}
 
-	return WriteFile(path, buf, 0600)
+	return WriteFile(path, buf, 0o600)
 }
 
 // DeserializeFromJSONFile deserializes the given JSON file into the
 // object pointed to by objPtr. It may return an error for which
 // ioutil.IsNotExist() returns true.
-func DeserializeFromJSONFile(path string, objPtr interface{}) error {
+func DeserializeFromJSONFile(path string, objPtr any) error {
 	data, err := ReadFile(path)
 	if err != nil {
 		return err

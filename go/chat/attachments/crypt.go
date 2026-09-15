@@ -1,6 +1,7 @@
 package attachments
 
 import (
+	"crypto/ed25519"
 	"crypto/rand"
 	"errors"
 	"io"
@@ -8,7 +9,6 @@ import (
 	"github.com/keybase/client/go/chat/signencrypt"
 	"github.com/keybase/client/go/kbcrypto"
 	"github.com/keybase/client/go/libkb"
-	"github.com/keybase/go-crypto/ed25519"
 )
 
 type Encrypter interface {

@@ -1,36 +1,47 @@
 import * as Kb from '@/common-adapters'
 import * as React from 'react'
+import type * as T from '@/constants/types'
 import AlphabetIndex from './alphabet-index'
 import PeopleResult from './search-result/people-result'
 import UserResult from './search-result/user-result'
 import type * as Types from './types'
 import {ContactsImportButton} from './contacts'
-import {userResultHeight} from './search-result/common-result'
-import {createAnimatedComponent} from '@/common-adapters/reanimated'
-import type {Props as SectionListProps, Section as SectionType} from '@/common-adapters/section-list'
+
+type RefType = React.RefObject<Kb.SectionListRef<Types.ResultData, Types.SearchRecSection> | null>
+type TeamSoFar = ReadonlyArray<{userId: string}>
+
+type TeamAlphabetIndexProps = {
+  recommendations?: Array<Types.SearchRecSection>
+  teamSoFar: TeamSoFar
+  sectionListRef: RefType
+}
+
+type RecsAndRecosProps = {
+  highlightedIndex: number
+  recommendations?: Array<Types.SearchRecSection>
+  namespace: T.TB.AllowedNamespace
+  selectedService: T.TB.ServiceIdWithContact
+  onAdd: (userId: string) => void
+  onRemove: (userId: string) => void
+  teamSoFar: TeamSoFar
+  recommendedHideYourself: boolean
+}
 
 export const numSectionLabel = '0-9'
 
-const isImportContactsEntry = (x: Types.ResultData): x is Types.ImportContactsEntry =>
-  'isImportButton' in x && !!x.isImportButton
+const SearchHintText = () => {
+  const styles = useStyles()
+  return (
+    <Kb.Box2 direction="vertical" style={styles.searchHint}>
+      <Kb.Text type="BodySmall" center={true}>
+        Search anyone on Keybase by typing a username or a full name.
+      </Kb.Text>
+    </Kb.Box2>
+  )
+}
 
-const isSearchHintEntry = (x: Types.ResultData): x is Types.SearchHintEntry =>
-  'isSearchHint' in x && !!x.isSearchHint
-
-const SearchHintText = () => (
-  <Kb.Box2 direction="vertical" style={styles.searchHint}>
-    <Kb.Text type="BodySmall" style={{textAlign: 'center'}}>
-      Search anyone on Keybase by typing a username or a full name.
-    </Kb.Text>
-  </Kb.Box2>
-)
-
-const TeamAlphabetIndex = (
-  props: Pick<Types.Props, 'recommendations' | 'teamSoFar'> & {
-    sectionListRef: React.RefObject<Kb.SectionList<SectionType<Types.ResultData, Types.SearchRecSection>>>
-  }
-) => {
-  const {recommendations, teamSoFar, sectionListRef} = props
+const TeamAlphabetIndex = ({recommendations, teamSoFar, sectionListRef}: TeamAlphabetIndexProps) => {
+  const styles = useStyles()
   let showNumSection = false
   let labels: Array<string> = []
   if (recommendations && recommendations.length > 0) {
@@ -38,17 +49,16 @@ const TeamAlphabetIndex = (
     labels = recommendations.filter(r => r.shortcut && r.label !== numSectionLabel).map(r => r.label)
   }
 
-  const _onScrollToSection = (label: string) => {
+  const onScrollToSection = (label: string) => {
     if (sectionListRef.current) {
-      const ref = sectionListRef.current
       const sectionIndex =
         (recommendations &&
           (label === 'numSection'
             ? recommendations.length - 1
             : recommendations.findIndex(section => section.label === label))) ||
         -1
-      if (sectionIndex >= 0 && Kb.Styles.isMobile) {
-        ref.scrollToLocation({
+      if (sectionIndex >= 0 && isMobile) {
+        sectionListRef.current.scrollToLocation({
           animated: false,
           itemIndex: 0,
           sectionIndex,
@@ -61,23 +71,17 @@ const TeamAlphabetIndex = (
     return null
   }
   return (
-    <>
-      <AlphabetIndex
-        labels={labels}
-        showNumSection={showNumSection}
-        onScroll={_onScrollToSection}
-        style={styles.alphabetIndex}
-        measureKey={!!teamSoFar.length}
-      />
-    </>
+    <AlphabetIndex
+      labels={labels}
+      showNumSection={showNumSection}
+      onScroll={onScrollToSection}
+      style={styles.alphabetIndex}
+      measureKey={!!teamSoFar.length}
+    />
   )
 }
 
-const SectionList = createAnimatedComponent<
-  SectionListProps<SectionType<Types.ResultData, Types.SearchRecSection>>
->(Kb.SectionList)
-
-const _listIndexToSectionAndLocalIndex = (
+const listIndexToSectionAndLocalIndex = (
   highlightedIndex?: number,
   sections?: Types.SearchRecSection[]
 ): {index: number; section: Types.SearchRecSection} | undefined => {
@@ -93,95 +97,43 @@ const _listIndexToSectionAndLocalIndex = (
   }
   return
 }
-export const RecsAndRecos = (
-  props: Pick<
-    Types.Props,
-    | 'highlightedIndex'
-    | 'recommendations'
-    | 'namespace'
-    | 'selectedService'
-    | 'onAdd'
-    | 'onRemove'
-    | 'teamSoFar'
-  > &
-    Types.OnScrollProps & {
-      recommendedHideYourself: boolean
-    }
-) => {
-  const {highlightedIndex, recommendations, onScroll, recommendedHideYourself, namespace} = props
+export const RecsAndRecos = (props: RecsAndRecosProps) => {
+  const styles = useStyles()
+  const {highlightedIndex, recommendations, recommendedHideYourself, namespace} = props
   const {selectedService, onAdd, onRemove, teamSoFar} = props
-
-  const sectionListRef =
-    React.useRef<Kb.SectionList<SectionType<Types.ResultData, Types.SearchRecSection>>>(null)
+  const sectionListRef = React.useRef<Kb.SectionListRef<Types.ResultData, Types.SearchRecSection>>(null)
   const ResultRow = namespace === 'people' ? PeopleResult : UserResult
+  // modal drops its bottom safe-area edge (see page.tsx). iOS
+  // contentInsetAdjustmentBehavior="automatic" clears the home indicator;
+  // Android must pad the scroll content manually.
+  const insets = Kb.useSafeAreaInsets()
+  const contentContainerStyle = isAndroid
+    ? {minHeight: '133%' as const, paddingBottom: insets.bottom}
+    : {minHeight: '133%' as const}
 
-  const _getRecLayout = (
-    sections: Array<Types.SearchRecSection>,
-    indexInList: number
-  ): {index: number; length: number; offset: number} => {
-    const sectionDividerHeight = Kb.SectionDivider.height
-    const dataRowHeight = userResultHeight
+  const highlightDetails = listIndexToSectionAndLocalIndex(highlightedIndex, recommendations)
 
-    let numSections = 0
-    let numData = 0
-    let length = dataRowHeight
-    let currSectionHeaderIdx = 0
-    for (const s of sections) {
-      if (indexInList === currSectionHeaderIdx) {
-        // we are the section header
-        length = Kb.SectionDivider.height
-        break
-      }
-      numSections++
-      const indexInSection = indexInList - currSectionHeaderIdx - 1
-      if (indexInSection === s.data.length) {
-        // it's the section footer (we don't render footers so 0px).
-        numData += s.data.length
-        length = 0
-        break
-      }
-      if (indexInSection < s.data.length) {
-        // we are in this data
-        numData += indexInSection
-        break
-      }
-      // we're not in this section
-      numData += s.data.length
-      currSectionHeaderIdx += s.data.length + 2 // +2 because footer
+  React.useEffect(() => {
+    if (highlightedIndex >= 0) {
+      sectionListRef.current?.scrollToLocation({
+        itemIndex: highlightedIndex,
+        sectionIndex: 0,
+        viewPosition: 0,
+      })
     }
-    const offset = numSections * sectionDividerHeight + numData * dataRowHeight
-    return {index: indexInList, length, offset}
-  }
+  }, [highlightedIndex])
 
-  const highlightDetails = React.useMemo(
-    () => _listIndexToSectionAndLocalIndex(highlightedIndex, recommendations),
-    [highlightedIndex, recommendations]
-  )
   return (
     <Kb.BoxGrow>
-      <Kb.Box2 direction="vertical" fullWidth={true} style={styles.listContainer}>
-        <SectionList
-          ref={Kb.Styles.isMobile ? sectionListRef : undefined}
-          contentContainerStyle={{minHeight: '133%'}}
+      <Kb.Box2 direction="vertical" fullWidth={true} relative={true} style={styles.listContainer}>
+        <Kb.SectionList
+          ref={sectionListRef}
+          contentContainerStyle={contentContainerStyle}
           keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"
           stickySectionHeadersEnabled={false}
           scrollEventThrottle={1}
-          onScroll={onScroll}
-          selectedIndex={Kb.Styles.isMobile ? undefined : highlightedIndex || 0}
           sections={recommendations ?? []}
-          keyExtractor={(item: Types.ResultData, index: number) => {
-            if (!isImportContactsEntry(item) && !isSearchHintEntry(item) && item.contact) {
-              // Ids for contacts are not guaranteed to be unique
-              return item.userId + index
-            }
-            return isImportContactsEntry(item)
-              ? 'Import Contacts'
-              : isSearchHintEntry(item)
-                ? 'New User Search Hint'
-                : item.userId
-          }}
-          getItemLayout={_getRecLayout}
           renderItem={({index, item: result, section}) =>
             result.isImportButton ? (
               <ContactsImportButton />
@@ -201,7 +153,7 @@ export const RecsAndRecos = (
                 isYou={result.isYou}
                 followingState={result.followingState}
                 highlight={
-                  !Kb.Styles.isMobile &&
+                  !isMobile &&
                   !!highlightDetails &&
                   highlightDetails.section === section &&
                   highlightDetails.index === index
@@ -213,12 +165,12 @@ export const RecsAndRecos = (
             )
           }
           renderSectionHeader={({section: {label}}) =>
-            label && (!Kb.Styles.isMobile || label !== 'Recommendations') ? (
+            label && (!isMobile || label !== 'Recommendations') ? (
               <Kb.SectionDivider label={label} />
             ) : null
           }
         />
-        {Kb.Styles.isMobile && (
+        {isMobile && (
           <TeamAlphabetIndex
             recommendations={recommendations}
             sectionListRef={sectionListRef}
@@ -230,7 +182,7 @@ export const RecsAndRecos = (
   )
 }
 
-const styles = Kb.Styles.styleSheetCreate(
+const useStyles = Kb.Styles.createStyleHook(
   () =>
     ({
       alphabetIndex: {
@@ -240,17 +192,11 @@ const styles = Kb.Styles.styleSheetCreate(
         top: Kb.Styles.globalMargins.large,
       },
       listContainer: Kb.Styles.platformStyles({
-        common: {position: 'relative'},
         isElectron: {flex: 1, height: '100%', overflow: 'hidden'},
         isMobile: {
           flexGrow: 1,
-          width: '100%',
         },
       }),
-      searchHint: {
-        paddingLeft: Kb.Styles.globalMargins.xlarge,
-        paddingRight: Kb.Styles.globalMargins.xlarge,
-        paddingTop: Kb.Styles.globalMargins.xlarge,
-      },
+      searchHint: Kb.Styles.padding(Kb.Styles.globalMargins.xlarge, Kb.Styles.globalMargins.xlarge, 0),
     }) as const
 )

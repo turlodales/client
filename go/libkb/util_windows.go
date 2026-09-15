@@ -2,7 +2,6 @@
 // this source code is governed by the included BSD license.
 
 //go:build windows
-// +build windows
 
 package libkb
 
@@ -13,9 +12,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
-	"unsafe"
-
 	"unicode/utf16"
+	"unsafe"
 
 	"github.com/keybase/client/go/utils"
 	"golang.org/x/sys/windows"
@@ -129,7 +127,6 @@ func SystemDir() (string, error) {
 // SafeWriteToFile retries safeWriteToFileOnce a few times on Windows,
 // in case AV programs interfere with 2 writes in quick succession.
 func SafeWriteToFile(g SafeWriteLogger, t SafeWriter, mode os.FileMode) error {
-
 	var err error
 	for i := 0; i < 5; i++ {
 		if err != nil {

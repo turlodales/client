@@ -3,14 +3,14 @@
 // license that can be found in the LICENSE file.
 
 //go:build !darwin && !windows
-// +build !darwin,!windows
 
 package libfuse
 
 import (
+	"context"
+
 	"bazil.org/fuse"
 	"bazil.org/fuse/fs"
-	"golang.org/x/net/context"
 )
 
 var platformRootDirs []fuse.Dirent

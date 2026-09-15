@@ -1,43 +1,42 @@
 import * as React from 'react'
 import * as C from '@/constants'
 import * as Kb from '@/common-adapters'
-import {useTeamsSubscribe} from '@/teams/subscriber'
+import {useSafeSubmit} from '@/util/safe-submit'
+import * as T from '@/constants/types'
+import LastOwnerDialog from './last-owner'
+import AvatarBadge from '../avatar-badge'
+import {useLoadedTeam} from '@/teams/team/use-loaded-team'
 
-export type Props = {
+type Props = {
   error: string
   onBack: () => void
-  onDeleteTeam: () => void
   onLeave: (perm: boolean) => void
   name: string
   open?: boolean
 }
 
-const Header = (props: Props) => (
-  <>
-    <Kb.Avatar teamname={props.name} size={64} />
-    <Kb.Box2 direction="horizontal" centerChildren={true} style={styles.iconContainer}>
-      <Kb.Icon
-        type="iconfont-leave"
-        color={Kb.Styles.globalColors.white}
-        fontSize={14}
-        style={styles.headerIcon}
-      />
-    </Kb.Box2>
-  </>
-)
+const Header = (props: Props) => {
+  const styles = useStyles()
+  return (
+    <>
+      <Kb.Avatar teamname={props.name} size={64} />
+      <AvatarBadge icon="iconfont-leave" style={styles.iconContainer} iconStyle={styles.headerIcon} />
+    </>
+  )
+}
 
-const _ReallyLeaveTeam = (props: Props) => {
-  const {name} = props
+const ReallyLeaveTeam = (props: Props) => {
+  const styles = useStyles()
+  const {name, onLeave: propOnLeave} = props
   const dispatchClearWaiting = C.Waiting.useDispatchClearWaiting()
   React.useEffect(
     () => () => {
-      dispatchClearWaiting(C.Teams.leaveTeamWaitingKey(name))
+      dispatchClearWaiting(C.waitingKeyTeamsLeaveTeam(name))
     },
     [dispatchClearWaiting, name]
   )
   const [leavePermanently, setLeavePermanently] = React.useState(false)
-  const onLeave = () => props.onLeave(leavePermanently)
-  useTeamsSubscribe()
+  const onLeave = () => propOnLeave(leavePermanently)
   return (
     <Kb.ConfirmModal
       error={props.error}
@@ -62,52 +61,91 @@ const _ReallyLeaveTeam = (props: Props) => {
           Leave {props.name}?
         </Kb.Text>
       }
-      waitingKey={C.Teams.leaveTeamWaitingKey(props.name)}
+      waitingKey={C.waitingKeyTeamsLeaveTeam(props.name)}
     />
   )
 }
 
-const styles = Kb.Styles.styleSheetCreate(() => ({
-  checkBox: Kb.Styles.platformStyles({
-    common: {
-      marginBottom: Kb.Styles.globalMargins.small,
-    },
-    isElectron: {
-      marginLeft: 48,
-      marginRight: 48,
-    },
-    isMobile: {
-      marginLeft: Kb.Styles.globalMargins.small,
-      marginRight: Kb.Styles.globalMargins.small,
-      marginTop: 12,
-    },
-  }),
-  headerIcon: {
-    position: 'relative',
-    top: 1,
-  },
-  iconContainer: {
-    backgroundColor: Kb.Styles.globalColors.red,
-    borderColor: Kb.Styles.globalColors.white,
-    borderRadius: 12,
-    borderStyle: 'solid',
-    borderWidth: 3,
-    height: 24,
-    marginRight: -46,
-    marginTop: -20,
-    overflow: 'hidden',
-    width: 24,
-    zIndex: 1,
-  },
-  prompt: Kb.Styles.padding(0, Kb.Styles.globalMargins.small),
-  spinnerContainer: {
-    alignItems: 'center',
-    flex: 1,
-    padding: Kb.Styles.globalMargins.xlarge,
-  },
-  spinnerProgressIndicator: {
-    width: Kb.Styles.globalMargins.medium,
-  },
-}))
+const useStyles = Kb.Styles.createStyleHook(
+  () =>
+    ({
+      checkBox: Kb.Styles.platformStyles({
+        common: {
+          marginBottom: Kb.Styles.globalMargins.small,
+        },
+        isElectron: {
+          ...Kb.Styles.marginH(48),
+        },
+        isMobile: {
+          marginLeft: Kb.Styles.globalMargins.small,
+          marginRight: Kb.Styles.globalMargins.small,
+          marginTop: 12,
+        },
+      }),
+      headerIcon: {
+        position: 'relative',
+        top: 1,
+      },
+      iconContainer: {
+        marginRight: -46,
+        marginTop: -20,
+        zIndex: 1,
+      },
+      prompt: Kb.Styles.padding(0, Kb.Styles.globalMargins.small),
+    }) as const
+)
 
-export default _ReallyLeaveTeam
+type OwnProps = {teamID: T.Teams.TeamID}
+
+const ReallyLeaveTeamContainer = (op: OwnProps) => {
+  const teamID = op.teamID
+  const {loading, teamDetails, teamMeta} = useLoadedTeam(teamID)
+  const teamname = teamMeta.teamname
+  const open = teamDetails.settings.open
+  const lastOwner =
+    teamMeta.role === 'owner' &&
+    [...teamDetails.members.values()].filter(member => member.type === 'owner').length < 2
+  const leaveTeamRPC = C.useRPC(T.RPCGen.teamsTeamLeaveRpcPromise)
+  const stillLoadingTeam = loading
+  const waitingKey = C.waitingKeyTeamsLeaveTeam(teamname)
+  const leaving = C.Waiting.useAnyWaiting(waitingKey)
+  const error = C.Waiting.useAnyErrors(waitingKey)
+  const onDeleteTeam = () => {
+    C.Router2.navigateUp()
+    C.Router2.navigateAppend({name: 'teamDeleteTeam', params: {teamID}})
+  }
+  const _onLeave = (permanent: boolean) => {
+    if (!teamname) {
+      return
+    }
+    leaveTeamRPC(
+      [{name: teamname, permanent}, waitingKey],
+      () => {
+        C.Router2.clearModals()
+        C.Router2.navUpToScreen('teamsRoot')
+      },
+      () => {}
+    )
+  }
+  const onBack = leaving ? () => {} : C.Router2.navigateUp
+  const onLeave = useSafeSubmit(_onLeave, !leaving && !loading && !!teamname)
+
+  return lastOwner ? (
+    <LastOwnerDialog
+      onBack={onBack}
+      onDeleteTeam={onDeleteTeam}
+      name={teamname}
+      stillLoadingTeam={stillLoadingTeam}
+    />
+  ) : (
+    <ReallyLeaveTeam
+      error={error?.message ?? ''}
+      onBack={onBack}
+      onLeave={onLeave}
+      open={open}
+      name={teamname}
+    />
+  )
+}
+
+export default ReallyLeaveTeamContainer

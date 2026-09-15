@@ -75,7 +75,6 @@ func (pe *Pinentry) FindProgram() (error, error) {
 }
 
 func (pe *Pinentry) Get(arg keybase1.SecretEntryArg) (res *keybase1.SecretEntryRes, err error) {
-
 	pe.log.Debug("+ Pinentry::Get()")
 
 	// Do a lazy initialization
@@ -121,7 +120,7 @@ func (pi *pinentryInstance) Set(cmd, val string, errp *error) {
 		return
 	}
 	if string(line) != "OK" {
-		*errp = fmt.Errorf("Response to " + cmd + " was " + string(line))
+		*errp = fmt.Errorf("%s", "Response to "+cmd+" was "+string(line))
 	}
 }
 
@@ -130,7 +129,7 @@ func (pi *pinentryInstance) Init() (err error) {
 
 	parent.log.Debug("+ pinentryInstance::Init()")
 
-	pi.cmd = exec.Command(parent.path)
+	pi.cmd = exec.Command(parent.path) //nolint:gosec // G204: Pinentry binary path from config (system pinentry or GPG pinentry)
 	pi.stdin, _ = pi.cmd.StdinPipe()
 	pi.stdout, _ = pi.cmd.StdoutPipe()
 
@@ -141,7 +140,6 @@ func (pi *pinentryInstance) Init() (err error) {
 
 	pi.br = bufio.NewReader(pi.stdout)
 	lineb, _, err := pi.br.ReadLine()
-
 	if err != nil {
 		err = fmt.Errorf("Failed to get getpin greeting: %s", err)
 		return
@@ -184,7 +182,6 @@ func resDecode(s string) string {
 }
 
 func (pi *pinentryInstance) Run(arg keybase1.SecretEntryArg) (res *keybase1.SecretEntryRes, err error) {
-
 	pi.Set("SETPROMPT", arg.Prompt, &err)
 	pi.Set("SETDESC", descEncode(arg.Desc), &err)
 	pi.Set("SETOK", arg.Ok, &err)

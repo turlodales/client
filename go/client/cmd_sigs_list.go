@@ -4,10 +4,9 @@
 package client
 
 import (
+	"context"
 	"fmt"
 	"strings"
-
-	"golang.org/x/net/context"
 
 	"github.com/keybase/cli"
 	"github.com/keybase/client/go/libcmdline"
@@ -43,8 +42,8 @@ func (s *CmdSigsList) ParseTypes(ctx *cli.Context) error {
 	}
 
 	ret := make(map[string]bool)
-	v := strings.Split(tmp, ",")
-	for _, i := range v {
+	v := strings.SplitSeq(tmp, ",")
+	for i := range v {
 		ok, found := types[i]
 		if !ok || !found {
 			return fmt.Errorf("Unknown signature type: %s", i)

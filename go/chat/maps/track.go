@@ -87,7 +87,7 @@ func (t *locationTrack) IsStopped() bool {
 }
 
 func (t *locationTrack) Key() types.LiveLocationKey {
-	key := base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%d", t.convID, t.msgID)))
+	key := base64.StdEncoding.EncodeToString(fmt.Appendf(nil, "%s:%d", t.convID, t.msgID))
 	return types.LiveLocationKey(key)
 }
 
@@ -104,7 +104,8 @@ func (t *locationTrack) ToDisk() diskLocationTrack {
 }
 
 func newLocationTrack(convID chat1.ConversationID, msgID chat1.MessageID,
-	endTime time.Time, getCurrentPosition bool, maxCoords int, stopped bool) *locationTrack {
+	endTime time.Time, getCurrentPosition bool, maxCoords int, stopped bool,
+) *locationTrack {
 	perm := chat1.UIWatchPositionPerm_BASE
 	if !getCurrentPosition {
 		perm = chat1.UIWatchPositionPerm_ALWAYS

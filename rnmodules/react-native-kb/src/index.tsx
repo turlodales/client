@@ -1,30 +1,8 @@
-import {NativeModules, Platform, NativeEventEmitter} from 'react-native'
+import {Platform} from 'react-native'
+import type {EventSubscription} from 'react-native'
+import KbNative from './NativeKb'
 
-const LINKING_ERROR =
-  `The package 'react-native-kb' doesn't seem to be linked. Make sure: \n\n` +
-  Platform.select({ios: "- You have run 'pod install'\n", default: ''}) +
-  '- You rebuilt the app after installing the package\n' +
-  '- You are not using Expo Go\n'
-
-// @ts-expect-error
-const isTurboModuleEnabled = global.__turboModuleProxy != null
-
-const KbModule = isTurboModuleEnabled ? require('./NativeKb').default : NativeModules.Kb
-
-const Kb = KbModule
-  ? KbModule
-  : new Proxy(
-      {},
-      {
-        get() {
-          throw new Error(LINKING_ERROR)
-        },
-      }
-    )
-
-export const getDefaultCountryCode = (): Promise<string> => {
-  return Kb.getDefaultCountryCode()
-}
+const Kb = KbNative
 
 export const logSend = (
   status: string,
@@ -37,9 +15,6 @@ export const logSend = (
   return Kb.logSend(status, feedback, sendLogs, sendMaxBytes, traceDir, cpuProfileDir)
 }
 
-export const install = () => {
-  Kb.install()
-}
 export const iosGetHasShownPushPrompt = (): Promise<boolean> => {
   if (Platform.OS === 'ios') {
     return Kb.iosGetHasShownPushPrompt()
@@ -47,24 +22,30 @@ export const iosGetHasShownPushPrompt = (): Promise<boolean> => {
   return Promise.resolve(false)
 }
 
-export const androidOpenSettings = () => {
-  if (Platform.OS === 'android') {
-    Kb.androidOpenSettings()
+// iOS only. The native Android method rejects, so short-circuit and hand the
+// path back untouched instead.
+export const processMedia = (
+  path: string,
+  isVideo: boolean,
+  compress: boolean,
+  startMs = 0,
+  endMs = 0,
+  removeAudio = false
+): Promise<string> => {
+  if (Platform.OS === 'ios') {
+    return Kb.processMedia(path, isVideo, compress, startMs, endMs, removeAudio)
   }
+  return Promise.resolve(path)
 }
 
-export const androidSetSecureFlagSetting = (s: boolean): Promise<boolean> => {
-  if (Platform.OS === 'android') {
-    return Kb.androidSetSecureFlagSetting(s)
+// iOS only. Shares the file, offering `text` (pass '' for none) alongside it so
+// targets that only take text get the contents, without the ones that write a
+// file getting both.
+export const iosShareFile = (path: string, text: string): Promise<boolean> => {
+  if (Platform.OS === 'ios') {
+    return Kb.iosShareFile(path, text)
   }
-  return Promise.resolve(false)
-}
-
-export const androidGetSecureFlagSetting = (): Promise<boolean> => {
-  if (Platform.OS === 'android') {
-    return Kb.androidGetSecureFlagSetting()
-  }
-  return Promise.resolve(false)
+  return Promise.reject(new Error('wrong platform'))
 }
 
 export const androidShareText = (text: string, mimeType: string): Promise<boolean> => {
@@ -81,32 +62,6 @@ export const androidShare = (text: string, mimeType: string): Promise<boolean> =
   return Promise.resolve(false)
 }
 
-export const androidCheckPushPermissions = (): Promise<boolean> => {
-  if (Platform.OS === 'android') {
-    return Kb.androidCheckPushPermissions()
-  }
-  return Promise.resolve(false)
-}
-export const androidRequestPushPermissions = (): Promise<boolean> => {
-  if (Platform.OS === 'android') {
-    return Kb.androidRequestPushPermissions()
-  }
-  return Promise.resolve(false)
-}
-export const androidGetRegistrationToken = (): Promise<string> => {
-  if (Platform.OS === 'android') {
-    return Kb.androidGetRegistrationToken()
-  }
-  return Promise.resolve('')
-}
-
-export const androidUnlink = (path: string): Promise<void> => {
-  if (Platform.OS === 'android') {
-    return Kb.androidUnlink(path)
-  }
-  return Promise.reject()
-}
-
 export const androidAddCompleteDownload = (o: {
   description: string
   mime: string
@@ -117,7 +72,7 @@ export const androidAddCompleteDownload = (o: {
   if (Platform.OS === 'android') {
     return Kb.androidAddCompleteDownload(o)
   }
-  return Promise.reject()
+  return Promise.reject(new Error('wrong platform'))
 }
 
 export const androidAppColorSchemeChanged = (mode: 'system' | 'alwaysDark' | 'alwaysLight' | ''): void => {
@@ -126,48 +81,106 @@ export const androidAppColorSchemeChanged = (mode: 'system' | 'alwaysDark' | 'al
   }
 }
 
-export const androidSetApplicationIconBadgeNumber = (n: number): void => {
-  if (Platform.OS === 'android') {
-    Kb.androidSetApplicationIconBadgeNumber(n)
+export const checkPushPermissions = (): Promise<boolean> => {
+  return Kb.checkPushPermissions()
+}
+
+export const requestPushPermissions = (): Promise<boolean> => {
+  return Kb.requestPushPermissions()
+}
+
+export const getRegistrationToken = (): Promise<string> => {
+  return Kb.getRegistrationToken()
+}
+
+export const setApplicationIconBadgeNumber = (n: number): void => {
+  Kb.setApplicationIconBadgeNumber(n)
+}
+
+export const getInitialNotification = (): Promise<object | null> => {
+  return Kb.getInitialNotification()
+}
+
+export const removeAllPendingNotificationRequests = (): void => {
+  Kb.removeAllPendingNotificationRequests()
+}
+
+export const addNotificationRequest = (config: {body: string; id: string}): Promise<void> => {
+  return Kb.addNotificationRequest(config)
+}
+
+// Hardware keyboard events
+const hwKeyPressedListeners: Array<EventSubscription> = []
+
+export const onHWKeyPressed = (callback: (event: {pressedKey: string}) => void): void => {
+  const listener = Kb.onHardwareKeyPressed(pressedKey => callback({pressedKey}))
+  hwKeyPressedListeners.push(listener)
+}
+
+export const removeOnHWKeyPressed = (): void => {
+  hwKeyPressedListeners.forEach(listener => listener.remove())
+  hwKeyPressedListeners.length = 0
+}
+
+// Paste image events (iOS)
+let pasteImageListenerCount = 0
+
+export const registerPasteImage = (callback: (uris: Array<string>) => void): (() => void) => {
+  if (Platform.OS !== 'ios') return () => {}
+  const listener = Kb.onPasteImage(uris => callback(uris))
+  pasteImageListenerCount++
+  Kb.setEnablePasteImage(true)
+  return () => {
+    listener.remove()
+    pasteImageListenerCount--
+    Kb.setEnablePasteImage(pasteImageListenerCount > 0)
   }
 }
 
-export const androidGetInitialBundleFromNotification = (): Promise<any> => {
-  if (Platform.OS === 'android') {
-    return Kb.androidGetInitialBundleFromNotification()
-  }
-  return Promise.reject()
+// Engine meta events (e.g. 'kb-engine-reset')
+export const onMetaEvent = (callback: (payload: string) => void): EventSubscription => {
+  return Kb.onMetaEvent(callback)
 }
-export const androidGetInitialShareFileUrls = (): Promise<Array<string>> => {
-  if (Platform.OS === 'android') {
-    return Kb.androidGetInitialShareFileUrls()
-  }
-  return Promise.reject()
+
+// Push events
+export const onPushNotification = (callback: (notification: object) => void): EventSubscription => {
+  return Kb.onPushNotification(n => callback(n))
 }
-export const androidGetInitialShareText = (): Promise<string> => {
-  if (Platform.OS === 'android') {
-    return Kb.androidGetInitialShareText()
-  }
-  return Promise.reject()
+
+export const onPushToken = (callback: (token: string) => void): EventSubscription => {
+  return Kb.onPushToken(callback)
 }
+
+// Android share-into-app intents
+export const onShareData = (
+  callback: (evt: {text?: string; localPaths?: Array<string>}) => void
+): EventSubscription => {
+  return Kb.onShareData(callback)
+}
+
 export const engineReset = (): void => {
   return Kb.engineReset()
 }
-export const engineStart = (): void => {
-  return Kb.engineStart()
+export const notifyJSReady = (): void => {
+  return Kb.notifyJSReady()
 }
-export const getNativeEmitter = () => {
-  return new NativeEventEmitter(Kb as any)
+export const shareListenersRegistered = (): void => {
+  return Kb.shareListenersRegistered()
 }
 
-export const androidIsDeviceSecure: boolean = Kb.getConstants().androidIsDeviceSecure
-export const androidIsTestDevice: boolean = Kb.getConstants().androidIsTestDevice
-export const appVersionCode: string = Kb.getConstants().appVersionCode
-export const appVersionName: string = Kb.getConstants().appVersionCode
-export const darkModeSupported: boolean = Kb.getConstants().darkModeSupported
-export const fsCacheDir: string = Kb.getConstants().fsCacheDir
-export const fsDownloadDir: string = Kb.getConstants().fsDownloadDir
-export const guiConfig: string = Kb.getConstants().guiConfig
-export const serverConfig: string = Kb.getConstants().serverConfig
-export const uses24HourClock: boolean = Kb.getConstants().uses24HourClock
-export const version: string = Kb.getConstants().version
+export const clearLocalLogs = (): Promise<void> => {
+  return Kb.clearLocalLogs()
+}
+
+const KBC = Kb.getTypedConstants()
+export const androidIsDeviceSecure: boolean = KBC.androidIsDeviceSecure
+export const androidIsTestDevice: boolean = KBC.androidIsTestDevice
+export const appVersionCode: string = KBC.appVersionCode
+export const appVersionName: string = KBC.appVersionName
+export const darkModeSupported: boolean = KBC.darkModeSupported
+export const fsCacheDir: string = KBC.fsCacheDir
+export const fsDownloadDir: string = KBC.fsDownloadDir
+export const guiConfig: string = KBC.guiConfig
+export const serverConfig: string = KBC.serverConfig
+export const uses24HourClock: boolean = KBC.uses24HourClock
+export const version: string = KBC.version

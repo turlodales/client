@@ -12,44 +12,42 @@ export type ContactRowProps = Contact & {
   onClick: () => void
 }
 
-const contactRow = (_: number, props: ContactRowProps) => {
+const ContactRow = (props: ContactRowProps) => {
+  const styles = useStyles()
   const hasThumbnail = !!props.pictureUri
 
   return (
-    <Kb.Box style={styles.contactRowBox}>
-      <Kb.Box style={styles.contactRowInnerBox}>
-        <Kb.Box style={styles.contactRowInnerBox}>
-          {!!hasThumbnail && !!props.pictureUri && (
-            <Kb.Image2 style={styles.thumbnail} src={props.pictureUri} />
-          )}
-          {!hasThumbnail && <Kb.Avatar size={48} style={styles.placeHolderAvatar} />}
-          <Kb.Box>
-            <Kb.Box style={Kb.Styles.globalStyles.flexBoxRow}>
-              <Kb.Text type="BodySemibold">{props.name}</Kb.Text>
-            </Kb.Box>
-            <Kb.Box style={Kb.Styles.globalStyles.flexBoxRow}>
-              <Kb.Text type="BodySmall">{props.valueFormatted || props.value}</Kb.Text>
-            </Kb.Box>
-          </Kb.Box>
-        </Kb.Box>
-        <Kb.Box>
-          <Kb.Button
-            type="Success"
-            mode={props.alreadyInvited ? 'Secondary' : 'Primary'}
-            label={props.alreadyInvited ? 'Invited!' : 'Invite'}
-            waiting={props.loading}
-            small={true}
-            onClick={props.onClick}
-            style={styles.inviteButton}
-          />
-        </Kb.Box>
-      </Kb.Box>
-    </Kb.Box>
+    <Kb.Box2 direction="horizontal" fullWidth={true} alignItems="center" style={styles.contactRowBox}>
+      <Kb.Box2 direction="horizontal" alignItems="center" flex={1}>
+        {!!hasThumbnail && !!props.pictureUri && (
+          <Kb.Image style={styles.thumbnail} src={props.pictureUri} />
+        )}
+        {!hasThumbnail && <Kb.Avatar size={48} style={styles.placeHolderAvatar} />}
+        <Kb.Box2 direction="vertical" flex={1}>
+          <Kb.Box2 direction="horizontal" fullWidth={true}>
+            <Kb.Text type="BodySemibold">{props.name}</Kb.Text>
+          </Kb.Box2>
+          <Kb.Box2 direction="horizontal" fullWidth={true}>
+            <Kb.Text type="BodySmall">{props.valueFormatted || props.value}</Kb.Text>
+          </Kb.Box2>
+        </Kb.Box2>
+        <Kb.Button
+          type="Success"
+          mode={props.alreadyInvited ? 'Secondary' : 'Primary'}
+          label={props.alreadyInvited ? 'Invited!' : 'Invite'}
+          waiting={props.loading}
+          small={true}
+          onClick={props.onClick}
+          style={styles.inviteButton}
+        />
+      </Kb.Box2>
+    </Kb.Box2>
   )
 }
 
-export type InviteByContactProps = {
-  onBack: () => void
+const contactRow = (_: number, props: ContactRowProps) => <ContactRow {...props} />
+
+type InviteByContactProps = {
   selectedRole: T.Teams.TeamRoleType
   onRoleChange: (newRole: T.Teams.TeamRoleType) => void
   teamName: string
@@ -58,22 +56,11 @@ export type InviteByContactProps = {
 }
 
 export const InviteByContact = (props: InviteByContactProps) => {
+  const styles = useStyles()
   const [isRolePickerOpen, setRolePickerOpen] = React.useState(false)
-  const controlRolePicker = React.useCallback(
-    (open: boolean) => {
-      setRolePickerOpen(open)
-    },
-    [setRolePickerOpen]
-  )
-
   const [filterValue, setFilterValue] = React.useState('')
-  const onFilterChange = React.useCallback(
-    (newValue: string) => {
-      setFilterValue(newValue)
-    },
-    [setFilterValue]
-  )
 
+  const {errorMessage, onRoleChange, selectedRole, teamName} = props
   let {listItems} = props
   // Remember if we have any data before appying filtering.
   const hasItems = listItems.length > 0
@@ -90,86 +77,71 @@ export const InviteByContact = (props: InviteByContactProps) => {
 
   return (
     <Kb.Box2 direction="vertical" fullWidth={true} fullHeight={true}>
-      <Kb.HeaderHocHeader onBack={props.onBack} title="Invite contacts" />
-      {!!props.errorMessage && (
-        <Kb.Box2 direction="horizontal" style={styles.errorMessageContainer} fullWidth={true}>
+      {!!errorMessage && (
+        <Kb.Box2 direction="horizontal" style={styles.errorMessageContainer} fullWidth={true} justifyContent="center">
           <Kb.Text center={true} type="BodySemibold" negative={true}>
-            {props.errorMessage}
+            {errorMessage}
           </Kb.Text>
         </Kb.Box2>
       )}
       {hasItems && (
-        <Kb.Box style={styles.listContainer}>
+        <Kb.Box2 direction="vertical" fullWidth={true} flex={1} style={styles.listContainer}>
           <Kb.Box2 direction="horizontal" style={styles.filterContainer}>
-            <Kb.PlainInput
+            <Kb.Input3
               autoFocus={true}
               keyboardType="email-address"
               value={filterValue}
-              onChangeText={onFilterChange}
+              onChangeText={setFilterValue}
               placeholder="Search"
-              style={styles.filter}
+              hideBorder={true}
             />
           </Kb.Box2>
           <FloatingRolePicker
-            presetRole={props.selectedRole}
+            presetRole={selectedRole}
             onConfirm={role => {
-              props.onRoleChange(role)
-              controlRolePicker(false)
+              onRoleChange(role)
+              setRolePickerOpen(false)
             }}
             open={isRolePickerOpen}
             position="bottom center"
             disabledRoles={{owner: 'Cannot invite an owner via email.'}}
           />
+          <Kb.ClickableBox direction="vertical" centerChildren={true} onClick={() => setRolePickerOpen(true)} style={styles.rolePickerBox}>
+            <Kb.Text center={true} type="BodySmall">
+              Users will be invited to {teamName} as
+              <Kb.Text type="BodySmallPrimaryLink">{' ' + selectedRole + 's'}</Kb.Text>.
+            </Kb.Text>
+          </Kb.ClickableBox>
           <Kb.List
             keyProperty="id"
             items={listItems}
-            fixedHeight={56}
-            ListHeaderComponent={
-              <Kb.ClickableBox onClick={() => controlRolePicker(true)} style={styles.rolePickerBox}>
-                <Kb.Text center={true} type="BodySmall">
-                  Users will be invited to {props.teamName} as
-                  <Kb.Text type="BodySmallPrimaryLink">{' ' + props.selectedRole + 's'}</Kb.Text>.
-                </Kb.Text>
-              </Kb.ClickableBox>
-            }
+            itemHeight={{height: 56, type: 'fixed'}}
             renderItem={contactRow}
             style={styles.contactList}
           />
-        </Kb.Box>
+        </Kb.Box2>
       )}
     </Kb.Box2>
   )
 }
 
-const styles = Kb.Styles.styleSheetCreate(
-  () =>
+const useStyles = Kb.Styles.createStyleHook(
+  theme =>
     ({
       contactList: {
         alignSelf: 'stretch',
       },
       contactRowBox: {
-        ...Kb.Styles.globalStyles.flexBoxRow,
-        alignItems: 'center',
         height: 56,
         padding: Kb.Styles.globalMargins.small,
-        width: '100%',
-      },
-      contactRowInnerBox: {
-        ...Kb.Styles.globalStyles.flexBoxRow,
-        alignItems: 'center',
-        flex: 1,
       },
       errorMessageContainer: {
         alignItems: 'center',
-        backgroundColor: Kb.Styles.globalColors.red,
-        justifyContent: 'center',
+        backgroundColor: theme.red,
         padding: Kb.Styles.globalMargins.tiny,
       },
-      filter: {
-        width: '100%',
-      },
       filterContainer: {
-        borderBottomColor: Kb.Styles.globalColors.black_10,
+        borderBottomColor: theme.black_10,
         borderBottomWidth: Kb.Styles.hairlineWidth,
         padding: Kb.Styles.globalMargins.small,
       },
@@ -179,19 +151,14 @@ const styles = Kb.Styles.styleSheetCreate(
         width: 100,
       },
       listContainer: {
-        ...Kb.Styles.globalStyles.flexBoxColumn,
-        flex: 1,
         paddingBottom: Kb.Styles.globalMargins.xtiny,
       },
       placeHolderAvatar: {
         marginRight: 16,
       },
       rolePickerBox: {
-        ...Kb.Styles.globalStyles.flexBoxColumn,
-        alignItems: 'center',
-        borderBottomColor: Kb.Styles.globalColors.black_10,
+        borderBottomColor: theme.black_10,
         borderBottomWidth: Kb.Styles.hairlineWidth,
-        justifyContent: 'center',
         marginBottom: Kb.Styles.globalMargins.xtiny,
         padding: Kb.Styles.globalMargins.small,
       },

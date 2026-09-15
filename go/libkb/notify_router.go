@@ -4,6 +4,7 @@
 package libkb
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -12,7 +13,6 @@ import (
 	"github.com/keybase/client/go/protocol/keybase1"
 	stellar1 "github.com/keybase/client/go/protocol/stellar1"
 	"github.com/keybase/go-framed-msgpack-rpc/rpc"
-	context "golang.org/x/net/context"
 )
 
 // NotifyListener provides hooks for listening for when
@@ -40,6 +40,7 @@ type NotifyListener interface {
 	SimpleFSArchiveStatusChanged(status keybase1.SimpleFSArchiveStatus)
 	PaperKeyCached(uid keybase1.UID, encKID keybase1.KID, sigKID keybase1.KID)
 	KeyfamilyChanged(uid keybase1.UID)
+	DeviceHistoryChanged()
 	NewChatActivity(uid keybase1.UID, activity chat1.ChatActivity, source chat1.ChatActivitySource)
 	NewChatKBFSFileEditActivity(uid keybase1.UID, activity chat1.ChatActivity)
 	ChatIdentifyUpdate(update keybase1.CanonicalTLFNameAndIDWithBreaks)
@@ -119,7 +120,6 @@ type NotifyListener interface {
 	UpdateInviteCounts(keybase1.InviteCounts)
 	TeamTreeMembershipsPartial(keybase1.TeamTreeMembership)
 	TeamTreeMembershipsDone(keybase1.TeamTreeMembershipsDoneResult)
-	WebOfTrustChanged(username string)
 }
 
 type NoopNotifyListener struct{}
@@ -144,28 +144,35 @@ func (n *NoopNotifyListener) FSEditListRequest(arg keybase1.FSEditListRequest)  
 func (n *NoopNotifyListener) FavoritesChanged(uid keybase1.UID)                             {}
 func (n *NoopNotifyListener) FSSubscriptionNotify(arg keybase1.FSSubscriptionNotifyArg) {
 }
+
 func (n *NoopNotifyListener) FSSubscriptionNotifyPath(arg keybase1.FSSubscriptionNotifyPathArg) {
 }
+
 func (n *NoopNotifyListener) SimpleFSArchiveStatusChanged(status keybase1.SimpleFSArchiveStatus) {
 }
+
 func (n *NoopNotifyListener) PaperKeyCached(uid keybase1.UID, encKID keybase1.KID, sigKID keybase1.KID) {
 }
 func (n *NoopNotifyListener) KeyfamilyChanged(uid keybase1.UID) {}
+func (n *NoopNotifyListener) DeviceHistoryChanged()             {}
 func (n *NoopNotifyListener) NewChatActivity(uid keybase1.UID, activity chat1.ChatActivity,
 	source chat1.ChatActivitySource) {
 }
+
 func (n *NoopNotifyListener) NewChatKBFSFileEditActivity(uid keybase1.UID, activity chat1.ChatActivity) {
 }
 func (n *NoopNotifyListener) ChatIdentifyUpdate(update keybase1.CanonicalTLFNameAndIDWithBreaks) {}
 func (n *NoopNotifyListener) ChatTLFFinalize(uid keybase1.UID, convID chat1.ConversationID,
 	finalizeInfo chat1.ConversationFinalizeInfo) {
 }
+
 func (n *NoopNotifyListener) ChatTLFResolve(uid keybase1.UID, convID chat1.ConversationID,
 	resolveInfo chat1.ConversationResolveInfo) {
 }
 func (n *NoopNotifyListener) ChatInboxStale(uid keybase1.UID) {}
 func (n *NoopNotifyListener) ChatThreadsStale(uid keybase1.UID, updates []chat1.ConversationStaleUpdate) {
 }
+
 func (n *NoopNotifyListener) ChatInboxSynced(uid keybase1.UID, topicType chat1.TopicType,
 	syncRes chat1.ChatSyncResult) {
 }
@@ -183,33 +190,45 @@ func (n *NoopNotifyListener) ChatSetConvSettings(uid keybase1.UID, convID chat1.
 func (n *NoopNotifyListener) ChatSubteamRename(uid keybase1.UID, convIDs []chat1.ConversationID)  {}
 func (n *NoopNotifyListener) ChatKBFSToImpteamUpgrade(uid keybase1.UID, convID chat1.ConversationID) {
 }
+
 func (n *NoopNotifyListener) ChatAttachmentUploadStart(uid keybase1.UID, convID chat1.ConversationID,
 	outboxID chat1.OutboxID) {
 }
+
 func (n *NoopNotifyListener) ChatAttachmentUploadProgress(uid keybase1.UID, convID chat1.ConversationID,
 	outboxID chat1.OutboxID, bytesComplete, bytesTotal int64) {
 }
+
 func (n *NoopNotifyListener) ChatAttachmentDownloadProgress(uid keybase1.UID, convID chat1.ConversationID,
 	msgID chat1.MessageID, bytesComplete, bytesTotal int64) {
 }
+
 func (n *NoopNotifyListener) ChatAttachmentDownloadComplete(uid keybase1.UID, convID chat1.ConversationID,
 	msgID chat1.MessageID) {
 }
+
 func (n *NoopNotifyListener) ChatArchiveProgress(jobID chat1.ArchiveJobID, messagesComplete, messagesTotal int64) {
 }
+
 func (n *NoopNotifyListener) ChatArchiveComplete(jobID chat1.ArchiveJobID) {
 }
+
 func (n *NoopNotifyListener) ChatPaymentInfo(uid keybase1.UID, convID chat1.ConversationID,
 	msgID chat1.MessageID, info chat1.UIPaymentInfo) {
 }
+
 func (n *NoopNotifyListener) ChatRequestInfo(uid keybase1.UID, convID chat1.ConversationID,
 	msgID chat1.MessageID, info chat1.UIRequestInfo) {
 }
+
 func (n *NoopNotifyListener) ChatPromptUnfurl(uid keybase1.UID, convID chat1.ConversationID,
 	msgID chat1.MessageID, domain string) {
 }
-func (n *NoopNotifyListener) ChatConvUpdate(uid keybase1.UID, convID chat1.ConversationID)          {}
+
+func (n *NoopNotifyListener) ChatConvUpdate(uid keybase1.UID, convID chat1.ConversationID) {}
+
 func (n *NoopNotifyListener) ChatWelcomeMessageLoaded(keybase1.TeamID, chat1.WelcomeMessageDisplay) {}
+
 func (n *NoopNotifyListener) ChatParticipantsInfo(
 	participants map[chat1.ConvIDStr][]chat1.UIParticipant) {
 }
@@ -219,18 +238,27 @@ func (n *NoopNotifyListener) BadgeState(badgeState keybase1.BadgeState)   {}
 func (n *NoopNotifyListener) ReachabilityChanged(r keybase1.Reachability) {}
 func (n *NoopNotifyListener) TeamChangedByID(teamID keybase1.TeamID, latestSeqno keybase1.Seqno, implicitTeam bool, changes keybase1.TeamChangeSet, latestHiddenSeqno keybase1.Seqno, source keybase1.TeamChangedSource) {
 }
+
 func (n *NoopNotifyListener) TeamChangedByName(teamName string, latestSeqno keybase1.Seqno, implicitTeam bool, changes keybase1.TeamChangeSet, latestHiddenSeqno keybase1.Seqno, source keybase1.TeamChangedSource) {
 }
-func (n *NoopNotifyListener) TeamDeleted(teamID keybase1.TeamID)                                    {}
-func (n *NoopNotifyListener) TeamExit(teamID keybase1.TeamID)                                       {}
-func (n *NoopNotifyListener) TeamRoleMapChanged(version keybase1.UserTeamVersion)                   {}
-func (n *NoopNotifyListener) NewTeamEK(teamID keybase1.TeamID, generation keybase1.EkGeneration)    {}
+
+func (n *NoopNotifyListener) TeamDeleted(teamID keybase1.TeamID) {}
+
+func (n *NoopNotifyListener) TeamExit(teamID keybase1.TeamID) {}
+
+func (n *NoopNotifyListener) TeamRoleMapChanged(version keybase1.UserTeamVersion) {}
+
+func (n *NoopNotifyListener) NewTeamEK(teamID keybase1.TeamID, generation keybase1.EkGeneration) {}
+
 func (n *NoopNotifyListener) NewTeambotEK(teamID keybase1.TeamID, generation keybase1.EkGeneration) {}
+
 func (n *NoopNotifyListener) TeambotEKNeeded(teamID keybase1.TeamID, botUID keybase1.UID,
 	generation keybase1.EkGeneration, forceCreateGen *keybase1.EkGeneration) {
 }
+
 func (n *NoopNotifyListener) NewTeambotKey(teamID keybase1.TeamID, generation keybase1.TeambotKeyGeneration) {
 }
+
 func (n *NoopNotifyListener) TeambotKeyNeeded(teamID keybase1.TeamID, botUID keybase1.UID,
 	generation keybase1.TeambotKeyGeneration) {
 }
@@ -239,6 +267,7 @@ func (n *NoopNotifyListener) AvatarUpdated(name string, formats []keybase1.Avata
 func (n *NoopNotifyListener) DeviceCloneCountChanged(newClones int)                      {}
 func (n *NoopNotifyListener) WalletPaymentNotification(accountID stellar1.AccountID, paymentID stellar1.PaymentID) {
 }
+
 func (n *NoopNotifyListener) WalletPaymentStatusNotification(accountID stellar1.AccountID, paymentID stellar1.PaymentID) {
 }
 func (n *NoopNotifyListener) WalletRequestStatusNotification(reqID stellar1.KeybaseRequestID) {}
@@ -247,6 +276,7 @@ func (n *NoopNotifyListener) WalletAccountDetailsUpdate(accountID stellar1.Accou
 func (n *NoopNotifyListener) WalletAccountsUpdate(accounts []stellar1.WalletAccountLocal) {}
 func (n *NoopNotifyListener) WalletPendingPaymentsUpdate(accountID stellar1.AccountID, pending []stellar1.PaymentOrErrorLocal) {
 }
+
 func (n *NoopNotifyListener) WalletRecentPaymentsUpdate(accountID stellar1.AccountID, firstPage stellar1.PaymentsPageLocal) {
 }
 func (n *NoopNotifyListener) TeamMetadataUpdate()                   {}
@@ -269,16 +299,17 @@ func (n *NoopNotifyListener) UserBlocked(keybase1.UserBlockedBody)              
 func (n *NoopNotifyListener) FeaturedBotsUpdate(bots []keybase1.FeaturedBot, limit, offset int) {}
 func (n *NoopNotifyListener) SaltpackOperationStart(opType keybase1.SaltpackOperationType, filename string) {
 }
+
 func (n *NoopNotifyListener) SaltpackOperationProgress(opType keybase1.SaltpackOperationType, filename string, bytesComplete, bytesTotal int64) {
 }
+
 func (n *NoopNotifyListener) SaltpackOperationDone(opType keybase1.SaltpackOperationType, filename string) {
 }
+
 func (n *NoopNotifyListener) UpdateInviteCounts(keybase1.InviteCounts) {
 }
 func (n *NoopNotifyListener) TeamTreeMembershipsPartial(keybase1.TeamTreeMembership)         {}
 func (n *NoopNotifyListener) TeamTreeMembershipsDone(keybase1.TeamTreeMembershipsDoneResult) {}
-func (n *NoopNotifyListener) WebOfTrustChanged(username string) {
-}
 
 type NotifyListenerID string
 
@@ -549,29 +580,6 @@ func (n *NotifyRouter) HandleTrackingChanged(uid keybase1.UID, username Normaliz
 	})
 }
 
-func (n *NotifyRouter) HandleWebOfTrustChanged(username string) {
-	if n == nil {
-		return
-	}
-	// For all connections we currently have open...
-	n.cm.ApplyAll(func(id ConnectionID, xp rpc.Transporter) bool {
-		// If the connection wants the notification type
-		if n.getNotificationChannels(id).Tracking {
-			// In the background do...
-			go func() {
-				// A send of a `WebOfTrustChanged` RPC with the user's username
-				_ = (keybase1.NotifyUsersClient{
-					Cli: rpc.NewClient(xp, NewContextifiedErrorUnwrapper(n.G()), nil),
-				}).WebOfTrustChanged(context.Background(), username)
-			}()
-		}
-		return true
-	})
-	n.runListeners(func(listener NotifyListener) {
-		listener.WebOfTrustChanged(username)
-	})
-}
-
 func (n *NotifyRouter) HandleTrackingInfo(arg keybase1.TrackingInfoArg) {
 	if n == nil {
 		return
@@ -766,14 +774,12 @@ func (n *NotifyRouter) HandleFSEditListResponse(ctx context.Context, arg keybase
 		// If the connection wants the `Kbfslegacy` notification type
 		if n.getNotificationChannels(id).Kbfslegacy {
 			// In the background do...
-			wg.Add(1)
-			go func() {
+			wg.Go(func() {
 				// A send of a `FSEditListResponse` RPC with the notification
 				_ = (keybase1.NotifyFSClient{
 					Cli: rpc.NewClient(xp, NewContextifiedErrorUnwrapper(n.G()), nil),
 				}).FSEditListResponse(context.Background(), keybase1.FSEditListResponseArg(arg))
-				wg.Done()
-			}()
+			})
 		}
 		return true
 	})
@@ -797,15 +803,13 @@ func (n *NotifyRouter) HandleFSEditListRequest(ctx context.Context, arg keybase1
 	n.cm.ApplyAll(func(id ConnectionID, xp rpc.Transporter) bool {
 		// If the connection wants the `Kbfslegacy` notification type
 		if n.getNotificationChannels(id).Kbfslegacy {
-			wg.Add(1)
 			// In the background do...
-			go func() {
+			wg.Go(func() {
 				// A send of a `FSEditListRequest` RPC with the notification
 				_ = (keybase1.NotifyFSRequestClient{
 					Cli: rpc.NewClient(xp, NewContextifiedErrorUnwrapper(n.G()), nil),
 				}).FSEditListRequest(context.Background(), arg)
-				wg.Done()
-			}()
+			})
 		}
 		return true
 	})
@@ -1021,7 +1025,8 @@ func (n *NotifyRouter) shouldSendChatNotification(id ConnectionID, topicType cha
 }
 
 func (n *NotifyRouter) HandleNewChatActivity(ctx context.Context, uid keybase1.UID,
-	topicType chat1.TopicType, activity *chat1.ChatActivity, source chat1.ChatActivitySource, canSkip bool) {
+	topicType chat1.TopicType, activity *chat1.ChatActivity, source chat1.ChatActivitySource, canSkip bool,
+) {
 	if n == nil {
 		return
 	}
@@ -1031,9 +1036,8 @@ func (n *NotifyRouter) HandleNewChatActivity(ctx context.Context, uid keybase1.U
 	n.cm.ApplyAll(func(id ConnectionID, xp rpc.Transporter) bool {
 		// If the connection wants the `Chat` notification type
 		if n.shouldSendChatNotification(id, topicType) && !n.canSkipNotif(id, canSkip) {
-			wg.Add(1)
 			// In the background do...
-			go func() {
+			wg.Go(func() {
 				// A send of a `NewChatActivity` RPC with the user's UID
 				_ = (chat1.NotifyChatClient{
 					Cli: rpc.NewClient(xp, NewContextifiedErrorUnwrapper(n.G()), nil),
@@ -1042,8 +1046,7 @@ func (n *NotifyRouter) HandleNewChatActivity(ctx context.Context, uid keybase1.U
 					Activity: *activity,
 					Source:   source,
 				})
-				wg.Done()
-			}()
+			})
 		}
 		return true
 	})
@@ -1063,13 +1066,11 @@ func (n *NotifyRouter) HandleChatIdentifyUpdate(ctx context.Context, update keyb
 	n.G().Log.CDebugf(ctx, "+ Sending ChatIdentifyUpdate notification")
 	n.cm.ApplyAll(func(id ConnectionID, xp rpc.Transporter) bool {
 		if n.shouldSendChatNotification(id, chat1.TopicType_CHAT) {
-			wg.Add(1)
-			go func() {
+			wg.Go(func() {
 				_ = (chat1.NotifyChatClient{
 					Cli: rpc.NewClient(xp, NewContextifiedErrorUnwrapper(n.G()), nil),
 				}).ChatIdentifyUpdate(context.Background(), update)
-				wg.Done()
-			}()
+			})
 		}
 		return true
 	})
@@ -1083,7 +1084,8 @@ func (n *NotifyRouter) HandleChatIdentifyUpdate(ctx context.Context, update keyb
 
 func (n *NotifyRouter) HandleChatTLFFinalize(ctx context.Context, uid keybase1.UID,
 	convID chat1.ConversationID, topicType chat1.TopicType, finalizeInfo chat1.ConversationFinalizeInfo,
-	conv *chat1.InboxUIItem) {
+	conv *chat1.InboxUIItem,
+) {
 	if n == nil {
 		return
 	}
@@ -1091,8 +1093,7 @@ func (n *NotifyRouter) HandleChatTLFFinalize(ctx context.Context, uid keybase1.U
 	n.G().Log.CDebugf(ctx, "+ Sending ChatTLFFinalize notification")
 	n.cm.ApplyAll(func(id ConnectionID, xp rpc.Transporter) bool {
 		if n.shouldSendChatNotification(id, topicType) {
-			wg.Add(1)
-			go func() {
+			wg.Go(func() {
 				_ = (chat1.NotifyChatClient{
 					Cli: rpc.NewClient(xp, NewContextifiedErrorUnwrapper(n.G()), nil),
 				}).ChatTLFFinalize(context.Background(), chat1.ChatTLFFinalizeArg{
@@ -1101,8 +1102,7 @@ func (n *NotifyRouter) HandleChatTLFFinalize(ctx context.Context, uid keybase1.U
 					FinalizeInfo: finalizeInfo,
 					Conv:         conv,
 				})
-				wg.Done()
-			}()
+			})
 		}
 		return true
 	})
@@ -1115,7 +1115,8 @@ func (n *NotifyRouter) HandleChatTLFFinalize(ctx context.Context, uid keybase1.U
 }
 
 func (n *NotifyRouter) HandleChatTLFResolve(ctx context.Context, uid keybase1.UID,
-	convID chat1.ConversationID, topicType chat1.TopicType, resolveInfo chat1.ConversationResolveInfo) {
+	convID chat1.ConversationID, topicType chat1.TopicType, resolveInfo chat1.ConversationResolveInfo,
+) {
 	if n == nil {
 		return
 	}
@@ -1123,8 +1124,7 @@ func (n *NotifyRouter) HandleChatTLFResolve(ctx context.Context, uid keybase1.UI
 	n.G().Log.CDebugf(ctx, "+ Sending ChatTLFResolve notification")
 	n.cm.ApplyAll(func(id ConnectionID, xp rpc.Transporter) bool {
 		if n.shouldSendChatNotification(id, topicType) {
-			wg.Add(1)
-			go func() {
+			wg.Go(func() {
 				_ = (chat1.NotifyChatClient{
 					Cli: rpc.NewClient(xp, NewContextifiedErrorUnwrapper(n.G()), nil),
 				}).ChatTLFResolve(context.Background(), chat1.ChatTLFResolveArg{
@@ -1132,8 +1132,7 @@ func (n *NotifyRouter) HandleChatTLFResolve(ctx context.Context, uid keybase1.UI
 					ConvID:      convID,
 					ResolveInfo: resolveInfo,
 				})
-				wg.Done()
-			}()
+			})
 		}
 		return true
 	})
@@ -1153,13 +1152,11 @@ func (n *NotifyRouter) HandleChatInboxStale(ctx context.Context, uid keybase1.UI
 	n.G().Log.CDebugf(ctx, "+ Sending ChatInboxStale notification")
 	n.cm.ApplyAll(func(id ConnectionID, xp rpc.Transporter) bool {
 		if n.shouldSendChatNotification(id, chat1.TopicType_NONE) {
-			wg.Add(1)
-			go func() {
+			wg.Go(func() {
 				_ = (chat1.NotifyChatClient{
 					Cli: rpc.NewClient(xp, NewContextifiedErrorUnwrapper(n.G()), nil),
 				}).ChatInboxStale(context.Background(), uid)
-				wg.Done()
-			}()
+			})
 		}
 		return true
 	})
@@ -1172,7 +1169,8 @@ func (n *NotifyRouter) HandleChatInboxStale(ctx context.Context, uid keybase1.UI
 }
 
 func (n *NotifyRouter) HandleChatThreadsStale(ctx context.Context, uid keybase1.UID,
-	updates []chat1.ConversationStaleUpdate) {
+	updates []chat1.ConversationStaleUpdate,
+) {
 	if n == nil {
 		return
 	}
@@ -1180,16 +1178,14 @@ func (n *NotifyRouter) HandleChatThreadsStale(ctx context.Context, uid keybase1.
 	n.G().Log.CDebugf(ctx, "+ Sending ChatThreadsStale notification")
 	n.cm.ApplyAll(func(id ConnectionID, xp rpc.Transporter) bool {
 		if n.shouldSendChatNotification(id, chat1.TopicType_NONE) {
-			wg.Add(1)
-			go func() {
+			wg.Go(func() {
 				_ = (chat1.NotifyChatClient{
 					Cli: rpc.NewClient(xp, NewContextifiedErrorUnwrapper(n.G()), nil),
 				}).ChatThreadsStale(context.Background(), chat1.ChatThreadsStaleArg{
 					Uid:     uid,
 					Updates: updates,
 				})
-				wg.Done()
-			}()
+			})
 		}
 		return true
 	})
@@ -1202,7 +1198,8 @@ func (n *NotifyRouter) HandleChatThreadsStale(ctx context.Context, uid keybase1.
 }
 
 func (n *NotifyRouter) HandleChatInboxSynced(ctx context.Context, uid keybase1.UID,
-	topicType chat1.TopicType, syncRes chat1.ChatSyncResult) {
+	topicType chat1.TopicType, syncRes chat1.ChatSyncResult,
+) {
 	if n == nil {
 		return
 	}
@@ -1211,16 +1208,14 @@ func (n *NotifyRouter) HandleChatInboxSynced(ctx context.Context, uid keybase1.U
 	n.G().Log.CDebugf(ctx, "+ Sending ChatInboxSynced notification: syncTyp: %v topicType: %v", typ, topicType)
 	n.cm.ApplyAll(func(id ConnectionID, xp rpc.Transporter) bool {
 		if n.shouldSendChatNotification(id, topicType) {
-			wg.Add(1)
-			go func() {
+			wg.Go(func() {
 				_ = (chat1.NotifyChatClient{
 					Cli: rpc.NewClient(xp, NewContextifiedErrorUnwrapper(n.G()), nil),
 				}).ChatInboxSynced(context.Background(), chat1.ChatInboxSyncedArg{
 					Uid:     uid,
 					SyncRes: syncRes,
 				})
-				wg.Done()
-			}()
+			})
 		}
 		return true
 	})
@@ -1240,13 +1235,11 @@ func (n *NotifyRouter) HandleChatInboxSyncStarted(ctx context.Context, uid keyba
 	n.G().Log.CDebugf(ctx, "+ Sending ChatInboxSyncStarted notification")
 	n.cm.ApplyAll(func(id ConnectionID, xp rpc.Transporter) bool {
 		if n.shouldSendChatNotification(id, chat1.TopicType_NONE) {
-			wg.Add(1)
-			go func() {
+			wg.Go(func() {
 				_ = (chat1.NotifyChatClient{
 					Cli: rpc.NewClient(xp, NewContextifiedErrorUnwrapper(n.G()), nil),
 				}).ChatInboxSyncStarted(context.Background(), uid)
-				wg.Done()
-			}()
+			})
 		}
 		return true
 	})
@@ -1265,13 +1258,11 @@ func (n *NotifyRouter) HandleChatTypingUpdate(ctx context.Context, updates []cha
 	var wg sync.WaitGroup
 	n.cm.ApplyAll(func(id ConnectionID, xp rpc.Transporter) bool {
 		if n.shouldSendChatNotification(id, chat1.TopicType_CHAT) {
-			wg.Add(1)
-			go func() {
+			wg.Go(func() {
 				_ = (chat1.NotifyChatClient{
 					Cli: rpc.NewClient(xp, NewContextifiedErrorUnwrapper(n.G()), nil),
 				}).ChatTypingUpdate(context.Background(), updates)
-				wg.Done()
-			}()
+			})
 		}
 		return true
 	})
@@ -1283,7 +1274,8 @@ func (n *NotifyRouter) HandleChatTypingUpdate(ctx context.Context, updates []cha
 }
 
 func (n *NotifyRouter) HandleChatJoinedConversation(ctx context.Context, uid keybase1.UID,
-	convID chat1.ConversationID, topicType chat1.TopicType, conv *chat1.InboxUIItem) {
+	convID chat1.ConversationID, topicType chat1.TopicType, conv *chat1.InboxUIItem,
+) {
 	if n == nil {
 		return
 	}
@@ -1291,8 +1283,7 @@ func (n *NotifyRouter) HandleChatJoinedConversation(ctx context.Context, uid key
 	n.G().Log.CDebugf(ctx, "+ Sending ChatJoinedConversation notification")
 	n.cm.ApplyAll(func(id ConnectionID, xp rpc.Transporter) bool {
 		if n.shouldSendChatNotification(id, topicType) {
-			wg.Add(1)
-			go func() {
+			wg.Go(func() {
 				_ = (chat1.NotifyChatClient{
 					Cli: rpc.NewClient(xp, NewContextifiedErrorUnwrapper(n.G()), nil),
 				}).ChatJoinedConversation(context.Background(), chat1.ChatJoinedConversationArg{
@@ -1300,8 +1291,7 @@ func (n *NotifyRouter) HandleChatJoinedConversation(ctx context.Context, uid key
 					ConvID: convID,
 					Conv:   conv,
 				})
-				wg.Done()
-			}()
+			})
 		}
 		return true
 	})
@@ -1314,7 +1304,8 @@ func (n *NotifyRouter) HandleChatJoinedConversation(ctx context.Context, uid key
 }
 
 func (n *NotifyRouter) HandleChatLeftConversation(ctx context.Context, uid keybase1.UID,
-	convID chat1.ConversationID, topicType chat1.TopicType) {
+	convID chat1.ConversationID, topicType chat1.TopicType,
+) {
 	if n == nil {
 		return
 	}
@@ -1322,16 +1313,14 @@ func (n *NotifyRouter) HandleChatLeftConversation(ctx context.Context, uid keyba
 	n.G().Log.CDebugf(ctx, "+ Sending ChatLeftConversation notification")
 	n.cm.ApplyAll(func(id ConnectionID, xp rpc.Transporter) bool {
 		if n.shouldSendChatNotification(id, topicType) {
-			wg.Add(1)
-			go func() {
+			wg.Go(func() {
 				_ = (chat1.NotifyChatClient{
 					Cli: rpc.NewClient(xp, NewContextifiedErrorUnwrapper(n.G()), nil),
 				}).ChatLeftConversation(context.Background(), chat1.ChatLeftConversationArg{
 					Uid:    uid,
 					ConvID: convID,
 				})
-				wg.Done()
-			}()
+			})
 		}
 		return true
 	})
@@ -1343,7 +1332,8 @@ func (n *NotifyRouter) HandleChatLeftConversation(ctx context.Context, uid keyba
 }
 
 func (n *NotifyRouter) HandleChatResetConversation(ctx context.Context, uid keybase1.UID,
-	convID chat1.ConversationID, topicType chat1.TopicType) {
+	convID chat1.ConversationID, topicType chat1.TopicType,
+) {
 	if n == nil {
 		return
 	}
@@ -1351,16 +1341,14 @@ func (n *NotifyRouter) HandleChatResetConversation(ctx context.Context, uid keyb
 	n.G().Log.CDebugf(ctx, "+ Sending ChatResetConversation notification")
 	n.cm.ApplyAll(func(id ConnectionID, xp rpc.Transporter) bool {
 		if n.shouldSendChatNotification(id, topicType) {
-			wg.Add(1)
-			go func() {
+			wg.Go(func() {
 				_ = (chat1.NotifyChatClient{
 					Cli: rpc.NewClient(xp, NewContextifiedErrorUnwrapper(n.G()), nil),
 				}).ChatResetConversation(context.Background(), chat1.ChatResetConversationArg{
 					Uid:    uid,
 					ConvID: convID,
 				})
-				wg.Done()
-			}()
+			})
 		}
 		return true
 	})
@@ -1373,7 +1361,8 @@ func (n *NotifyRouter) HandleChatResetConversation(ctx context.Context, uid keyb
 }
 
 func (n *NotifyRouter) HandleChatKBFSToImpteamUpgrade(ctx context.Context, uid keybase1.UID,
-	convID chat1.ConversationID, topicType chat1.TopicType) {
+	convID chat1.ConversationID, topicType chat1.TopicType,
+) {
 	if n == nil {
 		return
 	}
@@ -1381,16 +1370,14 @@ func (n *NotifyRouter) HandleChatKBFSToImpteamUpgrade(ctx context.Context, uid k
 	n.G().Log.CDebugf(ctx, "+ Sending ChatKBFSToImpteamUpgrade notification")
 	n.cm.ApplyAll(func(id ConnectionID, xp rpc.Transporter) bool {
 		if n.shouldSendChatNotification(id, topicType) {
-			wg.Add(1)
-			go func() {
+			wg.Go(func() {
 				_ = (chat1.NotifyChatClient{
 					Cli: rpc.NewClient(xp, NewContextifiedErrorUnwrapper(n.G()), nil),
 				}).ChatKBFSToImpteamUpgrade(context.Background(), chat1.ChatKBFSToImpteamUpgradeArg{
 					Uid:    uid,
 					ConvID: convID,
 				})
-				wg.Done()
-			}()
+			})
 		}
 		return true
 	})
@@ -1403,7 +1390,8 @@ func (n *NotifyRouter) HandleChatKBFSToImpteamUpgrade(ctx context.Context, uid k
 }
 
 func (n *NotifyRouter) HandleChatAttachmentUploadStart(ctx context.Context, uid keybase1.UID,
-	convID chat1.ConversationID, outboxID chat1.OutboxID) {
+	convID chat1.ConversationID, outboxID chat1.OutboxID,
+) {
 	if n == nil {
 		return
 	}
@@ -1411,8 +1399,7 @@ func (n *NotifyRouter) HandleChatAttachmentUploadStart(ctx context.Context, uid 
 	n.G().Log.CDebugf(ctx, "+ Sending ChatAttachmentUploadStart notification")
 	n.cm.ApplyAll(func(id ConnectionID, xp rpc.Transporter) bool {
 		if n.getNotificationChannels(id).Chatattachments {
-			wg.Add(1)
-			go func() {
+			wg.Go(func() {
 				_ = (chat1.NotifyChatClient{
 					Cli: rpc.NewClient(xp, NewContextifiedErrorUnwrapper(n.G()), nil),
 				}).ChatAttachmentUploadStart(context.Background(), chat1.ChatAttachmentUploadStartArg{
@@ -1420,8 +1407,7 @@ func (n *NotifyRouter) HandleChatAttachmentUploadStart(ctx context.Context, uid 
 					ConvID:   convID,
 					OutboxID: outboxID,
 				})
-				wg.Done()
-			}()
+			})
 		}
 		return true
 	})
@@ -1434,7 +1420,8 @@ func (n *NotifyRouter) HandleChatAttachmentUploadStart(ctx context.Context, uid 
 }
 
 func (n *NotifyRouter) HandleChatAttachmentUploadProgress(ctx context.Context, uid keybase1.UID,
-	convID chat1.ConversationID, outboxID chat1.OutboxID, bytesComplete, bytesTotal int64) {
+	convID chat1.ConversationID, outboxID chat1.OutboxID, bytesComplete, bytesTotal int64,
+) {
 	if n == nil {
 		return
 	}
@@ -1442,8 +1429,7 @@ func (n *NotifyRouter) HandleChatAttachmentUploadProgress(ctx context.Context, u
 	n.G().Log.CDebugf(ctx, "+ Sending ChatAttachmentUploadProgress notification")
 	n.cm.ApplyAll(func(id ConnectionID, xp rpc.Transporter) bool {
 		if n.getNotificationChannels(id).Chatattachments {
-			wg.Add(1)
-			go func() {
+			wg.Go(func() {
 				_ = (chat1.NotifyChatClient{
 					Cli: rpc.NewClient(xp, NewContextifiedErrorUnwrapper(n.G()), nil),
 				}).ChatAttachmentUploadProgress(context.Background(), chat1.ChatAttachmentUploadProgressArg{
@@ -1453,8 +1439,7 @@ func (n *NotifyRouter) HandleChatAttachmentUploadProgress(ctx context.Context, u
 					BytesComplete: bytesComplete,
 					BytesTotal:    bytesTotal,
 				})
-				wg.Done()
-			}()
+			})
 		}
 		return true
 	})
@@ -1467,7 +1452,8 @@ func (n *NotifyRouter) HandleChatAttachmentUploadProgress(ctx context.Context, u
 }
 
 func (n *NotifyRouter) HandleChatAttachmentDownloadProgress(ctx context.Context, uid keybase1.UID,
-	convID chat1.ConversationID, msgID chat1.MessageID, bytesComplete, bytesTotal int64) {
+	convID chat1.ConversationID, msgID chat1.MessageID, bytesComplete, bytesTotal int64,
+) {
 	if n == nil {
 		return
 	}
@@ -1475,8 +1461,7 @@ func (n *NotifyRouter) HandleChatAttachmentDownloadProgress(ctx context.Context,
 	n.G().Log.CDebugf(ctx, "+ Sending ChatAttachmentDownloadProgress notification")
 	n.cm.ApplyAll(func(id ConnectionID, xp rpc.Transporter) bool {
 		if n.getNotificationChannels(id).Chatattachments {
-			wg.Add(1)
-			go func() {
+			wg.Go(func() {
 				_ = (chat1.NotifyChatClient{
 					Cli: rpc.NewClient(xp, NewContextifiedErrorUnwrapper(n.G()), nil),
 				}).ChatAttachmentDownloadProgress(context.Background(), chat1.ChatAttachmentDownloadProgressArg{
@@ -1486,8 +1471,7 @@ func (n *NotifyRouter) HandleChatAttachmentDownloadProgress(ctx context.Context,
 					BytesComplete: bytesComplete,
 					BytesTotal:    bytesTotal,
 				})
-				wg.Done()
-			}()
+			})
 		}
 		return true
 	})
@@ -1500,7 +1484,8 @@ func (n *NotifyRouter) HandleChatAttachmentDownloadProgress(ctx context.Context,
 }
 
 func (n *NotifyRouter) HandleChatAttachmentDownloadComplete(ctx context.Context, uid keybase1.UID,
-	convID chat1.ConversationID, msgID chat1.MessageID) {
+	convID chat1.ConversationID, msgID chat1.MessageID,
+) {
 	if n == nil {
 		return
 	}
@@ -1508,8 +1493,7 @@ func (n *NotifyRouter) HandleChatAttachmentDownloadComplete(ctx context.Context,
 	n.G().Log.CDebugf(ctx, "+ Sending ChatAttachmentDownloadComplete notification")
 	n.cm.ApplyAll(func(id ConnectionID, xp rpc.Transporter) bool {
 		if n.getNotificationChannels(id).Chatattachments {
-			wg.Add(1)
-			go func() {
+			wg.Go(func() {
 				_ = (chat1.NotifyChatClient{
 					Cli: rpc.NewClient(xp, NewContextifiedErrorUnwrapper(n.G()), nil),
 				}).ChatAttachmentDownloadComplete(context.Background(), chat1.ChatAttachmentDownloadCompleteArg{
@@ -1517,8 +1501,7 @@ func (n *NotifyRouter) HandleChatAttachmentDownloadComplete(ctx context.Context,
 					ConvID: convID,
 					MsgID:  msgID,
 				})
-				wg.Done()
-			}()
+			})
 		}
 		return true
 	})
@@ -1538,8 +1521,7 @@ func (n *NotifyRouter) HandleChatArchiveProgress(ctx context.Context, jobID chat
 	n.G().Log.CDebugf(ctx, "+ Sending ChatArchiveProgress notification")
 	n.cm.ApplyAll(func(id ConnectionID, xp rpc.Transporter) bool {
 		if n.getNotificationChannels(id).Chatarchive {
-			wg.Add(1)
-			go func() {
+			wg.Go(func() {
 				_ = (chat1.NotifyChatClient{
 					Cli: rpc.NewClient(xp, NewContextifiedErrorUnwrapper(n.G()), nil),
 				}).ChatArchiveProgress(context.Background(), chat1.ChatArchiveProgressArg{
@@ -1547,8 +1529,7 @@ func (n *NotifyRouter) HandleChatArchiveProgress(ctx context.Context, jobID chat
 					MessagesComplete: messagesComplete,
 					MessagesTotal:    messagesTotal,
 				})
-				wg.Done()
-			}()
+			})
 		}
 		return true
 	})
@@ -1568,15 +1549,14 @@ func (n *NotifyRouter) HandleChatArchiveComplete(ctx context.Context, jobID chat
 	n.G().Log.CDebugf(ctx, "+ Sending ChatArchiveComplete notification")
 	n.cm.ApplyAll(func(id ConnectionID, xp rpc.Transporter) bool {
 		if n.getNotificationChannels(id).Chatarchive {
-			wg.Add(1)
-			go func() {
+			wg.Go(func() {
 				_ = (chat1.NotifyChatClient{
 					Cli: rpc.NewClient(xp, NewContextifiedErrorUnwrapper(n.G()), nil),
-				}).ChatArchiveComplete(context.Background(),
+				}).ChatArchiveComplete(
+					context.Background(),
 					jobID,
 				)
-				wg.Done()
-			}()
+			})
 		}
 		return true
 	})
@@ -1589,7 +1569,8 @@ func (n *NotifyRouter) HandleChatArchiveComplete(ctx context.Context, jobID chat
 }
 
 func (n *NotifyRouter) HandleChatSetConvRetention(ctx context.Context, uid keybase1.UID,
-	convID chat1.ConversationID, topicType chat1.TopicType, conv *chat1.InboxUIItem) {
+	convID chat1.ConversationID, topicType chat1.TopicType, conv *chat1.InboxUIItem,
+) {
 	n.notifyChatCommon(ctx, "ChatSetConvRetention", topicType,
 		func(ctx context.Context, cli *chat1.NotifyChatClient) {
 			_ = cli.ChatSetConvRetention(ctx, chat1.ChatSetConvRetentionArg{
@@ -1603,7 +1584,8 @@ func (n *NotifyRouter) HandleChatSetConvRetention(ctx context.Context, uid keyba
 }
 
 func (n *NotifyRouter) HandleChatSetTeamRetention(ctx context.Context, uid keybase1.UID,
-	teamID keybase1.TeamID, topicType chat1.TopicType, convs []chat1.InboxUIItem) {
+	teamID keybase1.TeamID, topicType chat1.TopicType, convs []chat1.InboxUIItem,
+) {
 	n.notifyChatCommon(ctx, "ChatSetTeamRetention", topicType,
 		func(ctx context.Context, cli *chat1.NotifyChatClient) {
 			_ = cli.ChatSetTeamRetention(ctx, chat1.ChatSetTeamRetentionArg{
@@ -1617,7 +1599,8 @@ func (n *NotifyRouter) HandleChatSetTeamRetention(ctx context.Context, uid keyba
 }
 
 func (n *NotifyRouter) HandleChatSetConvSettings(ctx context.Context, uid keybase1.UID,
-	convID chat1.ConversationID, topicType chat1.TopicType, conv *chat1.InboxUIItem) {
+	convID chat1.ConversationID, topicType chat1.TopicType, conv *chat1.InboxUIItem,
+) {
 	n.notifyChatCommon(ctx, "ChatSetConvSettings", topicType,
 		func(ctx context.Context, cli *chat1.NotifyChatClient) {
 			_ = cli.ChatSetConvSettings(ctx, chat1.ChatSetConvSettingsArg{
@@ -1631,7 +1614,8 @@ func (n *NotifyRouter) HandleChatSetConvSettings(ctx context.Context, uid keybas
 }
 
 func (n *NotifyRouter) HandleChatSubteamRename(ctx context.Context, uid keybase1.UID,
-	convIDs []chat1.ConversationID, topicType chat1.TopicType, convs []chat1.InboxUIItem) {
+	convIDs []chat1.ConversationID, topicType chat1.TopicType, convs []chat1.InboxUIItem,
+) {
 	n.notifyChatCommon(ctx, "ChatSubteamRename", topicType,
 		func(ctx context.Context, cli *chat1.NotifyChatClient) {
 			_ = cli.ChatSubteamRename(ctx, chat1.ChatSubteamRenameArg{
@@ -1644,7 +1628,8 @@ func (n *NotifyRouter) HandleChatSubteamRename(ctx context.Context, uid keybase1
 }
 
 func (n *NotifyRouter) HandleChatPromptUnfurl(ctx context.Context, uid keybase1.UID,
-	convID chat1.ConversationID, msgID chat1.MessageID, domain string) {
+	convID chat1.ConversationID, msgID chat1.MessageID, domain string,
+) {
 	n.notifyChatCommon(ctx, "ChatPromptUnfurl", chat1.TopicType_CHAT,
 		func(ctx context.Context, cli *chat1.NotifyChatClient) {
 			_ = cli.ChatPromptUnfurl(ctx, chat1.ChatPromptUnfurlArg{
@@ -1659,7 +1644,8 @@ func (n *NotifyRouter) HandleChatPromptUnfurl(ctx context.Context, uid keybase1.
 }
 
 func (n *NotifyRouter) HandleChatConvUpdate(ctx context.Context, uid keybase1.UID,
-	convID chat1.ConversationID, topicType chat1.TopicType, conv *chat1.InboxUIItem) {
+	convID chat1.ConversationID, topicType chat1.TopicType, conv *chat1.InboxUIItem,
+) {
 	n.notifyChatCommon(ctx, "ChatConvUpdate", topicType,
 		func(ctx context.Context, cli *chat1.NotifyChatClient) {
 			_ = cli.ChatConvUpdate(ctx, chat1.ChatConvUpdateArg{
@@ -1673,7 +1659,8 @@ func (n *NotifyRouter) HandleChatConvUpdate(ctx context.Context, uid keybase1.UI
 }
 
 func (n *NotifyRouter) HandleChatWelcomeMessageLoaded(ctx context.Context,
-	teamID keybase1.TeamID, message chat1.WelcomeMessageDisplay) {
+	teamID keybase1.TeamID, message chat1.WelcomeMessageDisplay,
+) {
 	if n == nil {
 		return
 	}
@@ -1697,7 +1684,8 @@ func (n *NotifyRouter) HandleChatWelcomeMessageLoaded(ctx context.Context,
 }
 
 func (n *NotifyRouter) HandleChatParticipantsInfo(ctx context.Context,
-	participants map[chat1.ConvIDStr][]chat1.UIParticipant) {
+	participants map[chat1.ConvIDStr][]chat1.UIParticipant,
+) {
 	if n == nil {
 		return
 	}
@@ -1717,11 +1705,14 @@ func (n *NotifyRouter) HandleChatParticipantsInfo(ctx context.Context,
 	})
 }
 
-type notifyChatFn1 func(context.Context, *chat1.NotifyChatClient)
-type notifyChatFn2 func(context.Context, NotifyListener)
+type (
+	notifyChatFn1 func(context.Context, *chat1.NotifyChatClient)
+	notifyChatFn2 func(context.Context, NotifyListener)
+)
 
 func (n *NotifyRouter) notifyChatCommon(ctx context.Context, debugLabel string, topicType chat1.TopicType,
-	fn1 notifyChatFn1, fn2 notifyChatFn2) {
+	fn1 notifyChatFn1, fn2 notifyChatFn2,
+) {
 	if n == nil {
 		return
 	}
@@ -1729,14 +1720,12 @@ func (n *NotifyRouter) notifyChatCommon(ctx context.Context, debugLabel string, 
 	n.G().Log.CDebugf(ctx, "+ Sending %v notification", debugLabel)
 	n.cm.ApplyAll(func(id ConnectionID, xp rpc.Transporter) bool {
 		if n.shouldSendChatNotification(id, topicType) {
-			wg.Add(1)
-			go func() {
+			wg.Go(func() {
 				cli := &chat1.NotifyChatClient{
 					Cli: rpc.NewClient(xp, NewContextifiedErrorUnwrapper(n.G()), nil),
 				}
 				fn1(context.Background(), cli)
-				wg.Done()
-			}()
+			})
 		}
 		return true
 	})
@@ -1956,14 +1945,12 @@ func (n *NotifyRouter) HandlePaperKeyCached(uid keybase1.UID, encKID keybase1.KI
 	n.cm.ApplyAll(func(id ConnectionID, xp rpc.Transporter) bool {
 		// If the connection wants the `Favorites` notification type
 		if n.getNotificationChannels(id).Paperkeys {
-			wg.Add(1)
 			// In the background do...
-			go func() {
+			wg.Go(func() {
 				_ = (keybase1.NotifyPaperKeyClient{
 					Cli: rpc.NewClient(xp, NewContextifiedErrorUnwrapper(n.G()), nil),
 				}).PaperKeyCached(context.Background(), arg)
-				wg.Done()
-			}()
+			})
 		}
 		return true
 	})
@@ -2002,6 +1989,30 @@ func (n *NotifyRouter) HandleKeyfamilyChanged(uid keybase1.UID) {
 	n.G().Log.Debug("- Sent keyfamily changed notification")
 }
 
+// HandleDeviceHistoryChanged is called whenever the device history list is refreshed.
+func (n *NotifyRouter) HandleDeviceHistoryChanged() {
+	if n == nil {
+		return
+	}
+
+	n.G().Log.Debug("+ Sending device history changed notification")
+	n.cm.ApplyAll(func(id ConnectionID, xp rpc.Transporter) bool {
+		if n.getNotificationChannels(id).Devicehistory {
+			go func() {
+				_ = (keybase1.NotifyDeviceHistoryClient{
+					Cli: rpc.NewClient(xp, NewContextifiedErrorUnwrapper(n.G()), nil),
+				}).DeviceHistoryChanged(context.Background())
+			}()
+		}
+		return true
+	})
+
+	n.runListeners(func(listener NotifyListener) {
+		listener.DeviceHistoryChanged()
+	})
+	n.G().Log.Debug("- Sent device history changed notification")
+}
+
 // HandleServiceShutdown is called whenever the service shuts down.
 func (n *NotifyRouter) HandleServiceShutdown() {
 	if n == nil {
@@ -2017,13 +2028,11 @@ func (n *NotifyRouter) HandleServiceShutdown() {
 		// If the connection wants the `Service` notification type
 		if n.getNotificationChannels(id).Service {
 			// In the background do...
-			wg.Add(1)
-			go func() {
+			wg.Go(func() {
 				_ = (keybase1.NotifyServiceClient{
 					Cli: rpc.NewClient(xp, NewContextifiedErrorUnwrapper(n.G()), nil),
 				}).Shutdown(context.Background(), int(n.G().ExitCode))
-				wg.Done()
-			}()
+			})
 		}
 		return true
 	})
@@ -2106,16 +2115,16 @@ func (n *NotifyRouter) HandleReachability(r keybase1.Reachability) {
 // teamID and teamName are not necessarily the same team
 func (n *NotifyRouter) HandleTeamChangedByBothKeys(ctx context.Context,
 	teamID keybase1.TeamID, teamName string, latestSeqno keybase1.Seqno, implicitTeam bool, changes keybase1.TeamChangeSet,
-	latestHiddenSeqno keybase1.Seqno, latestOffchainSeqno keybase1.Seqno, source keybase1.TeamChangedSource) {
-
+	latestHiddenSeqno keybase1.Seqno, latestOffchainSeqno keybase1.Seqno, source keybase1.TeamChangedSource,
+) {
 	n.HandleTeamChangedByID(ctx, teamID, latestSeqno, implicitTeam, changes, latestHiddenSeqno, latestOffchainSeqno, source)
 	n.HandleTeamChangedByName(ctx, teamName, latestSeqno, implicitTeam, changes, latestHiddenSeqno, latestOffchainSeqno, source)
 }
 
 func (n *NotifyRouter) HandleTeamChangedByID(ctx context.Context,
 	teamID keybase1.TeamID, latestSeqno keybase1.Seqno, implicitTeam bool, changes keybase1.TeamChangeSet,
-	latestHiddenSeqno keybase1.Seqno, latestOffchainSeqno keybase1.Seqno, source keybase1.TeamChangedSource) {
-
+	latestHiddenSeqno keybase1.Seqno, latestOffchainSeqno keybase1.Seqno, source keybase1.TeamChangedSource,
+) {
 	if n == nil {
 		return
 	}
@@ -2135,13 +2144,11 @@ func (n *NotifyRouter) HandleTeamChangedByID(ctx context.Context,
 		teamID, latestSeqno, implicitTeam)
 	n.cm.ApplyAll(func(id ConnectionID, xp rpc.Transporter) bool {
 		if n.getNotificationChannels(id).Team {
-			wg.Add(1)
-			go func() {
+			wg.Go(func() {
 				_ = (keybase1.NotifyTeamClient{
 					Cli: rpc.NewClient(xp, NewContextifiedErrorUnwrapper(n.G()), nil),
 				}).TeamChangedByID(context.Background(), arg)
-				wg.Done()
-			}()
+			})
 		}
 		return true
 	})
@@ -2155,8 +2162,8 @@ func (n *NotifyRouter) HandleTeamChangedByID(ctx context.Context,
 
 func (n *NotifyRouter) HandleTeamChangedByName(ctx context.Context,
 	teamName string, latestSeqno keybase1.Seqno, implicitTeam bool, changes keybase1.TeamChangeSet,
-	latestHiddenSeqno keybase1.Seqno, latestOffchainSeqno keybase1.Seqno, source keybase1.TeamChangedSource) {
-
+	latestHiddenSeqno keybase1.Seqno, latestOffchainSeqno keybase1.Seqno, source keybase1.TeamChangedSource,
+) {
 	if n == nil {
 		return
 	}
@@ -2176,13 +2183,11 @@ func (n *NotifyRouter) HandleTeamChangedByName(ctx context.Context,
 		teamName, latestSeqno, implicitTeam)
 	n.cm.ApplyAll(func(id ConnectionID, xp rpc.Transporter) bool {
 		if n.getNotificationChannels(id).Team {
-			wg.Add(1)
-			go func() {
+			wg.Go(func() {
 				_ = (keybase1.NotifyTeamClient{
 					Cli: rpc.NewClient(xp, NewContextifiedErrorUnwrapper(n.G()), nil),
 				}).TeamChangedByName(context.Background(), arg)
-				wg.Done()
-			}()
+			})
 		}
 		return true
 	})
@@ -2262,13 +2267,11 @@ func (n *NotifyRouter) HandleTeamDeleted(ctx context.Context, teamID keybase1.Te
 	n.G().Log.CDebugf(ctx, "+ Sending TeamDeleted notification")
 	n.cm.ApplyAll(func(id ConnectionID, xp rpc.Transporter) bool {
 		if n.getNotificationChannels(id).Team {
-			wg.Add(1)
-			go func() {
+			wg.Go(func() {
 				_ = (keybase1.NotifyTeamClient{
 					Cli: rpc.NewClient(xp, NewContextifiedErrorUnwrapper(n.G()), nil),
 				}).TeamDeleted(context.Background(), teamID)
-				wg.Done()
-			}()
+			})
 		}
 		return true
 	})
@@ -2289,13 +2292,11 @@ func (n *NotifyRouter) HandleTeamExit(ctx context.Context, teamID keybase1.TeamI
 	n.G().Log.CDebugf(ctx, "+ Sending TeamExit notification")
 	n.cm.ApplyAll(func(id ConnectionID, xp rpc.Transporter) bool {
 		if n.getNotificationChannels(id).Team {
-			wg.Add(1)
-			go func() {
+			wg.Go(func() {
 				_ = (keybase1.NotifyTeamClient{
 					Cli: rpc.NewClient(xp, NewContextifiedErrorUnwrapper(n.G()), nil),
 				}).TeamExit(context.Background(), teamID)
-				wg.Done()
-			}()
+			})
 		}
 		return true
 	})
@@ -2316,13 +2317,11 @@ func (n *NotifyRouter) HandleTeamRoleMapChanged(ctx context.Context, version key
 	n.G().Log.CDebugf(ctx, "+ Sending TeamRoleMapChanged notification")
 	n.cm.ApplyAll(func(id ConnectionID, xp rpc.Transporter) bool {
 		if n.getNotificationChannels(id).Team {
-			wg.Add(1)
-			go func() {
+			wg.Go(func() {
 				_ = (keybase1.NotifyTeamClient{
 					Cli: rpc.NewClient(xp, NewContextifiedErrorUnwrapper(n.G()), nil),
 				}).TeamRoleMapChanged(context.Background(), version)
-				wg.Done()
-			}()
+			})
 		}
 		return true
 	})
@@ -2345,13 +2344,11 @@ func (n *NotifyRouter) HandleUserBlocked(ctx context.Context, b keybase1.UserBlo
 	n.G().Log.CDebugf(ctx, "+ Sending UserBlocked notification: %+v", b)
 	n.cm.ApplyAll(func(id ConnectionID, xp rpc.Transporter) bool {
 		if n.getNotificationChannels(id).Tracking {
-			wg.Add(1)
-			go func() {
+			wg.Go(func() {
 				_ = (keybase1.NotifyTrackingClient{
 					Cli: rpc.NewClient(xp, NewContextifiedErrorUnwrapper(n.G()), nil),
 				}).NotifyUserBlocked(context.Background(), summary)
-				wg.Done()
-			}()
+			})
 		}
 		return true
 	})
@@ -2372,13 +2369,11 @@ func (n *NotifyRouter) HandleTeamAbandoned(ctx context.Context, teamID keybase1.
 	n.G().Log.CDebugf(ctx, "+ Sending TeamAbandoned notification")
 	n.cm.ApplyAll(func(id ConnectionID, xp rpc.Transporter) bool {
 		if n.getNotificationChannels(id).Team {
-			wg.Add(1)
-			go func() {
+			wg.Go(func() {
 				_ = (keybase1.NotifyTeamClient{
 					Cli: rpc.NewClient(xp, NewContextifiedErrorUnwrapper(n.G()), nil),
 				}).TeamAbandoned(context.Background(), teamID)
-				wg.Done()
-			}()
+			})
 		}
 		return true
 	})
@@ -2399,13 +2394,11 @@ func (n *NotifyRouter) HandleNewlyAddedToTeam(ctx context.Context, teamID keybas
 	n.G().Log.CDebugf(ctx, "+ Sending NewlyAddedToTeam notification")
 	n.cm.ApplyAll(func(id ConnectionID, xp rpc.Transporter) bool {
 		if n.getNotificationChannels(id).Team {
-			wg.Add(1)
-			go func() {
+			wg.Go(func() {
 				_ = (keybase1.NotifyTeamClient{
 					Cli: rpc.NewClient(xp, NewContextifiedErrorUnwrapper(n.G()), nil),
 				}).NewlyAddedToTeam(context.Background(), teamID)
-				wg.Done()
-			}()
+			})
 		}
 		return true
 	})
@@ -2418,7 +2411,8 @@ func (n *NotifyRouter) HandleNewlyAddedToTeam(ctx context.Context, teamID keybas
 }
 
 func (n *NotifyRouter) HandleNewTeamEK(ctx context.Context, teamID keybase1.TeamID,
-	generation keybase1.EkGeneration) {
+	generation keybase1.EkGeneration,
+) {
 	if n == nil {
 		return
 	}
@@ -2432,13 +2426,11 @@ func (n *NotifyRouter) HandleNewTeamEK(ctx context.Context, teamID keybase1.Team
 	n.G().Log.CDebugf(ctx, "+ Sending NewTeamEK notification")
 	n.cm.ApplyAll(func(id ConnectionID, xp rpc.Transporter) bool {
 		if n.getNotificationChannels(id).Ephemeral {
-			wg.Add(1)
-			go func() {
+			wg.Go(func() {
 				_ = (keybase1.NotifyEphemeralClient{
 					Cli: rpc.NewClient(xp, NewContextifiedErrorUnwrapper(n.G()), nil),
 				}).NewTeamEk(context.Background(), arg)
-				wg.Done()
-			}()
+			})
 		}
 		return true
 	})
@@ -2451,7 +2443,8 @@ func (n *NotifyRouter) HandleNewTeamEK(ctx context.Context, teamID keybase1.Team
 }
 
 func (n *NotifyRouter) HandleNewTeambotEK(ctx context.Context, teamID keybase1.TeamID,
-	generation keybase1.EkGeneration) {
+	generation keybase1.EkGeneration,
+) {
 	if n == nil {
 		return
 	}
@@ -2465,13 +2458,11 @@ func (n *NotifyRouter) HandleNewTeambotEK(ctx context.Context, teamID keybase1.T
 	n.G().Log.CDebugf(ctx, "+ Sending NewTeambotEK notification")
 	n.cm.ApplyAll(func(id ConnectionID, xp rpc.Transporter) bool {
 		if n.getNotificationChannels(id).Ephemeral {
-			wg.Add(1)
-			go func() {
+			wg.Go(func() {
 				_ = (keybase1.NotifyEphemeralClient{
 					Cli: rpc.NewClient(xp, NewContextifiedErrorUnwrapper(n.G()), nil),
 				}).NewTeambotEk(context.Background(), arg)
-				wg.Done()
-			}()
+			})
 		}
 		return true
 	})
@@ -2484,7 +2475,8 @@ func (n *NotifyRouter) HandleNewTeambotEK(ctx context.Context, teamID keybase1.T
 }
 
 func (n *NotifyRouter) HandleTeambotEKNeeded(ctx context.Context, teamID keybase1.TeamID,
-	botUID keybase1.UID, generation keybase1.EkGeneration, forceCreateGen *keybase1.EkGeneration) {
+	botUID keybase1.UID, generation keybase1.EkGeneration, forceCreateGen *keybase1.EkGeneration,
+) {
 	if n == nil {
 		return
 	}
@@ -2500,13 +2492,11 @@ func (n *NotifyRouter) HandleTeambotEKNeeded(ctx context.Context, teamID keybase
 	n.G().Log.CDebugf(ctx, "+ Sending TeambotEKNeeded notification")
 	n.cm.ApplyAll(func(id ConnectionID, xp rpc.Transporter) bool {
 		if n.getNotificationChannels(id).Ephemeral {
-			wg.Add(1)
-			go func() {
+			wg.Go(func() {
 				_ = (keybase1.NotifyEphemeralClient{
 					Cli: rpc.NewClient(xp, NewContextifiedErrorUnwrapper(n.G()), nil),
 				}).TeambotEkNeeded(context.Background(), arg)
-				wg.Done()
-			}()
+			})
 		}
 		return true
 	})
@@ -2519,7 +2509,8 @@ func (n *NotifyRouter) HandleTeambotEKNeeded(ctx context.Context, teamID keybase
 }
 
 func (n *NotifyRouter) HandleNewTeambotKey(ctx context.Context, teamID keybase1.TeamID,
-	app keybase1.TeamApplication, generation keybase1.TeambotKeyGeneration) {
+	app keybase1.TeamApplication, generation keybase1.TeambotKeyGeneration,
+) {
 	if n == nil {
 		return
 	}
@@ -2534,13 +2525,11 @@ func (n *NotifyRouter) HandleNewTeambotKey(ctx context.Context, teamID keybase1.
 	n.G().Log.CDebugf(ctx, "+ Sending NewTeambotKey notification")
 	n.cm.ApplyAll(func(id ConnectionID, xp rpc.Transporter) bool {
 		if n.getNotificationChannels(id).Teambot {
-			wg.Add(1)
-			go func() {
+			wg.Go(func() {
 				_ = (keybase1.NotifyTeambotClient{
 					Cli: rpc.NewClient(xp, NewContextifiedErrorUnwrapper(n.G()), nil),
 				}).NewTeambotKey(context.Background(), arg)
-				wg.Done()
-			}()
+			})
 		}
 		return true
 	})
@@ -2553,7 +2542,8 @@ func (n *NotifyRouter) HandleNewTeambotKey(ctx context.Context, teamID keybase1.
 }
 
 func (n *NotifyRouter) HandleTeambotKeyNeeded(ctx context.Context, teamID keybase1.TeamID,
-	botUID keybase1.UID, app keybase1.TeamApplication, generation keybase1.TeambotKeyGeneration) {
+	botUID keybase1.UID, app keybase1.TeamApplication, generation keybase1.TeambotKeyGeneration,
+) {
 	if n == nil {
 		return
 	}
@@ -2569,13 +2559,11 @@ func (n *NotifyRouter) HandleTeambotKeyNeeded(ctx context.Context, teamID keybas
 	n.G().Log.CDebugf(ctx, "+ Sending TeambotKeyNeeded notification")
 	n.cm.ApplyAll(func(id ConnectionID, xp rpc.Transporter) bool {
 		if n.getNotificationChannels(id).Teambot {
-			wg.Add(1)
-			go func() {
+			wg.Go(func() {
 				_ = (keybase1.NotifyTeambotClient{
 					Cli: rpc.NewClient(xp, NewContextifiedErrorUnwrapper(n.G()), nil),
 				}).TeambotKeyNeeded(context.Background(), arg)
-				wg.Done()
-			}()
+			})
 		}
 		return true
 	})
@@ -2588,7 +2576,8 @@ func (n *NotifyRouter) HandleTeambotKeyNeeded(ctx context.Context, teamID keybas
 }
 
 func (n *NotifyRouter) HandleAvatarUpdated(ctx context.Context, name string, formats []keybase1.AvatarFormat,
-	typ keybase1.AvatarUpdateType) {
+	typ keybase1.AvatarUpdateType,
+) {
 	if n == nil {
 		return
 	}
@@ -2689,8 +2678,7 @@ func (n *NotifyRouter) HandleChatPaymentInfo(ctx context.Context, uid keybase1.U
 	n.G().Log.CDebugf(ctx, "+ Sending ChatPaymentInfo notification")
 	n.cm.ApplyAll(func(id ConnectionID, xp rpc.Transporter) bool {
 		if n.shouldSendChatNotification(id, chat1.TopicType_NONE) {
-			wg.Add(1)
-			go func() {
+			wg.Go(func() {
 				_ = (chat1.NotifyChatClient{
 					Cli: rpc.NewClient(xp, NewContextifiedErrorUnwrapper(n.G()), nil),
 				}).ChatPaymentInfo(context.Background(), chat1.ChatPaymentInfoArg{
@@ -2699,8 +2687,7 @@ func (n *NotifyRouter) HandleChatPaymentInfo(ctx context.Context, uid keybase1.U
 					MsgID:  msgID,
 					Info:   info,
 				})
-				wg.Done()
-			}()
+			})
 		}
 		return true
 	})
@@ -2720,8 +2707,7 @@ func (n *NotifyRouter) HandleChatRequestInfo(ctx context.Context, uid keybase1.U
 	n.G().Log.CDebugf(ctx, "+ Sending ChatRequestInfo notification")
 	n.cm.ApplyAll(func(id ConnectionID, xp rpc.Transporter) bool {
 		if n.shouldSendChatNotification(id, chat1.TopicType_NONE) {
-			wg.Add(1)
-			go func() {
+			wg.Go(func() {
 				_ = (chat1.NotifyChatClient{
 					Cli: rpc.NewClient(xp, NewContextifiedErrorUnwrapper(n.G()), nil),
 				}).ChatRequestInfo(context.Background(), chat1.ChatRequestInfoArg{
@@ -2730,8 +2716,7 @@ func (n *NotifyRouter) HandleChatRequestInfo(ctx context.Context, uid keybase1.U
 					MsgID:  msgID,
 					Info:   info,
 				})
-				wg.Done()
-			}()
+			})
 		}
 		return true
 	})
@@ -3012,8 +2997,8 @@ func (n *NotifyRouter) HandleUpdateInviteCounts(ctx context.Context, counts keyb
 }
 
 func (n *NotifyRouter) HandleTeamTreeMembershipsPartial(ctx context.Context,
-	result keybase1.TeamTreeMembership) {
-
+	result keybase1.TeamTreeMembership,
+) {
 	if n == nil {
 		return
 	}

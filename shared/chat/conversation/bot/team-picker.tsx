@@ -1,7 +1,6 @@
 import * as C from '@/constants'
 import * as React from 'react'
 import * as Kb from '@/common-adapters'
-import * as Styles from '@/styles'
 import * as T from '@/constants/types'
 import {Avatars, TeamAvatar} from '@/chat/avatars'
 import debounce from 'lodash/debounce'
@@ -10,6 +9,8 @@ import logger from '@/logger'
 type Props = {botUsername: string}
 
 const BotTeamPicker = (props: Props) => {
+  const styles = useStyles()
+  const theme = Kb.Styles.useTheme()
   const botUsername = props.botUsername
   const [term, setTerm] = React.useState('')
   const [results, setResults] = React.useState<ReadonlyArray<T.RPCChat.ConvSearchHit>>([])
@@ -35,52 +36,30 @@ const BotTeamPicker = (props: Props) => {
     )
   }
 
-  const clearModals = C.useRouterState(s => s.dispatch.clearModals)
-  const onClose = () => {
-    clearModals()
-  }
-  const navigateAppend = C.useRouterState(s => s.dispatch.navigateAppend)
+  const navigateAppend = C.Router2.navigateAppend
   const onSelect = (convID: T.RPCChat.ConversationID) => {
     const conversationIDKey = T.Chat.conversationIDToKey(convID)
     navigateAppend({
-      props: {botUsername, conversationIDKey},
-      selected: 'chatInstallBot',
+      name: 'chatInstallBot',
+      params: {botUsername, conversationIDKey},
     })
   }
-
-  const getFeaturedBots = C.useBotsState(s => s.dispatch.getFeaturedBots)
-  C.useOnMountOnce(() => {
-    getFeaturedBots()
-  })
-
   const renderResult = (index: number, item: T.RPCChat.ConvSearchHit) => {
     return (
-      <Kb.ClickableBox key={index} onClick={() => onSelect(item.convID)}>
-        <Kb.Box2 direction="horizontal" fullWidth={true} gap="tiny" style={styles.results}>
-          {item.isTeam ? (
-            <TeamAvatar isHovered={false} isMuted={false} isSelected={false} teamname={item.name} />
-          ) : (
-            <Avatars participantOne={item.parts?.[0]} participantTwo={item.parts?.[1]} />
-          )}
-          <Kb.Text type="Body" style={{alignSelf: 'center'}}>
-            {item.name}
-          </Kb.Text>
-        </Kb.Box2>
+      <Kb.ClickableBox key={index} onClick={() => onSelect(item.convID)} direction="horizontal" fullWidth={true} gap="tiny" style={styles.results}>
+        {item.isTeam ? (
+          <TeamAvatar isHovered={false} isMuted={false} isSelected={false} teamname={item.name} />
+        ) : (
+          <Avatars participantOne={item.parts?.[0]} participantTwo={item.parts?.[1]} />
+        )}
+        <Kb.Text type="Body" style={{alignSelf: 'center'}}>
+          {item.name}
+        </Kb.Text>
       </Kb.ClickableBox>
     )
   }
   return (
-    <Kb.Modal
-      onClose={onClose}
-      header={{
-        leftButton: Styles.isMobile ? (
-          <Kb.Text type="BodyBigLink" onClick={onClose}>
-            {'Cancel'}
-          </Kb.Text>
-        ) : undefined,
-        title: 'Add to team or chat',
-      }}
-    >
+    <>
       <Kb.Box2 direction="vertical" fullWidth={true}>
         <Kb.Box2 direction="horizontal" fullWidth={true}>
           <Kb.SearchFilter
@@ -96,48 +75,46 @@ const BotTeamPicker = (props: Props) => {
         </Kb.Box2>
         <Kb.Box2 direction="vertical" fullWidth={true} style={styles.container}>
           {error.length > 0 ? (
-            <Kb.Text type="Body" style={{alignSelf: 'center', color: Styles.globalColors.redDark}}>
+            <Kb.Text type="Body" style={{alignSelf: 'center', color: theme.redDark}}>
               {error}
             </Kb.Text>
           ) : (
-            <Kb.List2
+            <Kb.List
               indexAsKey={true}
               items={results}
-              itemHeight={{sizeType: 'Large', type: 'fixedListItem2Auto'}}
+              itemHeight={{sizeType: 'Large', type: 'fixedListItemAuto'}}
               renderItem={renderResult}
             />
           )}
         </Kb.Box2>
       </Kb.Box2>
-    </Kb.Modal>
+    </>
   )
 }
 
-const styles = Styles.styleSheetCreate(
+const useStyles = Kb.Styles.createStyleHook(
   () =>
     ({
-      container: Styles.platformStyles({
+      container: Kb.Styles.platformStyles({
         isElectron: {
           height: 450,
         },
       }),
-      results: Styles.platformStyles({
+      results: Kb.Styles.platformStyles({
         common: {
-          paddingLeft: Styles.globalMargins.tiny,
-          paddingRight: Styles.globalMargins.tiny,
+          ...Kb.Styles.paddingH(Kb.Styles.globalMargins.tiny),
         },
         isMobile: {
-          paddingBottom: Styles.globalMargins.tiny,
+          paddingBottom: Kb.Styles.globalMargins.tiny,
         },
       }),
-      searchFilter: Styles.platformStyles({
+      searchFilter: Kb.Styles.platformStyles({
         common: {
-          marginBottom: Styles.globalMargins.xsmall,
-          marginTop: Styles.globalMargins.tiny,
+          marginBottom: Kb.Styles.globalMargins.xsmall,
+          marginTop: Kb.Styles.globalMargins.tiny,
         },
         isElectron: {
-          marginLeft: Styles.globalMargins.small,
-          marginRight: Styles.globalMargins.small,
+          ...Kb.Styles.marginH(Kb.Styles.globalMargins.small),
         },
       }),
     }) as const

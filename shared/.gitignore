@@ -2,6 +2,9 @@
 android/local.properties
 android/.gradle
 android/keybaselib/keybaselib.aar
+# gobuild-if-needed's freshness stamp for the .aar above
+android/keybaselib/.gobuild-stamp
+android/.kotlin
 android/.idea
 android/app/.externalNativeBuild
 android/**/build/
@@ -40,6 +43,7 @@ xcuserdata
 shared
 ios/fastlane/README.md
 keybase.xcframework
+keybasego.xcframework
 ios/AppStore_keybase.ios.KeybaseShare.mobileprovision
 ios/AppStore_keybase.ios.mobileprovision
 ios/dist
@@ -49,5 +53,10 @@ ios/.xcode.env.local
 main.jsbundle
 .eslintcache
 .metro-health-check*
+.expo
+.yarn
 
 coverage-ts
+temp.log
+.watchman-cookie-*
+.tsOuts/

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"fmt"
-
 	"net/url"
 	"os"
 	"path/filepath"
@@ -48,9 +47,11 @@ type boxedData struct {
 // If we change this, make sure to update the key derivation reason for all
 // callers of ErasableKVStore!
 // ***
-const cryptoVersion = 1
-const noiseSuffix = ".ns"
-const storageSubDir = "eraseablekvstore"
+const (
+	cryptoVersion = 1
+	noiseSuffix   = ".ns"
+	storageSubDir = "eraseablekvstore"
+)
 
 func getStorageDir(mctx MetaContext, subDir string) string {
 	base := mctx.G().Env.GetDataDir()
@@ -62,8 +63,8 @@ func getStorageDir(mctx MetaContext, subDir string) string {
 }
 
 type ErasableKVStore interface {
-	Put(mctx MetaContext, key string, val interface{}) error
-	Get(mctx MetaContext, key string, val interface{}) error
+	Put(mctx MetaContext, key string, val any) error
+	Get(mctx MetaContext, key string, val any) error
 	Erase(mctx MetaContext, key string) error
 	AllKeys(mctx MetaContext, keySuffix string) ([]string, error)
 }
@@ -109,7 +110,7 @@ func (s *FileErasableKVStore) noiseKey(key string) string {
 	return fmt.Sprintf("%s%s", url.QueryEscape(key), noiseSuffix)
 }
 
-func (s *FileErasableKVStore) unbox(mctx MetaContext, data []byte, noiseBytes NoiseBytes, val interface{}) (err error) {
+func (s *FileErasableKVStore) unbox(mctx MetaContext, data []byte, noiseBytes NoiseBytes, val any) (err error) {
 	defer mctx.Trace("FileErasableKVStore#unbox", &err)()
 	// Decode encrypted box
 	var boxed boxedData
@@ -143,8 +144,9 @@ func (s *FileErasableKVStore) unbox(mctx MetaContext, data []byte, noiseBytes No
 	return nil
 }
 
-func (s *FileErasableKVStore) box(mctx MetaContext, val interface{},
-	noiseBytes NoiseBytes) (data []byte, err error) {
+func (s *FileErasableKVStore) box(mctx MetaContext, val any,
+	noiseBytes NoiseBytes,
+) (data []byte, err error) {
 	defer mctx.Trace("FileErasableKVStore#box", &err)()
 	data, err = MPackEncode(val)
 	if err != nil {
@@ -174,12 +176,15 @@ func (s *FileErasableKVStore) box(mctx MetaContext, val interface{},
 	return MPackEncode(boxed)
 }
 
-func (s *FileErasableKVStore) Put(mctx MetaContext, key string, val interface{}) (err error) {
+func (s *FileErasableKVStore) Put(mctx MetaContext, key string, val any) (err error) {
 	defer mctx.Trace(fmt.Sprintf("FileErasableKVStore#Put: %v", key), &err)()
 	s.Lock()
 	defer s.Unlock()
 
 	noiseBytes, err := MakeNoise()
+	if err != nil {
+		return err
+	}
 	data, err := s.box(mctx, val, noiseBytes)
 	if err != nil {
 		return err
@@ -252,14 +257,14 @@ func (s *FileErasableKVStore) write(mctx MetaContext, key string, data []byte) (
 	return nil
 }
 
-func (s *FileErasableKVStore) Get(mctx MetaContext, key string, val interface{}) (err error) {
+func (s *FileErasableKVStore) Get(mctx MetaContext, key string, val any) (err error) {
 	defer mctx.Trace(fmt.Sprintf("FileErasableKVStore#Get: %v", key), &err)()
 	s.Lock()
 	defer s.Unlock()
 	return s.get(mctx, key, val)
 }
 
-func (s *FileErasableKVStore) get(mctx MetaContext, key string, val interface{}) (err error) {
+func (s *FileErasableKVStore) get(mctx MetaContext, key string, val any) (err error) {
 	noiseKey := s.noiseKey(key)
 	noise, err := s.read(mctx, noiseKey)
 	if err != nil {

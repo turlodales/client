@@ -1,12 +1,11 @@
 package systests
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/keybase/client/go/client"
@@ -93,7 +92,7 @@ func TestHiddenRotateGregor(t *testing.T) {
 			Applications:  []keybase1.TeamApplication{keybase1.TeamApplication_CHAT},
 		})
 		require.NoError(t, err)
-		require.Equal(t, 1, len(team.ApplicationKeys))
+		require.Len(t, team.ApplicationKeys, 1)
 		return (team.ApplicationKeys[0].KeyGeneration == g)
 	}
 	// Prime user 1's cache
@@ -131,12 +130,8 @@ func TestTeamRotateOnRevoke(t *testing.T) {
 
 	// get the before state of the team
 	before, err := GetTeamForTestByStringName(context.TODO(), tt.users[0].tc.G, teamName.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if before.Generation() != 1 {
-		t.Errorf("generation before rotate: %d, expected 1", before.Generation())
-	}
+	require.NoError(t, err)
+	require.Equal(t, keybase1.PerTeamKeyGeneration(1), before.Generation(), "generation before rotate: %d, expected 1", before.Generation())
 	secretBefore := before.Data.PerTeamKeySeedsUnverified[before.Generation()].Seed.ToBytes()
 
 	// User1 should get a gregor that the team he was just added to changed.
@@ -150,16 +145,11 @@ func TestTeamRotateOnRevoke(t *testing.T) {
 
 	// check that key was rotated for team
 	after, err := GetTeamForTestByStringName(context.TODO(), tt.users[0].tc.G, teamName.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if after.Generation() != 2 {
-		t.Errorf("generation after rotate: %d, expected 2", after.Generation())
-	}
+	require.NoError(t, err)
+	require.Equal(t, keybase1.PerTeamKeyGeneration(2), after.Generation(), "generation after rotate: %d, expected 2", after.Generation())
 	secretAfter := after.Data.PerTeamKeySeedsUnverified[after.Generation()].Seed.ToBytes()
-	if libkb.SecureByteArrayEq(secretAfter, secretBefore) {
-		t.Fatal("team secret did not change when rotated")
-	}
+	require.False(t, libkb.SecureByteArrayEq(secretAfter, secretBefore),
+		"team secret did not change when rotated")
 }
 
 type teamTester struct {
@@ -282,7 +272,7 @@ func (tt *teamTester) addUserHelper(pre string, puk bool, paper bool) *userPlusD
 		u.backupKey = &backups[0]
 		u.backupKey.secret = signupUI.info.displayedPaperKey
 	} else {
-		require.Len(tt.t, backups, 0, "backup keys")
+		require.Empty(tt.t, backups, "backup keys")
 	}
 
 	tt.users = append(tt.users, &u)
@@ -321,18 +311,14 @@ type userPlusDevice struct {
 func (u *userPlusDevice) createTeam() string {
 	create := client.NewCmdTeamCreateRunner(u.tc.G)
 	nameStr, err := libkb.RandString("tt", 5)
-	if err != nil {
-		u.tc.T.Fatal(err)
-	}
+	require.NoError(u.tc.T, err)
 	name, err := keybase1.TeamNameFromString(strings.ToLower(nameStr))
-	if err != nil {
-		u.tc.T.Fatal(err)
-	}
+	require.NoError(u.tc.T, err)
 	create.TeamName = name
 	tracer := u.tc.G.CTimeTracer(context.Background(), "tracer-create-team", true)
 	defer tracer.Finish()
 	if err := create.Run(); err != nil {
-		u.tc.T.Fatal(err)
+		require.NoError(u.tc.T, err)
 	}
 	return create.TeamName.String()
 }
@@ -359,7 +345,7 @@ func (u *userPlusDevice) teamSetSettings(id keybase1.TeamID, settings keybase1.T
 			case arg := <-u.notifications.changeCh:
 				changeByID = arg.Changes.Misc
 			case <-time.After(500 * time.Millisecond * libkb.CITimeMultiplier(u.tc.G)):
-				u.tc.T.Fatal("no notification on teamSetSettings")
+				require.FailNow(u.tc.T, "no notification on teamSetSettings")
 			}
 			if changeByID {
 				return
@@ -470,24 +456,18 @@ func (u *userPlusDevice) readInviteEmails(email string) []string {
 	arg.Args = libkb.NewHTTPArgs()
 	arg.Args.Add("email", libkb.S{Val: email})
 	res, err := u.tc.G.API.Get(mctx, arg)
-	if err != nil {
-		u.tc.T.Fatal(err)
-	}
+	require.NoError(u.tc.T, err)
 	tokens := res.Body.AtKey("tokens")
 	n, err := tokens.Len()
-	if err != nil {
-		u.tc.T.Fatal(err)
-	}
+	require.NoError(u.tc.T, err)
 	if n == 0 {
 		require.Fail(u.tc.T, fmt.Sprintf("no invite tokens for %s", email))
 	}
 
 	exp := make([]string, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		token, err := tokens.AtIndex(i).GetString()
-		if err != nil {
-			u.tc.T.Fatal(err)
-		}
+		require.NoError(u.tc.T, err)
 		exp[i] = token
 	}
 
@@ -498,7 +478,7 @@ func (u *userPlusDevice) acceptEmailInvite(token string) {
 	c := client.NewCmdTeamAcceptInviteRunner(u.tc.G)
 	c.Token = token
 	if err := c.Run(); err != nil {
-		u.tc.T.Fatal(err)
+		require.NoError(u.tc.T, err)
 	}
 }
 
@@ -525,15 +505,13 @@ func (u *userPlusDevice) revokePaperKey() {
 	runner := client.NewCmdDeviceRemoveRunner(u.tc.G)
 	runner.SetIDOrName(id.String())
 	if err := runner.Run(); err != nil {
-		u.tc.T.Fatal(err)
+		require.NoError(u.tc.T, err)
 	}
 }
 
 func (u *userPlusDevice) devices() []keybase1.Device {
 	d, err := u.deviceClient.DeviceList(context.TODO(), 0)
-	if err != nil {
-		u.tc.T.Fatal(err)
-	}
+	require.NoError(u.tc.T, err)
 	return d
 }
 
@@ -549,13 +527,13 @@ func (u *userPlusDevice) paperKeyID() keybase1.DeviceID {
 			return d.DeviceID
 		}
 	}
-	u.tc.T.Fatal("no paper key found")
+	require.FailNow(u.tc.T, "no paper key found")
 	return keybase1.DeviceID("")
 }
 
 func (u *userPlusDevice) waitForTeamChangedGregor(teamID keybase1.TeamID, toSeqno keybase1.Seqno) {
 	// process 10 team rotations or 10s worth of time
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		select {
 		case arg := <-u.notifications.changeCh:
 			u.tc.T.Logf("membership change received: %+v", arg)
@@ -572,7 +550,7 @@ func (u *userPlusDevice) waitForTeamChangedGregor(teamID keybase1.TeamID, toSeqn
 
 func (u *userPlusDevice) waitForMetadataUpdateGregor(reason string) {
 	// process 10 team rotations or 10s worth of time
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		select {
 		case <-u.notifications.metadataUpdateCh:
 			u.tc.T.Logf("metadata update received for reason %q", reason)
@@ -598,14 +576,14 @@ func (u *userPlusDevice) waitForBadgeStateWithReset(numReset int) keybase1.Badge
 				return arg
 			}
 		case <-timeout:
-			u.tc.T.Fatal("timed out waiting for badge state")
+			require.FailNow(u.tc.T, "timed out waiting for badge state")
 			return keybase1.BadgeState{}
 		}
 	}
 }
 
 func (u *userPlusDevice) drainGregor() {
-	for i := 0; i < 1000; i++ {
+	for range 1000 {
 		select {
 		case <-u.notifications.changeCh:
 			u.tc.T.Logf("dropped notification")
@@ -629,7 +607,7 @@ func (u *userPlusDevice) waitForAnyRotateByID(teamID keybase1.TeamID, toSeqno ke
 
 	// process 20 team rotate notifications or 10s worth of time
 	timeout := time.After(10 * time.Second * libkb.CITimeMultiplier(u.tc.G))
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		select {
 		case arg := <-u.notifications.changeCh:
 			u.tc.T.Logf("rotate received: %s", spew.Sdump(arg))
@@ -648,7 +626,7 @@ func (u *userPlusDevice) waitForAnyRotateByID(teamID keybase1.TeamID, toSeqno ke
 func (u *userPlusDevice) waitForTeamChangedAndRotated(teamID keybase1.TeamID, toSeqno keybase1.Seqno) {
 	// process 20 team rotate notifications or 10s worth of time
 	timeout := time.After(10 * time.Second * libkb.CITimeMultiplier(u.tc.G))
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		select {
 		case arg := <-u.notifications.changeCh:
 			u.tc.T.Logf("membership change received: %+v", arg)
@@ -695,7 +673,7 @@ func (u *userPlusDevice) waitForNewlyAddedToTeamByID(teamID keybase1.TeamID) {
 	for {
 		select {
 		case tid := <-u.notifications.newlyAddedToTeam:
-			u.tc.T.Logf("newlyAddedToTeam recieved: %+v", tid)
+			u.tc.T.Logf("newlyAddedToTeam received: %+v", tid)
 			if tid.Eq(teamID) {
 				u.tc.T.Logf("newlyAddedToTeam matched!")
 				return
@@ -708,7 +686,7 @@ func (u *userPlusDevice) waitForNewlyAddedToTeamByID(teamID keybase1.TeamID) {
 }
 
 func (u *userPlusDevice) pollForTeamSeqnoLink(team string, toSeqno keybase1.Seqno) {
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		after, err := teams.Load(context.TODO(), u.tc.G, keybase1.LoadTeamArg{
 			Name:        team,
 			ForceRepoll: true,
@@ -730,7 +708,7 @@ func (u *userPlusDevice) pollForTeamSeqnoLink(team string, toSeqno keybase1.Seqn
 
 func (u *userPlusDevice) pollForTeamSeqnoLinkWithLoadArgs(args keybase1.LoadTeamArg, toSeqno keybase1.Seqno) {
 	args.ForceRepoll = true
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		details, err := teams.Load(context.Background(), u.tc.G, args)
 		if err != nil {
 			require.Fail(u.tc.T, fmt.Sprintf("error while loading team %v: %v", args, err))
@@ -750,7 +728,7 @@ func (u *userPlusDevice) pollForTeamSeqnoLinkWithLoadArgs(args keybase1.LoadTeam
 func (u *userPlusDevice) proveRooter() {
 	cmd := client.NewCmdProveRooterRunner(u.tc.G, u.username)
 	if err := cmd.Run(); err != nil {
-		u.tc.T.Fatal(err)
+		require.NoError(u.tc.T, err)
 	}
 }
 
@@ -1186,15 +1164,15 @@ func (n *teamNotifyHandler) TeamRoleMapChanged(ctx context.Context, version keyb
 }
 
 func (n *teamNotifyHandler) TeamTreeMembershipsPartial(ctx context.Context,
-	arg keybase1.TeamTreeMembership) error {
-
+	arg keybase1.TeamTreeMembership,
+) error {
 	n.teamTreeMembershipsPartialCh <- arg
 	return nil
 }
 
 func (n *teamNotifyHandler) TeamTreeMembershipsDone(ctx context.Context,
-	arg keybase1.TeamTreeMembershipsDoneResult) error {
-
+	arg keybase1.TeamTreeMembershipsDoneResult,
+) error {
 	n.teamTreeMembershipsDoneCh <- arg
 	return nil
 }
@@ -1264,7 +1242,7 @@ func TestTeamSignedByRevokedDevice(t *testing.T) {
 
 		revokeAttemptsMax := 3
 		var err error
-		for i := 0; i < revokeAttemptsMax; i++ {
+		for i := range revokeAttemptsMax {
 			t.Logf("revoke attempt %v / %v", i+1, revokeAttemptsMax)
 			revokeEngine := engine.NewRevokeDeviceEngine(alice.tc.G, engine.RevokeDeviceEngineArgs{
 				ID:        target.ID,
@@ -1451,7 +1429,7 @@ func TestTeamLeaveThenList(t *testing.T) {
 	alice.leave(teamName.String())
 
 	teams = alice.teamList("", false, false)
-	require.Len(t, teams.Teams, 0)
+	require.Empty(t, teams.Teams)
 }
 
 func TestTeamCanUserPerform(t *testing.T) {
@@ -1723,7 +1701,7 @@ func TestBatchAddMembersCLI(t *testing.T) {
 	require.Equal(t, []keybase1.UserVersion{{Uid: alice.uid, EldestSeqno: 1}}, members.Owners)
 	require.Equal(t, []keybase1.UserVersion{{Uid: bob.uid, EldestSeqno: 1}}, members.Admins)
 	require.Equal(t, []keybase1.UserVersion{{Uid: dodo.uid, EldestSeqno: 1}}, members.Writers)
-	require.Len(t, members.Readers, 0)
+	require.Empty(t, members.Readers)
 	require.Equal(t, []keybase1.UserVersion{{Uid: botua.uid, EldestSeqno: 1}}, members.Bots)
 	require.Equal(t, []keybase1.UserVersion{{Uid: restrictedBotua.uid, EldestSeqno: 1}}, members.RestrictedBots)
 	invites := team.GetActiveAndObsoleteInvites()
@@ -1733,13 +1711,13 @@ func TestBatchAddMembersCLI(t *testing.T) {
 		case keybase1.TeamInviteCategory_SBS:
 			require.Equal(t, invite.Type.Sbs(), keybase1.TeamInviteSocialNetwork("rooter"))
 			require.Equal(t, invite.Name, keybase1.TeamInviteName(john.username))
-			require.Equal(t, invite.Role, keybase1.TeamRole_ADMIN)
+			require.Equal(t, keybase1.TeamRole_ADMIN, invite.Role)
 		case keybase1.TeamInviteCategory_EMAIL:
 			require.Equal(t, invite.Name, keybase1.TeamInviteName("rob@gmail.com"))
-			require.Equal(t, invite.Role, keybase1.TeamRole_READER)
+			require.Equal(t, keybase1.TeamRole_READER, invite.Role)
 		case keybase1.TeamInviteCategory_KEYBASE:
 			require.Equal(t, invite.Name, keybase1.TeamInviteName(john.userVersion().PercentForm()))
-			require.Equal(t, invite.Role, keybase1.TeamRole_READER)
+			require.Equal(t, keybase1.TeamRole_READER, invite.Role)
 		default:
 			require.FailNowf(t, "unexpected invite type", "%v", spew.Sdump(invite))
 		}
@@ -1751,16 +1729,16 @@ func TestBatchAddMembersCLI(t *testing.T) {
 	}
 	_, _, err = teams.AddMembers(context.Background(), alice.tc.G, teamID, users, nil /* emailInviteMsg */)
 	require.Error(t, err)
-	require.IsType(t, err, teams.AddMembersError{})
-	require.IsType(t, err.(teams.AddMembersError).Err, teams.MixedServerTrustAssertionError{})
+	require.ErrorAs(t, err, new(teams.AddMembersError))
+	require.ErrorAs(t, err.(teams.AddMembersError).Err, new(teams.MixedServerTrustAssertionError))
 	// It should also fail to combine invites with other assertions
 	users = []keybase1.UserRolePair{
 		{Assertion: "xxffee22ee@twitter+jjjejiei3i@rooter", Role: keybase1.TeamRole_READER},
 	}
 	_, _, err = teams.AddMembers(context.Background(), alice.tc.G, teamID, users, nil /* emailInviteMsg */)
 	require.Error(t, err)
-	require.IsType(t, err, teams.AddMembersError{})
-	require.IsType(t, err.(teams.AddMembersError).Err, teams.CompoundInviteError{})
+	require.ErrorAs(t, err, new(teams.AddMembersError))
+	require.ErrorAs(t, err.(teams.AddMembersError).Err, new(teams.CompoundInviteError))
 }
 
 func TestBatchAddMembers(t *testing.T) {
@@ -1796,29 +1774,29 @@ func TestBatchAddMembers(t *testing.T) {
 
 	added, notAdded, err := teams.AddMembers(context.Background(), alice.tc.G, teamID, makeUserRolePairs(assertions, role), nil /* emailInviteMsg */)
 	require.Error(t, err, "can't invite assertions as owners")
-	require.IsType(t, teams.AttemptedInviteSocialOwnerError{}, err)
+	require.ErrorAs(t, err, new(teams.AttemptedInviteSocialOwnerError))
 	require.Nil(t, added)
 	require.Nil(t, notAdded)
 	team := alice.loadTeamByID(teamID, true /* admin */)
 	members, err := team.Members()
 	require.NoError(t, err)
 	require.Len(t, members.Owners, 1)
-	require.Len(t, members.Admins, 0)
-	require.Len(t, members.Writers, 0)
-	require.Len(t, members.Readers, 0)
-	require.Len(t, members.RestrictedBots, 0)
+	require.Empty(t, members.Admins)
+	require.Empty(t, members.Writers)
+	require.Empty(t, members.Readers)
+	require.Empty(t, members.RestrictedBots)
 
 	role = keybase1.TeamRole_ADMIN
 	added, notAdded, err = teams.AddMembers(context.Background(), alice.tc.G, teamID, makeUserRolePairs(assertions, role), nil /* emailInviteMsg */)
 	require.NoError(t, err)
 	require.Len(t, added, len(assertions))
-	require.Len(t, notAdded, 0)
+	require.Empty(t, notAdded)
 	for i, r := range added {
 		require.Equal(t, expectInvite[i], r.Invite, "invite %v", i)
 		if expectUsername[i] {
 			require.Equal(t, assertions[i], r.Username.String(), "expected username %v", i)
 		} else {
-			require.Equal(t, "", r.Username.String(), "expected no username %v", i)
+			require.Empty(t, r.Username.String(), "expected no username %v", i)
 		}
 	}
 
@@ -1829,9 +1807,9 @@ func TestBatchAddMembers(t *testing.T) {
 	require.Equal(t, alice.userVersion(), members.Owners[0])
 	require.Len(t, members.Admins, 1)
 	require.Equal(t, bob.userVersion(), members.Admins[0])
-	require.Len(t, members.Writers, 0)
-	require.Len(t, members.Readers, 0)
-	require.Len(t, members.RestrictedBots, 0)
+	require.Empty(t, members.Writers)
+	require.Empty(t, members.Readers)
+	require.Empty(t, members.RestrictedBots)
 
 	invites := team.GetActiveAndObsoleteInvites()
 	t.Logf("invites: %s", spew.Sdump(invites))
@@ -1881,7 +1859,7 @@ func TestAddCompoundAssertion(t *testing.T) {
 	}
 	added, notAdded, err := teams.AddMembers(context.Background(), alice.tc.G, teamID, users, nil /* emailInviteMsg */)
 	require.NoError(t, err)
-	require.Len(t, notAdded, 0)
+	require.Empty(t, notAdded)
 	require.Len(t, added, 1)
 	require.False(t, added[0].Invite)
 	require.EqualValues(t, bob.username, added[0].Username)
@@ -1961,13 +1939,13 @@ func TestForceRepollState(t *testing.T) {
 	require.NoError(t, err)
 
 	team := tt.users[0].createTeam()
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		tt.users[0].addTeamMember(team, tt.users[1].username, keybase1.TeamRole_WRITER)
 		tt.users[0].removeTeamMember(team, tt.users[1].username)
 	}
 	found := false
 	w := 10 * time.Millisecond
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		found = tt.users[0].tc.G.GetTeamLoader().(*teams.TeamLoader).InForceRepollMode(mctx)
 		if found {
 			break

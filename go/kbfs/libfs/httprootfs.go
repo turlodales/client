@@ -9,8 +9,8 @@ import (
 	"os"
 	"strings"
 
+	billy "github.com/go-git/go-billy/v5"
 	"github.com/pkg/errors"
-	billy "gopkg.in/src-d/go-billy.v4"
 )
 
 type httpRootFileSystem struct {
@@ -31,7 +31,7 @@ func (fo fileOnly) Readdir(count int) ([]os.FileInfo, error) {
 
 // Stat implements the http.File interface.
 func (fo fileOnly) Stat() (os.FileInfo, error) {
-	return fo.rfs.Stat(fo.File.Name())
+	return fo.rfs.Stat(fo.Name())
 }
 
 func (hrfs httpRootFileSystem) Open(filename string) (entry http.File, err error) {

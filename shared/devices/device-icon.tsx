@@ -1,35 +1,51 @@
-import type * as C from '@/constants'
+import type * as Provision from '@/constants/provision'
 import * as Kb from '@/common-adapters'
-import type * as T from '@/constants/types'
-import * as Constants from '@/constants/devices'
-import type {IconStyle} from '@/common-adapters/icon'
-
+import * as T from '@/constants/types'
 export type Props = {
   current?: boolean
-  device: T.Devices.Device | C.Provision.Device
+  device: T.Devices.Device | Provision.Device
   size: 32 | 64 | 96
-  style?: IconStyle
+  style?: Kb.Styles.StylesCrossPlatform
 }
-const DeviceIcon = (props: Props) => {
-  const defaultIcons = {
-    backup: `icon-paper-key-${props.size}`,
-    desktop: `icon-computer-${props.size}`,
-    mobile: `icon-phone-${props.size}`,
-  } as const
-
-  const {type, deviceNumberOfType} = props.device
-  const iconNumber = ((deviceNumberOfType % Constants.numBackgrounds) + 1) as T.Devices.IconNumber
-  const badge = props.current ? 'success-' : ''
-
-  const maybeIcon = (
-    {
-      backup: `icon-paper-key-${props.size}`,
-      desktop: `icon-computer-${badge}background-${iconNumber}-${props.size}`,
-      mobile: `icon-phone-${badge}background-${iconNumber}-${props.size}`,
-    } as const
-  )[type]
-  const icon: Kb.IconType = Kb.isValidIconType(maybeIcon) ? maybeIcon : defaultIcons[type]
-
-  return <Kb.Icon type={icon} style={props.style} />
+const getIconType = (
+  type: T.Devices.DeviceType,
+  iconNumber: T.Devices.IconNumber,
+  size: 32 | 48 | 64 | 96,
+  variant: '' | 'success-' | 'revoke-'
+): Kb.IconType => {
+  const revoke = variant === 'revoke-' ? variant : ''
+  if (type === 'backup') return `icon-paper-key-${revoke}${size}` as Kb.IconType
+  const base = type === 'desktop' ? 'computer' : 'phone'
+  const plain = `icon-${base}-${revoke}${size}` as Kb.IconType
+  const variantBackground = `icon-${base}-${variant}background-${iconNumber}-${size}`
+  if (Kb.isValidIconType(variantBackground)) {
+    return variantBackground
+  }
+  // success art only exists up to 48px, so above that keep the per-device
+  // background rather than dropping all the way to the bare icon
+  const background = `icon-${base}-background-${iconNumber}-${size}`
+  if (variant === 'success-' && Kb.isValidIconType(background)) {
+    return background
+  }
+  return plain
 }
+
+export const getDeviceIconType = (
+  type: T.Devices.DeviceType,
+  iconNumber: T.Devices.IconNumber,
+  size: 32 | 64 | 96,
+  current?: boolean
+): Kb.IconType => getIconType(type, iconNumber, size, current ? 'success-' : '')
+
+export const getDeviceRevokeIconType = (
+  type: T.Devices.DeviceType,
+  iconNumber: T.Devices.IconNumber
+): Kb.IconType => getIconType(type, iconNumber, isMobile ? 64 : 48, 'revoke-')
+
+const DeviceIcon = ({current, device, size, style}: Props) => (
+  <Kb.ImageIcon
+    type={getDeviceIconType(device.type, T.Devices.deviceNumberToIconNumber(device.deviceNumberOfType), size, current)}
+    style={style}
+  />
+)
 export default DeviceIcon

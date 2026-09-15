@@ -5,10 +5,9 @@
 package libcontext
 
 import (
+	"context"
 	"sync/atomic"
 	"time"
-
-	"golang.org/x/net/context"
 )
 
 // This file defines a set of functions for delaying context concellations.
@@ -103,7 +102,8 @@ func (e ContextAlreadyHasCancellationDelayerError) Error() string {
 // (with NewContextReplayable) if any delayed cancellation is used, e.g.
 // through EnableDelayedCancellationWithGracePeriod,
 func NewContextReplayable(
-	ctx context.Context, change CtxReplayFunc) context.Context {
+	ctx context.Context, change CtxReplayFunc,
+) context.Context {
 	ctx = change(ctx)
 	replays, _ := ctx.Value(CtxReplayKey).([]CtxReplayFunc)
 	replays = append(replays, change)
@@ -127,8 +127,8 @@ func NewContextWithReplayFrom(ctx context.Context) (context.Context, error) {
 }
 
 type cancellationDelayer struct {
-	delay    int64
-	canceled int64
+	delay    atomic.Int64
+	canceled atomic.Int64
 
 	done chan struct{}
 }
@@ -157,7 +157,8 @@ func newCancellationDelayer() *cancellationDelayer {
 // when operations associated with the context is done. Otherwise it leaks go
 // routines!
 func NewContextWithCancellationDelayer(
-	ctx context.Context) (newCtx context.Context, err error) {
+	ctx context.Context,
+) (newCtx context.Context, err error) {
 	v := ctx.Value(CtxCancellationDelayerKey)
 	if v != nil {
 		if _, ok := v.(*cancellationDelayer); ok {
@@ -180,11 +181,11 @@ func NewContextWithCancellationDelayer(
 		case <-ctx.Done():
 		case <-c.done:
 		}
-		d := time.Duration(atomic.LoadInt64(&c.delay))
+		d := time.Duration(c.delay.Load())
 		if d != 0 {
 			time.Sleep(d)
 		}
-		atomic.StoreInt64(&c.canceled, 1)
+		c.canceled.Store(1)
 		cancel()
 	}()
 	return newCtx, nil
@@ -204,12 +205,12 @@ func NewContextWithCancellationDelayer(
 // cancellation is already enabled.
 func EnableDelayedCancellationWithGracePeriod(ctx context.Context, timeout time.Duration) error {
 	if c, ok := ctx.Value(CtxCancellationDelayerKey).(*cancellationDelayer); ok {
-		if atomic.LoadInt64(&c.canceled) > 0 {
+		if c.canceled.Load() > 0 {
 			// Too late! The parent context is already canceled and timer has already
 			// started.
 			return context.Canceled
 		}
-		atomic.StoreInt64(&c.delay, int64(timeout))
+		c.delay.Store(int64(timeout))
 		return nil
 	}
 	return NoCancellationDelayerError{}
@@ -235,12 +236,12 @@ func CleanupCancellationDelayer(ctx context.Context) error {
 // BackgroundContextWithCancellationDelayer generate a "Background"
 // context that is cancellation delayable
 func BackgroundContextWithCancellationDelayer() context.Context {
-	if ctx, err := NewContextWithCancellationDelayer(NewContextReplayable(
+	ctx, err := NewContextWithCancellationDelayer(NewContextReplayable(
 		context.Background(), func(c context.Context) context.Context {
 			return c
-		})); err != nil {
+		}))
+	if err != nil {
 		panic(err)
-	} else {
-		return ctx
 	}
+	return ctx
 }

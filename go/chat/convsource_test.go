@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"testing"
@@ -12,8 +13,8 @@ import (
 	"github.com/keybase/client/go/protocol/chat1"
 	"github.com/keybase/client/go/protocol/gregor1"
 	"github.com/keybase/client/go/protocol/keybase1"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/context"
 )
 
 func TestGetThreadSupersedes(t *testing.T) {
@@ -69,7 +70,7 @@ func testGetThreadSupersedes(t *testing.T, deleteHistory bool) {
 			MessageTypes: []chat1.MessageType{chat1.MessageType_TEXT},
 		}, nil)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(thread.Messages), "wrong length")
+	require.Len(t, thread.Messages, 1, "wrong length")
 	require.Equal(t, msgID, thread.Messages[0].GetMessageID(), "wrong msgID")
 
 	_, editMsgBoxed, err := sender.Send(ctx, res.ConvID, chat1.MessagePlaintext{
@@ -96,7 +97,7 @@ func testGetThreadSupersedes(t *testing.T, deleteHistory bool) {
 			MessageTypes: []chat1.MessageType{chat1.MessageType_TEXT},
 		}, nil)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(thread.Messages), "wrong length")
+	require.Len(t, thread.Messages, 1, "wrong length")
 	require.Equal(t, msgID, thread.Messages[0].GetMessageID(), "wrong msgID")
 	require.Equal(t, editMsgID, thread.Messages[0].Valid().ServerHeader.SupersededBy, "wrong super")
 	require.Equal(t, "EDITED", thread.Messages[0].Valid().MessageBody.Text().Body, "wrong body")
@@ -136,7 +137,7 @@ func testGetThreadSupersedes(t *testing.T, deleteHistory bool) {
 			MessageTypes: []chat1.MessageType{chat1.MessageType_TEXT},
 		}, nil)
 	require.NoError(t, err)
-	require.Equal(t, 0, len(thread.Messages), "wrong length")
+	require.Empty(t, thread.Messages, "wrong length")
 
 	t.Logf("testing disabling resolve")
 	thread, err = tc.ChatG.ConvSource.Pull(ctx, res.ConvID, u.User.GetUID().ToBytes(),
@@ -151,7 +152,7 @@ func testGetThreadSupersedes(t *testing.T, deleteHistory bool) {
 			DisableResolveSupersedes: true,
 		}, nil)
 	require.NoError(t, err)
-	require.Equal(t, 3, len(thread.Messages), "wrong length")
+	require.Len(t, thread.Messages, 3, "wrong length")
 	require.Equal(t, msgID, thread.Messages[2].GetMessageID(), "wrong msgID")
 	require.Equal(t, deleteMsgID, thread.Messages[2].Valid().ServerHeader.SupersededBy, "wrong super")
 }
@@ -209,7 +210,7 @@ func TestExplodeNow(t *testing.T) {
 		}, nil)
 
 	require.NoError(t, err)
-	require.Equal(t, 1, len(thread.Messages), "wrong length")
+	require.Len(t, thread.Messages, 1, "wrong length")
 	msg1 := thread.Messages[0]
 	require.Equal(t, msgID, msg1.GetMessageID(), "wrong msgID")
 	require.True(t, msg1.IsValid())
@@ -242,7 +243,7 @@ func TestExplodeNow(t *testing.T) {
 			MessageTypes: []chat1.MessageType{chat1.MessageType_TEXT},
 		}, nil)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(thread.Messages), "wrong length")
+	require.Len(t, thread.Messages, 1, "wrong length")
 	msg2 := thread.Messages[0]
 	require.Equal(t, msgID, msg2.GetMessageID(), "wrong msgID")
 	require.Equal(t, editMsgID, msg2.Valid().ServerHeader.SupersededBy, "wrong super")
@@ -276,7 +277,7 @@ func TestExplodeNow(t *testing.T) {
 			MessageTypes: []chat1.MessageType{chat1.MessageType_TEXT},
 		}, nil)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(thread.Messages), "wrong length")
+	require.Len(t, thread.Messages, 1, "wrong length")
 	// Since we deleted an exploding message, it will still show up in the
 	// thread with the deleter set as "explodedBy"
 	msg3 := thread.Messages[0]
@@ -318,14 +319,15 @@ func TestReactions(t *testing.T) {
 	require.NoError(t, err)
 
 	verifyThread := func(msgID, supersededBy chat1.MessageID, body string,
-		reactionIDs []chat1.MessageID, reactionMap chat1.ReactionMap) {
+		reactionIDs []chat1.MessageID, reactionMap chat1.ReactionMap,
+	) {
 		thread, err := tc.ChatG.ConvSource.Pull(ctx, res.ConvID, uid,
 			chat1.GetThreadReason_GENERAL, nil,
 			&chat1.GetThreadQuery{
 				MessageTypes: []chat1.MessageType{chat1.MessageType_TEXT},
 			}, nil)
 		require.NoError(t, err)
-		require.Equal(t, 1, len(thread.Messages), "wrong length")
+		require.Len(t, thread.Messages, 1, "wrong length")
 
 		msg := thread.Messages[0]
 		require.Equal(t, msgID, msg.GetMessageID(), "wrong msgID")
@@ -418,7 +420,6 @@ func TestReactions(t *testing.T) {
 		}, 0, nil, nil, nil)
 		require.NoError(t, err)
 		return deleteMsgBoxed.GetMessageID()
-
 	}
 
 	t.Logf("send text")
@@ -492,7 +493,7 @@ func TestReactions(t *testing.T) {
 			MessageTypes: []chat1.MessageType{chat1.MessageType_TEXT},
 		}, nil)
 	require.NoError(t, err)
-	require.Equal(t, 0, len(thread.Messages), "wrong length")
+	require.Empty(t, thread.Messages, "wrong length")
 
 	// Post illegal supersedes=0, fails on send
 	_, _, err = sender.Send(ctx, res.ConvID, chat1.MessagePlaintext{
@@ -556,7 +557,7 @@ func TestGetThreadHoleResolution(t *testing.T) {
 	var msg *chat1.MessageBoxed
 	var err error
 	holes := 3
-	for i := 0; i < holes; i++ {
+	for i := range holes {
 		pt.MessageBody = chat1.NewMessageBodyWithText(chat1.MessageText{
 			Body: fmt.Sprintf("MIKE: %d", i),
 		})
@@ -585,7 +586,7 @@ func TestGetThreadHoleResolution(t *testing.T) {
 
 	localThread, err := tc.Context().ConvSource.PullLocalOnly(ctx, convID, uid, chat1.GetThreadReason_GENERAL, nil, nil, 0)
 	require.NoError(t, err)
-	require.Equal(t, 2, len(localThread.Messages))
+	require.Len(t, localThread.Messages, 2)
 
 	tc.Context().ConvSource.SetRemoteInterface(func() chat1.RemoteInterface {
 		return newNoGetThreadRemote(ri)
@@ -593,7 +594,7 @@ func TestGetThreadHoleResolution(t *testing.T) {
 	thread, err := tc.Context().ConvSource.Pull(ctx, convID, uid, chat1.GetThreadReason_GENERAL, nil, nil,
 		nil)
 	require.NoError(t, err)
-	require.Equal(t, holes+2, len(thread.Messages))
+	require.Len(t, thread.Messages, holes+2)
 	require.Equal(t, msg.GetMessageID(), thread.Messages[0].GetMessageID())
 	require.Equal(t, "MIKE: 2", thread.Messages[0].Valid().MessageBody.Text().Body)
 
@@ -617,7 +618,7 @@ func timedAcquire(ctx context.Context, t *testing.T, hcs *HybridConversationSour
 	select {
 	case <-cb:
 	case <-time.After(20 * time.Second):
-		require.Fail(t, "acquire timeout")
+		assert.Fail(t, "acquire timeout")
 	}
 	return ret, err
 }
@@ -645,11 +646,11 @@ func TestConversationLocking(t *testing.T) {
 	ctx = globals.ChatCtx(context.TODO(), tc.Context(), keybase1.TLFIdentifyBehavior_CHAT_CLI, &breaks,
 		NewCachingIdentifyNotifier(tc.Context()))
 	acquires := 5
-	for i := 0; i < acquires; i++ {
+	for range acquires {
 		_, err := timedAcquire(ctx, t, hcs, uid, conv.GetConvID())
 		require.NoError(t, err)
 	}
-	for i := 0; i < acquires; i++ {
+	for range acquires {
 		hcs.lockTab.Release(ctx, uid, conv.GetConvID())
 	}
 	require.Zero(t, hcs.lockTab.NumLocks())
@@ -716,6 +717,7 @@ func TestConversationLockingDeadlock(t *testing.T) {
 	hcs := tc.Context().ConvSource.(*HybridConversationSource)
 	if hcs == nil {
 		t.Skip()
+		return
 	}
 	conv := newBlankConvWithMembersType(ctx, t, tc, uid, ri, sender, u.Username,
 		chat1.ConversationMembersType_KBFS)
@@ -780,7 +782,7 @@ func TestConversationLockingDeadlock(t *testing.T) {
 	select {
 	case res := <-cb3:
 		require.Error(t, res.err)
-		require.IsType(t, utils.ErrConvLockTabDeadlock, res.err)
+		require.ErrorIs(t, res.err, utils.ErrConvLockTabDeadlock)
 	case <-time.After(20 * time.Second):
 		require.Fail(t, "never failed")
 	}

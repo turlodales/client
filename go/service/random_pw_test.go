@@ -1,12 +1,12 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"testing"
 
 	"github.com/keybase/client/go/engine"
 	"github.com/keybase/client/go/protocol/keybase1"
-	"golang.org/x/net/context"
 
 	"github.com/keybase/client/go/kbtest"
 	"github.com/keybase/client/go/libkb"
@@ -37,17 +37,17 @@ func TestSignupRandomPWUser(t *testing.T) {
 	userHandler := NewUserHandler(nil, tc.G, nil, nil)
 	ret, err := userHandler.LoadPassphraseState(context.Background(), 0)
 	require.NoError(t, err)
-	require.Equal(t, ret, keybase1.PassphraseState_RANDOM)
+	require.Equal(t, keybase1.PassphraseState_RANDOM, ret)
 
 	// Another call to test the caching
 	ret, err = userHandler.LoadPassphraseState(context.Background(), 0)
 	require.NoError(t, err)
-	require.Equal(t, ret, keybase1.PassphraseState_RANDOM)
+	require.Equal(t, keybase1.PassphraseState_RANDOM, ret)
 
 	// Another one with ForceRepoll
 	ret, err = userHandler.LoadPassphraseState(context.Background(), 0)
 	require.NoError(t, err)
-	require.Equal(t, ret, keybase1.PassphraseState_RANDOM)
+	require.Equal(t, keybase1.PassphraseState_RANDOM, ret)
 
 	ret2, err := userHandler.CanLogout(context.Background(), 0)
 	require.NoError(t, err)

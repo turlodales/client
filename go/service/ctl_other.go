@@ -2,15 +2,14 @@
 // this source code is governed by the included BSD license.
 
 //go:build darwin
-// +build darwin
 
 package service
 
 import (
+	"context"
 	"errors"
 
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
-	"golang.org/x/net/context"
 )
 
 func (c *CtlHandler) SetOnLoginStartup(_ context.Context, _ bool) error {

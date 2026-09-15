@@ -1,24 +1,46 @@
-import * as C from '@/constants'
 import * as Kb from '@/common-adapters'
-import * as React from 'react'
 import * as T from '@/constants/types'
 import CoinFlipError from './errors'
 import CoinFlipParticipants from './participants'
 import CoinFlipResult from './results'
-import {OrdinalContext} from '@/chat/conversation/messages/ids-context'
+import {useOrdinal} from '@/chat/conversation/messages/ids-context'
 import {pluralize} from '@/util/string'
+import {useConversationThreadMessage, useConversationThreadSelector} from '../../../thread-context'
+import {useConversationSendActions} from '../../../send-actions'
+import {useSyncRowLayout} from '../../use-sync-row-layout'
 
-const CoinFlipContainer = React.memo(function CoinFlipContainer() {
-  const ordinal = React.useContext(OrdinalContext)
-  const message = C.useChatContext(s => s.messageMap.get(ordinal))
+// The flip result arrives via a separate status notification, not with the thread, so on initial
+// load (an already-finished flip) the card first-paints with no result and then grows when the
+// status streams in — which can leave the thread scrolled above the newest message. We can't know
+// the exact result size ahead of time, but the command text tells us the result TYPE, which is
+// enough to reserve an approximate result height up front so the card opens close to its final
+// size. Imperfect for multi-card / multi-item shuffles whose size depends on status-only data.
+const guessFlipResultHeight = (raw: string) => {
+  const s = raw.replace(/^\/flip/i, '').trim().toLowerCase()
+  if (s.startsWith('cards')) return 80 // dealt hand(s): at least one card row
+  if (s.includes(',')) return 120 // shuffle list (capped, ~5 items)
+  if (/^\d+(\s*(\.\.|-)\s*\d+)?$/.test(s)) return 40 // number / range: one line
+  return 56 // coin (default + most common): 48 icon + marginTop
+}
+
+function CoinFlipContainer() {
+  const styles = useStyles()
+  const theme = Kb.Styles.useTheme()
+  const ordinal = useOrdinal()
+  const message = useConversationThreadMessage(ordinal)
   const isSendError = message?.type === 'text' ? !!message.errorReason : false
   const text = message?.type === 'text' ? message.text : undefined
   const flipGameID = (message?.type === 'text' && message.flipGameID) || ''
-  const status = C.useChatState(s => s.flipStatusMap.get(flipGameID))
-  const messageSend = C.useChatContext(s => s.dispatch.messageSend)
-  const onFlipAgain = React.useCallback(() => {
-    text && messageSend(text.stringValue())
-  }, [messageSend, text])
+  const {sendMessage} = useConversationSendActions()
+  const status = useConversationThreadSelector(s => s.flipStatusMap.get(flipGameID))
+  // Reserve the result height only while the status has not loaded yet (the open-an-old-flip case).
+  // Once status is present the real result fills it, and live in-progress flips get no empty gap.
+  const reservedResultHeight = status === undefined ? guessFlipResultHeight(text?.stringValue() ?? '') : 0
+  const onFlipAgain = () => {
+    if (text) {
+      sendMessage(text.stringValue())
+    }
+  }
   const phase = status?.phase
   const errorInfo = phase === T.RPCChat.UICoinFlipPhase.error ? status?.errorInfo : undefined
   const participants = status?.participants ?? undefined
@@ -28,31 +50,33 @@ const CoinFlipContainer = React.memo(function CoinFlipContainer() {
   const showParticipants = phase === T.RPCChat.UICoinFlipPhase.complete
   const numParticipants = participants?.length ?? 0
 
+  // The flip result streams in after first paint and grows the card; flush the row measure so the
+  // list re-pins to the newest message instead of parking above it. Keyed on the status signals
+  // that change the card height (loaded yet, phase, participant count, result present).
+  useSyncRowLayout(`${status === undefined ? 0 : 1}|${phase ?? -1}|${numParticipants}|${resultInfo ? 1 : 0}`)
+
   const revealed =
     participants?.reduce((r, p) => {
       return r + (p.reveal ? 1 : 0)
     }, 0) ?? 0
   const revealSummary = `${revealed} / ${numParticipants}`
 
-  const makePopup = React.useCallback(
-    (p: Kb.Popup2Parms) => {
-      const {attachTo, hidePopup} = p
-      return (
-        <CoinFlipParticipants
-          attachTo={attachTo}
-          onHidden={hidePopup}
-          participants={participants}
-          visible={true}
-        />
-      )
-    },
-    [participants]
-  )
+  const makePopup = (p: Kb.Popup2Parms) => {
+    const {attachTo, hidePopup} = p
+    return (
+      <CoinFlipParticipants
+        attachTo={attachTo}
+        onHidden={hidePopup}
+        participants={participants}
+        visible={true}
+      />
+    )
+  }
   const {showPopup, hidePopup, popup, popupAnchor} = Kb.usePopup2(makePopup)
 
   const statusText = showParticipants ? (
-    <Kb.Box2Measure direction="vertical" onMouseOver={showPopup} onMouseLeave={hidePopup} ref={popupAnchor}>
-      {!Kb.Styles.isMobile && (
+    <Kb.Box2 direction="vertical" onMouseOver={showPopup} onMouseLeave={hidePopup} ref={popupAnchor}>
+      {!isMobile && (
         <Kb.Text selectable={true} type="BodySmall">
           Secured by{' '}
         </Kb.Text>
@@ -61,21 +85,21 @@ const CoinFlipContainer = React.memo(function CoinFlipContainer() {
         {`${numParticipants} ${pluralize('participant', numParticipants)}`}
       </Kb.Text>
       {popup}
-    </Kb.Box2Measure>
+    </Kb.Box2>
   ) : (
     <Kb.Box2 direction="vertical">
       <Kb.Box2 direction="horizontal" fullWidth={true} gap="tiny">
         <Kb.Text selectable={true} type="BodySmallSemibold">
-          {!Kb.Styles.isMobile && 'Collecting '}commitments: {numParticipants}
+          {!isMobile && 'Collecting '}commitments: {numParticipants}
         </Kb.Text>
         {phase === T.RPCChat.UICoinFlipPhase.reveals && (
-          <Kb.Icon type="iconfont-check" color={Kb.Styles.globalColors.green} sizeType="Small" />
+          <Kb.Icon type="iconfont-check" color={theme.green} sizeType="Small" />
         )}
       </Kb.Box2>
       {phase === T.RPCChat.UICoinFlipPhase.reveals && (
         <Kb.Box2 direction="horizontal" fullWidth={true} gap="tiny">
           <Kb.Text selectable={true} type="BodySmallSemibold">
-            {!Kb.Styles.isMobile && 'Collecting '}secrets: {revealSummary}
+            {!isMobile && 'Collecting '}secrets: {revealSummary}
           </Kb.Text>
         </Kb.Box2>
       )}
@@ -97,7 +121,7 @@ const CoinFlipContainer = React.memo(function CoinFlipContainer() {
           <Kb.Box2 direction="horizontal" fullWidth={true} gap="tiny">
             <Kb.Box2 direction="vertical">
               {(commitmentVis?.length ?? 0) > 0 ? (
-                <Kb.Image2 src={commitSrc} style={styles.progressVis} />
+                <Kb.Image src={commitSrc} style={styles.progressVis} />
               ) : (
                 <Kb.Box2
                   direction="vertical"
@@ -107,7 +131,7 @@ const CoinFlipContainer = React.memo(function CoinFlipContainer() {
             </Kb.Box2>
             <Kb.Box2 direction="vertical">
               {(revealVis?.length ?? 0) > 0 && phase !== T.RPCChat.UICoinFlipPhase.commitment ? (
-                <Kb.Image2 src={revealSrc} style={styles.progressVis} />
+                <Kb.Image src={revealSrc} style={styles.progressVis} />
               ) : (
                 <Kb.Box2
                   direction="vertical"
@@ -119,7 +143,7 @@ const CoinFlipContainer = React.memo(function CoinFlipContainer() {
           </Kb.Box2>
         </>
       )}
-      <Kb.Box2 direction="vertical" fullWidth={true}>
+      <Kb.Box2 direction="vertical" fullWidth={true} style={{minHeight: reservedResultHeight}}>
         {resultInfo && <CoinFlipResult result={resultInfo} />}
       </Kb.Box2>
       {isSendError || !!errorInfo ? (
@@ -145,43 +169,27 @@ const CoinFlipContainer = React.memo(function CoinFlipContainer() {
       )}
     </Kb.Box2>
   )
-})
+}
 
-const styles = Kb.Styles.styleSheetCreate(
-  () =>
+const useStyles = Kb.Styles.createStyleHook(
+  theme =>
     ({
       container: {
         alignSelf: 'flex-start',
-        borderColor: Kb.Styles.globalColors.grey,
+        borderColor: theme.grey,
         borderLeftWidth: 4,
         borderStyle: 'solid',
         marginTop: Kb.Styles.globalMargins.xtiny,
         paddingLeft: Kb.Styles.globalMargins.tiny,
       },
-      error: {color: Kb.Styles.globalColors.redDark},
+      error: {color: theme.redDark},
       flipAgainContainer: {paddingTop: Kb.Styles.globalMargins.tiny},
       flipAgainContainerHidden: {opacity: 0, paddingTop: Kb.Styles.globalMargins.tiny},
-      placeholder: {backgroundColor: Kb.Styles.globalColors.grey},
-      progress: Kb.Styles.platformStyles({
-        isElectron: {
-          cursor: 'text',
-          userSelect: 'text',
-          wordBreak: 'break-all',
-        },
-      }),
+      placeholder: {backgroundColor: theme.grey},
       progressVis: {
         height: 40,
         width: 64,
       },
-      result: Kb.Styles.platformStyles({
-        common: {fontWeight: '600'},
-        isElectron: {
-          cursor: 'text',
-          userSelect: 'text',
-          wordBreak: 'break-all',
-        },
-      }),
-      statusContainer: {paddingTop: Kb.Styles.globalMargins.tiny},
     }) as const
 )
 

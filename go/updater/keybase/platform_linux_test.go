@@ -2,7 +2,6 @@
 // this source code is governed by the included BSD license.
 
 //go:build linux
-// +build linux
 
 package keybase
 
@@ -36,7 +35,7 @@ func TestPausedPrompt(t *testing.T) {
 
 func TestApplyNoAsset(t *testing.T) {
 	ctx := newContext(&testConfigPlatform{}, testLog)
-	tmpDir, err := util.MakeTempDir("TestApplyNoAsset.", 0700)
+	tmpDir, err := util.MakeTempDir("TestApplyNoAsset.", 0o700)
 	defer util.RemoveFileAtPath(tmpDir)
 	require.NoError(t, err)
 	err = ctx.Apply(testUpdate, testOptions, tmpDir)

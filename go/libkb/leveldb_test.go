@@ -6,7 +6,6 @@ package libkb
 import (
 	"bytes"
 	"fmt"
-
 	"os"
 	"path/filepath"
 	"sync"
@@ -14,6 +13,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"github.com/syndtr/goleveldb/leveldb"
 )
 
 type teardowner struct {
@@ -66,7 +66,7 @@ func doSomeIO() error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(dir, "some-io"), []byte("O_O"), 0666)
+	return os.WriteFile(filepath.Join(dir, "some-io"), []byte("O_O"), 0o600)
 }
 
 func testLevelDbPut(db *LevelDb) (key DbKey, err error) {
@@ -109,6 +109,35 @@ func TestLevelDb(t *testing.T) {
 				_, found, err := db.Get(key)
 				require.NoError(t, err)
 				require.False(t, found)
+			},
+		},
+		{
+			name: "flush", testBody: func(t *testing.T) {
+				tc := SetupTest(t, "LevelDb-flush", 0)
+				defer tc.Cleanup()
+				db, err := createTempLevelDbForTest(&tc, &td)
+				require.NoError(t, err)
+
+				// Flush before the lazy open is a no-op.
+				require.NoError(t, db.Flush())
+
+				key, err := testLevelDbPut(db)
+				require.NoError(t, err)
+
+				require.NoError(t, db.Flush())
+				require.NoError(t, db.Flush())
+
+				// Data survives the flush and the sentinel is cleaned up.
+				val, found, err := db.Get(key)
+				require.NoError(t, err)
+				require.True(t, found)
+				require.Equal(t, []byte{1, 2, 3, 4}, val)
+				_, err = db.db.Get(levelDbFlushSentinelKey, nil)
+				require.Equal(t, leveldb.ErrNotFound, err)
+
+				// Writes still work after a flush.
+				_, err = testLevelDbPut(db)
+				require.NoError(t, err)
 			},
 		},
 		{
@@ -260,11 +289,12 @@ func TestLevelDb(t *testing.T) {
 
 					select {
 					case <-time.After(8 * time.Second):
-						t.Errorf("timeout")
+						t.Error("timeout")
 					case chOpen <- struct{}{}:
 					}
 
-					if err = tr.Put(key, nil, []byte{41}); err != nil {
+					err = tr.Put(key, nil, []byte{41})
+					if err != nil {
 						t.Error(err)
 					}
 
@@ -275,7 +305,8 @@ func TestLevelDb(t *testing.T) {
 					// 2) If there exists, any broken OpenTransaction() implementation
 					//		that does not block until this transaction finishes, the broken
 					//		OpenTransaction() would have has returned
-					if err = doSomeIO(); err != nil {
+					err = doSomeIO()
+					if err != nil {
 						t.Error(err)
 					}
 
@@ -283,10 +314,10 @@ func TestLevelDb(t *testing.T) {
 					// the channel is ready to read right after the commit
 					chCommitted <- struct{}{}
 
-					if err = tr.Commit(); err != nil {
+					err = tr.Commit()
+					if err != nil {
 						t.Error(err)
 					}
-
 				}()
 
 				go func() {
@@ -318,10 +349,12 @@ func TestLevelDb(t *testing.T) {
 						t.Errorf("key %v is not found", found)
 					}
 
-					if err = tr.Put(key, nil, []byte{d[0] + 1}); err != nil {
+					err = tr.Put(key, nil, []byte{d[0] + 1})
+					if err != nil {
 						t.Error(err)
 					}
-					if err = tr.Commit(); err != nil {
+					err = tr.Commit()
+					if err != nil {
 						t.Error(err)
 					}
 				}()

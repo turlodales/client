@@ -4,6 +4,7 @@
 package client
 
 import (
+	"context"
 	"fmt"
 	"io"
 
@@ -11,7 +12,6 @@ import (
 	"github.com/keybase/client/go/libkb"
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 	"github.com/keybase/go-framed-msgpack-rpc/rpc"
-	"golang.org/x/net/context"
 )
 
 type PgpUI struct {
@@ -24,16 +24,16 @@ func NewPgpUIProtocol(g *libkb.GlobalContext) rpc.Protocol {
 }
 
 func (p PgpUI) OutputPGPWarning(_ context.Context, arg keybase1.OutputPGPWarningArg) error {
-	_, _ = p.w.Write([]byte(ColorString(p.G(), "red", fmt.Sprintf("WARNING: %s\n", arg.Warning))))
+	_, _ = p.w.Write([]byte(ColorString(p.G(), "red", "WARNING: %s\n", arg.Warning)))
 	return nil
 }
 
 func (p PgpUI) OutputSignatureSuccess(ctx context.Context, arg keybase1.OutputSignatureSuccessArg) error {
 	signedAt := keybase1.FromTime(arg.SignedAt)
-	un := ColorString(p.G(), "bold", arg.Username)
-	output := func(fmtString string, args ...interface{}) {
+	un := ColorString(p.G(), "bold", "%s", arg.Username)
+	output := func(fmtString string, args ...any) {
 		s := fmt.Sprintf(fmtString, args...)
-		s = ColorString(p.G(), "green", s)
+		s = ColorString(p.G(), "green", "%s", s)
 		_, _ = p.w.Write([]byte(s))
 	}
 
@@ -57,9 +57,9 @@ func (p PgpUI) OutputSignatureSuccess(ctx context.Context, arg keybase1.OutputSi
 
 func (p PgpUI) OutputSignatureNonKeybase(ctx context.Context, arg keybase1.OutputSignatureNonKeybaseArg) error {
 	signedAt := keybase1.FromTime(arg.SignedAt)
-	output := func(fmtString string, args ...interface{}) {
+	output := func(fmtString string, args ...any) {
 		s := fmt.Sprintf(fmtString, args...)
-		s = ColorString(p.G(), "red", s)
+		s = ColorString(p.G(), "red", "%s", s)
 		_, _ = p.w.Write([]byte(s))
 	}
 
@@ -80,6 +80,7 @@ func (p PgpUI) OutputSignatureNonKeybase(ctx context.Context, arg keybase1.Outpu
 
 	return nil
 }
+
 func (p PgpUI) KeyGenerated(ctx context.Context, arg keybase1.KeyGeneratedArg) error {
 	return nil
 }

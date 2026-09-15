@@ -28,7 +28,7 @@ func (sfi *submoduleFileInfo) Size() int64 {
 
 func (sfi *submoduleFileInfo) Mode() os.FileMode {
 	// Make it read-only.
-	return 0600
+	return 0o600
 }
 
 func (sfi *submoduleFileInfo) ModTime() time.Time {
@@ -39,6 +39,6 @@ func (sfi *submoduleFileInfo) IsDir() bool {
 	return false
 }
 
-func (sfi *submoduleFileInfo) Sys() interface{} {
+func (sfi *submoduleFileInfo) Sys() any {
 	return nil
 }

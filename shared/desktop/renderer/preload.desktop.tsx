@@ -1,18 +1,25 @@
 import * as Electron from 'electron'
-import type {Actions} from '@/actions/remote-gen'
+import type {Actions} from '@/constants/remote-actions'
 import {
+  type EngineRPCMessage,
   injectPreload,
   type KB2,
   type OpenDialogOptions,
   type SaveDialogOptions,
-} from '@/util/electron.desktop'
-import type * as RPCTypes from '@/constants/types/rpc-gen'
+} from '@/util/electron'
+import type * as RPCTypes from '@/constants/rpc/rpc-gen'
 import type {Action} from '../app/ipctypes'
 
 const isRenderer = process.type === 'renderer'
 const isDarwin = process.platform === 'darwin'
 
-const invoke = async (action: Action) => Electron.ipcRenderer.invoke('KBkeybase', action)
+const ignorePromise = (f: Promise<unknown>) => {
+  f.then(() => {}).catch(() => {})
+}
+
+async function invoke<F>(action: Action) {
+  return Electron.ipcRenderer.invoke('KBkeybase', action) as Promise<F>
+}
 
 if (isRenderer) {
   Electron.ipcRenderer
@@ -20,90 +27,72 @@ if (isRenderer) {
     .then((kb2consts: KB2['constants']) => {
       const functions: Required<KB2['functions']> = {
         DEVwriteMenuIcons: () => {
-          invoke({type: 'DEVwriteMenuIcons'})
-            .then(() => {})
-            .catch(() => {})
+          ignorePromise(invoke({type: 'DEVwriteMenuIcons'}))
         },
         activeChanged: (changedAtMs: number, isUserActive: boolean) => {
-          invoke({payload: {changedAtMs, isUserActive}, type: 'activeChanged'})
-            .then(() => {})
-            .catch(() => {})
+          ignorePromise(invoke({payload: {changedAtMs, isUserActive}, type: 'activeChanged'}))
         },
-        appStartedUp: () => {
-          invoke({type: 'appStartedUp'})
-            .then(() => {})
-            .catch(() => {})
-        },
+        appStartedUp: async () => invoke({type: 'appStartedUp'}),
         clipboardAvailableFormats: async () => {
           return invoke({type: 'clipboardAvailableFormats'})
         },
         closeRenderer: (options: {windowComponent?: string; windowParam?: string}) => {
           const {windowComponent, windowParam} = options
-          invoke({payload: {windowComponent, windowParam}, type: 'closeRenderer'})
-            .then(() => {})
-            .catch(() => {})
+          ignorePromise(invoke({payload: {windowComponent, windowParam}, type: 'closeRenderer'}))
         },
         closeWindow: () => {
-          invoke({type: 'closeWindow'})
-            .then(() => {})
-            .catch(() => {})
+          ignorePromise(invoke({type: 'closeWindow'}))
         },
         copyToClipboard: (text: string) => {
-          invoke({payload: {text}, type: 'copyToClipboard'})
-            .then(() => {})
-            .catch(() => {})
+          ignorePromise(invoke({payload: {text}, type: 'copyToClipboard'}))
         },
         ctlQuit: () => {
-          invoke({type: 'ctlQuit'})
-            .then(() => {})
-            .catch(() => {})
+          ignorePromise(invoke({type: 'ctlQuit'}))
         },
         darwinCopyToChatTempUploadFile: async (dst: string, originalFilePath: string) => {
           if (!isDarwin) {
             throw new Error('Unsupported platform')
           }
-          const res = (await invoke({
+          const res = await invoke({
             payload: {dst, originalFilePath},
             type: 'darwinCopyToChatTempUploadFile',
-          })) as boolean
-          if (res) {
-            return
-          } else {
+          })
+          if (!res) {
             throw new Error("Couldn't save")
           }
         },
         darwinCopyToKBFSTempUploadFile: async (dir: string, originalFilePath: string) => {
           if (!isDarwin) return ''
-          return (await invoke({
+          return await invoke({
             payload: {dir, originalFilePath},
             type: 'darwinCopyToKBFSTempUploadFile',
-          })) as string
+          })
         },
         dumpNodeLogger: async () => {
           await invoke({
             type: 'dumpNodeLogger',
           })
         },
-        engineSend: (buf: Uint8Array) => {
-          invoke({payload: {buf}, type: 'engineSend'})
-            .then(() => {})
-            .catch(() => {})
+        engineSend: (buf: EngineRPCMessage) => {
+          Electron.ipcRenderer.send('engineSend', buf)
         },
         exitApp: (code: number) => {
-          invoke({payload: {code}, type: 'exitApp'})
-            .then(() => {})
-            .catch(() => {})
+          ignorePromise(invoke({payload: {code}, type: 'exitApp'}))
+        },
+        getPathForFile: (file: File) => {
+          return Electron.webUtils.getPathForFile(file)
+        },
+        getRemoteProps: async (windowComponent: string, windowParam: string) => {
+          return invoke<string>({payload: {windowComponent, windowParam}, type: 'getRemoteProps'})
         },
         getPathType: async (path: string) => {
-          return (await invoke({
+          return await invoke({
             payload: {path},
             type: 'getPathType',
-          })) as 'file' | 'directory'
+          })
         },
         hideWindow: () => {
-          invoke({type: 'hideWindow'})
-            .then(() => {})
-            .catch(() => {})
+          ignorePromise(invoke({type: 'hideWindow'}))
         },
         installCachedDokan: async () => {
           try {
@@ -115,22 +104,17 @@ if (isRenderer) {
         },
         ipcRendererOn: (channel: string, cb: (event: unknown, action: unknown) => void) => {
           Electron.ipcRenderer.on(channel, cb)
+          return () => {
+            Electron.ipcRenderer.removeListener(channel, cb)
+          }
         },
         isDirectory: async (path: string) => {
           return invoke({payload: {path}, type: 'isDirectory'})
         },
         mainWindowDispatch: (action: Actions) => {
-          Electron.ipcRenderer
-            .invoke('KBdispatchAction', action)
-            .then(() => {})
-            .catch(() => {})
+          ignorePromise(Electron.ipcRenderer.invoke('KBdispatchAction', action))
         },
-        mainWindowDispatchEngineIncoming: (data: Uint8Array) => {
-          Electron.ipcRenderer
-            .invoke('engineIncoming', data)
-            .then(() => {})
-            .catch(() => {})
-        },
+        mainWindowDispatchEngineIncoming: (_data: Uint8Array) => undefined,
         makeRenderer: (options: {
           windowComponent: string
           windowOpts: {
@@ -143,67 +127,59 @@ if (isRenderer) {
           windowPositionBottomRight?: boolean
         }) => {
           const {windowComponent, windowOpts, windowParam, windowPositionBottomRight} = options
-          invoke({
-            payload: {
-              windowComponent,
-              windowOpts,
-              windowParam,
-              windowPositionBottomRight,
-            },
-            type: 'makeRenderer',
-          })
-            .then(() => {})
-            .catch(() => {})
+          ignorePromise(
+            invoke({
+              payload: {
+                windowComponent,
+                windowOpts,
+                windowParam,
+                windowPositionBottomRight,
+              },
+              type: 'makeRenderer',
+            })
+          )
         },
         minimizeWindow: () => {
-          invoke({type: 'minimizeWindow'})
-            .then(() => {})
-            .catch(() => {})
+          ignorePromise(invoke({type: 'minimizeWindow'}))
         },
         openPathInFinder: async (path: string, isFolder: boolean) => {
-          const res = (await invoke({
+          const res = await invoke({
             payload: {isFolder, path},
             type: 'openPathInFinder',
-          })) as boolean
+          })
           if (!res) {
             throw new Error('openInDefaultDirectory')
           }
         },
         openURL: async (url: string) => {
-          const res = (await invoke({
+          const res = await invoke({
             payload: {url},
             type: 'openURL',
-          })) as boolean
+          })
           if (!res) {
             throw new Error('openURL failed')
           }
         },
         quitApp: () => {
-          invoke({type: 'quitApp'})
-            .then(() => {})
-            .catch(() => {})
+          ignorePromise(invoke({type: 'quitApp'}))
         },
         readImageFromClipboard: async () => {
           return invoke({type: 'readImageFromClipboard'})
         },
         relaunchApp: () => {
-          invoke({type: 'relaunchApp'})
-            .then(() => {})
-            .catch(() => {})
+          ignorePromise(invoke({type: 'relaunchApp'}))
         },
         rendererNewProps: (options: {propsStr: string; windowComponent: string; windowParam: string}) => {
           const {propsStr, windowComponent, windowParam} = options
-          invoke({
-            payload: {propsStr, windowComponent, windowParam},
-            type: 'rendererNewProps',
-          })
-            .then(() => {})
-            .catch(() => {})
+          ignorePromise(
+            invoke({
+              payload: {propsStr, windowComponent, windowParam},
+              type: 'rendererNewProps',
+            })
+          )
         },
         requestWindowsStartService: () => {
-          invoke({type: 'requestWindowsStartService'})
-            .then(() => {})
-            .catch(() => {})
+          ignorePromise(invoke({type: 'requestWindowsStartService'}))
         },
         selectFilesToUploadDialog: async (type: 'file' | 'directory' | 'both', parent?: string) => {
           return invoke({
@@ -211,49 +187,43 @@ if (isRenderer) {
             type: 'selectFilesToUploadDialog',
           })
         },
+        setNativeTheme: async (theme: 'light' | 'dark' | 'system') => {
+          return invoke({payload: {theme}, type: 'setNativeTheme'})
+        },
         setOpenAtLogin: async (enabled: boolean) => {
           return invoke({payload: {enabled}, type: 'setOpenAtLogin'})
         },
         showContextMenu: (url: string) => {
-          invoke({payload: {url}, type: 'showContextMenu'})
-            .then(() => {})
-            .catch(() => {})
+          ignorePromise(invoke({payload: {url}, type: 'showContextMenu'}))
         },
         showInactive: () => {
-          invoke({type: 'showInactive'})
-            .then(() => {})
-            .catch(() => {})
+          ignorePromise(invoke({type: 'showInactive'}))
         },
         showMainWindow: () => {
-          invoke({type: 'showMainWindow'})
-            .then(() => {})
-            .catch(() => {})
+          ignorePromise(invoke({type: 'showMainWindow'}))
         },
         showOpenDialog: async (options: OpenDialogOptions) => {
-          return (await invoke({
+          return await invoke({
             payload: {options},
             type: 'showOpenDialog',
-          })) as Array<string>
+          })
         },
         showSaveDialog: async (options: SaveDialogOptions) => {
-          return (await invoke({
+          return await invoke({
             payload: {options},
             type: 'showSaveDialog',
-          })) as string
+          })
         },
         showTray: (desktopAppBadgeCount: number, badgeType: 'regular' | 'update' | 'error' | 'uploading') => {
-          Electron.ipcRenderer
-            .invoke('KBmenu', {
+          ignorePromise(
+            Electron.ipcRenderer.invoke('KBmenu', {
               payload: {badgeType, desktopAppBadgeCount},
               type: 'showTray',
             })
-            .then(() => {})
-            .catch(() => {})
+          )
         },
         toggleMaximizeWindow: () => {
-          invoke({type: 'toggleMaximizeWindow'})
-            .then(() => {})
-            .catch(() => {})
+          ignorePromise(invoke({type: 'toggleMaximizeWindow'}))
         },
         uninstallDokan: async (execPath: string) => {
           return invoke({payload: {execPath}, type: 'uninstallDokan'})
@@ -265,9 +235,9 @@ if (isRenderer) {
           return invoke({type: 'uninstallKBFSDialog'})
         },
         winCheckRPCOwnership: async () => {
-          const res = (await invoke({
+          const res = await invoke({
             type: 'winCheckRPCOwnership',
-          })) as boolean
+          })
           if (!res) {
             throw new Error('RPCCheck failed!')
           }
@@ -298,10 +268,11 @@ if (isRenderer) {
     })
 } else {
   const {default: kb2consts} = require('../app/kb2-impl.desktop') as {default: KB2['constants']}
-  const getMainWindow = (): Electron.BrowserWindow | undefined => {
-    const w = require('electron')
-      .BrowserWindow.getAllWindows()
-      .find(w => w.webContents.getURL().includes('/main.'))
+  const getMainWindow = () => {
+    const e = require('electron')
+    const w = e.BrowserWindow.getAllWindows().find((w: Electron.BrowserWindow) =>
+      w.webContents.getURL().includes('/main.')
+    )
     return w
   }
 

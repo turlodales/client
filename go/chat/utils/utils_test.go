@@ -19,15 +19,54 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestParseTeamNameFromDisplayName(t *testing.T) {
+	cases := []struct {
+		input    string
+		expected string
+	}{
+		{"team#channel", "team"},
+		{"team", "team"},
+		{"teamname#channelname", "teamname"},
+		{"", ""},
+		{"a", "a"},
+		{"#channel", "#channel"},
+		{"keybase.staff#general", "keybase.staff"},
+	}
+	for _, c := range cases {
+		got := ParseTeamNameFromDisplayName(c.input)
+		require.Equal(t, c.expected, got, "ParseTeamNameFromDisplayName(%q)", c.input)
+	}
+}
+
+func TestParseParticipantNamesFromDisplayName(t *testing.T) {
+	cases := []struct {
+		input    string
+		max      int
+		expected []string
+	}{
+		{"alice,bob,charlie", 2, []string{"alice", "bob"}},
+		{"alice,bob,charlie", 3, []string{"alice", "bob", "charlie"}},
+		{"alice,bob", 2, []string{"alice", "bob"}},
+		{"alice", 2, []string{"alice"}},
+		{"", 2, nil},
+		{"alice, ,bob", 2, []string{"alice", "bob"}},
+		{" alice , bob ", 2, []string{"alice", "bob"}},
+		{"alice,bob,charlie", 1, []string{"alice"}},
+		{",", 2, nil},
+		{",alice,", 2, []string{"alice"}},
+		{"alice,bob", 10, []string{"alice", "bob"}},
+	}
+	for _, c := range cases {
+		got := ParseParticipantNamesFromDisplayName(c.input, c.max)
+		require.Equal(t, c.expected, got, "ParseParticipantNamesFromDisplayName(%q, %d)", c.input, c.max)
+	}
+}
+
 func TestParseDurationExtended(t *testing.T) {
 	test := func(input string, expected time.Duration) {
 		d, err := ParseDurationExtended(input)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if d != expected {
-			t.Fatalf("wrong parsed duration. Expected %v, got %v\n", expected, d)
-		}
+		require.NoError(t, err)
+		require.Equal(t, expected, d, "wrong parsed duration. Expected %v, got %v\n", expected, d)
 	}
 	test("1d", time.Hour*24)
 	test("123d12h2ns", 123*24*time.Hour+12*time.Hour+2*time.Nanosecond)
@@ -69,7 +108,8 @@ func newTestTeamChannelSource(channels []string) *testTeamChannelSource {
 }
 
 func (t *testTeamChannelSource) GetChannelsTopicName(ctx context.Context, uid gregor1.UID,
-	teamID chat1.TLFID, topicType chat1.TopicType) (res []chat1.ChannelNameMention, err error) {
+	teamID chat1.TLFID, topicType chat1.TopicType,
+) (res []chat1.ChannelNameMention, err error) {
 	for _, c := range t.channels {
 		res = append(res, chat1.ChannelNameMention{
 			TopicName: c,
@@ -79,22 +119,26 @@ func (t *testTeamChannelSource) GetChannelsTopicName(ctx context.Context, uid gr
 }
 
 func (t *testTeamChannelSource) GetLastActiveForTLF(ctx context.Context, uid gregor1.UID, tlfID chat1.TLFID,
-	topicType chat1.TopicType) (gregor1.Time, error) {
+	topicType chat1.TopicType,
+) (gregor1.Time, error) {
 	return 0, fmt.Errorf("testTeamChannelSource.GetLastActiveForTLF not implemented")
 }
 
 func (t *testTeamChannelSource) GetLastActiveForTeams(ctx context.Context, uid gregor1.UID,
-	topicType chat1.TopicType) (res chat1.LastActiveTimeAll, err error) {
+	topicType chat1.TopicType,
+) (res chat1.LastActiveTimeAll, err error) {
 	return res, fmt.Errorf("testTeamChannelSource.GetLastActiveForTeams not implemented")
 }
 
 func (t *testTeamChannelSource) GetChannelTopicName(ctx context.Context, uid gregor1.UID,
-	teamID chat1.TLFID, topicType chat1.TopicType, convID chat1.ConversationID) (string, error) {
+	teamID chat1.TLFID, topicType chat1.TopicType, convID chat1.ConversationID,
+) (string, error) {
 	return "", fmt.Errorf("testTeamChannelSource.GetChannelTopicName not implemented")
 }
 
 func (t *testTeamChannelSource) GetChannelsFull(ctx context.Context, uid gregor1.UID,
-	teamID chat1.TLFID, topicType chat1.TopicType) (res []chat1.ConversationLocal, err error) {
+	teamID chat1.TLFID, topicType chat1.TopicType,
+) (res []chat1.ConversationLocal, err error) {
 	return res, nil
 }
 
@@ -145,14 +189,17 @@ type testInboxSource struct {
 }
 
 func (t testInboxSource) Read(ctx context.Context, uid gregor1.UID, localizeTyp types.ConversationLocalizerTyp,
-	dataSource types.InboxSourceDataSourceTyp, maxLocalize *int, query *chat1.GetInboxLocalQuery) (types.Inbox, chan types.AsyncInboxResult, error) {
+	dataSource types.InboxSourceDataSourceTyp, maxLocalize *int, query *chat1.GetInboxLocalQuery,
+) (types.Inbox, chan types.AsyncInboxResult, error) {
 	return types.Inbox{
-		Convs: []chat1.ConversationLocal{{
-			Info: chat1.ConversationInfoLocal{
-				TopicName: "mike",
+		Convs: []chat1.ConversationLocal{
+			{
+				Info: chat1.ConversationInfoLocal{
+					TopicName: "mike",
+				},
 			},
 		},
-		}}, nil, nil
+	}, nil, nil
 }
 
 func (s *testUIDSource) LookupUID(ctx context.Context, un libkb.NormalizedUsername) (uid keybase1.UID, err error) {
@@ -189,7 +236,7 @@ func TestSystemMessageMentions(t *testing.T) {
 		Addee: u2name,
 	})
 	atMentions, chanMention, _ := SystemMessageMentions(context.TODO(), g, u1, body)
-	require.Equal(t, 1, len(atMentions))
+	require.Len(t, atMentions, 1)
 	require.Equal(t, u2, atMentions[0])
 	require.Equal(t, chat1.ChannelMention_NONE, chanMention)
 	body = chat1.NewMessageSystemWithInviteaddedtoteam(chat1.MessageSystemInviteAddedToTeam{
@@ -198,7 +245,7 @@ func TestSystemMessageMentions(t *testing.T) {
 		Adder:   u2name,
 	})
 	atMentions, chanMention, _ = SystemMessageMentions(context.TODO(), g, u1, body)
-	require.Equal(t, 2, len(atMentions))
+	require.Len(t, atMentions, 2)
 	require.Equal(t, u1, atMentions[0])
 	require.Equal(t, u3, atMentions[1])
 	require.Equal(t, chat1.ChannelMention_NONE, chanMention)
@@ -206,14 +253,14 @@ func TestSystemMessageMentions(t *testing.T) {
 		Team: "MIKE",
 	})
 	atMentions, chanMention, _ = SystemMessageMentions(context.TODO(), g, u1, body)
-	require.Zero(t, len(atMentions))
+	require.Empty(t, atMentions)
 	require.Equal(t, chat1.ChannelMention_ALL, chanMention)
 
 	body = chat1.NewMessageSystemWithNewchannel(chat1.MessageSystemNewChannel{})
 	atMentions, chanMention, channelNameMentions := SystemMessageMentions(context.TODO(), g, u1, body)
-	require.Zero(t, len(atMentions))
+	require.Empty(t, atMentions)
 	require.Equal(t, chat1.ChannelMention_NONE, chanMention)
-	require.Equal(t, 1, len(channelNameMentions))
+	require.Len(t, channelNameMentions, 1)
 	require.Equal(t, "mike", channelNameMentions[0].TopicName)
 }
 
@@ -319,7 +366,7 @@ func TestDecorateMentions(t *testing.T) {
 }
 
 func BenchmarkDecorateLinks(b *testing.B) {
-	var messages = []string{
+	messages := []string{
 		"The buttons have been \"encrypted\" and the plaintext is still there.",
 		":joy: ",
 		"it looked like \"CASINO\" to me ",
@@ -336,7 +383,7 @@ func BenchmarkDecorateLinks(b *testing.B) {
 		"Oh really?! Oh.. that’s a shame... :( ",
 		"The program ended in December and was killed off by the influx of spammers and thieves. No January airdrop. There's a team for it #stellar where they will tell you the same (and worse) heh @rottentweetie Also search for a team called airdrop for more info and misc spammers galore.",
 		"there is none in january. it ended. would be simple to google @rottentweetie ",
-		"Hi there! How are ya’ll?? Question: I didn’t recieve the airdrop of lumens of januari. Did you guys do?! Or the same as I? ",
+		"Hi there! How are ya’ll?? Question: I didn’t receive the airdrop of lumens of januari. Did you guys do?! Or the same as I? ",
 		"I am currently trying the \"linux\" path so far it has bot crashed",
 		"Lovelly getting error saying that path from windows is not a KBFS path",
 		"you should be able to find out the exact path from your windows explorer portion though",
@@ -354,7 +401,7 @@ func BenchmarkDecorateLinks(b *testing.B) {
 		"Something about the merkle tree. ",
 		"I think the files are stored in a manner that prior versions can be seen/copied/recoverd. Similar to git.",
 		"@idah6 I think there is. I don't know it, but I don know one thing: STOP. Do nothing further until you have the answer. To continue could ruin the chance of recovery.",
-		"I need help, I accidently was deleting files off of Keybase, and was asked to permanently deleting them (thinking it was the local copy in another location on the computer) I stopped the operation but is there any way of restoring those files?",
+		"I need help, I accidentally was deleting files off of Keybase, and was asked to permanently deleting them (thinking it was the local copy in another location on the computer) I stopped the operation but is there any way of restoring those files?",
 		"Type an @ and the first few letters, click the one you want and then copy that.",
 		"Never had it self-activate though. And I very seldom close the main window anyway. It's set to show on all desktops, so I don't have to even look at the tray icon.",
 		"@nevezen I think, now that you describe it, that I've seen that. When I click on the KB icon in the tray, it show \"Show Keybase\" which opens that window. I've always just clicked on one of the chats, or the chat icon on top, as that's where I'm going then anyway.",
@@ -454,7 +501,7 @@ func BenchmarkDecorateLinks(b *testing.B) {
 		"using google tts",
 		"im working on a bot recording minutes of a meeting inside a team then after the meeting, bot can send back the minutes as audio file",
 		"Learning curve for everyone. Huge teams, like this one, are bound to have more than a few complications.",
-		"actaully theres 2 triggers same with @sholebot the !price. i already changed",
+		"actually theres 2 triggers same with @sholebot the !price. i already changed",
 		"i cant changed mine the korean team used to it",
 		"Yep, imagine single word triggers 10+ bots info. ",
 		"Cute, for a puppy.",
@@ -531,7 +578,7 @@ func BenchmarkDecorateLinks(b *testing.B) {
 		"maybe make sure there's actually something on your clipboard? :p",
 		"Can't do that here. Only my desktop is usable for CLI",
 		"i tested it with `termux-clipboard-get` and it worked though",
-		"Perhaps the termux-clipboard-get isn't doing it correctly. Or something on the choosen options aren't set right.",
+		"Perhaps the termux-clipboard-get isn't doing it correctly. Or something on the chosen options aren't set right.",
 		"So it seems, Works for me with various options and no --message/-m flag",
 		"you're right though, that's standard, and i'm sure it works that way too",
 		"you don't need `-m` at all when piping to it",
@@ -637,7 +684,7 @@ func BenchmarkDecorateLinks(b *testing.B) {
 		"i only see F94DA63DF218AA31 and 43E0A440A5971D1B",
 		"I've never posted any keys to a public server on my own. Unless keybase did it outside their own server, that's the only place that should exist.",
 		"Now I see `f218aa31` not sure where I got that other one from",
-		"While expirementing, try to keep copies of everything, in case you need to \"clear the record\" later.",
+		"While experimenting, try to keep copies of everything, in case you need to \"clear the record\" later.",
 		"I'm enjoying it. I don't see af971d1b on my profile...there are two keys on the page though",
 		"It's lots of fun, imho",
 		"I'm newish to pgp.",
@@ -652,7 +699,7 @@ func BenchmarkDecorateLinks(b *testing.B) {
 		"Ok I did that. Now I see it in my local keychain. Doesn't look like something I recognize, though it has my name. I must have generated it as a test when keybase released back in the day.",
 		"If not, add it with `keybase pgp export --unencrypted | gpg --import`",
 		"It may, or may not, be in your computer's GPG keychain.",
-		"Well, purging it would not cause any issues. However, I'd recomend a few other steps first.",
+		"Well, purging it would not cause any issues. However, I'd recommend a few other steps first.",
 		"I don't know what it's for anymore, I'm getting ready to create a new one that I will know what it's for, and I don't really want it anymore. I haven't ever used it that I'm aware of.",
 		"Why do you need to remove the key?",
 		"I have a pgp key in my `keybase pgp list` and I'm not sure if I generated it in the past or if it was created automatically. Can I safely `keybase pgp purge` without screwing up my account?",
@@ -938,17 +985,17 @@ func TestPresentConversationParticipantsLocal(t *testing.T) {
 	res := PresentConversationParticipantsLocal(context.TODO(), rawParticipants)
 
 	require.Equal(t, res[0].ContactName, &tofurkeyhq)
-	require.Equal(t, res[0].Type, chat1.UIParticipantType_EMAIL)
+	require.Equal(t, chat1.UIParticipantType_EMAIL, res[0].Type)
 
 	require.Equal(t, res[1].ContactName, &tofurus)
-	require.Equal(t, res[1].Type, chat1.UIParticipantType_PHONENO)
+	require.Equal(t, chat1.UIParticipantType_PHONENO, res[1].Type)
 
-	require.Equal(t, res[2].Assertion, "ayoubd")
+	require.Equal(t, "ayoubd", res[2].Assertion)
 	require.Equal(t, res[2].FullName, &danny)
-	require.Equal(t, res[2].Type, chat1.UIParticipantType_USER)
+	require.Equal(t, chat1.UIParticipantType_USER, res[2].Type)
 
-	require.Equal(t, res[3].Assertion, "example@twitter")
-	require.Equal(t, res[3].Type, chat1.UIParticipantType_USER)
+	require.Equal(t, "example@twitter", res[3].Assertion)
+	require.Equal(t, chat1.UIParticipantType_USER, res[3].Type)
 }
 
 type contactStoreMock struct {
@@ -968,7 +1015,8 @@ func (c *contactStoreMock) RetrieveAssertionToName(libkb.MetaContext) (map[strin
 }
 
 func (c *contactStoreMock) UnresolveContactsWithComponent(mctx libkb.MetaContext,
-	phoneNumber *keybase1.PhoneNumber, email *keybase1.EmailAddress) {
+	phoneNumber *keybase1.PhoneNumber, email *keybase1.EmailAddress,
+) {
 	panic("unexpected call to UnresolveContactsWithComponent in mock")
 }
 
@@ -1032,4 +1080,50 @@ func TestSearchableRemoteConversationName(t *testing.T) {
 		searchableRemoteConversationNameFromStr("joshblum,zoommikem,mikem,zoomua", "mikem"))
 	require.Equal(t, "joshblum,zoommikem,zoomua",
 		searchableRemoteConversationNameFromStr("joshblum,zoommikem,mikem,zoomua,mikem", "mikem"))
+}
+
+func TestGetMsgSnippetEphemeralError(t *testing.T) {
+	ctx := context.Background()
+	conv := chat1.ConversationLocal{}
+	errMsg := "This exploding message is not available because this device was created after the message was sent"
+
+	// Non-expired ephemeral error: should surface the error message with EXPLODING_MESSAGE decoration.
+	msg := chat1.NewMessageUnboxedWithError(chat1.MessageUnboxedError{
+		ErrType:     chat1.MessageUnboxedErrorType_EPHEMERAL,
+		ErrMsg:      errMsg,
+		IsEphemeral: true,
+		Etime:       gregor1.ToTime(time.Now().Add(time.Hour)),
+		MessageType: chat1.MessageType_TEXT,
+	})
+	decoration, snippet, _ := GetMsgSnippet(ctx, nil, gregor1.UID{}, msg, conv, "alice")
+	require.Equal(t, chat1.SnippetDecoration_EXPLODING_MESSAGE, decoration)
+	require.Equal(t, errMsg, snippet)
+
+	// Expired ephemeral error: should show "Message exploded." with EXPLODED_MESSAGE decoration.
+	msg = chat1.NewMessageUnboxedWithError(chat1.MessageUnboxedError{
+		ErrType:     chat1.MessageUnboxedErrorType_EPHEMERAL,
+		ErrMsg:      errMsg,
+		IsEphemeral: true,
+		Etime:       gregor1.ToTime(time.Now().Add(-time.Hour)),
+		MessageType: chat1.MessageType_TEXT,
+	})
+	decoration, snippet, _ = GetMsgSnippet(ctx, nil, gregor1.UID{}, msg, conv, "alice")
+	require.Equal(t, chat1.SnippetDecoration_EXPLODED_MESSAGE, decoration)
+	require.Equal(t, "Message exploded.", snippet)
+}
+
+func TestStripUsernameFromConvName(t *testing.T) {
+	// Only the username as a complete segment is removed; "mikem" inside "zoommikem" must not be stripped
+	require.Equal(t, "joshblum,zoommikem,zoomua",
+		StripUsernameFromConvName("joshblum,zoommikem,mikem,zoomua", "mikem"))
+	require.Equal(t, "zoommikem,zoomua",
+		StripUsernameFromConvName("zoommikem,mikem,zoomua", "mikem"))
+	require.Equal(t, "alice,bob",
+		StripUsernameFromConvName("alice,charlie,bob", "charlie"))
+	require.Equal(t, "alice",
+		StripUsernameFromConvName("alice,bob", "bob"))
+	require.Equal(t, "bob",
+		StripUsernameFromConvName("alice,bob", "alice"))
+	require.Equal(t, "alice,bob",
+		StripUsernameFromConvName("alice,bob", "charlie"))
 }

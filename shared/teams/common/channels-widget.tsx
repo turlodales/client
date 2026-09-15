@@ -15,28 +15,32 @@ type Props = {
 }
 
 // always shows #general
-export const ChannelsWidget = (props: Props) => (
-  <Kb.Box2 direction="vertical" gap="tiny" style={styles.container} fullWidth={true}>
-    <ChannelInput
-      onAdd={props.onAddChannel}
-      teamID={props.teamID}
-      selected={props.channels}
-      disableGeneral={props.disableGeneral}
-      disabledChannels={props.disabledChannels}
-    />
-    {!!props.channels.length && (
-      <Kb.Box2 direction="horizontal" gap="xtiny" fullWidth={true} style={styles.pillContainer}>
-        {props.channels.map(channel => (
-          <ChannelPill
-            key={channel.channelname}
-            channelname={channel.channelname}
-            onRemove={channel.channelname === 'general' ? undefined : () => props.onRemoveChannel(channel)}
-          />
-        ))}
-      </Kb.Box2>
-    )}
-  </Kb.Box2>
-)
+export const ChannelsWidget = (props: Props) => {
+  const styles = useStyles()
+  const {onRemoveChannel} = props
+  return (
+    <Kb.Box2 direction="vertical" gap="tiny" style={styles.container} fullWidth={true}>
+      <ChannelInput
+        onAdd={props.onAddChannel}
+        teamID={props.teamID}
+        selected={props.channels}
+        disableGeneral={props.disableGeneral}
+        disabledChannels={props.disabledChannels}
+      />
+      {!!props.channels.length && (
+        <Kb.Box2 direction="horizontal" gap="xtiny" fullWidth={true} style={styles.pillContainer}>
+          {props.channels.map(channel => (
+            <ChannelPill
+              key={channel.channelname}
+              channelname={channel.channelname}
+              onRemove={channel.channelname === 'general' ? undefined : () => onRemoveChannel(channel)}
+            />
+          ))}
+        </Kb.Box2>
+      )}
+    </Kb.Box2>
+  )
+}
 
 type ChannelInputProps = {
   disableGeneral?: boolean
@@ -51,29 +55,22 @@ const ChannelInputDesktop = (props: ChannelInputProps) => {
   const [filter, setFilter] = React.useState('')
 
   const {channelMetas} = useAllChannelMetas(teamID)
-  const channelItems = React.useMemo(
-    () =>
-      [...channelMetas.values()]
-        .filter(
-          c =>
-            !selected.find(channel => channel.conversationIDKey === c.conversationIDKey) &&
-            (!disableGeneral || c.channelname !== 'general') &&
-            !disabledChannels?.some(dc => dc.conversationIDKey === c.conversationIDKey)
-        )
-        .map(c => ({
-          label: `#${c.channelname}`,
-          value: {channelname: c.channelname, conversationIDKey: c.conversationIDKey},
-        })),
-    [channelMetas, disableGeneral, disabledChannels, selected]
-  )
+  const channelItems = [...channelMetas.values()]
+    .filter(
+      c =>
+        !selected.find(channel => channel.conversationIDKey === c.conversationIDKey) &&
+        (!disableGeneral || c.channelname !== 'general') &&
+        !disabledChannels?.some(dc => dc.conversationIDKey === c.conversationIDKey)
+    )
+    .map(c => ({
+      label: `#${c.channelname}`,
+      value: {channelname: c.channelname, conversationIDKey: c.conversationIDKey},
+    }))
 
-  const onSelect = React.useCallback(
-    (value: T.Unpacked<typeof channelItems>['value']) => {
-      onAdd([value])
-      setFilter('')
-    },
-    [onAdd, setFilter]
-  )
+  const onSelect = (value: T.Unpacked<typeof channelItems>['value']) => {
+    onAdd([value])
+    setFilter('')
+  }
 
   const {popup, popupAnchor, onKeyDown, showPopup, hidePopup} = useAutocompleter(
     channelItems,
@@ -90,7 +87,7 @@ const ChannelInputDesktop = (props: ChannelInputProps) => {
         placeholderText="Add channels"
         icon="iconfont-search"
         onChange={setFilter}
-        size={Kb.Styles.isMobile ? 'full-width' : 'small'}
+        size={isMobile ? 'full-width' : 'small'}
         onKeyDown={onKeyDown}
         value={filter}
         valueControlled={true}
@@ -101,6 +98,8 @@ const ChannelInputDesktop = (props: ChannelInputProps) => {
 }
 
 const ChannelInputMobile = (props: ChannelInputProps) => {
+  const styles = useStyles()
+  const theme = Kb.Styles.useTheme()
   const {disableGeneral, disabledChannels, onAdd, selected, teamID} = props
   const [showingPopup, setShowingPopup] = React.useState(false)
   const onComplete = (channels: Array<T.Teams.ChannelNameID>) => {
@@ -108,7 +107,7 @@ const ChannelInputMobile = (props: ChannelInputProps) => {
     onAdd(channels)
   }
   return (
-    <Kb.ClickableBox onClick={() => setShowingPopup(true)}>
+    <Kb.ClickableBox onClick={() => setShowingPopup(true)} direction="vertical">
       <Kb.Box2
         direction="horizontal"
         gap="tiny"
@@ -116,7 +115,7 @@ const ChannelInputMobile = (props: ChannelInputProps) => {
         centerChildren={true}
         style={styles.channelDummyInput}
       >
-        <Kb.Icon type="iconfont-search" color={Kb.Styles.globalColors.black_50} sizeType="Small" />
+        <Kb.Icon type="iconfont-search" color={theme.black_50} sizeType="Small" />
         <Kb.Text type="BodySemibold" style={styles.channelDummyInputText}>
           Add channels
         </Kb.Text>
@@ -134,41 +133,42 @@ const ChannelInputMobile = (props: ChannelInputProps) => {
   )
 }
 
-const ChannelInput = Kb.Styles.isMobile ? ChannelInputMobile : ChannelInputDesktop
+const ChannelInput = isMobile ? ChannelInputMobile : ChannelInputDesktop
 
-const ChannelPill = ({channelname, onRemove}: {channelname: string; onRemove?: () => void}) => (
-  <Kb.Box2 direction="horizontal" gap="tiny" alignItems="center" style={styles.pill}>
-    <Kb.Text type={Kb.Styles.isMobile ? 'Body' : 'BodySemibold'}>#{channelname}</Kb.Text>
-    {onRemove && (
-      <Kb.Icon type="iconfont-remove" onClick={onRemove} color={Kb.Styles.globalColors.black_20} />
-    )}
-  </Kb.Box2>
-)
+const ChannelPill = ({channelname, onRemove}: {channelname: string; onRemove?: () => void}) => {
+  const styles = useStyles()
+  const theme = Kb.Styles.useTheme()
+  return (
+    <Kb.Box2 direction="horizontal" gap="tiny" alignItems="center" style={styles.pill}>
+      <Kb.Text type={isMobile ? 'Body' : 'BodySemibold'}>#{channelname}</Kb.Text>
+      {onRemove && (
+        <Kb.Icon type="iconfont-remove" onClick={onRemove} color={theme.black_20} />
+      )}
+    </Kb.Box2>
+  )
+}
 
-const styles = Kb.Styles.styleSheetCreate(() => ({
+const useStyles = Kb.Styles.createStyleHook(theme => ({
   channelDummyInput: {
-    backgroundColor: Kb.Styles.globalColors.black_10,
+    backgroundColor: theme.black_10,
     borderRadius: Kb.Styles.borderRadius,
-    paddingBottom: Kb.Styles.globalMargins.xtiny,
-    paddingTop: Kb.Styles.globalMargins.xtiny,
+    ...Kb.Styles.paddingV(Kb.Styles.globalMargins.xtiny),
   },
-  channelDummyInputText: {color: Kb.Styles.globalColors.black_50},
+  channelDummyInputText: {color: theme.black_50},
   container: {
     ...Kb.Styles.padding(Kb.Styles.globalMargins.tiny),
-    backgroundColor: Kb.Styles.globalColors.blueGrey,
+    backgroundColor: theme.blueGrey,
     borderRadius: Kb.Styles.borderRadius,
   },
   pill: Kb.Styles.platformStyles({
     common: {
       ...Kb.Styles.padding(Kb.Styles.globalMargins.xtiny, Kb.Styles.globalMargins.tiny),
-      backgroundColor: Kb.Styles.globalColors.white,
+      backgroundColor: theme.white,
       borderRadius: Kb.Styles.borderRadius,
       marginBottom: Kb.Styles.globalMargins.xtiny,
     },
     isMobile: {
-      borderColor: Kb.Styles.globalColors.black_20,
-      borderStyle: 'solid',
-      borderWidth: 1,
+      ...Kb.Styles.border(theme.black_20),
     },
   }),
   pillContainer: {

@@ -8,47 +8,41 @@ export type Props = {
   waiting: boolean
 }
 
-type State = {
-  paperkey: string
+const PaperKeyInput = (props: Props) => {
+  const styles = useStyles()
+  const [paperkey, setPaperkey] = React.useState('')
+  const {onContinue} = props
+
+  return (
+    <Kb.Box2 alignItems="center" direction="vertical" padding="small">
+      <Kb.BackButton onClick={props.onBack} style={styles.back} />
+      <Kb.ImageIcon style={styles.icon} type="icon-paper-key-48" />
+      <Kb.Input3
+        textType="BodySemibold"
+        multiline={true}
+        rowsMax={3}
+        onChangeText={setPaperkey}
+        error={!!props.paperkeyError}
+        placeholder="Enter your paper key"
+      />
+      {!!props.paperkeyError && <Kb.Text type="BodySmallError">{props.paperkeyError}</Kb.Text>}
+      <Kb.Button
+        label="Continue"
+        style={styles.button}
+        waiting={props.waiting}
+        onClick={() => onContinue(paperkey)}
+      />
+    </Kb.Box2>
+  )
 }
 
-class PaperKeyInput extends React.Component<Props, State> {
-  state: State = {paperkey: ''}
-
-  render() {
-    const errorText = this.props.paperkeyError
-
-    return (
-      <Kb.Box2 alignItems="center" direction="vertical" style={styles.container}>
-        <Kb.BackButton onClick={this.props.onBack} style={styles.back} />
-        <Kb.Icon style={styles.icon} type="icon-paper-key-48" />
-        <Kb.LabeledInput
-          multiline={true}
-          rowsMax={3}
-          onChangeText={paperkey => this.setState({paperkey})}
-          error={!!errorText}
-          placeholder="Enter your paper key"
-        />
-        {!!errorText && <Kb.Text type="BodySmallError">{errorText}</Kb.Text>}
-        <Kb.Button
-          label="Continue"
-          style={styles.button}
-          waiting={this.props.waiting}
-          onClick={() => this.props.onContinue(this.state.paperkey)}
-        />
-      </Kb.Box2>
-    )
-  }
-}
-
-const styles = Kb.Styles.styleSheetCreate(() => ({
+const useStyles = Kb.Styles.createStyleHook(() => ({
   back: {
     left: 30,
     position: 'absolute',
     top: 30,
   },
   button: {marginTop: Kb.Styles.globalMargins.small},
-  container: {padding: Kb.Styles.globalMargins.small},
   icon: {marginBottom: Kb.Styles.globalMargins.tiny},
 }))
 

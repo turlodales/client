@@ -12,8 +12,10 @@ import (
 
 const invalidBaseIndex = 0xFF
 
-var Base30 = NewBaseX("abcdefghjkmnpqrsuvwxyz23456789")
-var Base58 = NewBaseX("123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz")
+var (
+	Base30 = NewBaseX("abcdefghjkmnpqrsuvwxyz23456789")
+	Base58 = NewBaseX("123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz")
+)
 
 type BaseXEncoder struct {
 	size        int
@@ -35,7 +37,7 @@ func NewBaseX(alphabet string) *BaseXEncoder {
 		enc.alphabetMap[i] = invalidBaseIndex
 	}
 	for i, c := range alphabet {
-		enc.alphabetMap[c] = uint8(i)
+		enc.alphabetMap[c] = uint8(i) //nolint:gosec // G115: Alphabet length bounded by encoding scheme (e.g., base58 = 58 chars), safe to convert
 	}
 	return enc
 }
@@ -43,7 +45,7 @@ func NewBaseX(alphabet string) *BaseXEncoder {
 func reverseBuf(buf []byte) {
 	tot := len(buf)
 	mid := tot / 2
-	for i := 0; i < mid; i++ {
+	for i := range mid {
 		buf[i], buf[tot-i-1] = buf[tot-i-1], buf[i]
 	}
 }

@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 
@@ -10,7 +11,6 @@ import (
 	"github.com/keybase/client/go/protocol/chat1"
 	"github.com/keybase/client/go/protocol/keybase1"
 	"github.com/keybase/go-framed-msgpack-rpc/rpc"
-	"golang.org/x/net/context"
 )
 
 type CmdChatArchive struct {
@@ -43,7 +43,8 @@ func newCmdChatArchive(cl *libcmdline.CommandLine, g *libkb.GlobalContext) cli.C
 			cli.StringFlag{
 				Name:  "o, outfile",
 				Usage: "Output directory name for the archive",
-			}}...),
+			},
+		}...),
 	}
 }
 

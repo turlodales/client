@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -15,7 +16,8 @@ import (
 )
 
 func setupLoaderTest(t *testing.T) (context.Context, *kbtest.ChatTestContext, *kbtest.ChatMockWorld,
-	func() chat1.RemoteInterface, types.Sender, *chatListener, chat1.NewConversationRemoteRes) {
+	func() chat1.RemoteInterface, types.Sender, *chatListener, chat1.NewConversationRemoteRes,
+) {
 	ctx, world, ri, _, baseSender, listener := setupTest(t, 1)
 
 	u := world.GetUsers()[0]
@@ -51,10 +53,10 @@ func TestConvLoader(t *testing.T) {
 	select {
 	case convID := <-listener.bgConvLoads:
 		if !convID.Eq(res.ConvID) {
-			t.Errorf("loaded conv id: %s, expected %s", convID, res.ConvID)
+			require.Failf(t, "", "loaded conv id: %s, expected %s", convID, res.ConvID)
 		}
 	case <-time.After(20 * time.Second):
-		t.Fatal("timeout waiting for conversation load")
+		require.FailNow(t, "timeout waiting for conversation load")
 	}
 }
 
@@ -77,12 +79,12 @@ func (s slowestRemote) delay(ctx context.Context) {
 	}
 }
 
-func (s slowestRemote) GetThreadRemote(ctx context.Context, arg chat1.GetThreadRemoteArg) (res chat1.GetThreadRemoteRes, err error) {
+func (s slowestRemote) GetThreadRemote(ctx context.Context, _ chat1.GetThreadRemoteArg) (res chat1.GetThreadRemoteRes, err error) {
 	s.delay(ctx)
 	return res, context.Canceled
 }
 
-func (s slowestRemote) GetMessagesRemote(ctx context.Context, arg chat1.GetMessagesRemoteArg) (res chat1.GetMessagesRemoteRes, err error) {
+func (s slowestRemote) GetMessagesRemote(ctx context.Context, _ chat1.GetMessagesRemoteArg) (res chat1.GetMessagesRemoteRes, err error) {
 	s.delay(ctx)
 	return res, context.Canceled
 }
@@ -238,13 +240,13 @@ func TestConvLoaderPageBack(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	require.Equal(t, 1, len(ib.Inbox.Full().Conversations))
+	require.Len(t, ib.Inbox.Full().Conversations, 1)
 	conv := ib.Inbox.Full().Conversations[0]
 
 	u := world.GetUsers()[0]
 	skp, err := sender.(*BlockingSender).getSigningKeyPair(ctx)
 	require.NoError(t, err)
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		pt := chat1.MessagePlaintext{
 			ClientHeader: chat1.MessageClientHeader{
 				Conv:        conv.Metadata.IdTriple,
@@ -271,7 +273,7 @@ func TestConvLoaderPageBack(t *testing.T) {
 	require.NoError(t, tc.Context().ConvLoader.Queue(context.TODO(),
 		types.NewConvLoaderJob(res.ConvID, &chat1.Pagination{Num: 1}, types.ConvLoaderPriorityHigh,
 			types.ConvLoaderGeneric, newConvLoaderPagebackHook(tc.Context(), 0, 1))))
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		select {
 		case <-listener.bgConvLoads:
 		case <-time.After(20 * time.Second):
@@ -285,7 +287,8 @@ func TestConvLoaderJobQueue(t *testing.T) {
 	convID1 := chat1.ConversationID([]byte{1, 2, 3})
 	convID2 := chat1.ConversationID([]byte{1, 2, 3, 4})
 	newTask := func(convID chat1.ConversationID, p types.ConvLoaderPriority,
-		u types.ConvLoaderUniqueness) clTask {
+		u types.ConvLoaderUniqueness,
+	) clTask {
 		job := types.NewConvLoaderJob(convID, nil, p, u, nil)
 		return clTask{job: job}
 	}
@@ -316,13 +319,15 @@ func TestConvLoaderJobQueue(t *testing.T) {
 	require.Zero(t, j.queue.Len())
 
 	t.Logf("test priority")
-	order := []types.ConvLoaderPriority{types.ConvLoaderPriorityHigh, types.ConvLoaderPriorityMedium,
-		types.ConvLoaderPriorityLow, types.ConvLoaderPriorityLow}
-	for i := len(order) - 1; i >= 0; i-- {
-		_, err = j.Push(newTask(convID1, order[i], types.ConvLoaderUnique))
+	order := []types.ConvLoaderPriority{
+		types.ConvLoaderPriorityHigh, types.ConvLoaderPriorityMedium,
+		types.ConvLoaderPriorityLow, types.ConvLoaderPriorityLow,
+	}
+	for _, o := range slices.Backward(order) {
+		_, err = j.Push(newTask(convID1, o, types.ConvLoaderUnique))
 		require.NoError(t, err)
 	}
-	for i := 0; i < len(order); i++ {
+	for i := range order {
 		task, ok := j.PopFront()
 		require.True(t, ok)
 		require.Equal(t, order[i], task.job.Priority)
@@ -351,7 +356,7 @@ func TestConvLoaderJobQueue(t *testing.T) {
 		types.ConvLoaderPriorityHigh, types.ConvLoaderUnique, nil)})
 	require.NoError(t, err)
 	require.True(t, queued)
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		_, ok := j.PopFront()
 		require.True(t, ok)
 	}
@@ -372,4 +377,40 @@ func TestConvLoaderJobQueue(t *testing.T) {
 	require.NoError(t, err)
 	_, err = j.Push(newTask(convID1, types.ConvLoaderPriorityLow, types.ConvLoaderUnique))
 	require.Error(t, err)
+}
+
+// TestConvLoaderStartStopRace tests the race condition where Start() is called
+// multiple times and then Stop() is called. Without the fix in Start() that
+// waits for existing goroutines before starting new ones, Stop() can hang
+// because the errgroup accumulates goroutines from multiple Start() calls.
+func TestConvLoaderStartStopRace(t *testing.T) {
+	// Use existing test setup which properly initializes everything
+	ctx, tc, world, _, _, _, _ := setupLoaderTest(t)
+	defer world.Cleanup()
+
+	u := world.GetUsers()[0]
+	uid := u.User.GetUID().ToBytes()
+
+	// Get the existing loader and stop it first
+	loader := tc.Context().ConvLoader.(*BackgroundConvLoader)
+	select {
+	case <-loader.Stop(ctx):
+		t.Logf("Initial Stop() completed")
+	case <-time.After(5 * time.Second):
+		require.FailNow(t, "Initial Stop() timed out")
+	}
+
+	// Now test the race: Start multiple times rapidly
+	for range 5 {
+		loader.Start(ctx, uid)
+		require.True(t, loader.isRunning())
+	}
+
+	select {
+	case <-loader.Stop(ctx):
+		t.Logf("Final Stop() completed")
+	case <-time.After(5 * time.Second):
+		require.FailNow(t, "Final Stop() timed out")
+	}
+	require.False(t, loader.isRunning())
 }

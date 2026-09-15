@@ -5,11 +5,11 @@ package client
 
 import (
 	"bufio"
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
-
-	"golang.org/x/net/context"
 
 	"github.com/keybase/cli"
 	"github.com/keybase/client/go/libcmdline"
@@ -54,7 +54,6 @@ func NewCmdSimpleFSWrite(cl *libcmdline.CommandLine, g *libkb.GlobalContext) cli
 
 // Run runs the command in client/server mode.
 func (c *CmdSimpleFSWrite) Run() error {
-
 	cli, err := GetSimpleFSClient(c.G())
 	if err != nil {
 		return err
@@ -96,7 +95,7 @@ func (c *CmdSimpleFSWrite) Run() error {
 			if bufErr == nil {
 				continue
 			}
-			if bufErr == io.EOF {
+			if errors.Is(bufErr, io.EOF) {
 				break
 			}
 		}
@@ -113,7 +112,7 @@ func (c *CmdSimpleFSWrite) Run() error {
 		c.offset += int64(n)
 
 		if bufErr != nil {
-			if bufErr == io.EOF {
+			if errors.Is(bufErr, io.EOF) {
 				err = nil
 			} else {
 				err = bufErr

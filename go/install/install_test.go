@@ -2,7 +2,6 @@
 // this source code is governed by the included BSD license.
 
 //go:build darwin
-// +build darwin
 
 package install
 
@@ -22,35 +21,29 @@ var testLog = logger.New("test")
 func TestCommandLine(t *testing.T) {
 	testDir, err := os.MkdirTemp("", "kbbin")
 	defer os.RemoveAll(testDir)
-	if err != nil {
-		t.Fatalf("%s", err)
-	}
+	require.NoError(t, err,
+		"%s", err)
 
 	binPath, err := filepath.Abs(os.Args[0])
-	if err != nil {
-		t.Fatalf("%s", err)
-	}
+	require.NoError(t, err,
+		"%s", err)
 	linkPath := filepath.Join(testDir, "kbtest")
 
 	// Install
 	err = installCommandLineForBinPath(binPath, linkPath, true, testLog)
-	if err != nil {
-		t.Fatalf("%s", err)
-	}
+	require.NoError(t, err,
+		"%s", err)
 	_, err = os.Stat(linkPath)
-	if err != nil {
-		t.Fatalf("%s", err)
-	}
+	require.NoError(t, err,
+		"%s", err)
 
 	// Install again
 	err = installCommandLineForBinPath(binPath, linkPath, true, testLog)
-	if err != nil {
-		t.Fatalf("%s", err)
-	}
+	require.NoError(t, err,
+		"%s", err)
 	_, err = os.Stat(linkPath)
-	if err != nil {
-		t.Fatalf("%s", err)
-	}
+	require.NoError(t, err,
+		"%s", err)
 }
 
 func TestLastModifiedMatchingFile(t *testing.T) {
@@ -72,9 +65,9 @@ func TestLastModifiedMatchingFile(t *testing.T) {
 	require.Nil(t, match)
 
 	// no matches with two files that each only half match
-	err = os.WriteFile(filepath.Join(tmpdir, fmt.Sprintf("first%sfile.txt", nameMatch)), []byte(unmatchingContent), 0644)
+	err = os.WriteFile(filepath.Join(tmpdir, fmt.Sprintf("first%sfile.txt", nameMatch)), []byte(unmatchingContent), 0o600)
 	require.NoError(t, err)
-	err = os.WriteFile(filepath.Join(tmpdir, "secondfile.txt"), []byte(matchingContent), 0644)
+	err = os.WriteFile(filepath.Join(tmpdir, "secondfile.txt"), []byte(matchingContent), 0o600)
 	require.NoError(t, err)
 
 	match, err = LastModifiedMatchingFile(filePattern, contentMatch)
@@ -83,7 +76,7 @@ func TestLastModifiedMatchingFile(t *testing.T) {
 
 	// with an actual match
 	fullPath := filepath.Join(tmpdir, fmt.Sprintf("third%sfile.txt", nameMatch))
-	err = os.WriteFile(fullPath, []byte(matchingContent), 0644)
+	err = os.WriteFile(fullPath, []byte(matchingContent), 0o600)
 	require.NoError(t, err)
 	match, err = LastModifiedMatchingFile(filePattern, contentMatch)
 	require.NoError(t, err)
@@ -92,7 +85,7 @@ func TestLastModifiedMatchingFile(t *testing.T) {
 
 	// with another match
 	fullPath = filepath.Join(tmpdir, fmt.Sprintf("fourth%sfile.txt", nameMatch))
-	err = os.WriteFile(fullPath, []byte(matchingContent), 0644)
+	err = os.WriteFile(fullPath, []byte(matchingContent), 0o600)
 	require.NoError(t, err)
 	match, err = LastModifiedMatchingFile(filePattern, contentMatch)
 	require.NoError(t, err)
@@ -100,9 +93,9 @@ func TestLastModifiedMatchingFile(t *testing.T) {
 	require.Equal(t, fullPath, *match)
 
 	// result doesn't change after additional files are added
-	err = os.WriteFile(filepath.Join(tmpdir, fmt.Sprintf("fifth%sfile.txt", nameMatch)), []byte(unmatchingContent), 0644)
+	err = os.WriteFile(filepath.Join(tmpdir, fmt.Sprintf("fifth%sfile.txt", nameMatch)), []byte(unmatchingContent), 0o600)
 	require.NoError(t, err)
-	err = os.WriteFile(filepath.Join(tmpdir, "sixthfile.txt"), []byte(matchingContent), 0644)
+	err = os.WriteFile(filepath.Join(tmpdir, "sixthfile.txt"), []byte(matchingContent), 0o600)
 	require.NoError(t, err)
 	match, err = LastModifiedMatchingFile(filePattern, contentMatch)
 	require.NoError(t, err)

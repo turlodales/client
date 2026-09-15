@@ -4,6 +4,7 @@
 package systests
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"testing"
@@ -16,7 +17,6 @@ import (
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 	"github.com/keybase/go-framed-msgpack-rpc/rpc"
 	"github.com/stretchr/testify/require"
-	context "golang.org/x/net/context"
 )
 
 type delegateID3UI struct {
@@ -41,7 +41,7 @@ func (d *delegateID3UI) Identify3ShowTracker(_ context.Context, arg keybase1.Ide
 	d.Lock()
 	defer d.Unlock()
 	d.guiid = arg.GuiID
-	require.Equal(d.T, string(arg.Assertion), "t_alice")
+	require.Equal(d.T, "t_alice", string(arg.Assertion))
 	return nil
 }
 
@@ -94,7 +94,7 @@ func (d *delegateID3UI) Identify3TrackerTimedOut(context.Context, keybase1.Ident
 func (d *delegateID3UI) Identify3Result(_ context.Context, arg keybase1.Identify3ResultArg) error {
 	d.Lock()
 	require.Equal(d.T, arg.GuiID, d.guiid)
-	require.Equal(d.T, arg.Result, keybase1.Identify3ResultType_OK)
+	require.Equal(d.T, keybase1.Identify3ResultType_OK, arg.Result)
 	d.Unlock()
 	close(d.ch)
 	return nil
@@ -116,7 +116,6 @@ func newDelegateID3UI(g *libkb.GlobalContext, t *testing.T) *delegateID3UI {
 // if we just checked all 3 bools, but there's a race because of Notify() use,
 // since we don't get a guarantee of when the Notify()s go out.
 func (d *delegateID3UI) checkSuccess() {
-
 	check := func() bool {
 		d.Lock()
 		defer d.Unlock()
@@ -136,7 +135,7 @@ func (d *delegateID3UI) checkSuccess() {
 	}
 	n := 10
 	wait := 2 * time.Millisecond
-	for i := 0; i < n; i++ {
+	for range n {
 		if check() {
 			return
 		}
@@ -144,7 +143,7 @@ func (d *delegateID3UI) checkSuccess() {
 		time.Sleep(wait)
 		wait *= 2
 	}
-	d.T.Fatalf("Tried %d times to get successes and failed", n)
+	require.FailNow(d.T, fmt.Sprintf("Tried %d times to get successes and failed", n))
 }
 
 func TestDelegateIdentify3UI(t *testing.T) {

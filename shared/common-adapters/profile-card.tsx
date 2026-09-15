@@ -2,30 +2,38 @@ import * as C from '@/constants'
 import * as React from 'react'
 import * as Styles from '@/styles'
 import * as Platforms from '@/util/platforms'
-import * as TrackerConstants from '@/constants/tracker2'
-import type * as T from '@/constants/types'
+import * as T from '@/constants/types'
 import capitalize from 'lodash/capitalize'
-import Box, {Box2, Box2Measure} from './box'
-import ClickableBox from './clickable-box'
-import ConnectedNameWithIcon from './name-with-icon/container'
+import {Box2, ClickableBox} from './box'
+import ConnectedNameWithIcon from './name-with-icon'
 import {_setWithProfileCardPopup} from './usernames'
 import FloatingMenu from './floating-menu'
 import Icon from './icon'
 import Meta from './meta'
+import {useFollowerState} from '@/stores/followers'
+import {useCurrentUserState} from '@/stores/current-user'
 import ProgressIndicator from './progress-indicator'
 import Text from './text'
 import WithTooltip from './with-tooltip'
-import DelayedMounting from './delayed-mounting'
-import {type default as FollowButtonType} from '../profile/user/actions/follow-button'
-import type ChatButtonType from '../chat/chat-button'
+import {useTimeout} from './use-timers'
+import FollowButton from '../profile/user/actions/follow-button'
+import ChatButton from '../chat/chat-button'
 import type {MeasureRef} from './measure-ref'
+import {navToProfile} from '@/constants/router'
+import {useTrackerProfile} from '@/tracker/use-profile'
+import {noAssertion} from '@/tracker/model'
 
 const positionFallbacks = ['top center', 'bottom center'] as const
 
+const DelayedMounting = (props: {delay: number; children: React.ReactNode}) => {
+  const [showing, setShowing] = React.useState(false)
+  const setShowingTrue = useTimeout(() => setShowing(true), props.delay)
+  React.useEffect(setShowingTrue, [setShowingTrue])
+  return <>{showing && props.children}</>
+}
+
 const Kb = {
-  Box,
   Box2,
-  Box2Measure,
   ClickableBox,
   ConnectedNameWithIcon,
   FloatingMenu,
@@ -66,6 +74,8 @@ const assertionTypeToServiceId = (assertionType: string): Platforms.ServiceId | 
 }
 
 const ServiceIcons = ({userDetailsAssertions}: ServiceIconsProps) => {
+  const styles = useStyles()
+  const theme = Styles.useTheme()
   const services = new Map(
     userDetailsAssertions
       ? [...userDetailsAssertions.values()].map(assertion => [assertion.type, assertion])
@@ -87,7 +97,7 @@ const ServiceIcons = ({userDetailsAssertions}: ServiceIconsProps) => {
       centerChildren={true}
     >
       {serviceIdsShowing.map(serviceId => {
-        const assertion = services.get(serviceId) || TrackerConstants.noAssertion
+        const assertion = services.get(serviceId) || noAssertion
         return (
           <Kb.WithTooltip
             key={serviceId}
@@ -95,29 +105,29 @@ const ServiceIcons = ({userDetailsAssertions}: ServiceIconsProps) => {
               `${assertion.value} on ${capitalize(serviceId)}` +
               (assertion.state === 'valid' ? '' : ' (unverified)')
             }
-            backgroundColor={assertion.state === 'valid' ? undefined : Styles.globalColors.red}
+            backgroundColor={assertion.state === 'valid' ? undefined : theme.red}
             position="top center"
             showOnPressMobile={true}
             containerStyle={styles.iconContainer}
           >
             <Kb.Icon
               type={Platforms.serviceIdToIcon(serviceId)}
-              color={assertion.state === 'valid' ? Styles.globalColors.black : Styles.globalColors.black_20}
+              color={assertion.state === 'valid' ? theme.black : theme.black_20}
             />
             {assertion.state !== 'valid' && (
               <Kb.Icon
-                fontSize={Styles.isMobile ? 12 : 10}
+                fontSize={isMobile ? 12 : 10}
                 style={styles.brokenBadge}
                 type="iconfont-proof-broken"
-                color={Styles.globalColors.red}
+                color={theme.red}
               />
             )}
           </Kb.WithTooltip>
         )
       })}
       {!!expandLabel && (
-        <Kb.ClickableBox onClick={() => setExpanded(true)} style={styles.expand}>
-          <Kb.Meta title={expandLabel} backgroundColor={Styles.globalColors.greyDark} />
+        <Kb.ClickableBox onClick={() => setExpanded(true)} direction="vertical" style={styles.expand}>
+          <Kb.Meta title={expandLabel} backgroundColor={theme.greyDark} />
         </Kb.ClickableBox>
       )}
     </Kb.Box2>
@@ -132,11 +142,15 @@ const ProfileCard = ({
   onLayoutChange,
   username,
 }: Props) => {
-  const {default: ChatButton} = require('../chat/chat-button') as {default: typeof ChatButtonType}
-  const userDetails = C.useTrackerState(s => TrackerConstants.getDetails(s, username))
-  const followThem = C.useFollowerState(s => s.following.has(username))
-  const followsYou = C.useFollowerState(s => s.followers.has(username))
-  const isSelf = C.useCurrentUserState(s => s.username === username)
+  const styles = useStyles()
+  const theme = Styles.useTheme()
+  // a hover card is incidental, not "check this identity now" - the cached proof
+  // results are what it should show, and forcing a check re-fetches every proof
+  // from its third-party host
+  const {details: userDetails, loadProfile} = useTrackerProfile(username, {cachedOnMount: true})
+  const followThem = useFollowerState(s => s.following.has(username))
+  const followsYou = useFollowerState(s => s.followers.has(username))
+  const isSelf = useCurrentUserState(s => s.username === username)
   const hasBrokenProof = userDetails.assertions
     ? [...userDetails.assertions.values()].find(assertion => assertion.state !== 'valid')
     : false
@@ -157,10 +171,6 @@ const ProfileCard = ({
     bio: userDetailsBio,
     fullname: userDetailsFullname,
   } = userDetails
-  const showUser = C.useTrackerState(s => s.dispatch.showUser)
-  React.useEffect(() => {
-    userDetailsState === 'unknown' && showUser(username, false, true)
-  }, [showUser, username, userDetailsState])
   // signal layout change when it happens, to prevent popup cutoff.
   React.useEffect(() => {
     onLayoutChange?.()
@@ -173,30 +183,24 @@ const ProfileCard = ({
     showFollowButton,
   ])
 
-  const changeFollow = C.useTrackerState(s => s.dispatch.changeFollow)
-  const _changeFollow = React.useCallback(
-    (follow: boolean) => changeFollow(userDetails.guiID, follow),
-    [changeFollow, userDetails]
-  )
+  const followUser = C.useRPC(T.RPCGen.identify3Identify3FollowUserRpcPromise)
+  const _changeFollow = (follow: boolean) =>
+    followUser([{follow, guiID: userDetails.guiID}, C.waitingKeyTracker], () => loadProfile(false), () => {})
 
-  const showUserProfile = C.useProfileState(s => s.dispatch.showUserProfile)
-  const openProfile = React.useCallback(() => {
-    showUserProfile(username)
+  const openProfile = () => {
+    navToProfile(username)
     onHide?.()
-  }, [showUserProfile, onHide, username])
-
-  const {default: FollowButton} = require('../profile/user/actions/follow-button') as {
-    default: typeof FollowButtonType
   }
 
   return (
     <Kb.Box2
       direction="vertical"
-      style={Styles.collapseStyles([styles.container, containerStyle])}
       alignItems="center"
+      relative={true}
+      style={Styles.collapseStyles([styles.container, containerStyle])}
     >
       {!!showClose && (
-        <Kb.Icon type="iconfont-close" onClick={() => {}} boxStyle={styles.close} padding="tiny" />
+        <Kb.Icon type="iconfont-close" color={theme.black_20} onClick={() => {}} style={styles.close} padding="tiny" />
       )}
       <Kb.ConnectedNameWithIcon
         onClick={clickToProfile && openProfile}
@@ -224,7 +228,7 @@ const ProfileCard = ({
             key="unfollow"
             following={true}
             onUnfollow={() => _changeFollow(false)}
-            waitingKey={TrackerConstants.waitingKey}
+            waitingKey={C.waitingKeyTracker}
             small={true}
             style={styles.button}
           />
@@ -234,7 +238,7 @@ const ProfileCard = ({
             following={false}
             followsYou={followsYou}
             onFollow={() => _changeFollow(true)}
-            waitingKey={TrackerConstants.waitingKey}
+            waitingKey={C.waitingKeyTracker}
             small={true}
             style={styles.button}
           />
@@ -251,30 +255,35 @@ type WithProfileCardPopupProps = {
 }
 
 export const WithProfileCardPopup = ({username, children, ellipsisStyle}: WithProfileCardPopupProps) => {
-  const popupAnchor = React.useRef<MeasureRef>(null)
+  const styles = useStyles()
+  const popupAnchor = React.useRef<MeasureRef | null>(null)
   const [showing, setShowing] = React.useState(false)
   const [remeasureHint, setRemeasureHint] = React.useState(0)
-  const onLayoutChange = React.useCallback(() => setRemeasureHint(Date.now()), [setRemeasureHint])
-  const you = C.useCurrentUserState(s => s.username)
+  const onLayoutChange = () => setRemeasureHint(Date.now())
+  const you = useCurrentUserState(s => s.username)
   const isSelf = you === username
-  const onShow = React.useCallback(() => {
+  const onShow = C.useDebouncedCallback(() => {
     setShowing(true)
-  }, [])
-  const onHide = React.useCallback(() => {
+  }, 200)
+  const onHide = () => {
+    onShow.cancel()
     setShowing(false)
-  }, [])
+  }
+
   if (isSelf) {
     return children()
   }
   const popup = showing && (
-    <DelayedMounting delay={Styles.isMobile ? 0 : 500}>
+    <DelayedMounting delay={isMobile ? 0 : 300}>
       <Kb.FloatingMenu
         attachTo={popupAnchor}
         closeOnSelect={true}
-        onHidden={() => setShowing(false)}
+        mode="bottomsheet"
+        onHidden={onHide}
         position="top center"
+        offset={isMobile ? 0 : 10}
         positionFallbacks={positionFallbacks}
-        propagateOutsideClicks={!Styles.isMobile}
+        propagateOutsideClicks={!isMobile}
         remeasureHint={remeasureHint}
         visible={showing}
         header={
@@ -290,22 +299,30 @@ export const WithProfileCardPopup = ({username, children, ellipsisStyle}: WithPr
       />
     </DelayedMounting>
   )
-  return Styles.isMobile ? (
+  return isMobile ? (
     <>
       {children(onShow)}
       {popup}
     </>
   ) : (
-    <Kb.Box2Measure
+    <Kb.Box2
       direction="vertical"
       style={Styles.collapseStyles([styles.popupTextContainer, ellipsisStyle])}
       onMouseOver={onShow}
       onMouseLeave={onHide}
+      onMouseDown={e => {
+        // clicking the username navigates to the profile; cancel any pending/visible popup.
+        // portal children bubble through the React tree, so only hide when the click is on
+        // the anchor itself and not inside the floating card (follow/chat buttons).
+        // loose typing since tsconfig.native compiles this file without DOM lib
+        const anchor = e.currentTarget as unknown as {contains?: (t: unknown) => boolean}
+        if (anchor.contains?.(e.target)) onHide()
+      }}
       ref={popupAnchor}
     >
       {children()}
       {popup}
-    </Kb.Box2Measure>
+    </Kb.Box2>
   )
 }
 
@@ -313,71 +330,76 @@ _setWithProfileCardPopup(WithProfileCardPopup)
 
 export default ProfileCard
 
-const styles = Styles.styleSheetCreate(() => ({
-  brokenBadge: Styles.platformStyles({
-    common: {
-      borderColor: Styles.globalColors.white,
-      borderStyle: 'solid',
-      borderWidth: Styles.globalMargins.xxtiny,
-      bottom: -Styles.globalMargins.xxtiny,
-      position: 'absolute',
-      right: -Styles.globalMargins.xxtiny,
-    },
-    isElectron: {
-      borderRadius: '50%',
-    },
-    isMobile: {
-      borderRadius: 8,
-    },
-  }),
-  button: {
-    marginTop: Styles.globalMargins.xtiny + Styles.globalMargins.xxtiny,
-  },
-  close: {
-    position: 'absolute',
-    right: 0,
-    top: 0,
-  },
-  connectedNameWithIconMetaStyle: Styles.platformStyles({
-    isElectron: {
-      marginTop: Styles.globalMargins.xxtiny + Styles.globalMargins.xtiny,
-    },
-    isMobile: {
-      marginTop: (Styles.globalMargins.xxtiny + Styles.globalMargins.xtiny) / 2,
-    },
-  }),
-  container: Styles.platformStyles({
-    common: {
-      backgroundColor: Styles.globalColors.white,
-      ...Styles.padding(
-        Styles.globalMargins.small,
-        Styles.globalMargins.tiny,
-        Styles.globalMargins.small,
-        Styles.globalMargins.tiny
-      ),
-      position: 'relative',
-    },
-    isElectron: {
-      width: 170,
-    },
-  }),
-  expand: {
-    marginTop: -Styles.globalMargins.xxtiny,
-    paddingLeft: Styles.globalMargins.xtiny,
-  },
-  iconContainer: {
-    position: 'relative',
-  },
-  popupTextContainer: Styles.platformStyles({
-    isElectron: {
-      display: 'inline-block',
-    },
-  }),
-  profileCardPopup: Styles.platformStyles({
-    isMobile: Styles.padding(Styles.globalMargins.large, undefined, Styles.globalMargins.small, undefined),
-  }),
-  serviceIcons: {
-    flexWrap: 'wrap',
-    padding: Styles.globalMargins.xtiny + Styles.globalMargins.xxtiny,
-  },
-}))
+const useStyles = Styles.createStyleHook(
+  theme =>
+    ({
+      brokenBadge: Styles.platformStyles({
+        common: {
+          ...Styles.border(theme.white, Styles.globalMargins.xxtiny),
+          bottom: -Styles.globalMargins.xxtiny,
+          position: 'absolute',
+          right: -Styles.globalMargins.xxtiny,
+        },
+        isElectron: {
+          borderRadius: '50%',
+        },
+        isMobile: {
+          borderRadius: 8,
+        },
+      }),
+      button: {
+        marginTop: Styles.globalMargins.xtiny + Styles.globalMargins.xxtiny,
+      },
+      close: {
+        position: 'absolute',
+        right: 0,
+        top: 0,
+      },
+      connectedNameWithIconMetaStyle: Styles.platformStyles({
+        isElectron: {
+          marginTop: Styles.globalMargins.xxtiny + Styles.globalMargins.xtiny,
+        },
+        isMobile: {
+          marginTop: (Styles.globalMargins.xxtiny + Styles.globalMargins.xtiny) / 2,
+        },
+      }),
+      container: Styles.platformStyles({
+        common: {
+          backgroundColor: theme.white,
+          ...Styles.padding(
+            Styles.globalMargins.small,
+            Styles.globalMargins.tiny,
+            Styles.globalMargins.small,
+            Styles.globalMargins.tiny
+          ),
+        },
+        isElectron: {
+          width: 170,
+        },
+      }),
+      expand: {
+        marginTop: -Styles.globalMargins.xxtiny,
+        paddingLeft: Styles.globalMargins.xtiny,
+      },
+      iconContainer: {
+        position: 'relative',
+      },
+      popupTextContainer: Styles.platformStyles({
+        isElectron: {
+          display: 'inline-block',
+        },
+      }),
+      profileCardPopup: Styles.platformStyles({
+        isMobile: Styles.padding(
+          Styles.globalMargins.large,
+          undefined,
+          Styles.globalMargins.small,
+          undefined
+        ),
+      }),
+      serviceIcons: {
+        flexWrap: 'wrap',
+        padding: Styles.globalMargins.xtiny + Styles.globalMargins.xxtiny,
+      },
+    }) as const
+)

@@ -1,44 +1,39 @@
 import * as C from '@/constants'
 import * as Kb from '@/common-adapters'
-import * as React from 'react'
 import * as RowSizes from './sizes'
 import type * as T from '@/constants/types'
-import TeamMenu from '@/chat/conversation/info-panel/menu/container'
+import TeamMenu from '@/chat/conversation/info-panel/menu'
 
 type Props = {
-  navKey: string
+  showBadge: boolean
   teamname: string
   teamID: T.Teams.TeamID
 }
 
-const BigTeamHeader = React.memo(function BigTeamHeader(props: Props) {
-  const {teamID, teamname} = props
-  const badgeSubscribe = C.useTeamsState(s => !C.Teams.isTeamWithChosenChannels(s, teamname))
-  const navigateAppend = C.useRouterState(s => s.dispatch.navigateAppend)
-  const onClick = () => navigateAppend({props: {teamID}, selected: 'team'})
+const BigTeamHeader = (props: Props) => {
+  const styles = useStyles()
+  const theme = Kb.Styles.useTheme()
+  const {showBadge, teamID, teamname} = props
+  const navigateAppend = C.Router2.navigateAppend
+  const onClick = () => navigateAppend({name: 'team', params: {teamID}})
 
-  const makePopup = React.useCallback(
-    (p: Kb.Popup2Parms) => {
-      const {attachTo, hidePopup} = p
-      return (
-        <C.ChatProvider id="" canBeNull={true}>
-          <TeamMenu
-            attachTo={attachTo}
-            visible={true}
-            onHidden={hidePopup}
-            teamID={teamID}
-            hasHeader={true}
-            isSmallTeam={false}
-          />
-        </C.ChatProvider>
-      )
-    },
-    [teamID]
-  )
+  const makePopup = (p: Kb.Popup2Parms) => {
+    const {attachTo, hidePopup} = p
+    return (
+      <TeamMenu
+        attachTo={attachTo}
+        visible={true}
+        onHidden={hidePopup}
+        teamID={teamID}
+        hasHeader={true}
+        isSmallTeam={false}
+      />
+    )
+  }
   const {showPopup, popup, popupAnchor} = Kb.usePopup2(makePopup)
 
   return (
-    <Kb.Box2 fullWidth={true} direction="horizontal" style={styles.teamRowContainer}>
+    <Kb.Box2 fullWidth={true} direction="horizontal" noShrink={true} style={styles.teamRowContainer}>
       {popup}
       <Kb.Avatar onClick={onClick} teamname={teamname} size={32} />
       <Kb.BoxGrow2>
@@ -53,6 +48,7 @@ const BigTeamHeader = React.memo(function BigTeamHeader(props: Props) {
         </Kb.Text>
       </Kb.BoxGrow2>
       <Kb.ClickableBox
+        direction="vertical"
         className="hover_container"
         onClick={showPopup}
         ref={popupAnchor}
@@ -60,37 +56,36 @@ const BigTeamHeader = React.memo(function BigTeamHeader(props: Props) {
       >
         <Kb.Icon
           className="hover_contained_color_black"
-          fixOverdraw={!Kb.Styles.isTablet}
-          color={Kb.Styles.globalColors.black_35}
+          color={theme.black_35}
           type="iconfont-gear"
         />
-        <Kb.Box style={Kb.Styles.collapseStyles([styles.badge, badgeSubscribe && styles.badgeVisible])} />
+        <Kb.Box2
+          direction="vertical"
+          style={Kb.Styles.collapseStyles([styles.badge, showBadge && styles.badgeVisible])}
+        />
       </Kb.ClickableBox>
     </Kb.Box2>
   )
-})
+}
 
-const styles = Kb.Styles.styleSheetCreate(
-  () =>
+const useStyles = Kb.Styles.createStyleHook(
+  theme =>
     ({
       badge: {
         height: 10,
         position: 'absolute',
-        right: Kb.Styles.isMobile ? 4 : -4,
-        top: Kb.Styles.isMobile ? 7 : -2,
+        right: isMobile ? 4 : -4,
+        top: isMobile ? 7 : -2,
         width: 10,
       },
       badgeVisible: {
-        backgroundColor: Kb.Styles.globalColors.blue,
-        borderColor: Kb.Styles.globalColors.blueGrey,
+        backgroundColor: theme.blue,
+        borderColor: theme.blueGrey,
         borderRadius: 5,
         borderStyle: `solid`,
         borderWidth: 2,
       },
       showMenu: Kb.Styles.platformStyles({
-        common: {
-          ...Kb.Styles.globalStyles.flexBoxRow,
-        },
         isElectron: {
           alignSelf: 'center',
           position: 'relative',
@@ -100,29 +95,22 @@ const styles = Kb.Styles.styleSheetCreate(
           padding: 6,
         },
       }),
-      team: Kb.Styles.platformStyles({
-        common: {
-          alignSelf: 'center',
-          color: Kb.Styles.globalColors.black_50,
-          letterSpacing: 0.2,
-          marginLeft: Kb.Styles.globalMargins.tiny,
-          marginRight: Kb.Styles.globalMargins.tiny,
-        },
-        isPhone: {backgroundColor: Kb.Styles.globalColors.fastBlank},
-      }),
+      team: {
+        alignSelf: 'center',
+        color: theme.black_50,
+        letterSpacing: 0.2,
+        ...Kb.Styles.marginH(Kb.Styles.globalMargins.tiny),
+      },
       teamRowContainer: Kb.Styles.platformStyles({
         common: {
-          flexShrink: 0,
           height: RowSizes.bigHeaderHeight,
         },
         isElectron: {
           ...Kb.Styles.desktopStyles.clickable,
-          paddingLeft: Kb.Styles.globalMargins.xsmall,
-          paddingRight: Kb.Styles.globalMargins.xsmall,
+          ...Kb.Styles.paddingH(Kb.Styles.globalMargins.xsmall),
         },
         isMobile: {
-          paddingLeft: Kb.Styles.globalMargins.small,
-          paddingRight: Kb.Styles.globalMargins.small,
+          ...Kb.Styles.paddingH(Kb.Styles.globalMargins.small),
         },
       }),
     }) as const

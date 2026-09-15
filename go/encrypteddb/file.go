@@ -1,10 +1,10 @@
 package encrypteddb
 
 import (
+	"context"
 	"os"
 
 	"github.com/keybase/client/go/libkb"
-	"golang.org/x/net/context"
 )
 
 type EncryptedFile struct {
@@ -22,7 +22,7 @@ func NewFile(g *libkb.GlobalContext, path string, getSecretBoxKey KeyFn) *Encryp
 	}
 }
 
-func (f *EncryptedFile) Get(ctx context.Context, res interface{}) error {
+func (f *EncryptedFile) Get(ctx context.Context, res any) error {
 	enc, err := os.ReadFile(f.path)
 	if err != nil {
 		return err
@@ -33,12 +33,16 @@ func (f *EncryptedFile) Get(ctx context.Context, res interface{}) error {
 	return nil
 }
 
-func (f *EncryptedFile) Put(ctx context.Context, data interface{}) error {
+func (f *EncryptedFile) Put(ctx context.Context, data any) error {
 	b, err := EncodeBox(ctx, data, f.getSecretBoxKey)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(f.path, b, 0644)
+	// Write via a temp file + rename (libkb.SafeWriteToFile) so that an
+	// interrupted write (app kill, crash, power loss) can never leave a
+	// partially written file behind. A torn file would later fail to decrypt
+	// and be indistinguishable from corruption.
+	return libkb.NewFile(f.path, b, 0o600).Save(f.G().Log)
 }
 
 func (f *EncryptedFile) Remove(ctx context.Context) error {

@@ -1,19 +1,19 @@
 package teams
 
 import (
+	"context"
 	"encoding/hex"
 	"fmt"
 	"strings"
 	"testing"
 	"time"
 
-	"golang.org/x/net/context"
-
 	"github.com/davecgh/go-spew/spew"
 	"github.com/keybase/client/go/externals"
 	"github.com/keybase/client/go/kbtest"
 	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/protocol/keybase1"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -38,7 +38,7 @@ func TestImplicitRaceCreateTLFs(t *testing.T) {
 	displayName := u.Username
 	_, _, _, err = LookupImplicitTeam(context.TODO(), tc.G, displayName, false, ImplicitTeamOptions{})
 	require.Error(t, err)
-	require.IsType(t, TeamDoesNotExistError{}, err)
+	require.ErrorAs(t, err, new(TeamDoesNotExistError))
 	createdTeam, _, impTeamName, err := LookupOrCreateImplicitTeam(context.TODO(), tc.G, displayName, false)
 	require.NoError(t, err)
 	tlfid0 := createdTeam.LatestKBFSTLFID()
@@ -47,18 +47,18 @@ func TestImplicitRaceCreateTLFs(t *testing.T) {
 	tlfid1 := newImplicitTLFID(true)
 	n := 4
 	doneCh := make(chan struct{}, n+1)
-	for i := 0; i < n; i++ {
+	for range n {
 		go func() {
-			err = CreateTLF(context.TODO(), tc.G, keybase1.CreateTLFArg{TeamID: createdTeam.ID, TlfID: tlfid1})
-			require.NoError(t, err)
+			err := CreateTLF(context.TODO(), tc.G, keybase1.CreateTLFArg{TeamID: createdTeam.ID, TlfID: tlfid1})
+			assert.NoError(t, err)
 			doneCh <- struct{}{}
 		}()
 	}
-	for i := 0; i < n; i++ {
+	for i := range n {
 		select {
 		case <-doneCh:
 		case <-time.After(time.Minute):
-			t.Fatal("failed to get racing racers back")
+			require.FailNow(t, "failed to get racing racers back")
 		}
 		tc.G.Log.Debug("Got finisher %d", i)
 	}
@@ -77,7 +77,7 @@ func TestLookupImplicitTeams(t *testing.T) {
 
 	numKBUsers := 3
 	var usernames []string
-	for i := 0; i < numKBUsers; i++ {
+	for range numKBUsers {
 		u, err := kbtest.CreateAndSignupFakeUser("t", tc.G)
 		require.NoError(t, err)
 		usernames = append(usernames, u.Username)
@@ -87,7 +87,7 @@ func TestLookupImplicitTeams(t *testing.T) {
 		t.Logf("displayName:%v public:%v", displayName, public)
 		_, _, _, err := LookupImplicitTeam(context.TODO(), tc.G, displayName, public, ImplicitTeamOptions{})
 		require.Error(t, err)
-		require.IsType(t, TeamDoesNotExistError{}, err)
+		require.ErrorAs(t, err, new(TeamDoesNotExistError))
 
 		createdTeam, _, impTeamName, err := LookupOrCreateImplicitTeam(context.TODO(), tc.G, displayName,
 			public)
@@ -369,11 +369,11 @@ func TestLoggedOutPublicTeamLoad(t *testing.T) {
 	require.NoError(t, err)
 	createdTeam, _, impTeamName, err := LookupOrCreateImplicitTeam(context.TODO(), tc.G, u.Username, true)
 	require.NoError(t, err)
-	require.Equal(t, true, impTeamName.IsPublic)
+	require.True(t, impTeamName.IsPublic)
 	err = tc.Logout()
 	require.NoError(t, err)
 
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		_, err = Load(context.TODO(), tc.G, keybase1.LoadTeamArg{
 			ID:     createdTeam.ID,
 			Public: true,
@@ -465,7 +465,7 @@ func TestImpTeamAddInviteWithoutCanceling(t *testing.T) {
 		ID:   NewInviteID(),
 	}
 	err = teamObj.postInvite(context.Background(), invite, keybase1.TeamRole_OWNER)
-	require.IsType(t, libkb.AppStatusError{}, err)
+	require.ErrorAs(t, err, new(libkb.AppStatusError))
 }
 
 func TestTeamListImplicit(t *testing.T) {
@@ -499,7 +499,7 @@ func TestTeamListImplicit(t *testing.T) {
 	found, err := tcs[0].G.GetKVStore().GetInto(&cachedList, cacheKey)
 	require.NoError(t, err)
 	require.True(t, found)
-	require.Equal(t, len(list.Teams), len(cachedList))
+	require.Len(t, cachedList, len(list.Teams))
 
 	list, err = ListTeamsUnverified(context.Background(), tcs[0].G, keybase1.TeamListUnverifiedArg{IncludeImplicitTeams: true})
 	require.NoError(t, err)
@@ -508,7 +508,7 @@ func TestTeamListImplicit(t *testing.T) {
 	found, err = tcs[0].G.GetKVStore().GetInto(&cachedList, cacheKey)
 	require.NoError(t, err)
 	require.True(t, found)
-	require.Equal(t, len(list.Teams), len(cachedList))
+	require.Len(t, cachedList, len(list.Teams))
 
 	list, err = ListAll(context.Background(), tcs[0].G, keybase1.TeamListTeammatesArg{
 		IncludeImplicitTeams: false,
@@ -548,13 +548,13 @@ func TestReAddMemberWithSameUV(t *testing.T) {
 	t.Logf("created team id: %s", teamObj.ID)
 
 	err = reAddMemberAfterResetInner(context.Background(), tcAnn.G, teamObj.ID, bob.Username)
-	require.IsType(t, UserHasNotResetError{}, err)
+	require.ErrorAs(t, err, new(UserHasNotResetError))
 
 	err = ReAddMemberAfterReset(context.Background(), tcAnn.G, teamObj.ID, jun.Username)
 	require.NoError(t, err) // error should be suppressed
 
 	err = reAddMemberAfterResetInner(context.Background(), tcAnn.G, teamObj.ID, hal.Username)
-	require.IsType(t, UserHasNotResetError{}, err)
+	require.ErrorAs(t, err, new(UserHasNotResetError))
 
 	// Now, the fun part (bug CORE-8099):
 
@@ -570,7 +570,7 @@ func TestReAddMemberWithSameUV(t *testing.T) {
 
 	// Subsequent calls should start UserHasNotResetErrorin again
 	err = reAddMemberAfterResetInner(context.Background(), tcAnn.G, teamObj.ID, bob.Username)
-	require.IsType(t, UserHasNotResetError{}, err)
+	require.ErrorAs(t, err, new(UserHasNotResetError))
 }
 
 func TestBotMember(t *testing.T) {
@@ -625,7 +625,7 @@ func TestBotMember(t *testing.T) {
 	require.NoError(t, err)
 	// Subsequent calls should have UserHasNotResetError
 	err = reAddMemberAfterResetInner(context.Background(), tcs[0].G, teamObj.ID, botua.Username)
-	require.IsType(t, UserHasNotResetError{}, err)
+	require.ErrorAs(t, err, new(UserHasNotResetError))
 
 	team, err = Load(context.Background(), tcs[3].G, keybase1.LoadTeamArg{ID: teamObj.ID})
 	require.NoError(t, err)
@@ -653,7 +653,7 @@ func TestBotMember(t *testing.T) {
 
 	// Subsequent calls should have UserHasNotResetError
 	err = reAddMemberAfterResetInner(context.Background(), tcs[0].G, teamObj.ID, restrictedBotua.Username)
-	require.IsType(t, UserHasNotResetError{}, err)
+	require.ErrorAs(t, err, new(UserHasNotResetError))
 
 	team, err = Load(context.Background(), tcs[0].G, keybase1.LoadTeamArg{ID: teamObj.ID})
 	require.NoError(t, err)
@@ -692,8 +692,8 @@ func TestBotMember(t *testing.T) {
 	require.NoError(t, err)
 	members, err = team.Members()
 	require.NoError(t, err)
-	require.Len(t, members.Bots, 0)
-	require.Len(t, members.RestrictedBots, 0)
+	require.Empty(t, members.Bots)
+	require.Empty(t, members.RestrictedBots)
 }
 
 func TestGetTeamIDRPC(t *testing.T) {
@@ -850,9 +850,10 @@ func TestLookupImplicitTeamWithRestrictiveContactSettings(t *testing.T) {
 	impteamName := strings.Join([]string{ann.Username, bob.Username, jun.Username}, ",")
 	_, _, _, err = LookupOrCreateImplicitTeam(context.Background(), tcAnn.G, impteamName, false /*isPublic*/)
 	require.Error(t, err)
-	require.IsType(t, err, libkb.TeamContactSettingsBlockError{})
-	usernames := err.(libkb.TeamContactSettingsBlockError).BlockedUsernames()
-	require.Equal(t, 1, len(usernames))
+	var contactSettingsErr libkb.TeamContactSettingsBlockError
+	require.ErrorAs(t, err, &contactSettingsErr)
+	usernames := contactSettingsErr.BlockedUsernames()
+	require.Len(t, usernames, 1)
 	require.Equal(t, libkb.NewNormalizedUsername(jun.Username), usernames[0])
 
 	// jun follows ann

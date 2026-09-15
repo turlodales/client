@@ -9,6 +9,7 @@ import (
 
 	"github.com/eapache/channels"
 	"github.com/keybase/client/go/kbfs/data"
+	"github.com/pkg/errors"
 )
 
 // blockRetrievalWorker processes blockRetrievalQueue requests
@@ -27,7 +28,7 @@ func (brw *blockRetrievalWorker) run() {
 		err := brw.HandleRequest()
 		// Only io.EOF is relevant to the loop; other errors are handled in
 		// FinalizeRequest
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return
 		}
 	}
@@ -37,7 +38,8 @@ func (brw *blockRetrievalWorker) run() {
 // blockRetrievalQueue, using the passed in blockGetter to obtain blocks for
 // requests.
 func newBlockRetrievalWorker(bg blockGetter, q *blockRetrievalQueue,
-	workCh channels.Channel) *blockRetrievalWorker {
+	workCh channels.Channel,
+) *blockRetrievalWorker {
 	brw := &blockRetrievalWorker{
 		blockGetter: bg,
 		stopCh:      make(chan struct{}),

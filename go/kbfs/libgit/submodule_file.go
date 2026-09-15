@@ -8,9 +8,9 @@ import (
 	"io"
 	"time"
 
+	billy "github.com/go-git/go-billy/v5"
+	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/pkg/errors"
-	billy "gopkg.in/src-d/go-billy.v4"
-	"gopkg.in/src-d/go-git.v4/plumbing"
 )
 
 type submoduleFile struct {
@@ -30,7 +30,8 @@ const (
 var _ billy.File = (*submoduleFile)(nil)
 
 func newSubmoduleFile(
-	h plumbing.Hash, name string, mtime time.Time) *submoduleFile {
+	h plumbing.Hash, name string, mtime time.Time,
+) *submoduleFile {
 	data := []byte(submodulePrefix + h.String() + "\n")
 	return &submoduleFile{
 		name:  name,

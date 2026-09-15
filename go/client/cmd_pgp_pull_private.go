@@ -4,12 +4,13 @@
 package client
 
 import (
+	"context"
+
 	"github.com/keybase/cli"
 	"github.com/keybase/client/go/libcmdline"
 	"github.com/keybase/client/go/libkb"
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 	"github.com/keybase/go-framed-msgpack-rpc/rpc"
-	"golang.org/x/net/context"
 )
 
 type CmdPGPPullPrivate struct {
@@ -25,16 +26,15 @@ func (v *CmdPGPPullPrivate) ParseArgv(ctx *cli.Context) (err error) {
 }
 
 func (v *CmdPGPPullPrivate) Run() (err error) {
-
 	if !v.force {
 		dui := v.G().UI.GetDumbOutputUI()
-		dui.Printf(
-			ColorString(v.G(), "bold", "PLEASE READ THIS CAREFULLY -- PRIVATE KEYS ARE AT STAKE!") + "\n" +
-				`
+		msg := ColorString(v.G(), "bold", "PLEASE READ THIS CAREFULLY -- PRIVATE KEYS ARE AT STAKE!") + "\n" +
+			`
   This command will import PGP ` + ColorString(v.G(), "bold", "private") + ` keys from KBFS
   (found in .keys/pgp), and export them to the local GnuPG keychain. They might have been
   put there via ` + ColorString(v.G(), "blue", "keybase pgp push-private") + `. After this
-  operation, these keys will be available for local GnuPG operations.` + "\n\n")
+  operation, these keys will be available for local GnuPG operations.` + "\n\n"
+		dui.Printf("%s", msg)
 		err = v.G().UI.GetTerminalUI().PromptForConfirmation("Really pull your PGP private key from KBFS?")
 		if err != nil {
 			return err

@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"os"
-
 	"path/filepath"
 	"testing"
 
@@ -34,7 +33,7 @@ func TestErasableKVStore(t *testing.T) {
 	// `AllKeys`
 	tmp, err := os.CreateTemp(s.storageDir, key)
 	require.NoError(t, err)
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		keys, err := s.AllKeys(mctx, ".key")
 		require.NoError(t, err)
 		require.Equal(t, []string{key}, keys)
@@ -57,7 +56,7 @@ func TestErasableKVStore(t *testing.T) {
 	copy(corruptedNoise, noise)
 	corruptedNoise[0] ^= 0x01
 
-	err = os.WriteFile(noiseFilePath, corruptedNoise, PermFile)
+	err = os.WriteFile(noiseFilePath, corruptedNoise, PermFile) //nolint:gosec // G703: test corrupts a file it just created
 	require.NoError(t, err)
 
 	var corrupt string

@@ -59,7 +59,7 @@ func TestCreateTeamAfterAccountReset(t *testing.T) {
 	err = u.Login(tc.G)
 	require.NoError(t, err)
 	if err = kbtest.AssertProvisioned(tc); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 
 	teamName := u.Username + "T"
@@ -146,7 +146,7 @@ func TestCreateImplicitTeam(t *testing.T) {
 	var users []*kbtest.FakeUser
 	var uvs []keybase1.UserVersion
 	var impTeam keybase1.ImplicitTeamDisplayName
-	for i := 0; i < numKBUsers; i++ {
+	for range numKBUsers {
 		u, err := kbtest.CreateAndSignupFakeUser("t", tc.G)
 		require.NoError(t, err)
 		users = append(users, u)
@@ -193,5 +193,5 @@ func TestCreateImplicitTeam(t *testing.T) {
 	sort.Sort(keybase1.ByUserVersionID(members.Owners))
 	require.Equal(t, members.Owners, uvs)
 	chainInvites := team.chain().ActiveInvites()
-	require.Equal(t, 2, len(chainInvites))
+	require.Len(t, chainInvites, 2)
 }

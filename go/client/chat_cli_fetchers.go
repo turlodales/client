@@ -4,10 +4,9 @@
 package client
 
 import (
+	"context"
 	"fmt"
 	"os"
-
-	"golang.org/x/net/context"
 
 	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/protocol/chat1"
@@ -43,7 +42,7 @@ func (f chatCLIConvFetcher) fetch(ctx context.Context, g *libkb.GlobalContext) (
 	}
 	f.query.Conv = *conversation
 
-	if conversation.Info.Id == nil || len(conversation.Info.Id) == 0 {
+	if len(conversation.Info.Id) == 0 {
 		return chat1.ConversationLocal{}, nil, fmt.Errorf("empty conversationInfo.Id: %+v", conversation.Info)
 	}
 

@@ -1,6 +1,7 @@
 import * as React from 'react'
 import * as Styles from '@/styles'
 import Text from '@/common-adapters/text'
+import {registerExternalResetter} from '@/util/zustand'
 
 type Props = {
   children: React.ReactNode
@@ -10,34 +11,38 @@ type Props = {
 
 const spoilerState = new Map<string, boolean>()
 
+// module scope outlives sign-out; keyed by message content, and a spoiler the
+// previous user revealed must not come up already revealed for the next one
+registerExternalResetter('markdown-spoiler-state', () => {
+  spoilerState.clear()
+})
+
 const Spoiler = (p: Props) => {
+  const styles = useStyles()
   const {children, content, context} = p
   const key = `${context ?? ''}:${content}`
   const [shown, setShown] = React.useState(spoilerState.get(key))
-
   const lastKey = React.useRef(key)
-  if (lastKey.current !== key) {
-    lastKey.current = key
-    setShown(false)
-  }
 
-  const onClick = React.useCallback(
-    (e: React.BaseSyntheticEvent) => {
-      e.preventDefault()
-      e.stopPropagation()
-      setShown(s => {
-        spoilerState.set(key, !s)
-        return !s
-      })
-    },
-    [key]
-  )
+  React.useEffect(() => {
+    if (lastKey.current !== key) {
+      lastKey.current = key
+      setShown(false)
+    }
+  }, [key])
+
+  const onClick = (e: React.BaseSyntheticEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setShown(s => {
+      spoilerState.set(key, !s)
+      return !s
+    })
+  }
 
   const smallContent = content.substring(0, 10)
   const len = smallContent.length
-  const masked = React.useMemo(() => {
-    return Array(len).fill('•').join('')
-  }, [len])
+  const masked = Array(len).fill('•').join('')
 
   return (
     <Text
@@ -52,37 +57,27 @@ const Spoiler = (p: Props) => {
   )
 }
 
-const styles = Styles.styleSheetCreate(() => {
-  return {
-    hidden: Styles.platformStyles({
-      common: {
-        backgroundColor: Styles.globalColors.black_on_white,
-        color: Styles.globalColors.black_on_white,
-      },
-      isElectron: {
-        borderRadius: Styles.borderRadius,
-        paddingLeft: 2,
-        paddingRight: 2,
-      },
-    }),
-    shown: Styles.platformStyles({
-      common: {
-        backgroundColor: Styles.globalColors.black_on_white,
-        color: Styles.globalColors.white,
-      },
-      isElectron: {
-        borderRadius: Styles.borderRadius,
-        paddingLeft: 2,
-        paddingRight: 2,
-      },
-    }),
-    tip: Styles.platformStyles({
-      isElectron: {
-        alignItems: 'flex-start',
-        display: 'inline-flex',
-      },
-    }),
-  } as const
-})
+const useStyles = Styles.createStyleHook(theme => ({
+  hidden: Styles.platformStyles({
+    common: {
+      backgroundColor: theme.black_on_white,
+      color: theme.black_on_white,
+    },
+    isElectron: {
+      borderRadius: Styles.borderRadius,
+      ...Styles.paddingH(2),
+    },
+  }),
+  shown: Styles.platformStyles({
+    common: {
+      backgroundColor: theme.black_on_white,
+      color: theme.white,
+    },
+    isElectron: {
+      borderRadius: Styles.borderRadius,
+      ...Styles.paddingH(2),
+    },
+  }),
+} as const))
 
 export default Spoiler

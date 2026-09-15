@@ -54,10 +54,10 @@ type FileSystem interface {
 	ErrorPrint(error)
 
 	// Printf is for information level messages.
-	Printf(format string, v ...interface{})
+	Printf(format string, v ...any)
 }
 
-// CreateStatus marks status of successfull create/open operations.
+// CreateStatus marks status of successful create/open operations.
 type CreateStatus uint32
 
 const (

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"testing"
-
 	"time"
 
 	"github.com/keybase/client/go/kbtest"
@@ -18,7 +17,7 @@ import (
 
 func setupOutboxTest(t testing.TB, name string) (kbtest.ChatTestContext, *Outbox, gregor1.UID, clockwork.FakeClock) {
 	ctc := setupCommonTest(t, name)
-	u, err := kbtest.CreateAndSignupFakeUser("ob", ctc.TestContext.G)
+	u, err := kbtest.CreateAndSignupFakeUser("ob", ctc.G)
 	require.NoError(t, err)
 	uid := gregor1.UID(u.User.GetUID().ToBytes())
 	cl := clockwork.NewFakeClock()
@@ -57,7 +56,7 @@ func TestChatOutbox(t *testing.T) {
 	conv := makeConvo(gregor1.Time(5), 1, 1)
 
 	prevOrdinal := outboxOrdinalStart
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		obr, err := ob.PushMessage(context.TODO(), conv.GetConvID(), makeMsgPlaintext("hi", uid),
 			nil, nil, nil, keybase1.TLFIdentifyBehavior_CHAT_CLI)
 		require.Equal(t, obr.Ordinal, prevOrdinal)
@@ -78,7 +77,7 @@ func TestChatOutbox(t *testing.T) {
 	require.Equal(t, obrs, res, "wrong obids")
 	emptyRes, err := ob.PullAllConversations(context.TODO(), true, true)
 	require.NoError(t, err)
-	require.Zero(t, len(emptyRes), "not empty")
+	require.Empty(t, emptyRes, "not empty")
 
 	// Record a failed attempt
 	require.NoError(t, ob.RecordFailedAttempt(context.TODO(), obrs[3]))
@@ -86,7 +85,7 @@ func TestChatOutbox(t *testing.T) {
 	// Check to make sure this record now has a failure
 	res, err = ob.PullAllConversations(context.TODO(), true, false)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(res), "wrong len")
+	require.Len(t, res, 1, "wrong len")
 	state, err := res[0].State.State()
 	require.NoError(t, err)
 	require.Equal(t, chat1.OutboxStateType_SENDING, state, "wrong state")
@@ -106,7 +105,7 @@ func TestChatOutbox(t *testing.T) {
 	// Check for correct order
 	res, err = ob.PullAllConversations(context.TODO(), true, false)
 	require.NoError(t, err)
-	require.Equal(t, 2, len(res), "wrong len")
+	require.Len(t, res, 2, "wrong len")
 	state, err = res[0].State.State()
 	require.NoError(t, err)
 	require.Equal(t, chat1.OutboxStateType_ERROR, state, "wrong state")
@@ -117,7 +116,7 @@ func TestChatOutbox(t *testing.T) {
 	// Pull without errors
 	res, err = ob.PullAllConversations(context.TODO(), false, false)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(res), "wrong len")
+	require.Len(t, res, 1, "wrong len")
 
 	// Retry the error
 	t.Logf("retrying the error: %s", obrs[2].OutboxID)
@@ -125,7 +124,7 @@ func TestChatOutbox(t *testing.T) {
 	require.NoError(t, err)
 	res, err = ob.PullAllConversations(context.TODO(), true, false)
 	require.NoError(t, err)
-	require.Equal(t, 2, len(res), "wrong len")
+	require.Len(t, res, 2, "wrong len")
 	state, err = res[1].State.State()
 	require.NoError(t, err)
 	require.Equal(t, chat1.OutboxStateType_SENDING, state, "wrong state")
@@ -136,12 +135,12 @@ func TestChatOutbox(t *testing.T) {
 	require.NoError(t, err)
 	res, err = ob.PullAllConversations(context.TODO(), true, false)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(res), "wrong len")
+	require.Len(t, res, 1, "wrong len")
 	require.Equal(t, obrs[3].OutboxID, res[0].OutboxID, "wrong element")
 
 	var tv chat1.ThreadView
 	require.NoError(t, ob.AppendToThread(context.TODO(), conv.GetConvID(), &tv))
-	require.Equal(t, 1, len(tv.Messages))
+	require.Len(t, tv.Messages, 1)
 	newObr, err = ob.MarkAsError(context.TODO(), obrs[3], chat1.OutboxStateError{
 		Message: "failed",
 		Typ:     chat1.OutboxErrorType_DUPLICATE,
@@ -153,7 +152,7 @@ func TestChatOutbox(t *testing.T) {
 	require.Equal(t, chat1.OutboxErrorType_DUPLICATE, newObr.State.Error().Typ)
 	tv.Messages = nil
 	require.NoError(t, ob.AppendToThread(context.TODO(), conv.GetConvID(), &tv))
-	require.Zero(t, len(tv.Messages))
+	require.Empty(t, tv.Messages)
 }
 
 func TestChatOutboxPurge(t *testing.T) {
@@ -165,7 +164,7 @@ func TestChatOutboxPurge(t *testing.T) {
 
 	prevOrdinal := outboxOrdinalStart
 	ephemeralMetadata := &chat1.MsgEphemeralMetadata{Lifetime: 0}
-	for i := 0; i < 9; i++ {
+	for i := range 9 {
 		// send some exploding and some non exploding msgs
 		if i > 3 {
 			ephemeralMetadata = nil
@@ -194,7 +193,7 @@ func TestChatOutboxPurge(t *testing.T) {
 
 	// Mark 6/9 records as an error, three of these are ephemeral message, 3
 	// regular messages.
-	for i := 0; i < 6; i++ {
+	for i := range 6 {
 		errRec := chat1.OutboxStateError{
 			Message: "failed",
 			Typ:     chat1.OutboxErrorType_MISC,
@@ -235,7 +234,7 @@ func TestChatOutboxMarkConv(t *testing.T) {
 	var obrs []chat1.OutboxRecord
 	conv := makeConvo(gregor1.Time(5), 1, 1)
 	conv2 := makeConvo(gregor1.Time(5), 1, 1)
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		convID := conv.GetConvID()
 		if i%2 == 0 {
 			convID = conv2.GetConvID()
@@ -264,7 +263,7 @@ func TestChatOutboxMarkConv(t *testing.T) {
 		Typ:     chat1.OutboxErrorType_MISC,
 	})
 	require.NoError(t, err)
-	require.Equal(t, 2, len(newObrs))
+	require.Len(t, newObrs, 2)
 	for _, newObr := range newObrs {
 		st, err := newObr.State.State()
 		require.NoError(t, err)
@@ -295,7 +294,7 @@ func TestChatOutboxCancelMessagesWithPredicate(t *testing.T) {
 	ctx := context.TODO()
 
 	conv := makeConvo(gregor1.Time(5), 1, 1)
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		_, err := ob.PushMessage(ctx, conv.GetConvID(),
 			makeMsgPlaintext(fmt.Sprintf("hi%d", i), uid),
 			nil, nil, nil, keybase1.TLFIdentifyBehavior_CHAT_CLI)
@@ -329,5 +328,5 @@ func TestChatOutboxCancelMessagesWithPredicate(t *testing.T) {
 	require.Equal(t, 3, numCancelled)
 	res, err = ob.PullAllConversations(ctx, false, false)
 	require.NoError(t, err)
-	require.Zero(t, len(res))
+	require.Empty(t, res)
 }

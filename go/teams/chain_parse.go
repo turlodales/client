@@ -13,11 +13,13 @@ import (
 	"github.com/keybase/client/go/teams/hidden"
 )
 
-type SCTeamName string
-type SCTeamID string
-type SCTeamInviteID string
-type SCTeamInviteIDShort string
-type SCTeamBoxSummaryHash string
+type (
+	SCTeamName           string
+	SCTeamID             string
+	SCTeamInviteID       string
+	SCTeamInviteIDShort  string
+	SCTeamBoxSummaryHash string
+)
 
 // SCTeamEntropy is used to render stubbed out links unguessable.
 // Basically, we shove a random 18-byte string into sensitive links.
@@ -30,11 +32,13 @@ func (s SCTeamID) ToTeamID() (keybase1.TeamID, error) { return keybase1.TeamIDFr
 // Just UID is fine as well (implicit %1), but marshaling will always add %1.
 type SCTeamMember keybase1.UserVersion
 
-type SCMapInviteIDToUV map[keybase1.TeamInviteID]keybase1.UserVersionPercentForm
-type SCMapInviteIDUVPair struct {
-	InviteID SCTeamInviteID                  `json:"id"`
-	UV       keybase1.UserVersionPercentForm `json:"uv"`
-}
+type (
+	SCMapInviteIDToUV   map[keybase1.TeamInviteID]keybase1.UserVersionPercentForm
+	SCMapInviteIDUVPair struct {
+		InviteID SCTeamInviteID                  `json:"id"`
+		UV       keybase1.UserVersionPercentForm `json:"uv"`
+	}
+)
 
 type SCTeamSection struct {
 	ID               SCTeamID               `json:"id"`
@@ -269,7 +273,7 @@ func (link *SCChainLink) UnmarshalPayload() (res SCChainLinkPayload, err error) 
 }
 
 type SCChainLinkPayload struct {
-	Body                SCPayloadBody                `json:"body,omitempty"`
+	Body                SCPayloadBody                `json:"body"`
 	Ctime               int                          `json:"ctime,omitempty"` // UnixTime
 	ExpireIn            int                          `json:"expire_in,omitempty"`
 	Prev                *string                      `json:"prev,omitempty"`
@@ -440,10 +444,10 @@ func CreateTeamBotSettings(bots map[keybase1.UserVersion]keybase1.TeamBotSetting
 		}
 		var convs, triggers *[]string
 		if len(botSettings.Triggers) > 0 {
-			triggers = &(botSettings.Triggers)
+			triggers = &botSettings.Triggers
 		}
 		if len(botSettings.Convs) > 0 {
-			convs = &(botSettings.Convs)
+			convs = &botSettings.Convs
 		}
 		res = append(res, SCTeamBot{
 			Bot:      ToSCTeamBotUV(bot),

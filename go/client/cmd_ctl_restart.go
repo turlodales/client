@@ -2,14 +2,12 @@
 // this source code is governed by the included BSD license.
 
 //go:build !darwin
-// +build !darwin
 
 package client
 
 import (
+	"context"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/keybase/cli"
 	"github.com/keybase/client/go/libcmdline"

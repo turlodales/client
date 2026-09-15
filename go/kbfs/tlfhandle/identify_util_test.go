@@ -5,6 +5,7 @@
 package tlfhandle
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"testing"
@@ -17,7 +18,6 @@ import (
 	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/protocol/keybase1"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/context"
 )
 
 type testIdentifier struct {
@@ -31,7 +31,8 @@ type testIdentifier struct {
 func (ti *testIdentifier) Identify(
 	ctx context.Context, assertion, reason string,
 	_ keybase1.OfflineAvailability) (
-	kbname.NormalizedUsername, keybase1.UserOrTeamID, error) {
+	kbname.NormalizedUsername, keybase1.UserOrTeamID, error,
+) {
 	ei := GetExtendedIdentify(ctx)
 	userInfo, ok := ti.assertionsBrokenTracks[assertion]
 	if ok {
@@ -43,7 +44,8 @@ func (ti *testIdentifier) Identify(
 				}
 		}
 		ei.UserBreak(
-			ctx, userInfo.Name, userInfo.UID, &keybase1.IdentifyTrackBreaks{})
+			ctx, userInfo.Name, userInfo.UID, &keybase1.IdentifyTrackBreaks{},
+		)
 		return userInfo.Name, userInfo.UID.AsUserOrTeam(), nil
 	}
 
@@ -67,7 +69,8 @@ func (ti *testIdentifier) Identify(
 }
 
 func (ti *testIdentifier) NormalizeSocialAssertion(
-	ctx context.Context, assertion string) (keybase1.SocialAssertion, error) {
+	ctx context.Context, assertion string,
+) (keybase1.SocialAssertion, error) {
 	socialAssertion, isSocialAssertion := externals.NormalizeSocialAssertionStatic(ctx, assertion)
 	if !isSocialAssertion {
 		return keybase1.SocialAssertion{}, fmt.Errorf("Invalid social assertion")
@@ -77,7 +80,8 @@ func (ti *testIdentifier) NormalizeSocialAssertion(
 
 func (ti *testIdentifier) IdentifyImplicitTeam(
 	_ context.Context, assertions, suffix string, ty tlf.Type, _ string,
-	_ keybase1.OfflineAvailability) (idutil.ImplicitTeamInfo, error) {
+	_ keybase1.OfflineAvailability,
+) (idutil.ImplicitTeamInfo, error) {
 	// TODO: canonicalize name.
 	name := assertions
 	if suffix != "" {
@@ -102,27 +106,30 @@ func (ti *testIdentifier) IdentifyImplicitTeam(
 }
 
 func makeNugAndTIForTest() (
-	idutiltest.NormalizedUsernameGetter, *testIdentifier) {
-	return idutiltest.NormalizedUsernameGetter{
-			keybase1.MakeTestUID(1).AsUserOrTeam(): "alice",
-			keybase1.MakeTestUID(2).AsUserOrTeam(): "bob",
-			keybase1.MakeTestUID(3).AsUserOrTeam(): "charlie",
-		}, &testIdentifier{
-			assertions: map[string]idutil.UserInfo{
-				"alice": {
-					Name: "alice",
-					UID:  keybase1.MakeTestUID(1),
-				},
-				"bob": {
-					Name: "bob",
-					UID:  keybase1.MakeTestUID(2),
-				},
-				"charlie": {
-					Name: "charlie",
-					UID:  keybase1.MakeTestUID(3),
-				},
+	idutiltest.NormalizedUsernameGetter, *testIdentifier,
+) {
+	nug := idutiltest.NormalizedUsernameGetter{
+		keybase1.MakeTestUID(1).AsUserOrTeam(): "alice",
+		keybase1.MakeTestUID(2).AsUserOrTeam(): "bob",
+		keybase1.MakeTestUID(3).AsUserOrTeam(): "charlie",
+	}
+	ti := &testIdentifier{
+		assertions: map[string]idutil.UserInfo{
+			"alice": {
+				Name: "alice",
+				UID:  keybase1.MakeTestUID(1),
 			},
-		}
+			"bob": {
+				Name: "bob",
+				UID:  keybase1.MakeTestUID(2),
+			},
+			"charlie": {
+				Name: "charlie",
+				UID:  keybase1.MakeTestUID(3),
+			},
+		},
+	}
+	return nug, ti
 }
 
 func TestIdentify(t *testing.T) {
@@ -135,7 +142,8 @@ func TestIdentify(t *testing.T) {
 
 	err := identifyUsersForTLF(
 		context.Background(), nug, ti, nug.UIDMap(), tlf.Private,
-		keybase1.OfflineAvailability_NONE)
+		keybase1.OfflineAvailability_NONE,
+	)
 	require.NoError(t, err)
 	require.Equal(t, ids, ti.identifiedIDs)
 }
@@ -155,7 +163,8 @@ func TestIdentifyAlternativeBehaviors(t *testing.T) {
 	require.NoError(t, err)
 	err = identifyUsersForTLF(
 		ctx, nug, ti, nug.UIDMap(), tlf.Private,
-		keybase1.OfflineAvailability_NONE)
+		keybase1.OfflineAvailability_NONE,
+	)
 	require.Error(t, err)
 
 	ctx, err = MakeExtendedIdentify(context.Background(),
@@ -163,7 +172,8 @@ func TestIdentifyAlternativeBehaviors(t *testing.T) {
 	require.NoError(t, err)
 	err = identifyUsersForTLF(
 		ctx, nug, ti, nug.UIDMap(), tlf.Private,
-		keybase1.OfflineAvailability_NONE)
+		keybase1.OfflineAvailability_NONE,
+	)
 	require.NoError(t, err)
 	tb := GetExtendedIdentify(ctx).GetTlfBreakAndClose()
 	require.Len(t, tb.Breaks, 1)
@@ -202,19 +212,22 @@ func TestIdentifyImplicitTeams(t *testing.T) {
 		context.Background(), nug, ti,
 		map[keybase1.UserOrTeamID]kbname.NormalizedUsername{
 			privID.AsUserOrTeam(): "alice,bob",
-		}, tlf.Private, keybase1.OfflineAvailability_NONE)
+		}, tlf.Private, keybase1.OfflineAvailability_NONE,
+	)
 	require.NoError(t, err)
 	err = identifyUsersForTLF(
 		context.Background(), nug, ti,
 		map[keybase1.UserOrTeamID]kbname.NormalizedUsername{
 			pubID.AsUserOrTeam(): "alice,bob",
-		}, tlf.Public, keybase1.OfflineAvailability_NONE)
+		}, tlf.Public, keybase1.OfflineAvailability_NONE,
+	)
 	require.NoError(t, err)
 	err = identifyUsersForTLF(
 		context.Background(), nug, ti,
 		map[keybase1.UserOrTeamID]kbname.NormalizedUsername{
 			suffixID.AsUserOrTeam(): "alice,bob (conflicted copy 2016-03-14 #3)",
-		}, tlf.Private, keybase1.OfflineAvailability_NONE)
+		}, tlf.Private, keybase1.OfflineAvailability_NONE,
+	)
 	require.NoError(t, err)
 	require.Equal(t, ids, ti.identifiedIDs)
 }

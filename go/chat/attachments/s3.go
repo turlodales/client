@@ -3,7 +3,7 @@ package attachments
 import (
 	"bytes"
 	"context"
-	"crypto/md5"
+	"crypto/md5" //nolint:gosec // G501: MD5 required for S3 ETag computation (AWS API requirement, not cryptographic use)
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -64,8 +64,10 @@ func (s *s3UploadPipeliner) Complete() {
 
 var s3UploadPipeline = &s3UploadPipeliner{}
 
-const minMultiSize = 5 * 1024 * 1024 // can't use Multi API with parts less than 5MB
-const blockSize = 5 * 1024 * 1024    // 5MB is the minimum Multi part size
+const (
+	minMultiSize = 5 * 1024 * 1024 // can't use Multi API with parts less than 5MB
+	blockSize    = 5 * 1024 * 1024 // 5MB is the minimum Multi part size
+)
 
 // ErrAbortOnPartMismatch is returned when there is a mismatch between a current
 // part and a previous attempt part.  If ErrAbortOnPartMismatch is returned,
@@ -121,8 +123,9 @@ func (a *S3Store) PutS3(ctx context.Context, r io.Reader, size int64, task *Uplo
 // used for anything less than 5MB.  It can be used for anything up
 // to 5GB, but putMultiPipeline best for anything over 5MB.
 func (a *S3Store) putSingle(ctx context.Context, r io.Reader, size int64, params chat1.S3Params,
-	b s3.BucketInt, progressReporter types.ProgressReporter) (err error) {
-	defer a.Trace(ctx, &err, fmt.Sprintf("putSingle(size=%d)", size))()
+	b s3.BucketInt, progressReporter types.ProgressReporter,
+) (err error) {
+	defer a.Trace(ctx, &err, "putSingle(size=%d)", size)()
 
 	progWriter := progress.NewProgressWriter(progressReporter, size)
 	tee := io.TeeReader(r, progWriter)
@@ -142,7 +145,7 @@ func (a *S3Store) putSingle(ctx context.Context, r io.Reader, size int64, params
 // will return a different object key from params.ObjectKey if a previous Put is
 // successfully resumed and completed.
 func (a *S3Store) putMultiPipeline(ctx context.Context, r io.Reader, size int64, task *UploadTask, b s3.BucketInt, previous *AttachmentInfo) (res string, err error) {
-	defer a.Trace(ctx, &err, fmt.Sprintf("putMultiPipeline(size=%d)", size))()
+	defer a.Trace(ctx, &err, "putMultiPipeline(size=%d)", size)()
 
 	var multi s3.MultiInt
 	if previous != nil {
@@ -252,14 +255,14 @@ func (a *S3Store) makeBlockJobs(ctx context.Context, r io.Reader, blockCh chan j
 		n, err := io.ReadFull(r, block)
 		// io.ErrUnexpectedEOF will be returned for last partial block,
 		// which is ok.
-		if err != nil && err != io.ErrUnexpectedEOF && err != io.EOF {
+		if err != nil && !errors.Is(err, io.ErrUnexpectedEOF) && !errors.Is(err, io.EOF) {
 			return err
 		}
 		if n < blockSize {
 			block = block[:n]
 		}
 		if n > 0 {
-			md5sum := md5.Sum(block)
+			md5sum := md5.Sum(block) //nolint:gosec // G401: MD5 required for S3 ETag (AWS API requirement)
 			md5hex := hex.EncodeToString(md5sum[:])
 
 			if previous != nil {
@@ -277,7 +280,7 @@ func (a *S3Store) makeBlockJobs(ctx context.Context, r io.Reader, blockCh chan j
 				return err
 			}
 		}
-		if err == io.EOF || err == io.ErrUnexpectedEOF {
+		if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
 			break
 		}
 
@@ -304,7 +307,7 @@ func (a *S3Store) addJob(ctx context.Context, blockCh chan job, block []byte, pa
 // If this is a resumed upload, it checks the previous parts reported by S3 and will skip uploading
 // any that already exist.
 func (a *S3Store) uploadPart(ctx context.Context, task *UploadTask, b job, previous *AttachmentInfo, previousParts map[int]s3.Part, multi s3.MultiInt, retCh chan s3.Part) (err error) {
-	defer a.Trace(ctx, &err, fmt.Sprintf("uploadPart(%d)", b.index))()
+	defer a.Trace(ctx, &err, "uploadPart(%d)", b.index)()
 
 	// check to see if this part has already been uploaded.
 	// for job `b` to be here, it has already passed local stash verification.

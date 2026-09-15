@@ -1,4 +1,4 @@
-import * as Kb from '@/common-adapters/index'
+import * as Kb from '@/common-adapters'
 import type * as T from '@/constants/types'
 
 export type Props = {
@@ -7,51 +7,46 @@ export type Props = {
   waitingKey?: string
 }
 
-const GoButton = (props: Props) => (
-  <Kb.Box style={styles.container}>
-    <Kb.WithTooltip
-      tooltip={
-        <Kb.Box2 direction="horizontal">
-          <Kb.Icon
-            type="iconfont-return"
-            sizeType="Small"
-            color={Kb.Styles.globalColors.white}
-            style={styles.goTooltipIcon}
-          />
-          Enter
-        </Kb.Box2>
-      }
-      containerStyle={styles.goTooltipIconContainer}
-    >
-      <Kb.WaitingButton
-        type="Success"
-        narrow={true}
-        label={props.label}
-        onClick={props.onClick}
-        style={styles.button}
-        waitingKey={props.waitingKey}
-      />
-    </Kb.WithTooltip>
-  </Kb.Box>
-)
+const GoButton = (props: Props) => {
+  const styles = useStyles()
+  const theme = Kb.Styles.useTheme()
+  return (
+    <Kb.Box2 direction="vertical" style={styles.container}>
+      <Kb.WithTooltip
+        tooltip={
+          <Kb.Box2 direction="horizontal">
+            <Kb.Icon
+              type="iconfont-return"
+              sizeType="Small"
+              color={theme.white}
+              style={styles.goTooltipIcon}
+            />
+            Enter
+          </Kb.Box2>
+        }
+        containerStyle={styles.goTooltipIconContainer}
+      >
+        <Kb.WaitingButton
+          type="Success"
+          label={props.label}
+          onClick={props.onClick}
+          style={styles.button}
+          waitingKey={props.waitingKey}
+        />
+      </Kb.WithTooltip>
+    </Kb.Box2>
+  )
+}
 
-const styles = Kb.Styles.styleSheetCreate(() => ({
-  button: {
-    height: '100%',
-  },
+const useStyles = Kb.Styles.createStyleHook(() => ({
+  button: Kb.Styles.platformStyles({
+    isElectron: {height: '100%', minWidth: 50, ...Kb.Styles.paddingH(Kb.Styles.globalMargins.small)},
+    isMobile: {height: '100%', minWidth: 80, ...Kb.Styles.paddingH(Kb.Styles.globalMargins.tiny)},
+  }),
   container: {
-    marginBottom: Kb.Styles.globalMargins.tiny,
-    marginTop: Kb.Styles.globalMargins.tiny,
+    alignSelf: 'stretch',
+    ...Kb.Styles.marginV(Kb.Styles.globalMargins.tiny),
   },
-  go: Kb.Styles.platformStyles({
-    common: {color: Kb.Styles.globalColors.white},
-    isElectron: {lineHeight: 40},
-  }),
-  goIcon: Kb.Styles.platformStyles({
-    isElectron: {
-      lineHeight: 40,
-    },
-  }),
   goTooltipIcon: Kb.Styles.platformStyles({
     isElectron: {
       marginRight: Kb.Styles.globalMargins.xtiny,
@@ -61,12 +56,6 @@ const styles = Kb.Styles.styleSheetCreate(() => ({
   goTooltipIconContainer: Kb.Styles.platformStyles({
     isElectron: {
       ...Kb.Styles.globalStyles.fullHeight,
-    },
-  }),
-  hoverContainerStyle: Kb.Styles.platformStyles({
-    isElectron: {
-      justifyContent: 'center',
-      width: '100%',
     },
   }),
 }))

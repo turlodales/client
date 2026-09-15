@@ -5,6 +5,7 @@
 package tlfhandle
 
 import (
+	"context"
 	"sync"
 	"testing"
 	"time"
@@ -18,7 +19,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/context"
 )
 
 func TestParseHandleEarlyFailure(t *testing.T) {
@@ -32,7 +32,8 @@ func TestParseHandleEarlyFailure(t *testing.T) {
 	_, err = ParseHandle(ctx, nil, nil, nil, nonCanonicalName, tlf.Private)
 	assert.Equal(
 		t, idutil.TlfNameNotCanonical{
-			Name: nonCanonicalName, NameToTry: name}, errors.Cause(err))
+			Name: nonCanonicalName, NameToTry: name,
+		}, errors.Cause(err))
 }
 
 func TestParseHandleNoUserFailure(t *testing.T) {
@@ -260,7 +261,7 @@ func TestHandleAccessorsPrivate(t *testing.T) {
 		name, tlf.Private)
 	require.NoError(t, err)
 
-	require.False(t, h.Type() == tlf.Public)
+	require.NotEqual(t, tlf.Public, h.Type())
 
 	require.True(t, h.IsWriter(localUsers[0].UID))
 	require.True(t, h.IsReader(localUsers[0].UID))
@@ -272,45 +273,41 @@ func TestHandleAccessorsPrivate(t *testing.T) {
 	require.True(t, h.IsReader(localUsers[2].UID))
 
 	for i := 6; i < 10; i++ {
-		u := keybase1.MakeTestUID(uint32(i))
+		u := keybase1.MakeTestUID(uint32(i)) //nolint:gosec // G115: Test data with small values
 		require.False(t, h.IsWriter(u))
 		require.False(t, h.IsReader(u))
 	}
 
-	require.Equal(t, h.ResolvedWriters(),
-		[]keybase1.UserOrTeamID{
-			localUsers[0].UID.AsUserOrTeam(),
-			localUsers[2].UID.AsUserOrTeam(),
-		})
+	require.Equal(t, []keybase1.UserOrTeamID{
+		localUsers[0].UID.AsUserOrTeam(),
+		localUsers[2].UID.AsUserOrTeam(),
+	}, h.ResolvedWriters())
 	require.Equal(t, h.FirstResolvedWriter(), localUsers[0].UID.AsUserOrTeam())
 
-	require.Equal(t, h.ResolvedReaders(),
-		[]keybase1.UserOrTeamID{
-			localUsers[1].UID.AsUserOrTeam(),
-		})
+	require.Equal(t, []keybase1.UserOrTeamID{
+		localUsers[1].UID.AsUserOrTeam(),
+	}, h.ResolvedReaders())
 
-	require.Equal(t, h.UnresolvedWriters(),
-		[]keybase1.SocialAssertion{
-			{
-				User:    "u2",
-				Service: "twitter",
-			},
-			{
-				User:    "u4",
-				Service: "twitter",
-			},
-		})
-	require.Equal(t, h.UnresolvedReaders(),
-		[]keybase1.SocialAssertion{
-			{
-				User:    "u5",
-				Service: "twitter",
-			},
-			{
-				User:    "u6",
-				Service: "twitter",
-			},
-		})
+	require.Equal(t, []keybase1.SocialAssertion{
+		{
+			User:    "u2",
+			Service: "twitter",
+		},
+		{
+			User:    "u4",
+			Service: "twitter",
+		},
+	}, h.UnresolvedWriters())
+	require.Equal(t, []keybase1.SocialAssertion{
+		{
+			User:    "u5",
+			Service: "twitter",
+		},
+		{
+			User:    "u6",
+			Service: "twitter",
+		},
+	}, h.UnresolvedReaders())
 }
 
 func TestHandleAccessorsPublic(t *testing.T) {
@@ -332,7 +329,7 @@ func TestHandleAccessorsPublic(t *testing.T) {
 		name, tlf.Public)
 	require.NoError(t, err)
 
-	require.True(t, h.Type() == tlf.Public)
+	require.Equal(t, tlf.Public, h.Type())
 
 	require.True(t, h.IsWriter(localUsers[0].UID))
 	require.True(t, h.IsReader(localUsers[0].UID))
@@ -344,31 +341,29 @@ func TestHandleAccessorsPublic(t *testing.T) {
 	require.True(t, h.IsReader(localUsers[2].UID))
 
 	for i := 6; i < 10; i++ {
-		u := keybase1.MakeTestUID(uint32(i))
+		u := keybase1.MakeTestUID(uint32(i)) //nolint:gosec // G115: Test data with small values
 		require.False(t, h.IsWriter(u))
 		require.True(t, h.IsReader(u))
 	}
 
-	require.Equal(t, h.ResolvedWriters(),
-		[]keybase1.UserOrTeamID{
-			localUsers[0].UID.AsUserOrTeam(),
-			localUsers[2].UID.AsUserOrTeam(),
-		})
+	require.Equal(t, []keybase1.UserOrTeamID{
+		localUsers[0].UID.AsUserOrTeam(),
+		localUsers[2].UID.AsUserOrTeam(),
+	}, h.ResolvedWriters())
 	require.Equal(t, h.FirstResolvedWriter(), localUsers[0].UID.AsUserOrTeam())
 
 	require.Nil(t, h.ResolvedReaders())
 
-	require.Equal(t, h.UnresolvedWriters(),
-		[]keybase1.SocialAssertion{
-			{
-				User:    "u2",
-				Service: "twitter",
-			},
-			{
-				User:    "u4",
-				Service: "twitter",
-			},
-		})
+	require.Equal(t, []keybase1.SocialAssertion{
+		{
+			User:    "u2",
+			Service: "twitter",
+		},
+		{
+			User:    "u4",
+			Service: "twitter",
+		},
+	}, h.UnresolvedWriters())
 	require.Nil(t, h.UnresolvedReaders())
 }
 
@@ -647,7 +642,8 @@ func TestParseHandleUIDAssertion(t *testing.T) {
 		a, tlf.Private)
 	assert.Equal(t, 1, kbpki.GetIdentifyCalls())
 	assert.Equal(t, idutil.TlfNameNotCanonical{
-		Name: a, NameToTry: "u1"}, errors.Cause(err))
+		Name: a, NameToTry: "u1",
+	}, errors.Cause(err))
 }
 
 func TestParseHandleAndAssertion(t *testing.T) {
@@ -674,7 +670,8 @@ func TestParseHandleAndAssertion(t *testing.T) {
 	// KBFS-2022 is completed.
 	assert.Equal(t, 1+1, kbpki.GetIdentifyCalls())
 	assert.Equal(t, idutil.TlfNameNotCanonical{
-		Name: a, NameToTry: "u1"}, errors.Cause(err))
+		Name: a, NameToTry: "u1",
+	}, errors.Cause(err))
 }
 
 func TestParseHandleConflictSuffix(t *testing.T) {
@@ -835,9 +832,7 @@ func TestResolveAgainConflict(t *testing.T) {
 
 	daemon.AddNewAssertionForTestOrBust("u3", "u3@twitter")
 	ext, err := tlf.NewHandleExtension(tlf.HandleExtensionConflict, 1, "", time.Now())
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	h.conflictInfo = ext
 	newH, err := h.ResolveAgain(ctx, kbpki, nil, nil)
 	require.NoError(t, err)
@@ -864,8 +859,7 @@ func TestHandleResolvesTo(t *testing.T) {
 		ctx, kbpki, ConstIDGetter{idPub}, nil, name1, tlf.Public)
 	require.NoError(t, err)
 
-	resolvesTo, partialResolvedH1, err :=
-		h1.ResolvesTo(ctx, codec, kbpki, ConstIDGetter{idPub}, nil, *h1)
+	resolvesTo, partialResolvedH1, err := h1.ResolvesTo(ctx, codec, kbpki, ConstIDGetter{idPub}, nil, *h1)
 	require.NoError(t, err)
 	require.True(t, resolvesTo)
 	require.Equal(t, h1, partialResolvedH1)
@@ -877,8 +871,7 @@ func TestHandleResolvesTo(t *testing.T) {
 		ctx, kbpki, ConstIDGetter{id}, nil, name1, tlf.Private)
 	require.NoError(t, err)
 
-	resolvesTo, partialResolvedH1, err =
-		h1.ResolvesTo(ctx, codec, kbpki, ConstIDGetter{idPub}, nil, *h2)
+	resolvesTo, partialResolvedH1, err = h1.ResolvesTo(ctx, codec, kbpki, ConstIDGetter{idPub}, nil, *h2)
 	require.NoError(t, err)
 	require.False(t, resolvesTo)
 	require.Equal(t, h1, partialResolvedH1)
@@ -896,8 +889,7 @@ func TestHandleResolvesTo(t *testing.T) {
 	h2, err = h2.WithUpdatedConflictInfo(codec, &info)
 	require.NoError(t, err)
 
-	resolvesTo, partialResolvedH1, err =
-		h1.ResolvesTo(ctx, codec, kbpki, ConstIDGetter{idPub}, nil, *h2)
+	resolvesTo, partialResolvedH1, err = h1.ResolvesTo(ctx, codec, kbpki, ConstIDGetter{idPub}, nil, *h2)
 	require.NoError(t, err)
 	require.True(t, resolvesTo)
 	require.Equal(t, h1, partialResolvedH1)
@@ -912,8 +904,7 @@ func TestHandleResolvesTo(t *testing.T) {
 	}
 	h2.SetFinalizedInfo(&info)
 
-	resolvesTo, partialResolvedH1, err =
-		h1.ResolvesTo(ctx, codec, kbpki, ConstIDGetter{idPub}, nil, *h2)
+	resolvesTo, partialResolvedH1, err = h1.ResolvesTo(ctx, codec, kbpki, ConstIDGetter{idPub}, nil, *h2)
 	require.NoError(t, err)
 	require.True(t, resolvesTo)
 	require.Equal(t, h1, partialResolvedH1)
@@ -938,8 +929,7 @@ func TestHandleResolvesTo(t *testing.T) {
 	h1, err = h1.WithUpdatedConflictInfo(codec, &info)
 	require.NoError(t, err)
 
-	resolvesTo, _, err =
-		h1.ResolvesTo(ctx, codec, kbpki, ConstIDGetter{idPub}, nil, *h2)
+	resolvesTo, _, err = h1.ResolvesTo(ctx, codec, kbpki, ConstIDGetter{idPub}, nil, *h2)
 	require.NoError(t, err)
 	require.False(t, resolvesTo)
 
@@ -962,8 +952,7 @@ func TestHandleResolvesTo(t *testing.T) {
 	}
 	h1.SetFinalizedInfo(&info)
 
-	resolvesTo, _, err =
-		h1.ResolvesTo(ctx, codec, kbpki, ConstIDGetter{idPub}, nil, *h2)
+	resolvesTo, _, err = h1.ResolvesTo(ctx, codec, kbpki, ConstIDGetter{idPub}, nil, *h2)
 	require.NoError(t, err)
 	require.False(t, resolvesTo)
 
@@ -980,8 +969,7 @@ func TestHandleResolvesTo(t *testing.T) {
 	h2, err = h2.WithUpdatedConflictInfo(codec, &info)
 	require.NoError(t, err)
 
-	_, _, err =
-		h1.ResolvesTo(ctx, codec, kbpki, ConstIDGetter{idPub}, nil, *h2)
+	_, _, err = h1.ResolvesTo(ctx, codec, kbpki, ConstIDGetter{idPub}, nil, *h2)
 	require.Error(t, err)
 
 	// Test positive resolution cases.
@@ -1010,8 +998,7 @@ func TestHandleResolvesTo(t *testing.T) {
 
 		daemon.AddNewAssertionForTestOrBust(tc.resolveTo, "u2@twitter")
 
-		resolvesTo, partialResolvedH1, err =
-			h1.ResolvesTo(ctx, codec, kbpki, ConstIDGetter{id}, nil, *h2)
+		resolvesTo, partialResolvedH1, err = h1.ResolvesTo(ctx, codec, kbpki, ConstIDGetter{id}, nil, *h2)
 		require.NoError(t, err)
 		assert.True(t, resolvesTo, tc.name2)
 		require.Equal(t, h2, partialResolvedH1, tc.name2)
@@ -1032,8 +1019,7 @@ func TestHandleResolvesTo(t *testing.T) {
 
 		daemon.AddNewAssertionForTestOrBust(tc.resolveTo, "u2@twitter")
 
-		resolvesTo, _, err =
-			h1.ResolvesTo(ctx, codec, kbpki, ConstIDGetter{id}, nil, *h2)
+		resolvesTo, _, err = h1.ResolvesTo(ctx, codec, kbpki, ConstIDGetter{id}, nil, *h2)
 		require.NoError(t, err)
 		assert.False(t, resolvesTo, tc.name2)
 
@@ -1063,7 +1049,8 @@ func TestHandleMigrationResolvesTo(t *testing.T) {
 	require.NoError(t, err)
 
 	makeImplicitHandle := func(
-		name string, ty tlf.Type, id tlf.ID) *Handle {
+		name string, ty tlf.Type, id tlf.ID,
+	) *Handle {
 		wrName, suffix, err := tlf.SplitExtension(name)
 		require.NoError(t, err)
 		iteamInfo, err := daemon.ResolveIdentifyImplicitTeam(
@@ -1080,8 +1067,7 @@ func TestHandleMigrationResolvesTo(t *testing.T) {
 	}
 	h2 := makeImplicitHandle(name1, tlf.Private, id)
 
-	resolvesTo, partialResolvedH1, err :=
-		h1.ResolvesTo(ctx, codec, kbpki, ConstIDGetter{id}, nil, *h2)
+	resolvesTo, partialResolvedH1, err := h1.ResolvesTo(ctx, codec, kbpki, ConstIDGetter{id}, nil, *h2)
 	require.NoError(t, err)
 	require.True(t, resolvesTo)
 	require.Equal(t, h1, partialResolvedH1)
@@ -1094,8 +1080,7 @@ func TestHandleMigrationResolvesTo(t *testing.T) {
 	require.NoError(t, err)
 	h2Pub := makeImplicitHandle(name1, tlf.Public, idPub)
 
-	resolvesTo, partialResolvedH1, err =
-		h1Pub.ResolvesTo(ctx, codec, kbpki, ConstIDGetter{idPub}, nil, *h2Pub)
+	resolvesTo, partialResolvedH1, err = h1Pub.ResolvesTo(ctx, codec, kbpki, ConstIDGetter{idPub}, nil, *h2Pub)
 	require.NoError(t, err)
 	require.True(t, resolvesTo)
 	require.Equal(t, h1Pub, partialResolvedH1)
@@ -1103,24 +1088,21 @@ func TestHandleMigrationResolvesTo(t *testing.T) {
 	t.Log("Bad migration to team with extra user")
 	name2 := "u1,u2,u3"
 	h3 := makeImplicitHandle(name2, tlf.Private, id)
-	resolvesTo, _, err =
-		h1.ResolvesTo(ctx, codec, kbpki, ConstIDGetter{id}, nil, *h3)
+	resolvesTo, _, err = h1.ResolvesTo(ctx, codec, kbpki, ConstIDGetter{id}, nil, *h3)
 	require.NoError(t, err)
 	require.False(t, resolvesTo)
 
 	t.Log("Bad migration to team with fewer users")
 	name3 := "u1"
 	h4 := makeImplicitHandle(name3, tlf.Private, id)
-	resolvesTo, _, err =
-		h1.ResolvesTo(ctx, codec, kbpki, ConstIDGetter{id}, nil, *h4)
+	resolvesTo, _, err = h1.ResolvesTo(ctx, codec, kbpki, ConstIDGetter{id}, nil, *h4)
 	require.NoError(t, err)
 	require.False(t, resolvesTo)
 
 	t.Log("Bad migration to team with new readers")
 	name4 := "u1,u2#u3"
 	h5 := makeImplicitHandle(name4, tlf.Private, id)
-	resolvesTo, _, err =
-		h1.ResolvesTo(ctx, codec, kbpki, ConstIDGetter{id}, nil, *h5)
+	resolvesTo, _, err = h1.ResolvesTo(ctx, codec, kbpki, ConstIDGetter{id}, nil, *h5)
 	require.NoError(t, err)
 	require.False(t, resolvesTo)
 
@@ -1131,8 +1113,7 @@ func TestHandleMigrationResolvesTo(t *testing.T) {
 		ctx, kbpki, ConstIDGetter{id}, nil, name5, tlf.Private)
 	require.NoError(t, err)
 	h7 := makeImplicitHandle(name5, tlf.Private, id)
-	resolvesTo, partialResolvedH6, err :=
-		h6.ResolvesTo(ctx, codec, kbpki, ConstIDGetter{id}, nil, *h7)
+	resolvesTo, partialResolvedH6, err := h6.ResolvesTo(ctx, codec, kbpki, ConstIDGetter{id}, nil, *h7)
 	require.NoError(t, err)
 	require.True(t, resolvesTo)
 	require.Equal(t, h6, partialResolvedH6)
@@ -1141,18 +1122,16 @@ func TestHandleMigrationResolvesTo(t *testing.T) {
 	// Handle without iteam.
 	name6 := "u1,u2,u3@twitter,u4@twitter"
 	h8 := makeImplicitHandle(name6, tlf.Private, id)
-	resolvesTo, _, err =
-		h6.ResolvesTo(ctx, codec, kbpki, ConstIDGetter{id}, nil, *h8)
+	resolvesTo, _, err = h6.ResolvesTo(ctx, codec, kbpki, ConstIDGetter{id}, nil, *h8)
 	require.NoError(t, err)
 	require.False(t, resolvesTo)
 
 	t.Log("Private team migration with newly-resolved user")
 	daemon.AddNewAssertionForTestOrBust("u3", "u3@twitter")
-	resolvesTo, partialResolvedH6, err =
-		h6.ResolvesTo(ctx, codec, kbpki, ConstIDGetter{id}, nil, *h3)
+	resolvesTo, partialResolvedH6, err = h6.ResolvesTo(ctx, codec, kbpki, ConstIDGetter{id}, nil, *h3)
 	require.NoError(t, err)
 	require.True(t, resolvesTo)
-	require.Len(t, partialResolvedH6.UnresolvedWriters(), 0)
+	require.Empty(t, partialResolvedH6.UnresolvedWriters())
 
 	t.Log("Private team migration with conflict info")
 	name7 := "u1,u2 (conflicted copy 2016-03-14 #3)"
@@ -1160,8 +1139,7 @@ func TestHandleMigrationResolvesTo(t *testing.T) {
 		ctx, kbpki, ConstIDGetter{id}, nil, name7, tlf.Private)
 	require.NoError(t, err)
 	h10 := makeImplicitHandle(name7, tlf.Private, id)
-	resolvesTo, partialResolvedH9, err :=
-		h9.ResolvesTo(ctx, codec, kbpki, ConstIDGetter{id}, nil, *h10)
+	resolvesTo, partialResolvedH9, err := h9.ResolvesTo(ctx, codec, kbpki, ConstIDGetter{id}, nil, *h10)
 	require.NoError(t, err)
 	require.True(t, resolvesTo)
 	require.Equal(t, h9, partialResolvedH9)
@@ -1184,7 +1162,7 @@ func TestParseHandleNoncanonicalExtensions(t *testing.T) {
 	id := tlf.FakeID(1, tlf.Private)
 	h, err := ParseHandle(
 		ctx, kbpki, ConstIDGetter{id}, nil, name, tlf.Private)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, tlf.HandleExtension{
 		Type:   tlf.HandleExtensionConflict,
 		Date:   tlf.HandleExtensionStaticTestDate,
@@ -1202,7 +1180,8 @@ func TestParseHandleNoncanonicalExtensions(t *testing.T) {
 		ctx, kbpki, ConstIDGetter{id}, nil, nonCanonicalName, tlf.Private)
 	assert.Equal(
 		t, idutil.TlfNameNotCanonical{
-			Name: nonCanonicalName, NameToTry: name}, errors.Cause(err))
+			Name: nonCanonicalName, NameToTry: name,
+		}, errors.Cause(err))
 }
 
 func TestParseHandleImplicitTeams(t *testing.T) {
@@ -1220,7 +1199,8 @@ func TestParseHandleImplicitTeams(t *testing.T) {
 
 	counter := byte(1)
 	newITeam := func(name, suffix string, ty tlf.Type) (
-		keybase1.TeamID, tlf.ID) {
+		keybase1.TeamID, tlf.ID,
+	) {
 		iteamInfo, err := daemon.ResolveIdentifyImplicitTeam(
 			ctx, name, suffix, ty, true, "", keybase1.OfflineAvailability_NONE)
 		require.NoError(t, err)
@@ -1235,9 +1215,9 @@ func TestParseHandleImplicitTeams(t *testing.T) {
 		h, err := ParseHandle(ctx, kbpki, nil, nil, name, ty)
 		require.NoError(t, err)
 		require.Len(t, h.ResolvedWriters(), 1)
-		require.Len(t, h.ResolvedReaders(), 0)
-		require.Len(t, h.UnresolvedWriters(), 0)
-		require.Len(t, h.UnresolvedReaders(), 0)
+		require.Empty(t, h.ResolvedReaders())
+		require.Empty(t, h.UnresolvedWriters())
+		require.Empty(t, h.UnresolvedReaders())
 		require.Equal(t, tid.String(), h.FirstResolvedWriter().String())
 		require.Equal(t, tlfID, h.tlfID)
 	}
@@ -1274,7 +1254,8 @@ type offlineResolveCounterKBPKI struct {
 }
 
 func (d *offlineResolveCounterKBPKI) countBestEffort(
-	offline keybase1.OfflineAvailability, s string) {
+	offline keybase1.OfflineAvailability, s string,
+) {
 	if offline != keybase1.OfflineAvailability_BEST_EFFORT {
 		return
 	}
@@ -1286,21 +1267,24 @@ func (d *offlineResolveCounterKBPKI) countBestEffort(
 func (d *offlineResolveCounterKBPKI) Resolve(
 	ctx context.Context, assertion string,
 	offline keybase1.OfflineAvailability) (
-	kbname.NormalizedUsername, keybase1.UserOrTeamID, error) {
+	kbname.NormalizedUsername, keybase1.UserOrTeamID, error,
+) {
 	d.countBestEffort(offline, assertion)
 	return d.KBPKI.Resolve(ctx, assertion, offline)
 }
 
 func (d *offlineResolveCounterKBPKI) ResolveTeamTLFID(
 	ctx context.Context, teamID keybase1.TeamID,
-	offline keybase1.OfflineAvailability) (tlf.ID, error) {
+	offline keybase1.OfflineAvailability,
+) (tlf.ID, error) {
 	d.countBestEffort(offline, teamID.String())
 	return d.KBPKI.ResolveTeamTLFID(ctx, teamID, offline)
 }
 
 func (d *offlineResolveCounterKBPKI) ResolveImplicitTeam(
 	ctx context.Context, assertions, suffix string, tlfType tlf.Type,
-	offline keybase1.OfflineAvailability) (idutil.ImplicitTeamInfo, error) {
+	offline keybase1.OfflineAvailability,
+) (idutil.ImplicitTeamInfo, error) {
 	d.countBestEffort(offline, "iteam:"+assertions+" "+suffix)
 	return d.KBPKI.ResolveImplicitTeam(
 		ctx, assertions, suffix, tlfType, offline)
@@ -1311,7 +1295,8 @@ type testOfflineStatusPathsGetter struct {
 }
 
 func (t *testOfflineStatusPathsGetter) OfflineAvailabilityForPath(
-	tlfPath string) keybase1.OfflineAvailability {
+	tlfPath string,
+) keybase1.OfflineAvailability {
 	if t.bestEffortPaths[tlfPath] {
 		return keybase1.OfflineAvailability_BEST_EFFORT
 	}
@@ -1319,7 +1304,8 @@ func (t *testOfflineStatusPathsGetter) OfflineAvailabilityForPath(
 }
 
 func (t *testOfflineStatusPathsGetter) OfflineAvailabilityForID(
-	tlfID tlf.ID) keybase1.OfflineAvailability {
+	tlfID tlf.ID,
+) keybase1.OfflineAvailability {
 	panic("Not supported")
 }
 
@@ -1348,12 +1334,12 @@ func TestParseHandleOfflineAvailability(t *testing.T) {
 	t.Log("Check unsynced private TLF")
 	_, err := ParseHandle(ctx, kbpki, nil, osg, "u1", tlf.Private)
 	require.NoError(t, err)
-	require.Equal(t, kbpki.bestEffortOfflineCounts["u1"], 0)
+	require.Equal(t, 0, kbpki.bestEffortOfflineCounts["u1"])
 
 	t.Log("Check synced private TLF")
 	_, err = ParseHandle(ctx, kbpki, nil, osg, "u2", tlf.Private)
 	require.NoError(t, err)
-	require.Equal(t, kbpki.bestEffortOfflineCounts["u2"], 1)
+	require.Equal(t, 1, kbpki.bestEffortOfflineCounts["u2"])
 
 	t.Log("Check synced private shared TLF")
 	osg.bestEffortPaths["/keybase/private/u1,u2,u3"] = true
@@ -1378,7 +1364,8 @@ func TestParseHandleOfflineAvailability(t *testing.T) {
 		tlf.Private)
 	assert.Equal(
 		t, idutil.TlfNameNotCanonical{
-			Name: "u1@twitter,u2,u3", NameToTry: "u1,u2,u3"},
+			Name: "u1@twitter,u2,u3", NameToTry: "u1,u2,u3",
+		},
 		errors.Cause(err))
 	require.Equal(t, 2, kbpki.bestEffortOfflineCounts["u1"])
 	require.Equal(t, 0, kbpki.bestEffortOfflineCounts["u1@twitter"])
@@ -1390,7 +1377,7 @@ func TestParseHandleOfflineAvailability(t *testing.T) {
 	osg.bestEffortPaths["/keybase/private/u1,u2@twitter,u3"] = true
 	_, err = ParseHandle(ctx, kbpki, nil, osg, "u1,u2@twitter,u3",
 		tlf.Private)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	require.Equal(t, 3, kbpki.bestEffortOfflineCounts["u1"])
 	require.Equal(t, 1, kbpki.bestEffortOfflineCounts["u2@twitter"])
 	require.Equal(t, 3, kbpki.bestEffortOfflineCounts["u2"])
@@ -1400,7 +1387,7 @@ func TestParseHandleOfflineAvailability(t *testing.T) {
 	osg.bestEffortPaths["/keybase/private/u1#u2,u3"] = true
 	_, err = ParseHandle(ctx, kbpki, nil, osg, "u1#u2,u3",
 		tlf.Private)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	require.Equal(t, 4, kbpki.bestEffortOfflineCounts["u1"])
 	require.Equal(t, 4, kbpki.bestEffortOfflineCounts["u2"])
 	require.Equal(t, 4, kbpki.bestEffortOfflineCounts["u3"])
@@ -1420,7 +1407,7 @@ func TestParseHandleOfflineAvailability(t *testing.T) {
 	osg.bestEffortPaths["/keybase/private/u1,u2 "+ext] = true
 	_, err = ParseHandle(
 		ctx, kbpki, nil, osg, "u1,u2 "+ext, tlf.Private)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	require.Equal(t, 6, kbpki.bestEffortOfflineCounts["u1"])
 	require.Equal(t, 6, kbpki.bestEffortOfflineCounts["u2"])
 	require.Equal(t, 5, kbpki.bestEffortOfflineCounts["u3"])
@@ -1447,7 +1434,7 @@ func TestParseHandleOfflineAvailability(t *testing.T) {
 	require.NoError(t, err)
 	_, err = ParseHandle(
 		ctx, kbpki, ConstIDGetter{tlfID1}, osg, "u1u2u3", tlf.SingleTeam)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	require.Equal(t, 1, kbpki.bestEffortOfflineCounts["team:u1u2u3"])
 	require.Equal(t, 7, kbpki.bestEffortOfflineCounts["u1"])
 	require.Equal(t, 2, kbpki.bestEffortOfflineCounts["u2@twitter"])
@@ -1462,7 +1449,7 @@ func TestParseHandleOfflineAvailability(t *testing.T) {
 	require.NoError(t, err)
 	_, err = ParseHandle(
 		ctx, kbpki, ConstIDGetter{tlfID2}, osg, "u3u2u1", tlf.SingleTeam)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	require.Equal(t, 1, kbpki.bestEffortOfflineCounts["team:u1u2u3"])
 	require.Equal(t, 0, kbpki.bestEffortOfflineCounts["team:u3u2u1"])
 

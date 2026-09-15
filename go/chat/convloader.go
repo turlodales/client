@@ -2,11 +2,11 @@ package chat
 
 import (
 	"container/list"
+	"context"
 	"errors"
 	"sync"
 	"time"
 
-	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/keybase/client/go/chat/globals"
@@ -154,7 +154,8 @@ func NewBackgroundConvLoader(g *globals.Context) *BackgroundConvLoader {
 	}
 	b.identNotifier.ResetOnGUIConnect()
 	b.newQueue()
-	go func() { _ = b.monitorAppState() }()
+	stopCh := b.stopCh
+	go func() { _ = b.monitorAppState(stopCh) }()
 
 	return b
 }
@@ -169,32 +170,38 @@ func (b *BackgroundConvLoader) removeActiveLoadLocked(key string) {
 	delete(b.activeLoads, key)
 }
 
-func (b *BackgroundConvLoader) monitorAppState() error {
+func (b *BackgroundConvLoader) monitorAppState(stopCh chan struct{}) error {
 	ctx := context.Background()
 	b.Debug(ctx, "monitorAppState: starting up")
 
 	suspended := false
 	state := keybase1.MobileAppState_FOREGROUND
 	for {
-		state = <-b.G().MobileAppState.NextUpdate(&state)
-		switch state {
-		case keybase1.MobileAppState_FOREGROUND, keybase1.MobileAppState_BACKGROUNDACTIVE:
-			b.Debug(ctx, "monitorAppState: active state: %v", state)
-			// Only resume if we had suspended earlier (frontend can spam us with these)
-			if suspended {
-				b.Debug(ctx, "monitorAppState: resuming load thread")
-				b.Resume(ctx)
-				suspended = false
+		select {
+		case <-b.G().MobileAppState.NextUpdate(state):
+			state = b.G().MobileAppState.State()
+			switch state {
+			case keybase1.MobileAppState_FOREGROUND, keybase1.MobileAppState_BACKGROUNDACTIVE:
+				b.Debug(ctx, "monitorAppState: active state: %v", state)
+				// Only resume if we had suspended earlier (frontend can spam us with these)
+				if suspended {
+					b.Debug(ctx, "monitorAppState: resuming load thread")
+					b.Resume(ctx)
+					suspended = false
+				}
+			case keybase1.MobileAppState_BACKGROUND:
+				b.Debug(ctx, "monitorAppState: backgrounded, suspending load thread")
+				if !suspended {
+					b.Suspend(ctx)
+					suspended = true
+				}
 			}
-		case keybase1.MobileAppState_BACKGROUND:
-			b.Debug(ctx, "monitorAppState: backgrounded, suspending load thread")
-			if !suspended {
-				b.Suspend(ctx)
-				suspended = true
+			if b.appStateCh != nil {
+				b.appStateCh <- struct{}{}
 			}
-		}
-		if b.appStateCh != nil {
-			b.appStateCh <- struct{}{}
+		case <-stopCh:
+			b.Debug(ctx, "monitorAppState: shutting down")
+			return nil
 		}
 	}
 }
@@ -215,8 +222,9 @@ func (b *BackgroundConvLoader) Start(ctx context.Context, uid gregor1.UID) {
 	b.newQueue()
 	b.started = true
 	b.uid = uid
-	b.eg.Go(func() error { return b.loop(uid, b.stopCh) })
-	b.eg.Go(func() error { return b.loadLoop(uid, b.stopCh) })
+	stopCh := b.stopCh
+	b.eg.Go(func() error { return b.loop(uid, stopCh) })
+	b.eg.Go(func() error { return b.loadLoop(uid, stopCh) })
 }
 
 func (b *BackgroundConvLoader) Stop(ctx context.Context) chan struct{} {
@@ -239,22 +247,6 @@ func (b *BackgroundConvLoader) Stop(ctx context.Context) chan struct{} {
 	return ch
 }
 
-type bgOperationKey int
-
-var bgOpKey bgOperationKey
-
-func (b *BackgroundConvLoader) makeConvLoaderContext(ctx context.Context) context.Context {
-	return context.WithValue(ctx, bgOpKey, true)
-}
-
-func (b *BackgroundConvLoader) isConvLoaderContext(ctx context.Context) bool {
-	val := ctx.Value(bgOpKey)
-	if _, ok := val.(bool); ok {
-		return true
-	}
-	return false
-}
-
 func (b *BackgroundConvLoader) setTestingNameInfoSource(ni types.NameInfoSource) {
 	b.Debug(context.TODO(), "setTestingNameInfoSource: setting to %T", ni)
 	b.testingNameInfoSource = ni
@@ -263,7 +255,7 @@ func (b *BackgroundConvLoader) setTestingNameInfoSource(ni types.NameInfoSource)
 func (b *BackgroundConvLoader) Queue(ctx context.Context, job types.ConvLoaderJob) error {
 	// allow high priority to be queued even in the bkg loader context. Often times, this is something like
 	// an ephemeral purge which we don't want to block.
-	if job.Priority != types.ConvLoaderPriorityHighest && b.isConvLoaderContext(ctx) {
+	if job.Priority != types.ConvLoaderPriorityHighest && utils.IsConvLoaderContext(ctx) {
 		b.Debug(ctx, "Queue: refusing to queue in background loader context: convID: %s", job)
 		return nil
 	}
@@ -385,10 +377,7 @@ func (b *BackgroundConvLoader) loop(uid gregor1.UID, stopCh chan struct{}) error
 			// charging through conversations
 			duration := bgLoaderInitDelay
 			if task.attempt > 0 {
-				duration = bgLoaderErrDelay - time.Since(task.lastAttemptAt)
-				if duration < bgLoaderInitDelay {
-					duration = bgLoaderInitDelay
-				}
+				duration = max(bgLoaderErrDelay-time.Since(task.lastAttemptAt), bgLoaderInitDelay)
 			}
 			// Make sure we aren't suspended (also make sure we don't get shutdown). Charge through if
 			// neither have any data on them.
@@ -459,7 +448,7 @@ func (b *BackgroundConvLoader) retriableError(err error) bool {
 	if IsOfflineError(err) != OfflineErrorKindOnline {
 		return true
 	}
-	if err == context.Canceled {
+	if errors.Is(err, context.Canceled) {
 		return true
 	}
 	switch err.(type) {
@@ -482,7 +471,7 @@ func (b *BackgroundConvLoader) load(ictx context.Context, task clTask, uid grego
 	b.Lock()
 	var al activeLoad
 	al.Ctx, al.CancelFn = context.WithCancel(
-		globals.ChatCtx(b.makeConvLoaderContext(ictx), b.G(), keybase1.TLFIdentifyBehavior_CHAT_GUI, nil,
+		globals.ChatCtx(utils.MakeConvLoaderContext(ictx), b.G(), keybase1.TLFIdentifyBehavior_CHAT_GUI, nil,
 			b.identNotifier))
 	ctx := al.Ctx
 	alKey := b.addActiveLoadLocked(al)

@@ -4,11 +4,10 @@
 package client
 
 import (
+	"context"
 	"errors"
 	"strconv"
 	"strings"
-
-	"golang.org/x/net/context"
 
 	"github.com/keybase/cli"
 	"github.com/keybase/client/go/libcmdline"
@@ -56,8 +55,8 @@ func (c *cmdTeamFTL) Run() error {
 }
 
 func (c *cmdTeamFTL) parseTeamGenerations(s string) (gens []keybase1.PerTeamKeyGeneration, err error) {
-	v := strings.Split(s, ",")
-	for _, e := range v {
+	v := strings.SplitSeq(s, ",")
+	for e := range v {
 		i, err := strconv.Atoi(e)
 		if err != nil {
 			return nil, err

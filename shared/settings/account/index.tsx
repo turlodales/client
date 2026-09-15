@@ -1,113 +1,30 @@
 import * as C from '@/constants'
-import * as Constants from '@/constants/settings'
 import * as Kb from '@/common-adapters'
 import * as React from 'react'
+import * as T from '@/constants/types'
 import EmailPhoneRow from './email-phone-row'
-import {isMobile} from '@/styles'
+import logger from '@/logger'
+import {produce} from 'immer'
+import {openURL} from '@/util/misc'
+import {loadSettings} from '../load-settings'
+import {useNavigation} from '@react-navigation/native'
+import {useIsFocused} from '@react-navigation/core'
+import {useConfigState} from '@/stores/config'
+import {makePhoneError, useSettingsPhoneState} from '@/stores/settings-phone'
+import {useSettingsEmailState} from '@/stores/settings-email'
+import {settingsPasswordTab} from '@/constants/settings'
+import type {SettingsAccountRouteParams} from '../routes'
+import SettingsSectionTitle from '../section-title'
+import {useRandomPWState} from '../use-random-pw'
 
-const Container = () => {
-  const _emails = C.useSettingsEmailState(s => s.emails)
-  const _phones = C.useSettingsPhoneState(s => s.phones)
-  const addedEmail = C.useSettingsEmailState(s => s.addedEmail)
-  const addedPhone = C.useSettingsPhoneState(s => s.addedPhone)
-  const editPhone = C.useSettingsPhoneState(s => s.dispatch.editPhone)
-  const clearAddedPhone = C.useSettingsPhoneState(s => s.dispatch.clearAddedPhone)
-  const hasPassword = C.useSettingsPasswordState(s => !s.randomPW)
-  const waiting = C.Waiting.useAnyWaiting(Constants.loadSettingsWaitingKey)
-  const _onClearSupersededPhoneNumber = (phone: string) => {
-    editPhone(phone, true)
-  }
-  const navigateAppend = C.useRouterState(s => s.dispatch.navigateAppend)
-  const onAddEmail = () => {
-    navigateAppend('settingsAddEmail')
-  }
-  const onAddPhone = () => {
-    navigateAppend('settingsAddPhone')
-  }
-  const navigateUp = C.useRouterState(s => s.dispatch.navigateUp)
-  const onBack = isMobile
-    ? () => {
-        navigateUp()
-      }
-    : undefined
-
-  const resetAddedEmail = C.useSettingsEmailState(s => s.dispatch.resetAddedEmail)
-  const onClearAddedEmail = resetAddedEmail
-  const onClearAddedPhone = clearAddedPhone
-  const onDeleteAccount = () => {
-    navigateAppend('deleteConfirm')
-  }
-  const loadSettings = C.useSettingsState(s => s.dispatch.loadSettings)
-  const loadRememberPassword = C.useSettingsPasswordState(s => s.dispatch.loadRememberPassword)
-  const loadHasRandomPw = C.useSettingsPasswordState(s => s.dispatch.loadHasRandomPw)
-
-  const onReload = () => {
-    loadSettings()
-    loadRememberPassword()
-    loadHasRandomPw()
-  }
-  const onSetPassword = () => {
-    navigateAppend(C.Settings.settingsPasswordTab)
-  }
-  const switchTab = C.useRouterState(s => s.dispatch.switchTab)
-  const onStartPhoneConversation = () => {
-    switchTab(C.Tabs.chatTab)
-    navigateAppend({props: {namespace: 'chat2'}, selected: 'chatNewChat'})
-    clearAddedPhone()
-  }
-  const supersededPhoneNumber = _phones && [..._phones.values()].find(p => p.superseded)
-  const supersededKey = supersededPhoneNumber?.e164
-  const props = {
-    addedEmail: addedEmail,
-    addedPhone: addedPhone,
-    contactKeys: [..._emails.keys(), ...(_phones ? _phones.keys() : [])],
-    hasPassword: hasPassword,
-    moreThanOneEmail: _emails.size > 1,
-    onAddEmail,
-    onAddPhone,
-    onBack,
-    onClearAddedEmail,
-    onClearAddedPhone,
-    onClearSupersededPhoneNumber: () => supersededKey && _onClearSupersededPhoneNumber(supersededKey),
-    onDeleteAccount,
-    onReload,
-    onSetPassword,
-    onStartPhoneConversation,
-    supersededPhoneNumber: supersededPhoneNumber ? supersededPhoneNumber.displayNumber : undefined,
-    tooManyEmails: _emails.size >= 10, // If you change this, also change in keybase/config/prod/email.iced
-    tooManyPhones: !!_phones && _phones.size >= 10, // If you change this, also change in keybase/config/prod/phone_numbers.iced
-    waiting: waiting,
-  }
-  return <AccountSettings {...props} />
+export const SettingsSection = ({children}: {children: React.ReactNode}) => {
+  const styles = useStyles()
+  return (
+    <Kb.Box2 direction="vertical" gap="tiny" fullWidth={true} style={styles.section}>
+      {children}
+    </Kb.Box2>
+  )
 }
-
-export type Props = {
-  addedEmail?: string
-  addedPhone: boolean
-  contactKeys: Array<string>
-  hasPassword: boolean
-  onClearSupersededPhoneNumber: () => void
-  onBack?: () => void
-  onAddEmail: () => void
-  onAddPhone: () => void
-  onClearAddedEmail: () => void
-  onClearAddedPhone: () => void
-  onDeleteAccount: () => void
-  onSetPassword: () => void
-  onStartPhoneConversation: () => void
-  onReload: () => void
-  supersededPhoneNumber?: string
-  tooManyEmails: boolean
-  tooManyPhones: boolean
-  moreThanOneEmail: boolean
-  waiting: boolean
-}
-
-export const SettingsSection = ({children}: {children: React.ReactNode}) => (
-  <Kb.Box2 direction="vertical" gap="tiny" fullWidth={true} style={styles.section}>
-    {children}
-  </Kb.Box2>
-)
 
 type AddButtonProps = {
   disabled: boolean
@@ -121,81 +38,106 @@ const AddButton = (props: AddButtonProps) => (
     label={`Add ${props.kind}`}
     small={true}
     disabled={props.disabled}
-    className="tooltip-top-right"
     tooltip={props.disabled ? `You're already at the maximum ${props.kind}s` : undefined}
   />
 )
 
-const EmailPhone = (props: Props) => (
-  <SettingsSection>
-    <Kb.Box2 direction="vertical" gap="xtiny" fullWidth={true}>
-      <Kb.Box2 alignItems="center" direction="horizontal" gap="tiny" fullWidth={true}>
-        <Kb.Text type="Header">Email & phone</Kb.Text>
-        {props.waiting && <Kb.ProgressIndicator style={styles.progress} />}
-      </Kb.Box2>
-      <Kb.Text type="BodySmall">
-        Secures your account by letting us send important notifications, and allows friends and teammates to
-        find you by phone number or email.{' '}
-        <Kb.Text type="BodySmallPrimaryLink" onClickURL="https://keybase.io/docs/chat/phones-and-emails">
-          Read more{' '}
-          <Kb.Icon
-            type="iconfont-open-browser"
-            sizeType="Tiny"
-            boxStyle={styles.displayInline}
-            color={Kb.Styles.globalColors.blueDark}
-          />
+const EmailPhone = ({onEmailVerificationSuccess}: {onEmailVerificationSuccess: (email: string) => void}) => {
+  const styles = useStyles()
+  const theme = Kb.Styles.useTheme()
+  const navigateAppend = C.Router2.navigateAppend
+  const _emails = useSettingsEmailState(s => s.emails)
+  const _phones = useSettingsPhoneState(s => s.phones)
+  const contactKeys = [..._emails.keys(), ...(_phones ? _phones.keys() : [])]
+  const tooManyEmails = _emails.size >= 10 // If you change this, also change in keybase/config/prod/email.iced
+  const tooManyPhones = !!_phones && _phones.size >= 10 // If you change this, also change in keybase/config/prod/phone_numbers.iced
+  const waiting = C.Waiting.useAnyWaiting(C.waitingKeySettingsLoadSettings)
+  const readMoreUrlProps = Kb.useClickURL('https://keybase.io/docs/chat/phones-and-emails')
+  const onAddEmail = () => {
+    navigateAppend({name: 'settingsAddEmail', params: {}})
+  }
+  const onAddPhone = () => {
+    navigateAppend({name: 'settingsAddPhone', params: {}})
+  }
+  return (
+    <SettingsSection>
+      <Kb.Box2 direction="vertical" gap="xtiny" fullWidth={true}>
+        <Kb.Box2 alignItems="center" direction="horizontal" gap="tiny" fullWidth={true}>
+          <Kb.Text type="Header">Email & phone</Kb.Text>
+          {waiting && <Kb.ProgressIndicator style={styles.progress} />}
+        </Kb.Box2>
+        <Kb.Text type="BodySmall">
+          Secures your account by letting us send important notifications, and allows friends and teammates to
+          find you by phone number or email.{' '}
+          <Kb.Text type="BodySmallPrimaryLink" {...readMoreUrlProps}>
+            Read more{' '}
+            <Kb.Icon type="iconfont-open-browser" sizeType="Tiny" color={theme.blueDark} />
+          </Kb.Text>
         </Kb.Text>
-      </Kb.Text>
-    </Kb.Box2>
-    {!!props.contactKeys.length && (
-      <Kb.Box2 direction="vertical" style={styles.contactRows} fullWidth={true}>
-        {props.contactKeys.map(ck => (
-          <EmailPhoneRow contactKey={ck} key={ck} />
-        ))}
       </Kb.Box2>
-    )}
-    <Kb.ButtonBar align="flex-start" style={styles.buttonBar}>
-      <AddButton onClick={props.onAddEmail} kind="email" disabled={props.tooManyEmails} />
-      <AddButton onClick={props.onAddPhone} kind="phone number" disabled={props.tooManyPhones} />
-    </Kb.ButtonBar>
-  </SettingsSection>
-)
+      {!!contactKeys.length && (
+        <Kb.Box2 direction="vertical" style={styles.contactRows} fullWidth={true}>
+          {contactKeys.map(ck => (
+            <EmailPhoneRow contactKey={ck} key={ck} onEmailVerificationSuccess={onEmailVerificationSuccess} />
+          ))}
+        </Kb.Box2>
+      )}
+      <Kb.ButtonBar align="flex-start" style={styles.buttonBar}>
+        <AddButton onClick={onAddEmail} kind="email" disabled={tooManyEmails} />
+        <AddButton onClick={onAddPhone} kind="phone number" disabled={tooManyPhones} />
+      </Kb.ButtonBar>
+    </SettingsSection>
+  )
+}
 
-const Password = (props: Props) => {
+const Password = ({randomPW}: {randomPW?: boolean}) => {
+  const styles = useStyles()
+  const navigateAppend = C.Router2.navigateAppend
+  const onSetPassword = () => {
+    navigateAppend({name: settingsPasswordTab, params: {}})
+  }
+  const hasPassword = !randomPW
   let passwordLabel: string
-  if (props.hasPassword) {
-    passwordLabel = Kb.Styles.isMobile ? 'Change' : 'Change password'
+  if (hasPassword) {
+    passwordLabel = isMobile ? 'Change' : 'Change password'
   } else {
     passwordLabel = 'Set a password'
   }
   return (
     <SettingsSection>
-      <Kb.Box2 direction="vertical" gap="xtiny" fullWidth={true}>
-        <Kb.Text type="Header">Password</Kb.Text>
-        <Kb.Text type="BodySmall">Allows you to sign out and sign back in.</Kb.Text>
-      </Kb.Box2>
+      <SettingsSectionTitle title="Password" description="Allows you to sign out and sign back in." />
       <Kb.Box2 direction="vertical" alignItems="flex-start" fullWidth={true}>
-        {props.hasPassword && (
+        {hasPassword && (
           <Kb.Text type="BodySemibold" style={styles.password}>
             ********************
           </Kb.Text>
         )}
         <Kb.ButtonBar align="flex-start" style={styles.buttonBar}>
-          <Kb.Button mode="Secondary" onClick={props.onSetPassword} label={passwordLabel} small={true} />
+          <Kb.Button mode="Secondary" onClick={onSetPassword} label={passwordLabel} small={true} />
         </Kb.ButtonBar>
       </Kb.Box2>
     </SettingsSection>
   )
 }
 
-const WebAuthTokenLogin = (_: Props) => {
-  const loginBrowserViaWebAuthToken = C.useSettingsState(s => s.dispatch.loginBrowserViaWebAuthToken)
+const WebAuthTokenLogin = () => {
+  const styles = useStyles()
+  const generateWebAuthToken = C.useRPC(T.RPCGen.configGenerateWebAuthTokenRpcPromise)
+  const loginBrowserViaWebAuthToken = () => {
+    generateWebAuthToken(
+      [undefined],
+      link => {
+        void openURL(link)
+      },
+      () => {}
+    )
+  }
   return (
     <SettingsSection>
-      <Kb.Box2 direction="vertical" gap="xtiny" fullWidth={true}>
-        <Kb.Text type="Header">Website login</Kb.Text>
-        <Kb.Text type="BodySmall">You can use your app to log your web browser into keybase.io.</Kb.Text>
-      </Kb.Box2>
+      <SettingsSectionTitle
+        title="Website login"
+        description="You can use your app to log your web browser into keybase.io."
+      />
       <Kb.ButtonBar align="flex-start" style={styles.buttonBar}>
         <Kb.Button
           label={`Open keybase.io in web browser`}
@@ -208,99 +150,219 @@ const WebAuthTokenLogin = (_: Props) => {
   )
 }
 
-const DeleteAccount = (props: Props) => (
-  <SettingsSection>
-    <Kb.Box2 direction="vertical" gap="xtiny" fullWidth={true}>
-      <Kb.Text type="Header">Delete account</Kb.Text>
-      <Kb.Text type="BodySmall">
-        This can not be undone. You won’t be able to create a new account with the same username.
-      </Kb.Text>
-    </Kb.Box2>
-    <Kb.ButtonBar align="flex-start" style={styles.buttonBar}>
-      <Kb.Button
-        type="Danger"
-        mode="Secondary"
-        onClick={props.onDeleteAccount}
-        label="Delete account"
-        small={true}
+const DeleteAccount = () => {
+  const styles = useStyles()
+  const navigateAppend = C.Router2.navigateAppend
+  const onDeleteAccount = () => {
+    navigateAppend({name: 'deleteConfirm', params: {}})
+  }
+  return (
+    <SettingsSection>
+      <SettingsSectionTitle
+        title="Delete account"
+        description="This can not be undone. You won’t be able to create a new account with the same username."
       />
-    </Kb.ButtonBar>
-  </SettingsSection>
-)
+      <Kb.ButtonBar align="flex-start" style={styles.buttonBar}>
+        <Kb.Button
+          type="Danger"
+          mode="Secondary"
+          onClick={onDeleteAccount}
+          label="Delete account"
+          small={true}
+        />
+      </Kb.ButtonBar>
+    </SettingsSection>
+  )
+}
 
-const AccountSettings = (props: Props) => (
-  <Kb.Reloadable
-    onReload={props.onReload}
-    reloadOnMount={true}
-    waitingKeys={[Constants.loadSettingsWaitingKey]}
-  >
-    <Kb.ScrollView style={Kb.Styles.globalStyles.fullWidth}>
-      {props.addedEmail && (
-        <Kb.Banner key="clearAdded" color="yellow" onClose={props.onClearAddedEmail}>
-          <Kb.BannerParagraph
-            bannerColor="yellow"
-            content={`Check your inbox! A verification link was sent to ${props.addedEmail}.`}
-          />
-        </Kb.Banner>
-      )}
-      {props.supersededPhoneNumber && (
-        <Kb.Banner key="supersededPhone" color="yellow" onClose={props.onClearSupersededPhoneNumber}>
-          <Kb.BannerParagraph
-            bannerColor="yellow"
-            content={`Your phone number ${props.supersededPhoneNumber} is now associated with another Keybase user.`}
-          />
-          <Kb.Button
-            onClick={props.onAddPhone}
-            label="Add a new number"
-            small={true}
-            backgroundColor="yellow"
-            style={styles.topButton}
-          />
-        </Kb.Banner>
-      )}
-      {props.addedPhone && (
-        <Kb.Banner key="addedPhone" color="green" onClose={props.onClearAddedPhone}>
-          <Kb.BannerParagraph
-            bannerColor="green"
-            content={[
-              'Success! And now you can message anyone on Keybase by phone number. ',
-              {onClick: props.onStartPhoneConversation, text: 'Give it a try.'},
-            ]}
-          />
-        </Kb.Banner>
-      )}
-      <Kb.Box2 direction="vertical" fullWidth={true} fullHeight={true}>
-        <EmailPhone {...props} />
-        <Kb.Divider />
-        <Password {...props} />
-        <Kb.Divider />
-        <WebAuthTokenLogin {...props} />
-        <Kb.Divider />
-        <DeleteAccount {...props} />
-      </Kb.Box2>
-    </Kb.ScrollView>
-  </Kb.Reloadable>
-)
+type Props = {route: {params?: SettingsAccountRouteParams}}
 
-const styles = Kb.Styles.styleSheetCreate(() => ({
+type AddedBannerState = {
+  email: string
+  isFocused: boolean
+  phone: boolean
+  routeEmail: string | undefined
+  routePhone: boolean
+}
+
+const AccountSettings = ({route}: Props) => {
+  const styles = useStyles()
+  const addedEmailFromRoute = route.params?.addedEmailBannerEmail
+  const addedPhoneFromRoute = !!route.params?.addedPhoneBanner
+  const navigation = useNavigation('settingsTabs.accountTab')
+  const isFocused = useIsFocused()
+  const emails = useSettingsEmailState(s => s.emails)
+  const phones = useSettingsPhoneState(s => s.phones)
+  const setGlobalError = useConfigState(s => s.dispatch.setGlobalError)
+  const deletePhoneNumber = C.useRPC(T.RPCGen.phoneNumbersDeletePhoneNumberRpcPromise)
+  const [addedBannerState, setAddedBannerState] = React.useState<AddedBannerState>(() => ({
+    email: addedEmailFromRoute ?? '',
+    isFocused,
+    phone: addedPhoneFromRoute,
+    routeEmail: addedEmailFromRoute,
+    routePhone: addedPhoneFromRoute,
+  }))
+  const {randomPW, reload: reloadRandomPW} = useRandomPWState()
+  const {navigateAppend, switchTab} = C.Router2
+  const _onClearSupersededPhoneNumber = (phone: string) => {
+    deletePhoneNumber(
+      [{phoneNumber: phone}],
+      () => {},
+      error => {
+        logger.warn('Error deleting superseded phone number', error)
+        setGlobalError(new Error(makePhoneError(error)))
+      }
+    )
+  }
+  let nextAddedBannerState = addedBannerState
+  if (nextAddedBannerState.routeEmail !== addedEmailFromRoute) {
+    nextAddedBannerState = {
+      ...nextAddedBannerState,
+      email: addedEmailFromRoute ?? nextAddedBannerState.email,
+      routeEmail: addedEmailFromRoute,
+    }
+  }
+  if (nextAddedBannerState.routePhone !== addedPhoneFromRoute) {
+    nextAddedBannerState = {
+      ...nextAddedBannerState,
+      phone: addedPhoneFromRoute ? true : nextAddedBannerState.phone,
+      routePhone: addedPhoneFromRoute,
+    }
+  }
+  if (nextAddedBannerState.isFocused !== isFocused) {
+    nextAddedBannerState = {
+      ...nextAddedBannerState,
+      email: isFocused ? nextAddedBannerState.email : '',
+      isFocused,
+      phone: isFocused ? nextAddedBannerState.phone : false,
+    }
+  }
+  const addedEmailRow = nextAddedBannerState.email ? emails.get(nextAddedBannerState.email) : undefined
+  if (nextAddedBannerState.email && (!addedEmailRow || addedEmailRow.isVerified)) {
+    nextAddedBannerState = {...nextAddedBannerState, email: ''}
+  }
+  if (nextAddedBannerState !== addedBannerState) {
+    setAddedBannerState(nextAddedBannerState)
+  }
+  const addedEmail = nextAddedBannerState.email
+  const addedPhone = nextAddedBannerState.phone
+  React.useEffect(() => {
+    if (!addedEmailFromRoute) {
+      return
+    }
+    navigation.setParams({addedEmailBannerEmail: undefined})
+  }, [addedEmailFromRoute, navigation])
+  React.useEffect(() => {
+    if (!addedPhoneFromRoute) {
+      return
+    }
+    navigation.setParams({addedPhoneBanner: undefined})
+  }, [addedPhoneFromRoute, navigation])
+  const onEmailVerificationSuccess = (email: string) =>
+    setAddedBannerState(
+      produce(draft => {
+        draft.email = email
+      })
+    )
+  const onClearAddedEmail = () =>
+    setAddedBannerState(
+      produce(draft => {
+        draft.email = ''
+      })
+    )
+  const onClearAddedPhone = () =>
+    setAddedBannerState(
+      produce(draft => {
+        draft.phone = false
+      })
+    )
+  const onReload = () => {
+    loadSettings()
+    reloadRandomPW()
+  }
+  const onStartPhoneConversation = () => {
+    switchTab(C.Tabs.chatTab)
+    navigateAppend({name: 'chatNewChat', params: {namespace: 'chat'}})
+    setAddedBannerState(
+      produce(draft => {
+        draft.phone = false
+      })
+    )
+  }
+  const _supersededPhoneNumber = phones && [...phones.values()].find(p => p.superseded)
+  const supersededKey = _supersededPhoneNumber?.e164
+  const onClearSupersededPhoneNumber = () => supersededKey && _onClearSupersededPhoneNumber(supersededKey)
+  const supersededPhoneNumber = _supersededPhoneNumber ? _supersededPhoneNumber.displayNumber : undefined
+  const onAddPhone = () => {
+    navigateAppend({name: 'settingsAddPhone', params: {}})
+  }
+
+  return (
+    <Kb.Reloadable onReload={onReload} reloadOnMount={true} waitingKeys={[C.waitingKeySettingsLoadSettings]}>
+      <Kb.ScrollView style={Kb.Styles.globalStyles.fullWidth}>
+        {addedEmail && (
+          <Kb.Banner key="clearAdded" color="yellow" onClose={onClearAddedEmail}>
+            <Kb.BannerParagraph
+              bannerColor="yellow"
+              content={`Check your inbox! A verification link was sent to ${addedEmail}.`}
+            />
+          </Kb.Banner>
+        )}
+        {supersededPhoneNumber && (
+          <Kb.Banner key="supersededPhone" color="yellow" onClose={onClearSupersededPhoneNumber}>
+            <Kb.BannerParagraph
+              bannerColor="yellow"
+              content={`Your phone number ${supersededPhoneNumber} is now associated with another Keybase user.`}
+            />
+            <Kb.Button
+              onClick={onAddPhone}
+              label="Add a new number"
+              small={true}
+              style={Kb.Styles.collapseStyles([styles.topButton, styles.primaryOnYellow])}
+              labelStyle={styles.primaryOnYellowLabel}
+            />
+          </Kb.Banner>
+        )}
+        {addedPhone && (
+          <Kb.Banner key="addedPhone" color="green" onClose={onClearAddedPhone}>
+            <Kb.BannerParagraph
+              bannerColor="green"
+              content={[
+                'Success! And now you can message anyone on Keybase by phone number. ',
+                {onClick: onStartPhoneConversation, text: 'Give it a try.'},
+              ]}
+            />
+          </Kb.Banner>
+        )}
+        <Kb.Box2 direction="vertical" fullWidth={true} fullHeight={true}>
+          <EmailPhone onEmailVerificationSuccess={onEmailVerificationSuccess} />
+          <Kb.Divider />
+          <Password randomPW={randomPW} />
+          <Kb.Divider />
+          <WebAuthTokenLogin />
+          <Kb.Divider />
+          <DeleteAccount />
+        </Kb.Box2>
+      </Kb.ScrollView>
+    </Kb.Reloadable>
+  )
+}
+
+const useStyles = Kb.Styles.createStyleHook(theme => ({
   buttonBar: {
     minHeight: undefined,
     width: undefined,
   },
   contactRows: Kb.Styles.platformStyles({
-    isElectron: {
-      paddingTop: Kb.Styles.globalMargins.xtiny,
-    },
+    isElectron: {paddingTop: Kb.Styles.globalMargins.xtiny},
   }),
-  displayInline: Kb.Styles.platformStyles({isElectron: {display: 'inline'}}),
   password: {
     ...Kb.Styles.padding(Kb.Styles.globalMargins.xsmall, 0),
-    flexGrow: 1,
+    ...Kb.Styles.globalStyles.flexGrow,
   },
-  progress: {
-    height: 16,
-    width: 16,
-  },
+  primaryOnYellow: {backgroundColor: theme.white},
+  primaryOnYellowLabel: {color: theme.brown_75OrYellow},
+  progress: Kb.Styles.size(16),
   section: Kb.Styles.platformStyles({
     common: {
       ...Kb.Styles.padding(
@@ -310,9 +372,7 @@ const styles = Kb.Styles.styleSheetCreate(() => ({
         Kb.Styles.globalMargins.small
       ),
     },
-    isElectron: {
-      maxWidth: 600,
-    },
+    isElectron: {maxWidth: 600},
     isPhone: {
       ...Kb.Styles.padding(
         Kb.Styles.globalMargins.small,
@@ -320,13 +380,9 @@ const styles = Kb.Styles.styleSheetCreate(() => ({
         Kb.Styles.globalMargins.medium
       ),
     },
-    isTablet: {
-      maxWidth: Kb.Styles.globalStyles.largeWidthPercent,
-    },
+    isTablet: {maxWidth: Kb.Styles.globalStyles.largeWidthPercent},
   }),
-  topButton: {
-    marginTop: Kb.Styles.globalMargins.xtiny,
-  },
+  topButton: {marginTop: Kb.Styles.globalMargins.xtiny},
 }))
 
-export default Container
+export default AccountSettings

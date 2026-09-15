@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -10,12 +11,12 @@ import (
 	"github.com/keybase/client/go/kbfs/data"
 	"github.com/keybase/client/go/kbfs/libkbfs"
 	"github.com/keybase/client/go/protocol/keybase1"
-	"golang.org/x/net/context"
 )
 
 func mdResetOne(
 	ctx context.Context, config libkbfs.Config, tlfPath string,
-	replacements replacementMap, checkValid, dryRun, force bool) error {
+	replacements replacementMap, checkValid, dryRun, force bool,
+) error {
 	irmd, err := mdGetMergedHeadForWriter(ctx, config, tlfPath)
 	if err != nil {
 		return err
@@ -54,8 +55,7 @@ func mdResetOne(
 
 	// TODO: Add an option to scan for and use the last known good
 	// root block.
-	_, info, readyBlockData, err :=
-		libkbfs.ResetRootBlock(ctx, config, rmdNext)
+	_, info, readyBlockData, err := libkbfs.ResetRootBlock(ctx, config, rmdNext)
 	if err != nil {
 		return err
 	}

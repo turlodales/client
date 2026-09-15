@@ -5,6 +5,7 @@ package client
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -13,7 +14,6 @@ import (
 	"github.com/keybase/client/go/libcmdline"
 	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/protocol/stellar1"
-	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -102,7 +102,7 @@ func (c *cmdWalletCancelAll) Run() (err error) {
 	// if c.outfile defined, append finished txIDs
 	var outfile *os.File
 	if len(c.outfile) > 0 {
-		outfile, err = os.OpenFile(c.outfile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		outfile, err = os.OpenFile(c.outfile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 		if err != nil {
 			return err
 		}
@@ -132,7 +132,7 @@ func (c *cmdWalletCancelAll) Run() (err error) {
 
 	writeToOutfile := func(txID string) {
 		if outfile != nil {
-			if _, err := outfile.WriteString(fmt.Sprintf("%s\n", txID)); err != nil {
+			if _, err := fmt.Fprintf(outfile, "%s\n", txID); err != nil {
 				dui.Printf("WRITE ERROR for tx %s: %s\n", txID, err)
 				c.stats.writeErrorCount++
 			}
@@ -140,7 +140,7 @@ func (c *cmdWalletCancelAll) Run() (err error) {
 	}
 
 	// start maxConsumers workers
-	for i := 0; i < maxConsumers; i++ {
+	for range maxConsumers {
 		c.group.Go(func() error {
 			for txID := range ingestChannel {
 				res, err := cli.ClaimCLILocal(context.TODO(), stellar1.ClaimCLILocalArg{TxID: txID})
@@ -173,7 +173,6 @@ func (c *cmdWalletCancelAll) Run() (err error) {
 	}
 	dui.Printf("All goroutines finished with no errors!\n")
 	return nil
-
 }
 
 func (c *cmdWalletCancelAll) GetUsage() libkb.Usage {
@@ -185,7 +184,6 @@ func (c *cmdWalletCancelAll) GetUsage() libkb.Usage {
 }
 
 func (c *cmdWalletCancelAll) getInTxIDs() (in []string, err error) {
-
 	// read outfile for already processed txIDs
 	out, err := c.getOutTxIDs()
 	if err != nil {

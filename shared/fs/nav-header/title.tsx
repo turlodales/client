@@ -1,68 +1,69 @@
-import * as C from '@/constants'
-import * as Constants from '@/constants/fs'
 import * as React from 'react'
 import * as T from '@/constants/types'
 import * as Kb from '@/common-adapters'
 import * as Kbfs from '../common'
-import * as Container from '@/util/container'
+import {useSafeNavigation} from '@/util/safe-navigation'
+import * as FS from '@/constants/fs'
 
 type Props = {
+  destinationPickerSource?: T.FS.MoveOrCopySource | T.FS.IncomingShareSource
   path: T.FS.Path
   inDestinationPicker?: boolean
 }
 
 const Breadcrumb = (props: Props) => {
-  const apath = props.path || C.FS.defaultPath
+  const styles = useStyles()
+  const apath = props.path || FS.defaultPath
   // /keybase/b/c => [/keybase, /keybase/b, /keybase/b/c]
-  const ancestors = React.useMemo(() => {
-    return apath === C.FS.defaultPath
+  const ancestors =
+    apath === FS.defaultPath
       ? []
       : T.FS.getPathElements(apath)
           .slice(1, -1)
-          .reduce((list, current) => [...list, T.FS.pathConcat(list.at(-1), current)], [C.FS.defaultPath])
-  }, [apath])
+          .reduce((list, current) => [...list, T.FS.pathConcat(list.at(-1), current)], [FS.defaultPath])
   const {inDestinationPicker} = props
-  const nav = Container.useSafeNavigation()
-  const onOpenPath = React.useCallback(
-    (path: T.FS.Path) => {
-      inDestinationPicker
-        ? C.FS.makeActionsForDestinationPickerOpen(0, path)
-        : nav.safeNavigateAppend({props: {path}, selected: 'fsRoot'})
-    },
-    [nav, inDestinationPicker]
-  )
+  const nav = useSafeNavigation()
+  const onOpenPath = (path: T.FS.Path) => {
+    if (inDestinationPicker) {
+      if (props.destinationPickerSource) {
+        nav.safeNavigateAppend({
+          name: 'destinationPicker',
+          params: {parentPath: path, source: props.destinationPickerSource},
+        })
+      }
+    } else {
+      nav.safeNavigateAppend({name: 'fsRoot', params: {path}})
+    }
+  }
 
-  const makePopup = React.useCallback(
-    (p: Kb.Popup2Parms) => {
-      const {attachTo, hidePopup} = p
-      return (
-        <Kb.FloatingMenu
-          containerStyle={styles.floating}
-          attachTo={attachTo}
-          visible={true}
-          onHidden={hidePopup}
-          items={ancestors
-            .slice(0, -2)
-            .reverse()
-            .map(path => ({
-              onClick: () => onOpenPath(path),
-              title: T.FS.getPathName(path),
-              view: (
-                <Kb.Box2 direction="horizontal" gap="tiny" fullWidth={true}>
-                  <Kbfs.ItemIcon path={path} size={16} />
-                  <Kb.Text type="Body" lineClamp={1}>
-                    {T.FS.getPathName(path)}
-                  </Kb.Text>
-                </Kb.Box2>
-              ),
-            }))}
-          position="bottom left"
-          closeOnSelect={true}
-        />
-      )
-    },
-    [ancestors, onOpenPath]
-  )
+  const makePopup = (p: Kb.Popup2Parms) => {
+    const {attachTo, hidePopup} = p
+    return (
+      <Kb.FloatingMenu
+        containerStyle={styles.floating}
+        attachTo={attachTo}
+        visible={true}
+        onHidden={hidePopup}
+        items={ancestors
+          .slice(0, -2)
+          .reverse()
+          .map(path => ({
+            onClick: () => onOpenPath(path),
+            title: T.FS.getPathName(path),
+            view: (
+              <Kb.Box2 direction="horizontal" gap="tiny" fullWidth={true}>
+                <Kbfs.ItemIcon path={path} size={16} />
+                <Kb.Text type="Body" lineClamp={1}>
+                  {T.FS.getPathName(path)}
+                </Kb.Text>
+              </Kb.Box2>
+            ),
+          }))}
+        position="bottom left"
+        closeOnSelect={true}
+      />
+    )
+  }
 
   const {showPopup, popup, popupAnchor} = Kb.usePopup2(makePopup)
 
@@ -97,35 +98,47 @@ const Breadcrumb = (props: Props) => {
   )
 }
 
-const MaybePublicTag = ({path}: {path: T.FS.Path}) =>
-  Constants.hasPublicTag(path) ? (
-    <Kb.Box2 direction="horizontal">
-      <Kb.Meta title="public" backgroundColor={Kb.Styles.globalColors.green} />
-    </Kb.Box2>
-  ) : null
+const MaybePublicTag = ({path}: {path: T.FS.Path}) => {
+  const theme = Kb.Styles.useTheme()
+  return FS.hasPublicTag(path) ? <Kb.Meta title="public" backgroundColor={theme.green} /> : null
+}
 
-const MainTitle = (props: Props) => (
-  <Kb.Box2 direction="horizontal" fullWidth={true} alignItems="center" gap="tiny">
-    <Kbfs.PathStatusIcon path={props.path} />
-    <Kbfs.Filename path={props.path} selectable={true} style={styles.mainTitleText} type="Header" />
-    <MaybePublicTag path={props.path} />
-  </Kb.Box2>
-)
-
-const FsNavHeaderTitle = (props: Props) =>
-  props.path === C.FS.defaultPath ? (
-    <Kb.Text type="Header" style={styles.rootTitle}>
-      Files
-    </Kb.Text>
-  ) : (
-    <Kb.Box2 direction="vertical" style={styles.container}>
-      <Breadcrumb {...props} />
-      <MainTitle {...props} />
+const MainTitle = (props: Props) => {
+  const styles = useStyles()
+  return (
+    <Kb.Box2 direction="horizontal" fullWidth={true} alignItems="center" gap="tiny">
+      <Kbfs.PathStatusIcon path={props.path} />
+      <Kbfs.Filename path={props.path} selectable={true} style={styles.mainTitleText} type="Header" />
+      <MaybePublicTag path={props.path} />
     </Kb.Box2>
   )
+}
+
+const FsNavHeaderTitleInner = (props: Props) => {
+  const styles = useStyles()
+  return props.path === FS.defaultPath ? (
+      <Kb.Text type="Header" style={styles.rootTitle}>
+        Files
+      </Kb.Text>
+    ) : (
+      <Kb.Box2 direction="vertical" style={styles.container}>
+        <Breadcrumb {...props} />
+        <MainTitle {...props} />
+      </Kb.Box2>
+    )
+}
+
+const FsNavHeaderTitle = (props: Props) => (
+  <Kbfs.FsErrorProvider>
+    <Kbfs.FsDataProvider>
+      <FsNavHeaderTitleInner {...props} />
+    </Kbfs.FsDataProvider>
+  </Kbfs.FsErrorProvider>
+)
+
 export default FsNavHeaderTitle
 
-const styles = Kb.Styles.styleSheetCreate(
+const useStyles = Kb.Styles.createStyleHook(
   () =>
     ({
       container: Kb.Styles.platformStyles({
@@ -135,25 +148,16 @@ const styles = Kb.Styles.styleSheetCreate(
         },
         isElectron: Kb.Styles.desktopStyles.windowDraggingClickable,
       }),
-      dropdown: {
-        marginLeft: -Kb.Styles.globalMargins.tiny, // the icon has padding, so offset it to align with the name below
-      },
       floating: Kb.Styles.platformStyles({
         isElectron: {
           width: 196,
         },
       }),
-      icon: {
-        padding: Kb.Styles.globalMargins.tiny,
-      },
       mainTitleText: Kb.Styles.platformStyles({isElectron: Kb.Styles.desktopStyles.windowDraggingClickable}),
       rootTitle: {
         alignSelf: 'center',
         marginLeft: Kb.Styles.globalMargins.xsmall,
       },
-      slash: {
-        paddingLeft: Kb.Styles.globalMargins.xxtiny,
-        paddingRight: Kb.Styles.globalMargins.xxtiny,
-      },
+      slash: Kb.Styles.paddingH(Kb.Styles.globalMargins.xxtiny),
     }) as const
 )

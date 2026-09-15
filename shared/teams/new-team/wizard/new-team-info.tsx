@@ -1,17 +1,18 @@
 import * as C from '@/constants'
 import * as React from 'react'
 import * as Kb from '@/common-adapters'
-import * as Container from '@/util/container'
-import {ModalTitle} from '@/teams/common'
 import * as T from '@/constants/types'
 import {pluralize} from '@/util/string'
 import {InlineDropdown} from '@/common-adapters/dropdown'
 import {FloatingRolePicker} from '../../role-picker'
+import {type NewTeamWizard} from './state'
+import {useNavigation} from '@react-navigation/native'
+import {useLoadedTeam} from '../../team/use-loaded-team'
 
 const getTeamTakenMessage = (status: T.RPCGen.StatusCode): string => {
   switch (status) {
     case T.RPCGen.StatusCode.scteambadnamereserveddb:
-      return Kb.Styles.isMobile
+      return isMobile
         ? 'This team name is reserved by the Keybase team. Contact reservations@keybase.io to claim it.'
         : 'This team name is reserved by the Keybase team, possibly for your organization. Contact reservations@keybase.io to claim it.'
 
@@ -23,59 +24,60 @@ const getTeamTakenMessage = (status: T.RPCGen.StatusCode): string => {
 }
 
 const cannotJoinAsOwner = {admin: `Users can't join open teams as admins`}
+type TeamNameTakenResult = {exists: boolean; status: T.RPCGen.StatusCode; teamname: string}
 
-const NewTeamInfo = () => {
-  const nav = Container.useSafeNavigation()
-  const teamWizardState = C.useTeamsState(s => s.newTeamWizard)
-  const parentName = C.useTeamsState(s =>
-    teamWizardState.parentTeamID ? C.Teams.getTeamNameFromID(s, teamWizardState.parentTeamID) : undefined
-  )
+type Props = {
+  wizard: NewTeamWizard
+}
 
-  const minLength = parentName ? 2 : 3
+const NewTeamInfo = ({wizard: teamWizardState}: Props) => {
+  const styles = useStyles()
+  const navigation = useNavigation('teamWizard2TeamInfo')
+  const parentTeamID = teamWizardState.parentTeamID ?? T.Teams.noTeamID
+  const {
+    teamMeta: {teamname: loadedParentName},
+  } = useLoadedTeam(parentTeamID)
+  const parentName = teamWizardState.parentTeamID ? loadedParentName : undefined
+  const waitingOnParentTeam = !!teamWizardState.parentTeamID && !parentName
+
+  const minLength = teamWizardState.parentTeamID ? 2 : 3
 
   const [name, _setName] = React.useState(
-    teamWizardState.name.substring(parentName ? parentName.length + 1 : 0)
+    teamWizardState.parentTeamID ? (teamWizardState.name.split('.').at(-1) ?? '') : teamWizardState.name
   )
   const teamname = parentName ? `${parentName}.${name}` : name
   const setName = (newName: string) => _setName(newName.replace(/[^a-zA-Z0-9_]/, ''))
-  const [teamNameTakenStatus, setTeamNameTakenStatus] = React.useState<T.RPCGen.StatusCode>(
-    T.RPCGen.StatusCode.scok
-  )
-  const [teamNameTaken, setTeamNameTaken] = React.useState(false)
+  const [teamNameTakenResult, setTeamNameTakenResult] = React.useState<TeamNameTakenResult | undefined>()
 
   // TODO this should check subteams too (ideally in go)
   // Also it shouldn't leak the names of subteams people make to the server
   const checkTeam = C.useDebouncedCallback(C.useRPC(T.RPCGen.teamsUntrustedTeamExistsRpcPromise), 100)
-  type TeamNameParams = Parameters<typeof checkTeam>
-  const checkTeamNameTaken = React.useCallback(
-    (teamNames: TeamNameParams[0], cb: TeamNameParams[1], eb: TeamNameParams[2]) => {
-      checkTeam(teamNames, cb, eb)
-    },
-    [checkTeam]
-  )
+  const canCheckTeamName = !waitingOnParentTeam && name.length >= minLength
 
   React.useEffect(() => {
-    if (name.length >= minLength) {
-      checkTeamNameTaken(
-        [{teamName: {parts: teamname.split('.')}}],
-        ({exists, status}) => {
-          setTeamNameTaken(exists)
-          setTeamNameTakenStatus(status)
-        },
-        () => {} // TODO: handle errors?
-      )
-    } else {
-      setTeamNameTaken(false)
-      setTeamNameTakenStatus(0)
+    if (!canCheckTeamName) {
+      return
     }
-  }, [teamname, name.length, setTeamNameTaken, checkTeamNameTaken, setTeamNameTakenStatus, minLength])
+    checkTeam(
+      [{teamName: {parts: teamname.split('.')}}],
+      ({exists, status}) => {
+        setTeamNameTakenResult({exists, status, teamname})
+      },
+      () => {} // TODO: handle errors?
+    )
+  }, [teamname, checkTeam, canCheckTeamName])
+
+  const visibleTeamNameTakenResult =
+    canCheckTeamName && teamNameTakenResult?.teamname === teamname ? teamNameTakenResult : undefined
+  const teamNameTaken = visibleTeamNameTakenResult?.exists ?? false
+  const teamNameTakenStatus = visibleTeamNameTakenResult?.status ?? T.RPCGen.StatusCode.scok
 
   const [description, setDescription] = React.useState(teamWizardState.description)
   const [openTeam, _setOpenTeam] = React.useState(
     teamWizardState.name ? teamWizardState.open : teamWizardState.teamType === 'community'
   )
   const setOpenTeam = () => {
-    if (Kb.Styles.isMobile) {
+    if (isMobile) {
       Kb.LayoutAnimation.configureNext(Kb.LayoutAnimation.Presets.easeInEaseOut)
     }
     _setOpenTeam(!openTeam)
@@ -89,58 +91,41 @@ const NewTeamInfo = () => {
   const [realRole, setRealRole] = React.useState<T.Teams.TeamRoleType>(teamWizardState.openTeamJoinRole)
   const [rolePickerIsOpen, setRolePickerIsOpen] = React.useState(false)
 
-  const continueDisabled = rolePickerIsOpen || teamNameTaken || name.length < minLength
+  const continueDisabled = waitingOnParentTeam || rolePickerIsOpen || teamNameTaken || name.length < minLength
 
-  const onBack = () => nav.safeNavigateUp()
-  const clearModals = C.useRouterState(s => s.dispatch.clearModals)
-  const onClose = () => clearModals()
+  const navigateAppend = C.Router2.navigateAppend
 
-  const setTeamWizardNameDescription = C.useTeamsState(s => s.dispatch.setTeamWizardNameDescription)
-
-  const onContinue = () =>
-    setTeamWizardNameDescription({
+  const onContinue = () => {
+    const wizard = {
+      ...teamWizardState,
       addYourself,
       description,
-      openTeam,
+      error: undefined,
+      name: teamname,
+      open: openTeam,
       openTeamJoinRole: realRole,
       profileShowcase: showcase,
-      teamname,
+    }
+    navigation.setParams({wizard})
+    navigateAppend({
+      name: 'profileEditAvatar',
+      params: {
+        createdTeam: true,
+        newTeamWizard: wizard,
+        teamID: T.Teams.newTeamWizardTeamID,
+        wizard: true,
+      },
     })
+  }
 
   return (
-    <Kb.Modal
-      mode="DefaultFullHeight"
-      onClose={parentName ? onClose : undefined} // This is the first page of the process for subteams only
-      header={{
-        leftButton:
-          teamWizardState.teamType === 'subteam' ? (
-            Kb.Styles.isMobile ? (
-              <Kb.Text type="BodyBigLink" onClick={onClose}>
-                Cancel
-              </Kb.Text>
-            ) : undefined
-          ) : (
-            <Kb.Icon type="iconfont-arrow-left" onClick={onBack} />
-          ),
-        title: (
-          <ModalTitle
-            teamID={teamWizardState.parentTeamID ?? T.Teams.newTeamWizardTeamID}
-            title={teamWizardState.teamType === 'subteam' ? 'Create a subteam' : 'Enter team info'}
-          />
-        ),
-      }}
-      footer={{
-        content: (
-          <Kb.Button label="Continue" onClick={onContinue} fullWidth={true} disabled={continueDisabled} />
-        ),
-      }}
-      allowOverflow={true}
-      backgroundStyle={styles.bg}
-    >
+    <>
       <Kb.Box2 direction="vertical" fullWidth={true} fullHeight={true} style={styles.body} gap="tiny">
         {parentName ? (
-          <Kb.NewInput
+          <Kb.Input3
+            textType="BodySemibold"
             autoFocus={true}
+            disabled={waitingOnParentTeam}
             maxLength={16}
             onChangeText={setName}
             prefix={`${parentName}.`}
@@ -149,8 +134,10 @@ const NewTeamInfo = () => {
             containerStyle={styles.subteamNameInput}
           />
         ) : (
-          <Kb.LabeledInput
+          <Kb.Input3
+            textType="BodySemibold"
             autoFocus={true}
+            disabled={waitingOnParentTeam}
             maxLength={16}
             onChangeText={setName}
             placeholder="Team name"
@@ -162,6 +149,8 @@ const NewTeamInfo = () => {
             <Kb.Text type="BodySmallError" style={styles.biggerOnTheInside}>
               {getTeamTakenMessage(teamNameTakenStatus)}
             </Kb.Text>
+          ) : waitingOnParentTeam ? (
+            <Kb.Text type="BodySmall">Loading parent team info…</Kb.Text>
           ) : (
             <Kb.Text type="BodySmall">
               {teamWizardState.teamType === 'subteam'
@@ -170,12 +159,9 @@ const NewTeamInfo = () => {
             </Kb.Text>
           )}
         </Kb.Box2>
-        <Kb.LabeledInput
-          hoverPlaceholder={
-            teamWizardState.teamType === 'subteam'
-              ? 'What is this subteam about?'
-              : 'What is your team about?'
-          }
+        <Kb.Input3
+          textType="BodySemibold"
+          disabled={waitingOnParentTeam}
           placeholder="Description"
           value={description}
           rowsMin={3}
@@ -187,10 +173,10 @@ const NewTeamInfo = () => {
 
         <Kb.Checkbox
           labelComponent={
-            <Kb.Box2 direction="vertical" alignItems="flex-start" style={Kb.Styles.globalStyles.flexOne}>
+            <Kb.Box2 direction="vertical" alignItems="flex-start" flex={1}>
               <Kb.Text type="Body">Make it an open team</Kb.Text>
               <Kb.Text type="BodySmall">Anyone can join without admin approval.</Kb.Text>
-              {(!Kb.Styles.isMobile || openTeam) && (
+              {(!isMobile || openTeam) && (
                 <Kb.Box2
                   direction="horizontal"
                   gap="xtiny"
@@ -201,7 +187,7 @@ const NewTeamInfo = () => {
                   <Kb.Text type="BodySmall">People will join as</Kb.Text>
                   <FloatingRolePicker
                     presetRole={realRole}
-                    floatingContainerStyle={styles.floatingRolePicker}
+
                     onConfirm={role => {
                       setRealRole(role)
                       setRolePickerIsOpen(false)
@@ -223,10 +209,16 @@ const NewTeamInfo = () => {
             </Kb.Box2>
           }
           checked={openTeam}
+          disabled={waitingOnParentTeam}
           onCheck={rolePickerIsOpen ? () => {} : setOpenTeam}
         />
         {teamWizardState.teamType === 'subteam' && (
-          <Kb.Checkbox onCheck={setAddYourself} checked={addYourself} label="Add yourself to the team" />
+          <Kb.Checkbox
+            onCheck={setAddYourself}
+            checked={addYourself}
+            disabled={waitingOnParentTeam}
+            label="Add yourself to the team"
+          />
         )}
         <Kb.Checkbox
           onCheck={setShowcase}
@@ -236,38 +228,26 @@ const NewTeamInfo = () => {
           labelSubtitle="Your profile will mention this team. Team description and number of members will be public."
         />
       </Kb.Box2>
-    </Kb.Modal>
+      <Kb.ModalFooter>
+        <Kb.Button label="Continue" onClick={onContinue} fullWidth={true} disabled={continueDisabled} />
+      </Kb.ModalFooter>
+    </>
   )
 }
 
-const styles = Kb.Styles.styleSheetCreate(() => ({
-  bg: {backgroundColor: Kb.Styles.globalColors.blueGrey},
+const useStyles = Kb.Styles.createStyleHook(() => ({
   biggerOnTheInside: {height: 100},
   body: Kb.Styles.platformStyles({
     common: {
       ...Kb.Styles.padding(Kb.Styles.globalMargins.small),
-      borderRadius: 4,
+      borderRadius: Kb.Styles.borderRadius,
     },
     isMobile: {...Kb.Styles.globalStyles.flexOne},
   }),
-  container: {
-    padding: Kb.Styles.globalMargins.small,
-  },
   extraLineText: {
     height: 36,
   },
-  floatingRolePicker: Kb.Styles.platformStyles({
-    isElectron: {
-      position: 'relative',
-      top: -20,
-    },
-  }),
   subteamNameInput: Kb.Styles.padding(Kb.Styles.globalMargins.tiny),
-  wordBreak: Kb.Styles.platformStyles({
-    isElectron: {
-      wordBreak: 'break-all',
-    },
-  }),
 }))
 
 export default NewTeamInfo

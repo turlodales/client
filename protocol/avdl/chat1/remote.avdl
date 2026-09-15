@@ -155,6 +155,25 @@ protocol remote {
 
   MarkAsReadRes markAsRead(ConversationID conversationID, MessageID msgID, boolean forceUnread);
 
+  record MarkAsReadItem {
+    ConversationID conversationID;
+    MessageID msgID;
+    boolean forceUnread;
+  }
+
+  record MarkAsReadItemResult {
+    ConversationID conversationID;
+    union { null, string } error;
+    boolean immediateFail;
+  }
+
+  record MarkAsReadBatchRes {
+    union { null, RateLimit } rateLimit;
+    array<MarkAsReadItemResult> results;
+  }
+
+  MarkAsReadBatchRes markAsReadBatch(array<MarkAsReadItem> items);
+
   @lint("ignore")
   SetConversationStatusRes SetConversationStatus(ConversationID conversationID, ConversationStatus status);
 
@@ -328,6 +347,20 @@ protocol remote {
   // Get the team ID of a conversation (server-to-server only)
   // Returns null if the conversation no simply-associated team ID (legacy kbfs-backed convs)
   union { null, keybase1.TeamID } teamIDOfConv(ConversationID convID);
+
+  // Validate that a conversation is a team chat conversation associated with
+  // the given team (server-to-server only). Returns the raw conversation
+  // attributes so the caller can decide what constitutes a valid team git
+  // chat conv. isActive is true when the conversation currently exists and is
+  // active. teamID is the team the conversation is associated with, or null if
+  // the conversation has no associated team / does not exist.
+  record ValidateTeamGitChatConvRes {
+    boolean isActive;
+    TopicType topicType;
+    ConversationMembersType membersType;
+    union { null, keybase1.TeamID } teamID;
+  }
+  ValidateTeamGitChatConvRes validateTeamGitChatConv(keybase1.TeamID teamID, ConversationID convID);
 
   record ServerNowRes {
     union { null, RateLimit } rateLimit;

@@ -102,24 +102,27 @@ const cards = [
   {suit: 'hearts', value: 'A'},
 ] as const
 
-const suits = {
-  clubs: {
-    color: Kb.Styles.globalColors.blackOrBlack,
-    icon: 'iconfont-club',
-  },
-  diamonds: {
-    color: Kb.Styles.globalColors.redDark,
-    icon: 'iconfont-diamond',
-  },
-  hearts: {
-    color: Kb.Styles.globalColors.redDark,
-    icon: 'iconfont-heart',
-  },
-  spades: {
-    color: Kb.Styles.globalColors.blackOrBlack,
-    icon: 'iconfont-spade',
-  },
-} as const
+const useSuits = Kb.Styles.createThemedHook(
+  theme =>
+    ({
+      clubs: {
+        color: theme.blackOrBlack,
+        icon: 'iconfont-club',
+      },
+      diamonds: {
+        color: theme.redDark,
+        icon: 'iconfont-diamond',
+      },
+      hearts: {
+        color: theme.redDark,
+        icon: 'iconfont-heart',
+      },
+      spades: {
+        color: theme.blackOrBlack,
+        icon: 'iconfont-spade',
+      },
+    }) as const
+)
 
 const cardToTitle = (c: (typeof cards)[number]) => {
   let v: string
@@ -142,76 +145,89 @@ const cardToTitle = (c: (typeof cards)[number]) => {
   return `${v} of ${capitalize(c.suit)}`
 }
 
-const Card = (props: CardType) => (
-  <Kb.Box2
-    direction="vertical"
-    centerChildren={true}
-    style={styles.card}
-    title={cardToTitle(cards[props.card])}
-  >
-    <Kb.Box2 direction="horizontal">
-      <Kb.Text
-        selectable={true}
-        type={Kb.Styles.isMobile ? 'BodySmall' : 'Body'}
-        style={{color: suits[cards[props.card].suit].color}}
-      >
-        {cards[props.card].value}
-      </Kb.Text>
+const Card = (props: CardType) => {
+  const styles = useStyles()
+  const suits = useSuits()
+  return (
+    <Kb.Box2
+      direction="vertical"
+      centerChildren={true}
+      noShrink={true}
+      style={styles.card}
+      title={cardToTitle(cards[props.card])}
+    >
+      <Kb.Box2 direction="horizontal">
+        <Kb.Text
+          selectable={true}
+          type={isMobile ? 'BodySmall' : 'Body'}
+          style={{color: suits[cards[props.card].suit].color}}
+        >
+          {cards[props.card].value}
+        </Kb.Text>
+      </Kb.Box2>
+      <Kb.Box2 direction="horizontal">
+        <Kb.Icon
+          fontSize={isMobile ? 10 : 12}
+          type={suits[cards[props.card].suit].icon}
+          color={suits[cards[props.card].suit].color}
+          style={styles.cardSuit}
+        />
+      </Kb.Box2>
     </Kb.Box2>
-    <Kb.Box2 direction="horizontal">
-      <Kb.Icon
-        fontSize={Kb.Styles.isMobile ? 10 : 12}
-        type={suits[cards[props.card]?.suit].icon}
-        color={suits[cards[props.card].suit].color}
-        style={styles.cardSuit}
-      />
-    </Kb.Box2>
-  </Kb.Box2>
-)
+  )
+}
 
 type DeckType = {
   deck?: Array<CardType['card']>
   hand?: boolean
 }
 
-const CoinFlipResultDeck = (props: DeckType) => (
-  <Kb.Box2
-    direction="horizontal"
-    fullWidth={true}
-    style={Kb.Styles.collapseStyles([styles.cards, !props.hand && styles.noMarginTop])}
-  >
-    {props.deck?.map(card => <Card key={card} card={card} hand={props.hand} />)}
-  </Kb.Box2>
-)
+const CoinFlipResultDeck = (props: DeckType) => {
+  const styles = useStyles()
+  return (
+    <Kb.Box2
+      direction="horizontal"
+      fullWidth={true}
+      style={Kb.Styles.collapseStyles([styles.cards, !props.hand && styles.noMarginTop])}
+    >
+      {props.deck?.map(card => <Card key={card} card={card} hand={props.hand} />)}
+    </Kb.Box2>
+  )
+}
 
 type CoinType = {
   coin?: boolean
 }
 
-const CoinFlipResultCoin = (props: CoinType) => (
-  <Kb.Box2 direction="horizontal" fullWidth={true} gap="tiny" style={styles.commonContainer}>
-    <Kb.Box2 direction="vertical" style={styles.coin} centerChildren={true}>
-      <Kb.Icon type={props.coin ? 'icon-coin-heads-48-48' : 'icon-coin-tails-48-48'} />
+const CoinFlipResultCoin = (props: CoinType) => {
+  const styles = useStyles()
+  return (
+    <Kb.Box2 direction="horizontal" fullWidth={true} gap="tiny" style={styles.commonContainer}>
+      <Kb.Box2 direction="vertical" style={styles.coin} centerChildren={true}>
+        <Kb.ImageIcon type={props.coin ? 'icon-coin-heads-48-48' : 'icon-coin-tails-48-48'} />
+      </Kb.Box2>
+      <Kb.Box2 direction="vertical" centerChildren={true}>
+        <Kb.Text selectable={true} type="Header">
+          {props.coin ? 'Heads!' : 'Tails!'}
+        </Kb.Text>
+      </Kb.Box2>
     </Kb.Box2>
-    <Kb.Box2 direction="vertical" centerChildren={true}>
-      <Kb.Text selectable={true} type="Header">
-        {props.coin ? 'Heads!' : 'Tails!'}
-      </Kb.Text>
-    </Kb.Box2>
-  </Kb.Box2>
-)
+  )
+}
 
 type HandType = {
   hands?: ReadonlyArray<T.RPCChat.UICoinFlipHand>
 }
 
 const CoinFlipResultHands = (props: HandType) => {
-  if (!props.hands) return null
+  const styles = useStyles()
+  // an empty list still renders the nested boxes, so bail on it too
+  if (!props.hands?.length) return null
   const [handsWithCards, handsWithoutCards] = partition(props.hands, hand => hand.hand)
   return (
     <Kb.Box2 direction="vertical" fullWidth={true}>
       <Kb.Box2 direction="horizontal" fullWidth={true}>
-        <Kb.Box2 direction="vertical" fullHeight={true} style={styles.handTarget}>
+        <Kb.Box2 direction="vertical" fullHeight={true} justifyContent="space-around" style={styles.handTarget}>
           {handsWithCards.map(hand => (
             <Kb.Box2 key={hand.target} alignSelf="flex-start" alignItems="stretch" direction="vertical">
               <Kb.Text selectable={true} type="BodyBig">
@@ -252,63 +268,72 @@ type NumberType = {
   number?: string
 }
 
-const CoinFlipResultNumber = (props: NumberType) => (
-  <Kb.Box2 direction="horizontal" fullWidth={true} style={styles.commonContainer}>
-    <Kb.Text selectable={true} type="Header" style={styles.break}>
-      {props.number}
-    </Kb.Text>
-  </Kb.Box2>
-)
+const CoinFlipResultNumber = (props: NumberType) => {
+  const styles = useStyles()
+  return (
+    <Kb.Box2 direction="horizontal" fullWidth={true} style={styles.commonContainer}>
+      <Kb.Text selectable={true} type="Header" style={styles.break}>
+        {props.number}
+      </Kb.Text>
+    </Kb.Box2>
+  )
+}
 
 type ShuffleType = {
   shuffle?: ReadonlyArray<string>
 }
 
-const CoinFlipResultShuffle = (props: ShuffleType) => (
-  <Kb.Box2 direction="vertical" alignSelf="flex-start" gap="xtiny" style={styles.listContainer}>
-    {props.shuffle?.slice(0, 5).map((item, i) => <CoinFlipResultShuffleItem key={i} item={item} index={i} />)}
-    {props.shuffle && props.shuffle.length > 5 && (
-      <Kb.Box2 direction="horizontal" style={styles.listFullContainer}>
-        <Kb.Text selectable={true} type="BodySmallBold" style={styles.listFull}>
-          Full shuffle:{' '}
-          <Kb.Text selectable={true} type="BodySmall" style={styles.listFull}>
-            {props.shuffle.join(', ')}
+const CoinFlipResultShuffle = (props: ShuffleType) => {
+  const styles = useStyles()
+  return (
+    <Kb.Box2 direction="vertical" alignSelf="flex-start" gap="xtiny" style={styles.listContainer}>
+      {props.shuffle?.slice(0, 5).map((item, i) => <CoinFlipResultShuffleItem key={i} item={item} index={i} />)}
+      {props.shuffle && props.shuffle.length > 5 && (
+        <Kb.Box2 direction="horizontal" style={styles.listFullContainer}>
+          <Kb.Text selectable={true} type="BodySmallBold" style={styles.listFull}>
+            Full shuffle:{' '}
+            <Kb.Text selectable={true} type="BodySmall" style={styles.listFull}>
+              {props.shuffle.join(', ')}
+            </Kb.Text>
           </Kb.Text>
+        </Kb.Box2>
+      )}
+    </Kb.Box2>
+  )
+}
+
+const CoinFlipResultShuffleItem = (props: {index: number; item: string}) => {
+  const styles = useStyles()
+  return (
+    <Kb.Box2 direction="horizontal" alignSelf="flex-start" centerChildren={true}>
+      <Kb.Box2 direction="vertical" centerChildren={true} style={styles.listOrderContainer}>
+        <Kb.Text
+          selectable={true}
+          center={true}
+          type={props.index === 0 ? 'BodyBig' : 'BodyTiny'}
+          style={Kb.Styles.collapseStyles([styles.listOrder, props.index === 0 && styles.listOrderFirst])}
+        >
+          {props.index + 1}
         </Kb.Text>
       </Kb.Box2>
-    )}
-  </Kb.Box2>
-)
-
-const CoinFlipResultShuffleItem = (props: {index: number; item: string}) => (
-  <Kb.Box2 direction="horizontal" alignSelf="flex-start" centerChildren={true}>
-    <Kb.Box2 direction="vertical" centerChildren={true} alignItems="center" style={styles.listOrderContainer}>
-      <Kb.Text
-        selectable={true}
-        center={true}
-        type={props.index === 0 ? 'BodyBig' : 'BodyTiny'}
-        style={Kb.Styles.collapseStyles([styles.listOrder, props.index === 0 && styles.listOrderFirst])}
-      >
-        {props.index + 1}
-      </Kb.Text>
+      <Kb.Markdown allowFontScaling={true} styleOverride={props.index === 0 ? paragraphOverrides : undefined}>
+        {props.item}
+      </Kb.Markdown>
     </Kb.Box2>
-    <Kb.Markdown allowFontScaling={true} styleOverride={props.index === 0 ? paragraphOverrides : undefined}>
-      {props.item}
-    </Kb.Markdown>
-  </Kb.Box2>
-)
+  )
+}
 
 const paragraphOverrides = {
   paragraph: {
     // These are Header's styles.
-    fontSize: Kb.Styles.isMobile ? 20 : 18,
+    fontSize: isMobile ? 20 : 18,
     fontWeight: '700',
-    lineHeight: Kb.Styles.isMobile ? 24 : undefined,
+    lineHeight: isMobile ? 24 : undefined,
   } as const,
 }
 
-const styles = Kb.Styles.styleSheetCreate(
-  () =>
+const useStyles = Kb.Styles.createStyleHook(
+  theme =>
     ({
       break: Kb.Styles.platformStyles({
         isElectron: {
@@ -317,12 +342,8 @@ const styles = Kb.Styles.styleSheetCreate(
       }),
       card: Kb.Styles.platformStyles({
         common: {
-          backgroundColor: Kb.Styles.globalColors.whiteOrWhite,
-          borderColor: Kb.Styles.globalColors.black_10OrBlack,
-          borderRadius: Kb.Styles.borderRadius,
-          borderStyle: 'solid',
-          borderWidth: 1,
-          flexShrink: 0,
+          backgroundColor: theme.whiteOrWhite,
+          ...Kb.Styles.border(theme.black_10OrBlack, 1, Kb.Styles.borderRadius),
           height: 44,
           marginRight: -4,
           marginTop: Kb.Styles.globalMargins.tiny,
@@ -353,8 +374,7 @@ const styles = Kb.Styles.styleSheetCreate(
         },
       }),
       coin: {
-        height: 48,
-        width: 48,
+        ...Kb.Styles.size(48),
       },
       commonContainer: {
         marginTop: Kb.Styles.globalMargins.tiny,
@@ -365,7 +385,6 @@ const styles = Kb.Styles.styleSheetCreate(
       },
       handTarget: {
         height: 'auto',
-        justifyContent: 'space-around',
         paddingRight: Kb.Styles.globalMargins.tiny,
       },
       listContainer: {
@@ -381,11 +400,10 @@ const styles = Kb.Styles.styleSheetCreate(
       },
       listOrder: Kb.Styles.platformStyles({
         common: {
-          backgroundColor: Kb.Styles.globalColors.greyDark,
+          backgroundColor: theme.greyDark,
           borderRadius: 2,
-          color: Kb.Styles.globalColors.black,
-          height: 14,
-          width: 14,
+          color: theme.black,
+          ...Kb.Styles.size(14),
         },
         isMobile: {
           height: 16,
@@ -394,16 +412,14 @@ const styles = Kb.Styles.styleSheetCreate(
         },
       }),
       listOrderContainer: {
-        marginLeft: Kb.Styles.globalMargins.xtiny,
-        marginRight: Kb.Styles.globalMargins.xtiny,
+        ...Kb.Styles.marginH(Kb.Styles.globalMargins.xtiny),
         width: 20,
       },
       listOrderFirst: Kb.Styles.platformStyles({
         common: {
-          backgroundColor: Kb.Styles.globalColors.black,
-          color: Kb.Styles.globalColors.white,
-          height: 18,
-          width: 18,
+          backgroundColor: theme.black,
+          color: theme.white,
+          ...Kb.Styles.size(18),
         },
         isMobile: {
           height: 20,

@@ -1,13 +1,12 @@
 package systests
 
 import (
-	"testing"
-
+	"context"
 	"fmt"
+	"testing"
 
 	"github.com/keybase/client/go/teams"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/context"
 
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 )

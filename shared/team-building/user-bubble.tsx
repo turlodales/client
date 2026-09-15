@@ -9,9 +9,10 @@ export type Props = {
   onRemove: () => void
 }
 
-const removeSize = Kb.Styles.isMobile ? 22 : 16
+const removeSize = isMobile ? 22 : 16
 
 const UserBubble = (props: Props) => {
+  const styles = useStyles()
   const isKeybase = props.service === 'keybase'
   let {username} = props
   let title = !isKeybase ? `${props.username}@${props.service}` : undefined
@@ -25,10 +26,10 @@ const UserBubble = (props: Props) => {
     }
   }
   return (
-    <Kb.Box2 direction="vertical" className="hover-container" style={styles.bubbleContainer}>
+    <Kb.Box2 direction="vertical" className="hover-container" relative={true} style={styles.bubbleContainer}>
       <Kb.WithTooltip tooltip={props.tooltip} position="top center">
         <Kb.Box2 direction="horizontal" style={styles.bubble}>
-          <Kb.ConnectedNameWithIcon
+          <Kb.NameWithIcon
             colorFollowing={true}
             hideFollowingOverlay={true}
             horizontal={false}
@@ -41,7 +42,7 @@ const UserBubble = (props: Props) => {
             titleStyle={styles.userBubbleTitle}
           />
         </Kb.Box2>
-        <Kb.Box2 direction="horizontal" className="hover-visible" style={styles.remove}>
+        <Kb.Box2 direction="horizontal" className="hover-visible" alignItems="center" style={styles.remove} justifyContent="center">
           <RemoveBubble onRemove={props.onRemove} />
         </Kb.Box2>
       </Kb.WithTooltip>
@@ -49,60 +50,42 @@ const UserBubble = (props: Props) => {
   )
 }
 
-const RemoveBubble = ({onRemove}: {onRemove: () => void}) => (
-  <Kb.ClickableBox onClick={onRemove}>
-    <Kb.Icon
-      type="iconfont-close"
-      color={Kb.Styles.globalColors.black_50_on_white}
-      fontSize={Kb.Styles.isMobile ? 14 : 12}
-      style={styles.removeIcon}
-      className="hover_color_black"
-    />
-  </Kb.ClickableBox>
-)
+const RemoveBubble = ({onRemove}: {onRemove: () => void}) => {
+  const styles = useStyles()
+  const theme = Kb.Styles.useTheme()
+  return (
+    <Kb.ClickableBox onClick={onRemove} direction="vertical">
+      <Kb.Icon
+        type="iconfont-close"
+        color={theme.black_50_on_white}
+        fontSize={isMobile ? 14 : 12}
+        style={styles.removeIcon}
+        className="hover_color_black"
+      />
+    </Kb.ClickableBox>
+  )
+}
 
-const styles = Kb.Styles.styleSheetCreate(
-  () =>
+const useStyles = Kb.Styles.createStyleHook(
+  theme =>
     ({
       bubble: Kb.Styles.platformStyles({
         common: {
-          marginLeft: Kb.Styles.globalMargins.tiny,
-          marginRight: Kb.Styles.globalMargins.tiny,
+          ...Kb.Styles.marginH(Kb.Styles.globalMargins.tiny),
         },
         isElectron: {
           flexShrink: 1,
         },
       }),
-      bubbleContainer: Kb.Styles.platformStyles({common: {position: 'relative'}, isMobile: {width: 91}}),
-      container: Kb.Styles.platformStyles({
-        common: {
-          marginBottom: Kb.Styles.globalMargins.xtiny,
-          marginLeft: Kb.Styles.globalMargins.tiny,
-          marginTop: Kb.Styles.globalMargins.xtiny,
-        },
-      }),
-      generalService: Kb.Styles.platformStyles({
-        isElectron: {
-          lineHeight: '35px',
-        },
-      }),
+      bubbleContainer: Kb.Styles.platformStyles({isMobile: {width: 91}}),
       // TODO: the service icons are too high without this - are they right?
-      iconBox: Kb.Styles.platformStyles({
-        isElectron: {
-          marginBottom: -3,
-          marginTop: 3,
-        },
-      }),
       remove: Kb.Styles.platformStyles({
         common: {
-          alignItems: 'center',
-          backgroundColor: Kb.Styles.globalColors.white,
+          backgroundColor: theme.white,
           borderRadius: 100,
-          height: removeSize,
-          justifyContent: 'center',
+          ...Kb.Styles.size(removeSize),
           position: 'absolute',
           top: 0,
-          width: removeSize,
         },
         isElectron: {
           cursor: 'pointer',
@@ -117,7 +100,7 @@ const styles = Kb.Styles.styleSheetCreate(
         position: 'relative',
         top: 1,
       },
-      userBubbleTitle: {color: Kb.Styles.globalColors.black},
+      userBubbleTitle: {color: theme.black},
     }) as const
 )
 

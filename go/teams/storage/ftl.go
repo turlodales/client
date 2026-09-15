@@ -2,6 +2,7 @@ package storage
 
 import (
 	"fmt"
+
 	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/protocol/keybase1"
 )
@@ -15,26 +16,33 @@ type FTLStorage struct {
 }
 
 // Increment to invalidate the disk cache.
-const ftlDiskStorageVersion = 10
-const ftlMemCacheLRUSize = 200
+const (
+	ftlDiskStorageVersion = 10
+	ftlMemCacheLRUSize    = 200
+)
 
 type ftlDiskStorageItem struct {
 	Version int                    `codec:"V"`
 	State   *keybase1.FastTeamData `codec:"S"`
 }
 
-var _ teamDataGeneric = (*keybase1.FastTeamData)(nil)
-var _ diskItemGeneric = (*ftlDiskStorageItem)(nil)
+var (
+	_ teamDataGeneric = (*keybase1.FastTeamData)(nil)
+	_ diskItemGeneric = (*ftlDiskStorageItem)(nil)
+)
 
 func (d *ftlDiskStorageItem) version() int {
 	return d.Version
 }
+
 func (d *ftlDiskStorageItem) value() teamDataGeneric {
 	return d.State
 }
+
 func (d *ftlDiskStorageItem) setVersion(i int) {
 	d.Version = i
 }
+
 func (d *ftlDiskStorageItem) setValue(v teamDataGeneric) error {
 	typed, ok := v.(*keybase1.FastTeamData)
 	if !ok {
@@ -50,12 +58,12 @@ func NewFTLStorage(g *libkb.GlobalContext, upgrader FTLStorageUpgrader) *FTLStor
 }
 
 func (s *FTLStorage) Put(mctx libkb.MetaContext, state *keybase1.FastTeamData) {
-	s.storageGeneric.put(mctx, state)
+	s.put(mctx, state)
 }
 
 // Can return nil.
 func (s *FTLStorage) Get(mctx libkb.MetaContext, teamID keybase1.TeamID, public bool) (data *keybase1.FastTeamData, frozen bool, tombstoned bool) {
-	vp := s.storageGeneric.get(mctx, teamID, public)
+	vp := s.get(mctx, teamID, public)
 	if vp == nil {
 		return nil, false, false
 	}

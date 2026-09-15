@@ -5,6 +5,8 @@
 package libkbfs
 
 import (
+	"context"
+
 	"github.com/keybase/client/go/kbfs/data"
 	"github.com/keybase/client/go/kbfs/kbfsblock"
 	"github.com/keybase/client/go/kbfs/kbfscodec"
@@ -12,16 +14,18 @@ import (
 	"github.com/keybase/client/go/kbfs/libkey"
 	"github.com/keybase/client/go/kbfs/tlf"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 )
 
 func isRecoverableBlockError(err error) bool {
-	_, isArchiveError := err.(kbfsblock.ServerErrorBlockArchived)
-	_, isDeleteError := err.(kbfsblock.ServerErrorBlockDeleted)
-	_, isRefError := err.(kbfsblock.ServerErrorBlockNonExistent)
-	_, isMaxExceededError := err.(kbfsblock.ServerErrorMaxRefExceeded)
-	return isArchiveError || isDeleteError || isRefError || isMaxExceededError
+	var archiveErr kbfsblock.ServerErrorBlockArchived
+	var deleteErr kbfsblock.ServerErrorBlockDeleted
+	var refErr kbfsblock.ServerErrorBlockNonExistent
+	var maxExceededErr kbfsblock.ServerErrorMaxRefExceeded
+	return errors.As(err, &archiveErr) ||
+		errors.As(err, &deleteErr) ||
+		errors.As(err, &refErr) ||
+		errors.As(err, &maxExceededErr)
 }
 
 // putBlockToServer either puts the full block to the block server, or
@@ -29,7 +33,8 @@ func isRecoverableBlockError(err error) bool {
 func putBlockToServer(
 	ctx context.Context, bserv BlockServer, tlfID tlf.ID,
 	blockPtr data.BlockPointer, readyBlockData data.ReadyBlockData,
-	cacheType DiskBlockCacheType) error {
+	cacheType DiskBlockCacheType,
+) error {
 	var err error
 	if blockPtr.RefNonce == kbfsblock.ZeroRefNonce {
 		err = bserv.Put(ctx, tlfID, blockPtr.ID, blockPtr.Context,
@@ -49,7 +54,8 @@ func putBlockToServer(
 func PutBlockCheckLimitErrs(ctx context.Context, bserv BlockServer,
 	reporter Reporter, tlfID tlf.ID, blockPtr data.BlockPointer,
 	readyBlockData data.ReadyBlockData, tlfName tlf.CanonicalName,
-	cacheType DiskBlockCacheType) error {
+	cacheType DiskBlockCacheType,
+) error {
 	err := putBlockToServer(
 		ctx, bserv, tlfID, blockPtr, readyBlockData, cacheType)
 	switch typedErr := errors.Cause(err).(type) {
@@ -78,7 +84,8 @@ func PutBlockCheckLimitErrs(ctx context.Context, bserv BlockServer,
 func doOneBlockPut(ctx context.Context, bserv BlockServer, reporter Reporter,
 	tlfID tlf.ID, tlfName tlf.CanonicalName, ptr data.BlockPointer,
 	bps blockPutState, blocksToRemoveChan chan data.BlockPointer,
-	cacheType DiskBlockCacheType) error {
+	cacheType DiskBlockCacheType,
+) error {
 	readyBlockData, err := bps.getReadyBlockData(ctx, ptr)
 	if err != nil {
 		return err
@@ -111,7 +118,8 @@ func doOneBlockPut(ctx context.Context, bserv BlockServer, reporter Reporter,
 func doBlockPuts(ctx context.Context, bserv BlockServer, bcache data.BlockCache,
 	reporter Reporter, log, deferLog traceLogger, tlfID tlf.ID,
 	tlfName tlf.CanonicalName, bps blockPutState,
-	cacheType DiskBlockCacheType) (blocksToRemove []data.BlockPointer, err error) {
+	cacheType DiskBlockCacheType,
+) (blocksToRemove []data.BlockPointer, err error) {
 	blockCount := bps.numBlocks()
 	log.LazyTrace(ctx, "doBlockPuts with %d blocks", blockCount)
 	defer func() {
@@ -122,10 +130,7 @@ func doBlockPuts(ctx context.Context, bserv BlockServer, bcache data.BlockCache,
 
 	blocks := make(chan data.BlockPointer, blockCount)
 
-	numWorkers := blockCount
-	if numWorkers > maxParallelBlockPuts {
-		numWorkers = maxParallelBlockPuts
-	}
+	numWorkers := min(blockCount, maxParallelBlockPuts)
 	// A channel to list any blocks that have been archived or
 	// deleted.  Any of these will result in an error, so the maximum
 	// we'll get is the same as the number of workers.
@@ -141,7 +146,7 @@ func doBlockPuts(ctx context.Context, bserv BlockServer, bcache data.BlockCache,
 		}
 		return nil
 	}
-	for i := 0; i < numWorkers; i++ {
+	for range numWorkers {
 		eg.Go(worker)
 	}
 
@@ -181,7 +186,8 @@ func doAssembleBlock(
 	ctx context.Context, keyGetter blockKeyGetter, codec kbfscodec.Codec,
 	cryptoPure cryptoPure, kmd libkey.KeyMetadata, blockPtr data.BlockPointer,
 	block data.Block, buf []byte,
-	blockServerHalf kbfscrypto.BlockCryptKeyServerHalf) error {
+	blockServerHalf kbfscrypto.BlockCryptKeyServerHalf,
+) error {
 	tlfCryptKey, err := keyGetter.GetTLFCryptKeyForBlockDecryption(
 		ctx, kmd, blockPtr)
 	if err != nil {
@@ -194,8 +200,7 @@ func doAssembleBlock(
 		return err
 	}
 
-	if idType, blockType :=
-		blockPtr.ID.HashType(),
+	if idType, blockType := blockPtr.ID.HashType(),
 		encryptedBlock.Version.ToHashType(); idType != blockType {
 		return errors.Errorf(
 			"Block ID %s and encrypted block disagree on encryption method "+
@@ -210,7 +215,7 @@ func doAssembleBlock(
 		return err
 	}
 
-	block.SetEncodedSize(uint32(len(buf)))
+	block.SetEncodedSize(uint32(len(buf))) //nolint:gosec // G115: Block sizes are bounded by max block size config
 	return nil
 }
 
@@ -218,7 +223,8 @@ func assembleBlockLocal(
 	ctx context.Context, keyGetter blockKeyGetter, codec kbfscodec.Codec,
 	cryptoPure cryptoPure, kmd libkey.KeyMetadata, blockPtr data.BlockPointer,
 	block data.Block, buf []byte,
-	blockServerHalf kbfscrypto.BlockCryptKeyServerHalf) error {
+	blockServerHalf kbfscrypto.BlockCryptKeyServerHalf,
+) error {
 	// This call only verifies the block ID if we're not running
 	// production mode, for performance reasons.
 	if err := verifyLocalBlockIDMaybe(buf, blockPtr.ID); err != nil {
@@ -234,7 +240,8 @@ func assembleBlock(
 	ctx context.Context, keyGetter blockKeyGetter, codec kbfscodec.Codec,
 	cryptoPure cryptoPure, kmd libkey.KeyMetadata, blockPtr data.BlockPointer,
 	block data.Block, buf []byte,
-	blockServerHalf kbfscrypto.BlockCryptKeyServerHalf) error {
+	blockServerHalf kbfscrypto.BlockCryptKeyServerHalf,
+) error {
 	if err := kbfsblock.VerifyID(buf, blockPtr.ID); err != nil {
 		return err
 	}

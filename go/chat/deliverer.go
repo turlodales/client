@@ -13,6 +13,7 @@ import (
 	"github.com/keybase/client/go/chat/storage"
 	"github.com/keybase/client/go/chat/types"
 	"github.com/keybase/client/go/chat/utils"
+	"github.com/keybase/client/go/encrypteddb"
 	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/protocol/chat1"
 	"github.com/keybase/client/go/protocol/gregor1"
@@ -21,8 +22,10 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-const deliverMaxAttempts = 180           // fifteen minutes in default mode
-const deliverDisconnectLimitMinutes = 10 // need to be offline for at least 10 minutes before auto failing a send
+const (
+	deliverMaxAttempts            = 180 // fifteen minutes in default mode
+	deliverDisconnectLimitMinutes = 10  // need to be offline for at least 10 minutes before auto failing a send
+)
 
 type DelivererInfoError interface {
 	IsImmediateFail() (chat1.OutboxErrorType, bool)
@@ -233,7 +236,8 @@ func (s *Deliverer) IsDelivering() bool {
 
 func (s *Deliverer) Queue(ctx context.Context, convID chat1.ConversationID, msg chat1.MessagePlaintext,
 	outboxID *chat1.OutboxID, sendOpts *chat1.SenderSendOptions, prepareOpts *chat1.SenderPrepareOptions,
-	identifyBehavior keybase1.TLFIdentifyBehavior) (obr chat1.OutboxRecord, err error) {
+	identifyBehavior keybase1.TLFIdentifyBehavior,
+) (obr chat1.OutboxRecord, err error) {
 	defer s.Trace(ctx, &err, "Queue")()
 
 	// KBFSFILEEDIT msgs skip the traditional outbox
@@ -321,7 +325,7 @@ func (s *Deliverer) alertFailureChannels(obrs []chat1.OutboxRecord) {
 	s.notifyFailureChs = make(map[string]chan []chat1.OutboxRecord)
 }
 
-func (s *Deliverer) doNotRetryFailure(ctx context.Context, obr chat1.OutboxRecord, err error) (resType chat1.OutboxErrorType, resErr error, resFail bool) {
+func (s *Deliverer) doNotRetryFailure(ctx context.Context, obr chat1.OutboxRecord, err error) (resType chat1.OutboxErrorType, resErr error, resFail bool) { // nolint
 	defer func() {
 		if resErr != nil && resFail {
 			s.Debug(ctx, "doNotRetryFailure: sending back to not retry: err: %s: typ: %T", resErr, resErr)
@@ -356,15 +360,16 @@ func (s *Deliverer) doNotRetryFailure(ctx context.Context, obr chat1.OutboxRecor
 		}
 		return chat1.OutboxErrorType_OFFLINE, err, !berr.Temporary() //nolint
 	}
-	switch err {
-	case ErrChatServerTimeout, ErrDuplicateConnection, ErrKeyServerTimeout:
+	if errors.Is(err, ErrChatServerTimeout) || errors.Is(err, ErrDuplicateConnection) ||
+		errors.Is(err, ErrKeyServerTimeout) {
 		return 0, err, false
 	}
 	return 0, err, true
 }
 
 func (s *Deliverer) failMessage(ctx context.Context, obr chat1.OutboxRecord,
-	oserr chat1.OutboxStateError) (err error) {
+	oserr chat1.OutboxStateError,
+) (err error) {
 	var marked []chat1.OutboxRecord
 	uid := s.outbox.GetUID()
 	convID := obr.ConvID
@@ -416,7 +421,7 @@ type delivererBackgroundTaskError struct {
 	Typ string
 }
 
-var _ (DelivererInfoError) = (*delivererBackgroundTaskError)(nil)
+var _ DelivererInfoError = (*delivererBackgroundTaskError)(nil)
 
 func (e delivererBackgroundTaskError) Error() string {
 	return fmt.Sprintf("%s in progress", e.Typ)
@@ -426,9 +431,11 @@ func (e delivererBackgroundTaskError) IsImmediateFail() (chat1.OutboxErrorType, 
 	return chat1.OutboxErrorType_MISC, false
 }
 
-var errDelivererUploadInProgress = delivererBackgroundTaskError{Typ: "attachment upload"}
-var errDelivererUnfurlInProgress = delivererBackgroundTaskError{Typ: "unfurl"}
-var errDelivererFlipConvCreationInProgress = delivererBackgroundTaskError{Typ: "flip"}
+var (
+	errDelivererUploadInProgress           = delivererBackgroundTaskError{Typ: "attachment upload"}
+	errDelivererUnfurlInProgress           = delivererBackgroundTaskError{Typ: "unfurl"}
+	errDelivererFlipConvCreationInProgress = delivererBackgroundTaskError{Typ: "flip"}
+)
 
 func (s *Deliverer) processAttachment(ctx context.Context, obr chat1.OutboxRecord) (chat1.OutboxRecord, error) {
 	if !obr.IsAttachment() {
@@ -436,7 +443,12 @@ func (s *Deliverer) processAttachment(ctx context.Context, obr chat1.OutboxRecor
 	}
 	status, res, err := s.G().AttachmentUploader.Status(ctx, obr.OutboxID)
 	if err != nil {
-		return obr, NewAttachmentUploadError(err.Error(), false)
+		// If the uploader's stored state cannot be read back (e.g. the encrypted
+		// status file is corrupt and fails to decrypt), retrying can never recover
+		// and would block delivery of every later message queued behind it in this
+		// conversation. Fail permanently in that case so the outbox can drain.
+		perm := errors.Is(err, encrypteddb.ErrDecryptionFailed)
+		return obr, NewAttachmentUploadError(err.Error(), perm)
 	}
 	switch status {
 	case types.AttachmentUploaderTaskStatusSuccess:
@@ -497,7 +509,7 @@ func (e unfurlError) IsImmediateFail() (chat1.OutboxErrorType, bool) {
 	return chat1.OutboxErrorType_MISC, e.status == types.UnfurlerTaskStatusPermFailed
 }
 
-var _ (DelivererInfoError) = (*unfurlError)(nil)
+var _ DelivererInfoError = (*unfurlError)(nil)
 
 func (s *Deliverer) processUnfurl(ctx context.Context, obr chat1.OutboxRecord) (chat1.OutboxRecord, error) {
 	if !obr.IsUnfurl() {
@@ -631,7 +643,7 @@ func (s *Deliverer) cancelPendingDuplicateReactions(ctx context.Context, obr cha
 func (s *Deliverer) shouldRecordError(ctx context.Context, err error) bool {
 	// This just happens when threads are racing to reconnect to
 	// Gregor, don't count it as an error to send.
-	return err != ErrDuplicateConnection
+	return !errors.Is(err, ErrDuplicateConnection)
 }
 
 func (s *Deliverer) shouldBreakLoop(ctx context.Context, obr chat1.OutboxRecord) bool {

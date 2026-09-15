@@ -1,4 +1,4 @@
-import * as React from 'react'
+import type * as React from 'react'
 import * as Kb from '@/common-adapters'
 
 export type HeaderType = 'Default' | 'Strong'
@@ -12,10 +12,12 @@ export type Props = {
   type?: HeaderType
 }
 
-class DragHeader extends React.Component<Props> {
-  renderDefault() {
+const DragHeader = (props: Props) => {
+  const styles = useStyles()
+  const theme = Kb.Styles.useTheme()
+  const renderDefault = () => {
     const maybeWindowDraggingStyle =
-      this.props.windowDragging ?? true ? Kb.Styles.desktopStyles.windowDragging : {}
+      (props.windowDragging ?? true) ? Kb.Styles.desktopStyles.windowDragging : {}
     return (
       <div
         style={
@@ -23,25 +25,23 @@ class DragHeader extends React.Component<Props> {
             styles.container,
             maybeWindowDraggingStyle,
             styles.defaultContainer,
-            this.props.style,
+            props.style,
           ]) as React.CSSProperties
         }
       >
-        {this.props.children}
-        {this.props.icon && <Kb.Icon type="icon-keybase-logo-24" />}
+        {props.children}
+        {props.icon && <Kb.ImageIcon type="icon-keybase-logo-24" />}
         <Kb.Text type="Body" style={{flex: 1, paddingLeft: 6}}>
-          {this.props.title}
+          {props.title}
         </Kb.Text>
-        {this.props.onClose && (
-          <Kb.Icon style={styles.closeIcon} type="iconfont-close" onClick={this.props.onClose} />
-        )}
+        {props.onClose && <Kb.Icon style={styles.closeIcon} type="iconfont-close" color={theme.black_20} onClick={props.onClose} />}
       </div>
     )
   }
 
-  renderStrong() {
+  const renderStrong = () => {
     const maybeWindowDraggingStyle =
-      this.props.windowDragging ?? true ? Kb.Styles.desktopStyles.windowDragging : {}
+      (props.windowDragging ?? true) ? Kb.Styles.desktopStyles.windowDragging : {}
     return (
       <div
         style={
@@ -49,11 +49,11 @@ class DragHeader extends React.Component<Props> {
             styles.container,
             maybeWindowDraggingStyle,
             styles.strongContainer,
-            this.props.style,
+            props.style,
           ]) as React.CSSProperties
         }
       >
-        {this.props.title && (
+        {props.title && (
           <Kb.Text
             type="Header"
             negative={true}
@@ -62,27 +62,23 @@ class DragHeader extends React.Component<Props> {
               isElectron: {cursor: 'default'},
             })}
           >
-            {this.props.title}
+            {props.title}
           </Kb.Text>
         )}
-        {this.props.children}
-        {this.props.onClose && (
-          <Kb.Icon style={styles.closeIcon} type="iconfont-close" onClick={this.props.onClose} />
-        )}
+        {props.children}
+        {props.onClose && <Kb.Icon style={styles.closeIcon} type="iconfont-close" color={theme.black_20} onClick={props.onClose} />}
       </div>
     )
   }
 
-  render() {
-    if ((this.props.type ?? 'Default') === 'Default') {
-      return this.renderDefault()
-    } else {
-      return this.renderStrong()
-    }
+  if ((props.type ?? 'Default') === 'Default') {
+    return renderDefault()
+  } else {
+    return renderStrong()
   }
 }
 
-const styles = {
+const useStyles = Kb.Styles.createStyleHook(theme => ({
   closeIcon: Kb.Styles.platformStyles({
     isElectron: {
       ...Kb.Styles.desktopStyles.windowDraggingClickable,
@@ -93,8 +89,7 @@ const styles = {
     isElectron: {
       ...Kb.Styles.globalStyles.flexBoxRow,
       ...Kb.Styles.desktopStyles.noSelect,
-      paddingLeft: 10,
-      paddingRight: 10,
+      ...Kb.Styles.paddingH(10),
     },
   }),
   defaultContainer: {
@@ -107,10 +102,10 @@ const styles = {
     width: 22,
   },
   strongContainer: {
-    backgroundColor: Kb.Styles.globalColors.blue,
+    backgroundColor: theme.blue,
     paddingBottom: 12,
     paddingTop: 6,
   },
-}
+}))
 
 export default DragHeader

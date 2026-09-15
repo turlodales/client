@@ -5,6 +5,7 @@
 package libdokan
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"sync"
@@ -18,7 +19,6 @@ import (
 	"github.com/keybase/client/go/kbfs/tlfhandle"
 	"github.com/keybase/client/go/libkb"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 )
 
 // HiddenFilePrefix is the prefix for files to be hidden.
@@ -61,7 +61,8 @@ type Folder struct {
 }
 
 func newFolder(fl *FolderList, h *tlfhandle.Handle,
-	hPreferredName tlf.PreferredName) *Folder {
+	hPreferredName tlf.PreferredName,
+) *Folder {
 	f := &Folder{
 		fs:             fl.fs,
 		list:           fl,
@@ -127,7 +128,8 @@ func (f *Folder) forgetNode(ctx context.Context, node libkbfs.Node) {
 }
 
 func (f *Folder) reportErr(ctx context.Context,
-	mode libkbfs.ErrorModeType, err error) {
+	mode libkbfs.ErrorModeType, err error,
+) {
 	if err == nil {
 		f.fs.vlog.CLogf(ctx, libkb.VLog1, "Request complete")
 		return
@@ -156,7 +158,8 @@ func (f *Folder) LocalChange(ctx context.Context, node libkbfs.Node, write libkb
 // BatchChanges is called for changes originating anywhere, including
 // other hosts.
 func (f *Folder) BatchChanges(
-	ctx context.Context, changes []libkbfs.NodeChange, _ []libkbfs.NodeID) {
+	ctx context.Context, changes []libkbfs.NodeChange, _ []libkbfs.NodeID,
+) {
 	f.fs.queueNotification(func() {})
 }
 
@@ -164,7 +167,8 @@ func (f *Folder) BatchChanges(
 // Note that newHandle may be nil. Then the handle in the folder is used.
 // This is used on e.g. logout/login.
 func (f *Folder) TlfHandleChange(ctx context.Context,
-	newHandle *tlfhandle.Handle) {
+	newHandle *tlfhandle.Handle,
+) {
 	f.fs.log.CDebugf(ctx, "TlfHandleChange called on %q",
 		canonicalNameIfNotNil(newHandle))
 
@@ -367,7 +371,7 @@ func (d *Dir) open(ctx context.Context, oc *openContext, path []string) (dokan.F
 
 		// Refuse to execute files by checking FILE_EXECUTE (not exported by syscall)
 		// in TLFs considered unsafe.
-		if de.Type.IsFile() && oc.CreateData.DesiredAccess&0x20 != 0 && !isSafeFolder(ctx, d.folder) {
+		if de.Type.IsFile() && oc.DesiredAccess&0x20 != 0 && !isSafeFolder(ctx, d.folder) {
 			d.folder.fs.log.CErrorf(ctx, "Denying execution access to: %q", path[0])
 
 			return nil, 0, dokan.ErrAccessDenied
@@ -498,7 +502,8 @@ func (d *Dir) create(ctx context.Context, oc *openContext, name string) (f dokan
 }
 
 func (d *Dir) mkdir(ctx context.Context, oc *openContext, name string) (
-	f *Dir, cst dokan.CreateStatus, err error) {
+	f *Dir, cst dokan.CreateStatus, err error,
+) {
 	if name, err = libkb.DecodeWindowsNameForKbfs(name); err != nil {
 		return nil, 0, err
 	}
@@ -625,6 +630,7 @@ func resolveSymlinkIsDir(ctx context.Context, oc *openContext, rootDir *Dir, ori
 	}
 	return cst, err
 }
+
 func isPathSeparator(r rune) bool {
 	return r == '/' || r == '\\'
 }

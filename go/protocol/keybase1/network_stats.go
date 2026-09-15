@@ -1,10 +1,11 @@
-// Auto-generated to Go types and interfaces using avdl-compiler v1.4.10 (https://github.com/keybase/node-avdl-compiler)
+// Code generated to Go types and interfaces using avdl-compiler v1.4.10 (https://github.com/keybase/node-avdl-compiler). DO NOT EDIT.
 //   Input file: avdl/keybase1/network_stats.avdl
 
 package keybase1
 
 import (
 	"fmt"
+
 	"github.com/keybase/go-framed-msgpack-rpc/rpc"
 )
 
@@ -27,11 +28,11 @@ var NetworkSourceRevMap = map[NetworkSource]string{
 	1: "REMOTE",
 }
 
-func (e NetworkSource) String() string {
-	if v, ok := NetworkSourceRevMap[e]; ok {
+func (o NetworkSource) String() string {
+	if v, ok := NetworkSourceRevMap[o]; ok {
 		return v
 	}
-	return fmt.Sprintf("%v", int(e))
+	return fmt.Sprintf("%v", int(o))
 }
 
 type InstrumentationStat struct {

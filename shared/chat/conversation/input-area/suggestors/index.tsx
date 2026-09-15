@@ -1,12 +1,17 @@
 import * as Channels from './channels'
-import * as C from '@/constants'
 import * as Commands from './commands'
 import * as Emoji from './emoji'
 import * as Kb from '@/common-adapters'
 import * as React from 'react'
 import * as Users from './users'
+import * as InputState from '../input-state'
 import type * as Common from './common'
-import type {Props} from '../normal/platform-input'
+import type {PlatformInputProps as Props, RefType as InputRef} from '../normal/input.shared'
+import {useConversationThreadID} from '../../thread-context'
+import {KeyboardStickyView, useReanimatedKeyboardAnimation} from 'react-native-keyboard-controller'
+import {useSafeAreaInsets} from 'react-native-safe-area-context'
+import {MaxInputAreaContext} from '../normal/max-input-area-context'
+import {useAnimatedStyle, default as Reanimated} from '@/common-adapters/reanimated'
 
 const positionFallbacks = ['bottom center'] as const
 
@@ -32,22 +37,43 @@ const transformers = {
   users: Users.transformer,
 } as const
 
-const suggestorToMarker = {
+type TransformerType = {
+  [key in keyof typeof transformers]: Parameters<(typeof transformers)[key]>[0]
+}
+
+// Unanchored and capture-free on purpose: these sources are anchored into the
+// per-suggestor markers below AND dropped raw into the word-split lookahead, where
+// a '^' sits mid-pattern and can never match, and a capture group would make
+// String.split interleave the captures with the words.
+const markerSources = {
   channels: '#',
-  commands: /^(!|\/)/,
-  emoji: /^(\+?):/,
+  commands: '(?:!|/)',
+  emoji: '\\+?:',
   // 'users' is for @user, @team, and @team#channel
-  users: /((\+\d+(\.\d+)?[a-zA-Z]{3,12}@)|@)/, // match normal mentions and ones in a stellar send
+  users: '(?:\\+\\d+(?:\\.\\d+)?[a-zA-Z]{3,12}@|@)', // normal mentions and ones in a stellar send
 } as const
+
+const suggestorToMarker = {
+  channels: markerSources.channels,
+  commands: new RegExp(`^${markerSources.commands}`),
+  emoji: new RegExp(`^${markerSources.emoji}`),
+  // deliberately unanchored: a stellar send puts the marker mid-word
+  users: new RegExp(markerSources.users),
+} as const
+
+// Datasources whose entries contain spaces (bot commands are `!keybot cancel`)
+// can't split on a plain space, so a command word instead splits on the space that
+// precedes the next suggestor marker.
+const commandWordSplit = new RegExp(` (?=${Object.values(markerSources).join('|')})`, 'g')
+const plainWordSplit = / |\n/
 
 type UseSuggestorsProps = Pick<
   Props,
-  'onChangeText' | 'suggestBotCommandsUpdateStatus' | 'suggestionOverlayStyle'
+  'onChangeText' | 'suggestionOverlayStyle'
 > & {
   suggestionListStyle: Kb.Styles.StylesCrossPlatform
   suggestionSpinnerStyle: Kb.Styles.StylesCrossPlatform
-  expanded: boolean
-  inputRef: React.MutableRefObject<Kb.PlainInput | null>
+  inputRef: React.RefObject<InputRef | null>
   onKeyDown?: (evt: React.KeyboardEvent) => void
 }
 
@@ -58,25 +84,39 @@ type SelectedType = Parameters<(typeof transformers)['channels' | 'commands' | '
 // handles watching the input and seeing which suggestor we need to use
 type UseSyncInputProps = {
   active: ActiveType
-  inputRef: React.MutableRefObject<Kb.PlainInput | null>
+  inputRef: React.RefObject<InputRef | null>
   setActive: React.Dispatch<React.SetStateAction<ActiveType>>
   setFilter: React.Dispatch<React.SetStateAction<string>>
-  selectedItemRef: React.MutableRefObject<undefined | SelectedType>
-  lastTextRef: React.MutableRefObject<string>
+  selectedItemRef: React.RefObject<undefined | SelectedType>
+  lastTextRef: React.RefObject<string>
+  setCommandInputSnapshot: (snapshot: Commands.CommandInputSnapshot) => void
+  setLastText: (text: string) => void
 }
+
 const useSyncInput = (p: UseSyncInputProps) => {
-  const {inputRef, active, setActive, setFilter, selectedItemRef, lastTextRef} = p
-  const setInactive = React.useCallback(() => {
+  const {
+    inputRef,
+    active,
+    setActive,
+    setFilter,
+    selectedItemRef,
+    setCommandInputSnapshot,
+    setLastText,
+    lastTextRef,
+  } = p
+  const setInactive = () => {
     setActive('')
     setFilter('')
-  }, [setActive, setFilter])
+  }
 
-  const getWordAtCursor = React.useCallback(() => {
+  const getInputSnapshot = (): Commands.CommandInputSnapshot => ({
+    selection: inputRef.current?.getSelection(),
+    text: lastTextRef.current,
+  })
+
+  const getWordAtCursor = (inputSnapshot: Commands.CommandInputSnapshot) => {
     if (inputRef.current) {
-      const useSpaces = active === 'commands'
-      const input = inputRef.current
-      const selection = input.getSelection()
-      const text = lastTextRef.current
+      const {selection, text} = inputSnapshot
       // eslint-disable-next-line
       if (!selection || selection.start === null) {
         return null
@@ -88,36 +128,35 @@ const useSyncInput = (p: UseSyncInputProps) => {
       const toReplaceEnd = nextSpaceIndex !== -1 ? nextSpaceIndex : text.length
 
       const upToCursor = text.substring(0, toReplaceEnd)
-      let wordRegex: string | RegExp
 
-      // If the datasource has data which contains spaces, we can't just split by a space character.
-      // So if we need to, we instead split on the next space which precedes another special marker
-      if (useSpaces) {
-        const markers = Object.values(suggestorToMarker).map(p => (p instanceof RegExp ? p.source : p))
-        wordRegex = new RegExp(` (?=${markers.join('|')})`, 'g')
-      } else {
-        wordRegex = / |\n/
+      // Which split applies can only be told from the word itself: `active` is a
+      // keystroke behind and pasted text never gets a follow-up keystroke to
+      // correct it. So take the command split and keep it only when the word it
+      // yields really is a command, otherwise fall back to plain spaces.
+      let lastWordPrefix = upToCursor.split(commandWordSplit).at(-1) ?? ''
+      if (!suggestorToMarker.commands.test(lastWordPrefix)) {
+        lastWordPrefix = upToCursor.split(plainWordSplit).at(-1) ?? ''
       }
-      const words = upToCursor.split(wordRegex)
-      const lastWordPrefix = words.at(-1)
-      const toReplaceStart = toReplaceEnd - (lastWordPrefix?.length ?? 0)
+      const toReplaceStart = toReplaceEnd - lastWordPrefix.length
       const position = {end: toReplaceEnd, start: toReplaceStart}
 
       const word = text.substring(toReplaceStart, toReplaceEnd)
       return {position, word}
     }
     return null
-  }, [inputRef, active, lastTextRef])
+  }
 
-  const triggerIDRef = React.useRef<NodeJS.Timeout>()
-  const checkTrigger = React.useCallback(() => {
+  const triggerIDRef = React.useRef<ReturnType<typeof setTimeout>>(undefined)
+  const checkTrigger = () => {
     if (triggerIDRef.current) {
       clearTimeout(triggerIDRef.current)
     }
     triggerIDRef.current = setTimeout(() => {
       // inside a timeout so selection will settle, there was a problem where
       // desktop would get the previous selection on arrowleft / arrowright
-      const cursorInfo = getWordAtCursor()
+      const inputSnapshot = getInputSnapshot()
+      setCommandInputSnapshot(inputSnapshot)
+      const cursorInfo = getWordAtCursor(inputSnapshot)
       if (!cursorInfo) {
         setInactive()
         return
@@ -148,7 +187,7 @@ const useSyncInput = (p: UseSyncInputProps) => {
         }
       }
     }, 1)
-  }, [getWordAtCursor, triggerIDRef, setActive, setFilter, setInactive, active, inputRef])
+  }
 
   React.useEffect(() => {
     return () => {
@@ -156,29 +195,52 @@ const useSyncInput = (p: UseSyncInputProps) => {
     }
   }, [])
 
-  const triggerTransform = React.useCallback(
-    (maybeValue: SelectedType | undefined, final = true) => {
-      if (!inputRef.current || !active) {
-        return
+  const triggerTransform = function (maybeValue: SelectedType | undefined, final = true) {
+    if (!inputRef.current || !active) {
+      return
+    }
+    const value = maybeValue ?? selectedItemRef.current
+    if (!value) {
+      return
+    }
+    const input = inputRef.current
+    const inputSnapshot = getInputSnapshot()
+    setCommandInputSnapshot(inputSnapshot)
+    const cursorInfo = getWordAtCursor(inputSnapshot)
+    const matchInfo = matchesMarker(cursorInfo?.word ?? '', suggestorToMarker[active])
+
+    let transformedText: {
+      selection: {
+        end: number
+        start: number
       }
-      const value = maybeValue ?? selectedItemRef.current
-      if (!value) {
-        return
-      }
-      const input = inputRef.current
-      const cursorInfo = getWordAtCursor()
-      const matchInfo = matchesMarker(cursorInfo?.word ?? '', suggestorToMarker[active])
-      const transformedText = transformers[active](
-        value as any,
-        matchInfo.marker,
-        {position: cursorInfo?.position ?? {end: null, start: null}, text: lastTextRef.current},
-        !final
-      )
-      lastTextRef.current = transformedText.text
-      input.transformText(() => transformedText, final)
-    },
-    [active, inputRef, getWordAtCursor, selectedItemRef, lastTextRef]
-  )
+      text: string
+    }
+
+    const transformRest = [
+      matchInfo.marker,
+      {position: cursorInfo?.position ?? {end: null, start: null}, text: lastTextRef.current},
+      !final,
+    ] as const
+
+    // nasty but the typing is hard since its ambiguous here
+    switch (active) {
+      case 'channels':
+        transformedText = transformers[active](value as TransformerType['channels'], ...transformRest)
+        break
+      case 'commands':
+        transformedText = transformers[active](value as TransformerType['commands'], ...transformRest)
+        break
+      case 'emoji':
+        transformedText = transformers[active](value as TransformerType['emoji'], ...transformRest)
+        break
+      case 'users':
+        transformedText = transformers[active](value as TransformerType['users'], ...transformRest)
+        break
+    }
+    setLastText(transformedText.text)
+    input.transformText(() => transformedText, final)
+  }
 
   return {
     active,
@@ -194,85 +256,104 @@ type UseHandleKeyEventsProps = {
   active: string
   checkTrigger: () => void
   filterEmpty: boolean
-  onMoveRef: React.MutableRefObject<((up: boolean) => void) | undefined>
-  onSubmitRef: React.MutableRefObject<(() => boolean) | undefined>
+  onMoveRef: React.RefObject<((up: boolean) => void) | undefined>
+  onSubmitRef: React.RefObject<(() => boolean) | undefined>
 }
 const useHandleKeyEvents = (p: UseHandleKeyEventsProps) => {
   const {onKeyDownProps, active, checkTrigger, filterEmpty, onMoveRef, onSubmitRef} = p
 
-  const onKeyDown = React.useCallback(
-    (evt: React.KeyboardEvent) => {
-      if (evt.key === 'ArrowLeft' || evt.key === 'ArrowRight') {
-        checkTrigger()
-      }
+  const onKeyDown = (evt: React.KeyboardEvent) => {
+    if (evt.key === 'ArrowLeft' || evt.key === 'ArrowRight') {
+      checkTrigger()
+    }
 
-      if (!active) {
-        // not showing list, bail
-        onKeyDownProps?.(evt)
-        return
-      }
+    if (!active) {
+      // not showing list, bail
+      onKeyDownProps?.(evt)
+      return
+    }
 
-      let shouldCallParentCallback = true
-      // check trigger keys (up, down, enter, tab)
-      switch (evt.key) {
-        case 'ArrowDown':
+    let shouldCallParentCallback = true
+    // check trigger keys (up, down, enter, tab)
+    switch (evt.key) {
+      case 'ArrowDown':
+        evt.preventDefault()
+        onMoveRef.current?.(false)
+        shouldCallParentCallback = false
+        break
+      case 'ArrowUp':
+        evt.preventDefault()
+        onMoveRef.current?.(true)
+        shouldCallParentCallback = false
+        break
+      case 'Enter':
+        if (!(evt.altKey || evt.shiftKey || evt.metaKey)) {
           evt.preventDefault()
-          onMoveRef.current?.(false)
-          shouldCallParentCallback = false
-          break
-        case 'ArrowUp':
-          evt.preventDefault()
-          onMoveRef.current?.(true)
-          shouldCallParentCallback = false
-          break
-        case 'Enter':
-          if (!(evt.altKey || evt.shiftKey || evt.metaKey)) {
-            evt.preventDefault()
-            shouldCallParentCallback = !onSubmitRef.current?.()
-          }
-          break
-        case 'Tab':
-          evt.preventDefault()
-          if (!filterEmpty) {
-            onSubmitRef.current?.()
-          } else {
-            // shift held -> move up
-            onMoveRef.current?.(evt.shiftKey)
-          }
-          shouldCallParentCallback = false
-      }
+          shouldCallParentCallback = !onSubmitRef.current?.()
+        }
+        break
+      case 'Tab':
+        evt.preventDefault()
+        if (!filterEmpty) {
+          onSubmitRef.current?.()
+        } else {
+          // shift held -> move up
+          onMoveRef.current?.(evt.shiftKey)
+        }
+        shouldCallParentCallback = false
+    }
 
-      if (shouldCallParentCallback) {
-        onKeyDownProps?.(evt)
-      }
-    },
-    [onKeyDownProps, active, checkTrigger, filterEmpty, onMoveRef, onSubmitRef]
-  )
+    if (shouldCallParentCallback) {
+      onKeyDownProps?.(evt)
+    }
+  }
 
   return {onKeyDown}
 }
 
 export const useSuggestors = (p: UseSuggestorsProps) => {
-  const selectedItemRef = React.useRef<undefined | SelectedType>()
+  const selectedItemRef = React.useRef<undefined | SelectedType>(undefined)
   const lastTextRef = React.useRef('')
+  const [commandInputSnapshot, setCommandInputSnapshot] = React.useState<Commands.CommandInputSnapshot>({
+    selection: undefined,
+    text: '',
+  })
+  const setCommandInputSnapshotIfChanged = (snapshot: Commands.CommandInputSnapshot) => {
+    setCommandInputSnapshot(previous =>
+      previous.text === snapshot.text &&
+      previous.selection?.start === snapshot.selection?.start &&
+      previous.selection?.end === snapshot.selection?.end
+        ? previous
+        : snapshot
+    )
+  }
+  const setLastText = (text: string) => {
+    lastTextRef.current = text
+    setCommandInputSnapshot(previous => (previous.text === text ? previous : {...previous, text}))
+  }
   const [active, setActive] = React.useState<ActiveType>('')
   const [filter, setFilter] = React.useState('')
-  const {inputRef, suggestionListStyle, suggestionOverlayStyle, expanded} = p
+  const suppressCommandSuggestions = InputState.useConversationInput(s => !!s.commandMarkdown || s.giphyWindow)
+  const {inputRef, suggestionListStyle, suggestionOverlayStyle} = p
   const {onChangeText: onChangeTextProps} = p
-  const {suggestBotCommandsUpdateStatus, suggestionSpinnerStyle} = p
+  const {suggestionSpinnerStyle} = p
+  const conversationIDKey = useConversationThreadID()
+  const botCommandsUpdateState = Commands.useBotCommandsUpdateState(conversationIDKey)
   const {triggerTransform, checkTrigger, setInactive} = useSyncInput({
     active,
     inputRef,
     lastTextRef,
     selectedItemRef,
     setActive,
+    setCommandInputSnapshot: setCommandInputSnapshotIfChanged,
     setFilter,
+    setLastText,
   })
 
   // tell list to move the selection
-  const onMoveRef = React.useRef<(up: boolean) => void>()
+  const onMoveRef = React.useRef<(up: boolean) => void>(undefined)
   // tell list we want to submit the selection, true if it selected anything
-  const onSubmitRef = React.useRef<() => boolean>()
+  const onSubmitRef = React.useRef<() => boolean>(undefined)
 
   const {onKeyDown} = useHandleKeyEvents({
     active,
@@ -283,47 +364,38 @@ export const useSuggestors = (p: UseSuggestorsProps) => {
     onSubmitRef,
   })
 
-  const onBlur = React.useCallback(() => {
+  const onBlur = () => {
     setInactive()
-  }, [setInactive])
+  }
 
-  const onChangeText = React.useCallback(
-    (text: string) => {
-      lastTextRef.current = text
-      onChangeTextProps(text)
-      checkTrigger()
-    },
-    [onChangeTextProps, checkTrigger]
-  )
-
-  const onFocus = React.useCallback(() => {
+  const onChangeText = (text: string) => {
+    setLastText(text)
+    onChangeTextProps(text)
     checkTrigger()
-  }, [checkTrigger])
+  }
 
-  const onSelectionChange2 = React.useCallback(
-    (_selection: Common.TransformerData['position']) => {
-      checkTrigger()
-    },
-    [checkTrigger]
-  )
+  const onFocus = () => {
+    checkTrigger()
+  }
 
-  const onSelected = React.useCallback(
-    (item: unknown, final: boolean) => {
-      selectedItemRef.current = item as SelectedType
-      triggerTransform(item as SelectedType, final)
-    },
-    [selectedItemRef, triggerTransform]
-  )
+  const onSelected = (item: unknown, final: boolean) => {
+    selectedItemRef.current = item as SelectedType
+    triggerTransform(item as SelectedType, final)
+  }
 
   const listProps = {
-    expanded,
+    conversationIDKey,
     filter,
     listStyle: suggestionListStyle,
-    onMoveRef,
     onSelected,
-    onSubmitRef,
+    setOnMoveRef: (r: (up: boolean) => void) => {
+      onMoveRef.current = r
+    },
+    setOnSubmitRef: (r: () => boolean) => {
+      onSubmitRef.current = r
+    },
     spinnerStyle: suggestionSpinnerStyle,
-    suggestBotCommandsUpdateStatus,
+    suggestBotCommandsUpdateStatus: botCommandsUpdateState.status,
   }
 
   let content: React.ReactNode = null
@@ -332,7 +404,14 @@ export const useSuggestors = (p: UseSuggestorsProps) => {
       content = <Channels.List {...listProps} />
       break
     case 'commands':
-      content = <Commands.List {...listProps} inputRef={inputRef} lastTextRef={lastTextRef} />
+      content = (
+        <Commands.List
+          {...listProps}
+          botSettings={botCommandsUpdateState.settings}
+          inputSnapshot={commandInputSnapshot}
+          suppressCommandSuggestions={suppressCommandSuggestions}
+        />
+      )
       break
     case 'emoji':
       content = <Emoji.List {...listProps} />
@@ -354,51 +433,70 @@ export const useSuggestors = (p: UseSuggestorsProps) => {
     onChangeText,
     onFocus,
     onKeyDown,
-    onSelectionChange: onSelectionChange2,
+    onSelectionChange: (_selection: Common.TransformerData['position']) => { checkTrigger() },
     popup,
+    suggestionsShowing: !!content,
   }
 }
 
 type PopupProps = {
   suggestionOverlayStyle: Kb.Styles.StylesCrossPlatform
   setInactive: () => void
-  inputRef: React.MutableRefObject<Kb.PlainInput | null>
+  inputRef: React.RefObject<InputRef | null>
   children: React.ReactNode
 }
+const MobileSuggestionArea = (p: {children: React.ReactNode}) => {
+  const styles = useStyles()
+  const insets = useSafeAreaInsets()
+  const maxInputArea = React.useContext(MaxInputAreaContext)
+  const {height: keyboardHeight} = useReanimatedKeyboardAnimation()
+  // this overlay is portaled to the window root, but the input bar sits
+  // insets.bottom above the window bottom while the keyboard is closed (the
+  // KeyboardStickyView in conversation/normal), so mirror its offsets or the
+  // list covers the input when no keyboard is up
+  const stickyOffset = React.useMemo(() => ({closed: -insets.bottom, opened: 0}), [insets.bottom])
+  // the sticky view only translates, it keeps the full window height, so give
+  // the list the same box the conversation has (below the header, above the
+  // keyboard). without it the list's percentage maxHeight resolves against the
+  // whole screen and the bottom-anchored list runs up over the header.
+  // keyboardHeight is negative while the keyboard is up
+  const areaStyle = useAnimatedStyle(() => ({
+    height: maxInputArea ? Math.max(0, maxInputArea + keyboardHeight.value) : undefined,
+  }))
+
+  return (
+    <KeyboardStickyView offset={stickyOffset} pointerEvents="box-none" style={styles.sticky}>
+      <Reanimated.View pointerEvents="box-none" style={[styles.area, areaStyle]}>
+        {p.children}
+      </Reanimated.View>
+    </KeyboardStickyView>
+  )
+}
+
 const Popup = (p: PopupProps) => {
   const {children, suggestionOverlayStyle, setInactive, inputRef} = p
-  const conversationIdKey = C.useChatContext(s => s.id)
 
-  const attachRef = React.useRef<Kb.MeasureRef | null>({
-    divRef: {current: null},
-    measure: () => {
-      const c = inputRef.current?._input.current
-      if (c) {
-        return c.getBoundingClientRect?.()
-      } else {
-        return undefined
-      }
-    },
-  })
+  const attachRef = inputRef as React.RefObject<Kb.MeasureRef | null>
 
-  return Kb.Styles.isMobile ? (
-    <Kb.FloatingBox containerStyle={suggestionOverlayStyle} onHidden={setInactive}>
-      <C.ChatProvider id={conversationIdKey}>
-        <Kb.KeyboardAvoidingView2>{children}</Kb.KeyboardAvoidingView2>
-      </C.ChatProvider>
-    </Kb.FloatingBox>
-  ) : (
-    <Kb.Overlay
+  return (
+    <Kb.Popup
       attachTo={attachRef}
+      mobileAnchored={true}
       matchDimension={true}
       position="top center"
       positionFallbacks={positionFallbacks}
       visible={true}
       propagateOutsideClicks={false}
       onHidden={setInactive}
+      containerStyle={suggestionOverlayStyle}
       style={suggestionOverlayStyle}
     >
-      {children}
-    </Kb.Overlay>
+      {isMobile ? <MobileSuggestionArea>{children}</MobileSuggestionArea> : children}
+    </Kb.Popup>
   )
 }
+
+const useStyles = Kb.Styles.createStyleHook(() => ({
+  area: {marginTop: 'auto'},
+  sticky: {flexGrow: 1, flexShrink: 1},
+}))

@@ -3,15 +3,16 @@
 // license that can be found in the LICENSE file.
 //
 //go:build !windows
-// +build !windows
 
 package libfuse
 
 import (
+	"context"
+
 	"bazil.org/fuse"
 	"bazil.org/fuse/fs"
+
 	"github.com/keybase/client/go/kbfs/libkbfs"
-	"golang.org/x/net/context"
 )
 
 // RekeyFile represents a write-only file when any write of at least
@@ -25,7 +26,7 @@ var _ fs.Node = (*RekeyFile)(nil)
 // Attr implements the fs.Node interface for RekeyFile.
 func (f *RekeyFile) Attr(ctx context.Context, a *fuse.Attr) error {
 	a.Size = 0
-	a.Mode = 0222
+	a.Mode = 0o222
 	return nil
 }
 
@@ -35,7 +36,8 @@ var _ fs.HandleWriter = (*RekeyFile)(nil)
 
 // Write implements the fs.HandleWriter interface for RekeyFile.
 func (f *RekeyFile) Write(ctx context.Context, req *fuse.WriteRequest,
-	resp *fuse.WriteResponse) (err error) {
+	resp *fuse.WriteResponse,
+) (err error) {
 	f.folder.fs.log.CDebugf(ctx, "RekeyFile Write")
 	defer func() { err = f.folder.processError(ctx, libkbfs.WriteMode, err) }()
 	if len(req.Data) == 0 {

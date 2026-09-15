@@ -3,7 +3,6 @@
 // license that can be found in the LICENSE file.
 
 //go:build !windows
-// +build !windows
 
 package libdokan
 
@@ -11,5 +10,7 @@ package libdokan
 
 func isNewFolderName(name string) bool { return false }
 
-var newFolderName, newFolderAltName string
-var newFolderNameErr error
+var (
+	newFolderName, newFolderAltName string
+	newFolderNameErr                error
+)

@@ -2,15 +2,13 @@
 // this source code is governed by the included BSD license.
 
 //go:build windows
-// +build windows
 
 package install
 
 import (
-	"testing"
-
 	"os"
 	"path/filepath"
+	"testing"
 
 	"github.com/keybase/client/go/libkb"
 	"github.com/stretchr/testify/assert"
@@ -33,14 +31,14 @@ func TestIsInUse(t *testing.T) {
 	require.False(t, IsInUse(tmpdir, tc.G.Log))
 
 	d := []byte("5")
-	assert.Nil(t, os.WriteFile(signalFileName, d, 0644))
+	assert.Nil(t, os.WriteFile(signalFileName, d, 0o644))
 	defer os.Remove(signalFileName)
 
 	// Should be true if special file has a number
 	require.True(t, IsInUse(tmpdir, tc.G.Log))
 
 	d = []byte("0")
-	assert.Nil(t, os.WriteFile(signalFileName, d, 0644))
+	assert.Nil(t, os.WriteFile(signalFileName, d, 0o644))
 
 	// Should be false if special file has a zero
 	require.False(t, IsInUse(tmpdir, tc.G.Log))

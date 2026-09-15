@@ -22,7 +22,7 @@ func TestRecentConversationParticipants(t *testing.T) {
 	uid := u.User.GetUID().ToBytes()
 
 	var refList []gregor1.UID
-	for i := 0; i < maxUsers; i++ {
+	for i := range maxUsers {
 		tlfName := ""
 		for j := i; j >= 0; j-- {
 			tlfName += world.GetUsers()[j].Username
@@ -63,7 +63,7 @@ func TestRecentConversationParticipants(t *testing.T) {
 
 	res, err := RecentConversationParticipants(ctx, tc.Context(), uid)
 	require.NoError(t, err)
-	require.Equal(t, maxUsers-1, len(res))
+	require.Len(t, res, maxUsers-1)
 	require.Equal(t, refList, res)
 }
 
@@ -90,20 +90,20 @@ func TestSendTextByName(t *testing.T) {
 		inbox, _, err := tc.Context().InboxSource.Read(ctx, uid, types.ConversationLocalizerBlocking,
 			types.InboxSourceDataSourceAll, nil, nil)
 		require.NoError(t, err)
-		require.Equal(t, 1, len(inbox.Convs))
+		require.Len(t, inbox.Convs, 1)
 		require.NoError(t, helper.SendTextByName(ctx, name, nil,
 			mt, keybase1.TLFIdentifyBehavior_CHAT_CLI, "HI"))
 		inbox, _, err = tc.Context().InboxSource.Read(ctx, uid, types.ConversationLocalizerBlocking,
 			types.InboxSourceDataSourceAll, nil, nil)
 		require.NoError(t, err)
-		require.Equal(t, 1, len(inbox.Convs))
+		require.Len(t, inbox.Convs, 1)
 		tv, err := tc.Context().ConvSource.Pull(ctx, inbox.Convs[0].GetConvID(), uid,
 			chat1.GetThreadReason_GENERAL, nil,
 			&chat1.GetThreadQuery{
 				MessageTypes: []chat1.MessageType{chat1.MessageType_TEXT},
 			}, nil)
 		require.NoError(t, err)
-		require.Equal(t, 2, len(tv.Messages))
+		require.Len(t, tv.Messages, 2)
 
 		t.Logf("sending into new topic name")
 		topicName := "MIKE"
@@ -115,13 +115,14 @@ func TestSendTextByName(t *testing.T) {
 		require.NoError(t, err)
 		switch mt {
 		case chat1.ConversationMembersType_TEAM:
-			require.Equal(t, 2, len(inbox.Convs))
+			require.Len(t, inbox.Convs, 2)
 		default:
 			// No second topic name on KBFS chats
-			require.Equal(t, 1, len(inbox.Convs))
+			require.Len(t, inbox.Convs, 1)
 		}
 	})
 }
+
 func TestTopicNameRace(t *testing.T) {
 	runWithMemberTypes(t, func(mt chat1.ConversationMembersType) {
 		switch mt {
@@ -149,7 +150,7 @@ func TestTopicNameRace(t *testing.T) {
 		topicName := "LOSERS"
 		attempts := 2
 		retCh := make(chan ncRes, attempts)
-		for i := 0; i < attempts; i++ {
+		for range attempts {
 			go func() {
 				ctx = globals.CtxAddLogTags(ctx, tc.Context())
 				conv, _, err := NewConversation(ctx, tc.Context(), uid, first.TlfName, &topicName,
@@ -159,7 +160,7 @@ func TestTopicNameRace(t *testing.T) {
 			}()
 		}
 		var convID chat1.ConversationID
-		for i := 0; i < attempts; i++ {
+		for range attempts {
 			res := <-retCh
 			require.NoError(t, res.err)
 			if convID.IsNil() {

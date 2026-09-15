@@ -4,6 +4,8 @@
 package systests
 
 import (
+	"context"
+	"fmt"
 	"testing"
 
 	"github.com/keybase/client/go/client"
@@ -12,7 +14,6 @@ import (
 	"github.com/keybase/client/go/service"
 	"github.com/keybase/go-framed-msgpack-rpc/rpc"
 	"github.com/stretchr/testify/require"
-	context "golang.org/x/net/context"
 )
 
 type trackingUI struct {
@@ -23,8 +24,7 @@ func (n *trackingUI) GetIdentifyTrackUI() libkb.IdentifyUI {
 	return &identifyUI{}
 }
 
-type identifyUI struct {
-}
+type identifyUI struct{}
 
 func (*identifyUI) Confirm(libkb.MetaContext, *keybase1.IdentifyOutcome) (keybase1.ConfirmResult, error) {
 	return keybase1.ConfirmResult{
@@ -32,36 +32,47 @@ func (*identifyUI) Confirm(libkb.MetaContext, *keybase1.IdentifyOutcome) (keybas
 		RemoteConfirmed:   true,
 	}, nil
 }
+
 func (*identifyUI) Start(libkb.MetaContext, string, keybase1.IdentifyReason, bool) error {
 	return nil
 }
+
 func (*identifyUI) FinishWebProofCheck(libkb.MetaContext, keybase1.RemoteProof, keybase1.LinkCheckResult) error {
 	return nil
 }
+
 func (*identifyUI) FinishSocialProofCheck(libkb.MetaContext, keybase1.RemoteProof, keybase1.LinkCheckResult) error {
 	return nil
 }
+
 func (*identifyUI) DisplayCryptocurrency(libkb.MetaContext, keybase1.Cryptocurrency) error {
 	return nil
 }
+
 func (*identifyUI) DisplayStellarAccount(libkb.MetaContext, keybase1.StellarAccount) error {
 	return nil
 }
+
 func (*identifyUI) DisplayKey(libkb.MetaContext, keybase1.IdentifyKey) error {
 	return nil
 }
+
 func (*identifyUI) ReportLastTrack(libkb.MetaContext, *keybase1.TrackSummary) error {
 	return nil
 }
+
 func (*identifyUI) LaunchNetworkChecks(libkb.MetaContext, *keybase1.Identity, *keybase1.User) error {
 	return nil
 }
+
 func (*identifyUI) DisplayTrackStatement(libkb.MetaContext, string) error {
 	return nil
 }
+
 func (*identifyUI) DisplayUserCard(libkb.MetaContext, keybase1.UserCard) error {
 	return nil
 }
+
 func (*identifyUI) ReportTrackToken(libkb.MetaContext, keybase1.TrackToken) error {
 	return nil
 }
@@ -69,9 +80,11 @@ func (*identifyUI) SetStrict(b bool) {}
 func (*identifyUI) Cancel(libkb.MetaContext) error {
 	return nil
 }
+
 func (*identifyUI) Finish(libkb.MetaContext) error {
 	return nil
 }
+
 func (*identifyUI) Dismiss(libkb.MetaContext, string, keybase1.DismissReason) error {
 	return nil
 }
@@ -142,7 +155,7 @@ func TestTrackingNotifications(t *testing.T) {
 	<-startCh
 
 	if err := signup.Run(); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 	nh := newTrackingNotifyHandler()
 
@@ -175,9 +188,7 @@ func TestTrackingNotifications(t *testing.T) {
 	trackCmd.SetUser("t_alice")
 	trackCmd.SetOptions(keybase1.TrackOptions{BypassConfirm: true})
 	err := trackCmd.Run()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	// Do a check for new tracking statements that should fire off a
 	// notification. Currently the track command above does not fetch the new
@@ -186,9 +197,7 @@ func TestTrackingNotifications(t *testing.T) {
 	// making this call unnecessary.
 	checkTrackingCmd := client.NewCmdCheckTrackingRunner(tc2.G)
 	err = checkTrackingCmd.Run()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	// Wait to get a notification back as we expect.
 	// NOTE: If this test ever starts deadlocking here, it's possible that
@@ -197,34 +206,32 @@ func TestTrackingNotifications(t *testing.T) {
 	// any "isOwnNewLinkFromServer" links. If so, one way to fix this test
 	// would be to blow away the local db before calling CheckTracking.
 	tc.G.Log.Debug("Waiting for two tracking notifications.")
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		select {
 		case err := <-nh.errCh:
-			t.Fatalf("Error before notify: %v", err)
+			require.FailNow(t, fmt.Sprintf("Error before notify: %v", err))
 		case arg := <-nh.trackingCh:
 			tAliceUID := keybase1.UID("295a7eea607af32040647123732bc819")
 			tc.G.Log.Debug("Got tracking changed notification (%#v)", arg)
-			if "t_alice" == arg.Username {
-				if !tAliceUID.Equal(arg.Uid) {
-					t.Fatalf("Bad UID back: %s != %s", tAliceUID, arg.Uid)
-				}
+			if arg.Username == "t_alice" {
+				require.True(t, tAliceUID.Equal(arg.Uid),
+					"Bad UID back: %s != %s", tAliceUID, arg.Uid)
 			} else if userInfo.username == arg.Username {
-				if !tc.G.Env.GetUID().Equal(arg.Uid) {
-					t.Fatalf("Bad UID back: %s != %s", tc.G.Env.GetUID(), arg.Uid)
-				}
+				require.True(t, tc.G.Env.GetUID().Equal(arg.Uid),
+					"Bad UID back: %s != %s", tc.G.Env.GetUID(), arg.Uid)
 			} else {
-				t.Fatalf("Bad username back: %s != %s || %s", arg.Username, "t_alice", userInfo.username)
+				require.FailNow(t, fmt.Sprintf("Bad username back: %s != %s || %s", arg.Username, "t_alice", userInfo.username))
 			}
 		}
 	}
 
 	if err := CtlStop(tc2.G); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 
 	// If the server failed, it's also an error
 	if err := <-stopCh; err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 }
 

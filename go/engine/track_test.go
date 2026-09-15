@@ -183,7 +183,6 @@ func TestTrackNewUserWithPGP(t *testing.T) {
 
 // see issue #578
 func TestTrackRetrack(t *testing.T) {
-
 	tc := SetupEngineTest(t, "track")
 	defer tc.Cleanup()
 	sigVersion := libkb.GetDefaultSigVersion(tc.G)
@@ -226,7 +225,7 @@ func TestTrackRetrack(t *testing.T) {
 	require.NoError(t, err)
 	seqnoRetrack := fu.User.GetSigChainLastKnownSeqno()
 
-	require.False(t, seqnoRetrack > seqnoAfter)
+	require.LessOrEqual(t, seqnoRetrack, seqnoAfter)
 }
 
 func TestTrackLocal(t *testing.T) {
@@ -258,7 +257,8 @@ func TestTrackWithSecretStore(t *testing.T) {
 
 func _testTrackWithSecretStore(t *testing.T, sigVersion libkb.SigVersion) {
 	testEngineWithSecretStore(t, func(
-		tc libkb.TestContext, fu *FakeUser, secretUI libkb.SecretUI) {
+		tc libkb.TestContext, fu *FakeUser, secretUI libkb.SecretUI,
+	) {
 		trackAliceWithOptions(tc, fu, keybase1.TrackOptions{BypassConfirm: true}, secretUI)
 		untrackAlice(tc, fu, sigVersion)
 	})
@@ -278,7 +278,6 @@ func _testIdentifyTrackRaceDetection(t *testing.T, sigVersion libkb.SigVersion) 
 	trackee := "t_tracy"
 
 	doID := func(tc libkb.TestContext, fui *FakeIdentifyUI) {
-
 		iarg := &keybase1.Identify2Arg{
 			UserAssertion: trackee,
 			// We need to block on identification so that the track token
@@ -328,7 +327,7 @@ func _testIdentifyTrackRaceDetection(t *testing.T, sigVersion libkb.SigVersion) 
 		require.Equal(tc.T, tse.FirstTrack, firstTrack)
 	}
 
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		fui1 := &FakeIdentifyUI{}
 		fui2 := &FakeIdentifyUI{}
 		doID(dev1, fui1)
@@ -372,8 +371,8 @@ func TestTrackNoKeys(t *testing.T) {
 	ui := trackUserGetUI(tc, fu, libkb.NewNormalizedUsername(nk), sigVersion)
 
 	// ensure track diff for new eldest key
-	require.Equal(t, 1, len(ui.DisplayKeyDiffs))
-	require.Equal(t, ui.DisplayKeyDiffs[0].Type, keybase1.TrackDiffType_NEW_ELDEST)
+	require.Len(t, ui.DisplayKeyDiffs, 1)
+	require.Equal(t, keybase1.TrackDiffType_NEW_ELDEST, ui.DisplayKeyDiffs[0].Type)
 }
 
 func TestTrackSelf(t *testing.T) {

@@ -127,12 +127,10 @@ func (ss *SecretSyncer) syncFromServer(m MetaContext, uid keybase1.UID, forceRel
 		hargs.Add("version", I{ss.keys.Version})
 	}
 	var res *APIRes
-	res, err = ss.G().API.Get(m, APIArg{
-		Endpoint:    "key/fetch_private",
-		Args:        hargs,
-		SessionType: APISessionTypeREQUIRED,
-		RetryCount:  5, // It's pretty bad to fail this, so retry.
-	})
+	apiArg := NewRetryAPIArg("key/fetch_private")
+	apiArg.Args = hargs
+	apiArg.SessionType = APISessionTypeREQUIRED
+	res, err = ss.G().API.Get(m, apiArg)
 	m.Debug("| syncFromServer -> %s", ErrToOk(err))
 	if err != nil {
 		return
@@ -182,7 +180,7 @@ func (ss *SecretSyncer) FindActiveKey(ckf *ComputedKeyFamily) (ret *SKB, err err
 	if len(keys) == 0 {
 		return nil, nil
 	}
-	ss.G().Log.Debug("NOTE: calling SecretSyncer.FindActiveKey: returning first secret key from randomly ordered map", err)
+	ss.G().Log.Debug("NOTE: calling SecretSyncer.FindActiveKey: returning first secret key from randomly ordered map: %v", err)
 	return keys[0], nil
 }
 

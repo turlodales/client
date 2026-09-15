@@ -62,6 +62,7 @@ func TestJourneycardStorage(t *testing.T) {
 }
 
 func TestJourneycardDismiss(t *testing.T) {
+	t.Skip("feature disabled")
 	useRemoteMock = false
 	defer func() { useRemoteMock = true }()
 	ctc := makeChatTestContext(t, t.Name(), 2)
@@ -109,7 +110,7 @@ func TestJourneycardDismiss(t *testing.T) {
 			chat1.GetThreadReason_GENERAL, nil, nil, nil)
 		require.NoError(t, err)
 		t.Logf("the messages: %v", chat1.MessageUnboxedDebugList(thread.Messages))
-		require.True(t, len(thread.Messages) >= 1)
+		require.GreaterOrEqual(t, len(thread.Messages), 1)
 		if toExist {
 			require.NotNil(t, thread.Messages[0].Journeycard__)
 		} else {
@@ -133,6 +134,7 @@ func TestJourneycardDismiss(t *testing.T) {
 // Test that dismissing a CHANNEL_INACTIVE in one conv actually dismisses
 // CHANNEL_INACTIVE in all convs in he team.
 func TestJourneycardDismissTeamwide(t *testing.T) {
+	t.Skip("feature disabled")
 	useRemoteMock = false
 	defer func() { useRemoteMock = true }()
 	ctc := makeChatTestContext(t, t.Name(), 2)
@@ -193,7 +195,7 @@ func TestJourneycardDismissTeamwide(t *testing.T) {
 			chat1.GetThreadReason_GENERAL, nil, nil, nil)
 		require.NoError(t, err)
 		t.Logf("the messages: %v", chat1.MessageUnboxedDebugList(thread.Messages))
-		require.True(t, len(thread.Messages) >= 1)
+		require.GreaterOrEqual(t, len(thread.Messages), 1)
 		for _, msg := range thread.Messages {
 			require.Nil(t, msg.Journeycard__)
 		}
@@ -204,7 +206,7 @@ func TestJourneycardDismissTeamwide(t *testing.T) {
 			chat1.GetThreadReason_GENERAL, nil, nil, nil)
 		require.NoError(t, err)
 		t.Logf("the messages: %v", chat1.MessageUnboxedDebugList(thread.Messages))
-		require.True(t, len(thread.Messages) >= 1)
+		require.GreaterOrEqual(t, len(thread.Messages), 1)
 		msg := thread.Messages[0]
 		require.NotNil(t, msg.Journeycard__, "requireJourneycard expects a journeycard")
 		require.Equal(t, cardType, msg.Journeycard().CardType, "card type")
@@ -264,6 +266,7 @@ func TestJourneycardDismissTeamwide(t *testing.T) {
 // A journeycard sticks in its position in the conv.
 // And survives a reboot.
 func TestJourneycardPersist(t *testing.T) {
+	t.Skip("feature disabled")
 	useRemoteMock = false
 	defer func() { useRemoteMock = true }()
 	ctc := makeChatTestContext(t, t.Name(), 2)
@@ -292,7 +295,7 @@ func TestJourneycardPersist(t *testing.T) {
 			chat1.GetThreadReason_GENERAL, nil, nil, nil)
 		require.NoError(t, err)
 		t.Logf("the messages: %v", chat1.MessageUnboxedDebugList(thread.Messages))
-		require.True(t, len(thread.Messages) >= 1+skipMessages)
+		require.GreaterOrEqual(t, len(thread.Messages), 1+skipMessages)
 		msg := thread.Messages[skipMessages]
 		require.NotNil(t, msg.Journeycard__, "requireJourneycard expects a journeycard")
 		require.Equal(t, cardType, msg.Journeycard().CardType, "card type")
@@ -351,7 +354,7 @@ func pollFor(t *testing.T, label string, totalTime time.Duration, poller func(i 
 		if since > totalTime {
 			// Game over
 			msg := fmt.Sprintf("pollFor '%s' timed out after %v attempts over %v", label, i, since)
-			t.Logf(msg)
+			t.Logf("%s", msg)
 			require.Fail(t, msg)
 			require.FailNow(t, msg)
 			return

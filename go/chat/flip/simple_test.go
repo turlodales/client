@@ -2,8 +2,9 @@ package flip
 
 import (
 	"fmt"
-	"github.com/stretchr/testify/require"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func makeTestSecret(b byte) Secret {
@@ -32,5 +33,5 @@ func TestFlip(t *testing.T) {
 	}
 	i, err := FlipInt(cp, players, int64(10033))
 	require.NoError(t, err)
-	require.Equal(t, i, int64(6265))
+	require.Equal(t, int64(6265), i)
 }

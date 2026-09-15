@@ -16,10 +16,10 @@ import (
 
 // Log is the logging interface for this package
 type Log interface {
-	Debug(s string, args ...interface{})
-	Info(s string, args ...interface{})
-	Warning(s string, args ...interface{})
-	Errorf(s string, args ...interface{})
+	Debug(s string, args ...any)
+	Info(s string, args ...any)
+	Warning(s string, args ...any)
+	Errorf(s string, args ...any)
 }
 
 // Context is the environment for install package.
@@ -72,7 +72,7 @@ func execNativeInstallerWithArg(args []string, runMode libkb.RunMode, log Log) e
 	}
 	includeArgs := []string{"--debug", fmt.Sprintf("--run-mode=%s", runMode), fmt.Sprintf("--app-path=%s", appPath), "--timeout=10"}
 	args = append(includeArgs, args...)
-	cmd := exec.Command(nativeInstallerAppBundleExecPath(appPath), args...)
+	cmd := exec.Command(nativeInstallerAppBundleExecPath(appPath), args...) //nolint:gosec // G204: Native installer binary from app bundle, args constructed internally
 	output, err := cmd.CombinedOutput()
 	log.Debug("Output (%s): %s", args, string(output))
 	return err

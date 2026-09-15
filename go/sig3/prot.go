@@ -4,22 +4,24 @@ import (
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 )
 
-type UID [16]byte
-type LinkType int
-type ChainType = keybase1.SeqType
-type SigVersion int
-type LinkID [32]byte
-type Seqno = keybase1.Seqno
-type Time = keybase1.Time
-type TimeSec int64
-type IgnoreIfUnsupported bool
-type KID = keybase1.BinaryKID
-type TeamID [16]byte
-type PerTeamKeyGeneration = keybase1.PerTeamKeyGeneration
-type Entropy []byte
-type Sig [64]byte
-type PTKType = keybase1.PTKType
-type AppkeyDerivationVersion int
+type (
+	UID                     [16]byte
+	LinkType                int
+	ChainType               = keybase1.SeqType
+	SigVersion              int
+	LinkID                  [32]byte
+	Seqno                   = keybase1.Seqno
+	Time                    = keybase1.Time
+	TimeSec                 int64
+	IgnoreIfUnsupported     bool
+	KID                     = keybase1.BinaryKID
+	TeamID                  [16]byte
+	PerTeamKeyGeneration    = keybase1.PerTeamKeyGeneration
+	Entropy                 []byte
+	Sig                     [64]byte
+	PTKType                 = keybase1.PTKType
+	AppkeyDerivationVersion int
+)
 
 const (
 	SigVersion3 SigVersion = 3
@@ -58,7 +60,7 @@ type OuterLink struct {
 }
 
 type InnerLink struct {
-	Body        interface{} `codec:"b"`           // The actual body, which varies based on the type in the outer link
+	Body        any         `codec:"b"`           // The actual body, which varies based on the type in the outer link
 	Ctime       TimeSec     `codec:"c"`           // Seconds since 1970 UTC.
 	Entropy     Entropy     `codec:"e"`           // entropy for hiding the value of the inner link
 	ClientInfo  *ClientInfo `codec:"i,omitempty"` // Optional client type making sig

@@ -1,43 +1,49 @@
 import * as C from '@/constants'
-import * as React from 'react'
 import * as Kb from '@/common-adapters'
-import * as Container from '@/util/container'
+import * as React from 'react'
+import {useSafeNavigation} from '@/util/safe-navigation'
 import * as T from '@/constants/types'
-import {SignupScreen} from '@/signup/common'
+import {SignupScreen, errorBanner} from '@/signup/common'
+import {QuestionBody} from '../common'
 import type {ButtonType} from '@/common-adapters/button'
+import {enterResetPipeline} from '@/login/reset/account-reset'
+import {startRecoverPassword, submitRecoverPasswordReset} from './flow'
 
 export type Props = {
   resetPassword?: boolean
+  skipPassword: boolean
+  username: string
 }
 
 const PromptReset = (props: Props) => {
-  const nav = Container.useSafeNavigation()
-  const skipPassword = C.useAutoResetState(s => s.skipPassword)
-  const error = C.useAutoResetState(s => s.error)
-  const resetAccount = C.useAutoResetState(s => s.dispatch.resetAccount)
-  const {resetPassword} = props
+  const styles = useStyles()
+  const theme = Kb.Styles.useTheme()
+  const nav = useSafeNavigation()
+  const [error, setError] = React.useState('')
+  const {resetPassword, skipPassword, username} = props
 
-  const submitResetPassword = C.useRecoverState(s => s.dispatch.dynamic.submitResetPassword)
-  const startRecoverPassword = C.useRecoverState(s => s.dispatch.startRecoverPassword)
-  const username = C.useRecoverState(s => s.username)
-
-  const onContinue = React.useCallback(() => {
+  const onContinue = () => {
+    // dont do this in preflight
+    if (C.androidIsTestDevice) {
+      nav.safeNavigateUp()
+      return
+    }
     if (resetPassword) {
-      submitResetPassword?.(T.RPCGen.ResetPromptResponse.confirmReset)
+      submitRecoverPasswordReset(T.RPCGen.ResetPromptResponse.confirmReset)
     }
     if (skipPassword) {
-      resetAccount()
+      enterResetPipeline({onError: setError, username})
     } else {
-      nav.safeNavigateAppend('resetKnowPassword', true)
+      nav.safeNavigateAppend({name: 'resetKnowPassword', params: {username}}, true)
     }
-  }, [submitResetPassword, resetAccount, skipPassword, resetPassword, nav])
-  const onBack = React.useCallback(() => {
+  }
+  const onBack = () => {
     if (skipPassword) {
       startRecoverPassword({replaceRoute: true, username})
     } else {
       nav.safeNavigateUp()
     }
-  }, [startRecoverPassword, skipPassword, nav, username])
+  }
   const title = props.resetPassword ? 'Reset password' : skipPassword ? 'Recover password' : 'Account reset'
 
   return (
@@ -47,30 +53,18 @@ const PromptReset = (props: Props) => {
           label: props.resetPassword ? 'Send a link' : 'Start account reset',
           onClick: onContinue,
           type: 'Default' as ButtonType,
-          waitingKey: C.AutoReset.enterPipelineWaitingKey,
+          waitingKey: C.waitingKeyAutoresetEnterPipeline,
         },
       ]}
-      banners={
-        error ? (
-          <Kb.Banner color="red">
-            <Kb.BannerParagraph bannerColor="red" content={error} />
-          </Kb.Banner>
-        ) : null
-      }
+      banners={errorBanner(error)}
       onBack={onBack}
       noBackground={true}
       title={title}
-      leftActionText="Cancel"
     >
-      <Kb.Box2
-        alignItems="center"
-        direction="vertical"
-        fullHeight={true}
-        fullWidth={true}
-        gap="medium"
-        style={styles.topGap}
+      <QuestionBody
+        centered={false}
+        icon={<Kb.Icon type="iconfont-skull" sizeType="Big" color={theme.black} />}
       >
-        <Kb.Icon type="iconfont-skull" sizeType="Big" color={Kb.Styles.globalColors.black} />
         {props.resetPassword ? (
           <Kb.Text type="Body" center={true} style={styles.main}>
             If you have forgotten your password you can reset it here. You will keep your username, but{' '}
@@ -94,23 +88,16 @@ const PromptReset = (props: Props) => {
             </Kb.Text>
           </>
         )}
-      </Kb.Box2>
+      </QuestionBody>
     </SignupScreen>
   )
 }
 
-const styles = Kb.Styles.styleSheetCreate(() => ({
+const useStyles = Kb.Styles.createStyleHook(() => ({
   main: {
     ...Kb.Styles.padding(0, Kb.Styles.globalMargins.medium, Kb.Styles.globalMargins.small),
     maxWidth: 500,
   },
-  questionBox: Kb.Styles.padding(Kb.Styles.globalMargins.tiny, Kb.Styles.globalMargins.tiny, 0),
-  topGap: Kb.Styles.platformStyles({
-    isMobile: {
-      justifyContent: 'flex-start',
-      marginTop: '20%',
-    },
-  }),
 }))
 
 export default PromptReset

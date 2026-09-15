@@ -252,6 +252,10 @@ type Identify2WithUID struct {
 
 	resultCh chan<- error
 
+	// When this identify was asked for. If it waits behind another identify of
+	// the same user, it may reuse proof results produced after this point.
+	requestedAt time.Time
+
 	// For eagerly checking remote Assertions as they come in, these
 	// member variables maintain state, protected by the remotesMutex.
 	remotesMutex     sync.Mutex
@@ -271,8 +275,10 @@ type Identify2WithUID struct {
 	trackBreaks *keybase1.IdentifyTrackBreaks
 }
 
-var _ (Engine2) = (*Identify2WithUID)(nil)
-var _ (libkb.CheckCompletedListener) = (*Identify2WithUID)(nil)
+var (
+	_ Engine2                      = (*Identify2WithUID)(nil)
+	_ libkb.CheckCompletedListener = (*Identify2WithUID)(nil)
+)
 
 // Name is the unique engine name.
 func (e *Identify2WithUID) Name() string {
@@ -296,7 +302,6 @@ func (e *Identify2WithUID) WantDelegate(k libkb.UIKind) bool {
 }
 
 func (e *Identify2WithUID) resetError(m libkb.MetaContext, inErr error) (outErr error) {
-
 	defer m.Trace(fmt.Sprintf("Identify2WithUID#resetError(%s)", libkb.ErrToOk(inErr)), &outErr)()
 
 	if inErr == nil {
@@ -319,7 +324,6 @@ func (e *Identify2WithUID) resetError(m libkb.MetaContext, inErr error) (outErr 
 
 // Run then engine
 func (e *Identify2WithUID) Run(m libkb.MetaContext) (err error) {
-
 	m = m.WithLogTag("ID2")
 
 	n := fmt.Sprintf("Identify2WithUID#Run(UID=%v, Assertion=%s)", e.arg.Uid, e.arg.UserAssertion)
@@ -328,6 +332,13 @@ func (e *Identify2WithUID) Run(m libkb.MetaContext) (err error) {
 
 	if e.arg.Uid.IsNil() {
 		return libkb.NoUIDError{}
+	}
+
+	// This identify may reuse proof results produced by an identify already
+	// running for the same user, but only results completed after it was
+	// requested. ResolveThenIdentify2 records this before assertion resolution.
+	if e.requestedAt.IsZero() {
+		e.requestedAt = m.G().Clock().Now()
 	}
 
 	// Only the first send matters, but we don't want to block the subsequent no-op
@@ -402,7 +413,6 @@ func (e *Identify2WithUID) run(m libkb.MetaContext) {
 }
 
 func (e *Identify2WithUID) hitFastCache(m libkb.MetaContext) bool {
-
 	if !e.allowCaching() {
 		m.Debug("| missed fast cache: no caching allowed")
 		return false
@@ -423,7 +433,6 @@ func (e *Identify2WithUID) hitFastCache(m libkb.MetaContext) bool {
 }
 
 func (e *Identify2WithUID) untrackedFastPath(m libkb.MetaContext) (ret bool) {
-
 	defer m.Trace("Identify2WithUID#untrackedFastPath", nil)()
 
 	if !e.arg.IdentifyBehavior.CanUseUntrackedFastPath() {
@@ -480,7 +489,6 @@ func (e *Identify2WithUID) untrackedFastPath(m libkb.MetaContext) (ret bool) {
 }
 
 func (e *Identify2WithUID) runReturnError(m libkb.MetaContext) (err error) {
-
 	m.Debug("+ acquire singleflight lock for %s", e.arg.Uid)
 	lock, err := m.G().IDLocktab.AcquireOnNameWithContext(m.Ctx(), m.G(), e.arg.Uid.String())
 	if err != nil {
@@ -634,7 +642,6 @@ func (e *Identify2WithUID) exportToResult(m libkb.MetaContext) (*keybase1.Identi
 }
 
 func (e *Identify2WithUID) maybeCacheResult(m libkb.MetaContext) {
-
 	isOK := e.state.Result().IsOK()
 	canCacheFailures := e.arg.IdentifyBehavior.WarningInsteadOfErrorOnBrokenTracks()
 
@@ -793,7 +800,6 @@ func (e *Identify2WithUID) useRemoteAssertions() bool {
 }
 
 func (e *Identify2WithUID) runIdentifyPrecomputation() (err error) {
-
 	keyDiffDisplayHook := func(k keybase1.IdentifyKey) error {
 		e.identifyKeys = append(e.identifyKeys, k)
 		return nil
@@ -889,7 +895,7 @@ func (e *Identify2WithUID) runIdentifyUI(m libkb.MetaContext) (err error) {
 	e.metaContext = m
 	if them.IDTable() == nil {
 		m.Debug("| No IDTable for user")
-	} else if err = them.IDTable().Identify(m, e.state, e.forceRemoteCheck(), iui, e, identifyTableMode); err != nil {
+	} else if err = them.IDTable().Identify(m, e.state, e.forceRemoteCheck(), e.requestedAt, iui, e, identifyTableMode); err != nil {
 		m.Debug("| Failure in running IDTable")
 		return err
 	}
@@ -1009,7 +1015,6 @@ func (e *Identify2WithUID) loadUserOpts(arg libkb.LoadUserArg) libkb.LoadUserArg
 }
 
 func (e *Identify2WithUID) loadMe(m libkb.MetaContext, uid keybase1.UID) (err error) {
-
 	// Short circuit loadMe for testing
 	if e.testArgs != nil && e.testArgs.noMe {
 		return nil
@@ -1054,20 +1059,16 @@ func (e *Identify2WithUID) loadUsers(m libkb.MetaContext) (err error) {
 		loggedIn, myUID := isLoggedIn(m)
 		if loggedIn {
 			selfLoad = myUID.Equal(e.arg.Uid)
-			wg.Add(1)
-			go func() {
+			wg.Go(func() {
 				loadMeErr = e.loadMe(m, myUID)
-				wg.Done()
-			}()
+			})
 		}
 	}
 
 	if !selfLoad {
-		wg.Add(1)
-		go func() {
+		wg.Go(func() {
 			loadThemErr = e.loadThem(m)
-			wg.Done()
-		}()
+		})
 	}
 	wg.Wait()
 
@@ -1097,7 +1098,6 @@ func (e *Identify2WithUID) checkFastCacheHit(m libkb.MetaContext) (hit bool) {
 		return libkb.Identify2CacheShortTimeout
 	}
 	u, err := e.getCache().Get(e.arg.Uid, fn, dfn, e.arg.IdentifyBehavior.WarningInsteadOfErrorOnBrokenTracks())
-
 	if err != nil {
 		m.Debug("| fast cache error for %s: %s", e.arg.Uid, err)
 	}

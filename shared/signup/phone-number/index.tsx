@@ -1,63 +1,9 @@
 import * as C from '@/constants'
 import * as React from 'react'
 import * as Kb from '@/common-adapters'
-import {SignupScreen, errorBanner} from '../common'
-import type {ButtonType} from '@/common-adapters/button'
-
-export type Props = {
-  error: string
-  defaultCountry?: string
-  onContinue: (phoneNumber: string, searchable: boolean) => void
-  onSkip: () => void
-  waiting: boolean
-}
-
-const EnterPhoneNumber = (props: Props) => {
-  // trigger a default phone number country rpc if it's not already loaded
-  const {defaultCountry} = props
-  const loadDefaultPhoneCountry = C.useSettingsPhoneState(s => s.dispatch.loadDefaultPhoneCountry)
-  React.useEffect(() => {
-    !defaultCountry && loadDefaultPhoneCountry()
-  }, [defaultCountry, loadDefaultPhoneCountry])
-
-  const [phoneNumber, onChangePhoneNumber] = React.useState('')
-  const [valid, onChangeValidity] = React.useState(false)
-  // const [searchable, onChangeSearchable] = React.useState(true)
-  const disabled = !valid
-  const onContinue = () =>
-    disabled || props.waiting ? {} : props.onContinue(phoneNumber, true /* searchable */)
-  const onChangeNumberCb = (phoneNumber: string, validity: boolean) => {
-    onChangePhoneNumber(phoneNumber)
-    onChangeValidity(validity)
-  }
-  return (
-    <SignupScreen
-      buttons={[
-        {
-          disabled,
-          label: 'Continue',
-          onClick: onContinue,
-          type: 'Success' as ButtonType,
-          waiting: props.waiting,
-        },
-      ]}
-      banners={errorBanner(props.error)}
-      rightActionLabel="Skip"
-      onRightAction={props.onSkip}
-      title="Your phone number"
-      showHeaderInfoicon={true}
-    >
-      <EnterPhoneNumberBody
-        autoFocus={!Kb.Styles.isMobile}
-        defaultCountry={props.defaultCountry}
-        onChangeNumber={onChangeNumberCb}
-        onContinue={onContinue}
-        searchable={true}
-        iconType={C.isLargeScreen ? 'icon-phone-number-add-96' : 'icon-phone-number-add-64'}
-      />
-    </SignupScreen>
-  )
-}
+import {SignupScreen, errorBanner, desktopInputWidth} from '../common'
+import {useAddPhoneNumber} from './use-verification'
+import {useDefaultPhoneCountry} from '@/util/phone-numbers'
 
 type BodyProps = {
   autoFocus?: boolean
@@ -68,17 +14,20 @@ type BodyProps = {
   onChangeSearchable?: (allow: boolean) => void
   iconType: Kb.IconType
 }
+
 export const EnterPhoneNumberBody = (props: BodyProps) => {
+  const styles = useStyles()
   const showCheckbox = !!props.onChangeSearchable
   return (
     <Kb.Box2
       alignItems="center"
       direction="vertical"
-      gap={Kb.Styles.isMobile ? 'small' : 'medium'}
+      flex={1}
+      gap={isMobile ? 'small' : 'medium'}
       fullWidth={true}
       style={styles.container}
     >
-      <Kb.Icon type={props.iconType} />
+      <Kb.ImageIcon type={props.iconType} />
       <Kb.Box2 direction="vertical" gap="tiny" style={styles.inputBox}>
         <Kb.PhoneInput
           autoFocus={props.autoFocus ?? true}
@@ -102,10 +51,9 @@ export const EnterPhoneNumberBody = (props: BodyProps) => {
   )
 }
 
-const styles = Kb.Styles.styleSheetCreate(() => ({
+const useStyles = Kb.Styles.createStyleHook(() => ({
   checkbox: {width: '100%'},
   container: Kb.Styles.platformStyles({
-    common: Kb.Styles.globalStyles.flexOne,
     isTablet: {maxWidth: 386},
   }),
   input: Kb.Styles.platformStyles({
@@ -118,12 +66,59 @@ const styles = Kb.Styles.styleSheetCreate(() => ({
       width: '100%',
     },
   }),
-  inputBox: Kb.Styles.platformStyles({
-    isElectron: {
-      // need to set width so subtext will wrap
-      width: 368,
-    },
-  }),
+  inputBox: desktopInputWidth,
 }))
 
-export default EnterPhoneNumber
+const ConnectedEnterPhoneNumber = () => {
+  const defaultCountry = useDefaultPhoneCountry()
+  const navigateAppend = C.Router2.navigateAppend
+  const {clearError, error, submitPhoneNumber, waiting} = useAddPhoneNumber()
+  const onSkip = () => {
+    navigateAppend({name: 'signupEnterEmail', params: {}}, true)
+  }
+
+  const [phoneNumber, onChangePhoneNumber] = React.useState('')
+  const [valid, onChangeValidity] = React.useState(false)
+  const disabled = !valid
+  const onContinue = () => {
+    if (disabled || waiting) {
+      return
+    }
+    submitPhoneNumber(phoneNumber, true, submittedPhoneNumber => {
+      navigateAppend({name: 'signupVerifyPhoneNumber', params: {phoneNumber: submittedPhoneNumber}})
+    })
+  }
+  return (
+    <SignupScreen
+      buttons={[
+        {
+          disabled,
+          label: 'Continue',
+          onClick: onContinue,
+          type: 'Success',
+          waiting,
+        },
+      ]}
+      banners={errorBanner(error)}
+      rightActionLabel="Skip"
+      onRightAction={onSkip}
+      title="Your phone number"
+      showHeaderInfoIcon={true}
+    >
+      <EnterPhoneNumberBody
+        autoFocus={!isMobile}
+        defaultCountry={defaultCountry}
+        onChangeNumber={(phoneNumber, validity) => {
+          if (error) clearError()
+          onChangePhoneNumber(phoneNumber)
+          onChangeValidity(validity)
+        }}
+        onContinue={onContinue}
+        searchable={true}
+        iconType={C.isLargeScreen ? 'icon-phone-number-add-96' : 'icon-phone-number-add-64'}
+      />
+    </SignupScreen>
+  )
+}
+
+export default ConnectedEnterPhoneNumber

@@ -1,5 +1,4 @@
 import './check-circle.css'
-import * as React from 'react'
 import * as Styles from '@/styles'
 import Icon from './icon'
 
@@ -23,35 +22,49 @@ type Props = {
 }
 
 const CheckCircle = (props: Props) => {
-  const onClick = (evt: React.BaseSyntheticEvent) => {
-    if (props.onCheck) {
-      !props.disabled && props.onCheck(!props.checked)
-      evt.preventDefault()
-      evt.stopPropagation()
+  const theme = Styles.useTheme()
+  const {
+    checked,
+    checkedColor,
+    checkedHoverColor,
+    className,
+    color,
+    disabled,
+    disabledColor,
+    fontSize,
+    hoverColor,
+    onCheck,
+    style,
+  } = props
+  const onClick = () => {
+    if (onCheck) {
+      if (!disabled) {
+        onCheck(!checked)
+      }
     }
   }
 
   return (
     <Kb.Icon
-      type={props.checked ? 'iconfont-success' : 'iconfont-circle'}
+      type={checked ? 'iconfont-success' : 'iconfont-circle'}
       onClick={onClick}
-      fontSize={props.fontSize}
+      fontSize={fontSize}
       color={
-        props.disabled
-          ? props.disabledColor || Styles.globalColors.black_05OrWhite_10
-          : props.checked
-          ? props.checkedColor || Styles.globalColors.blue
-          : props.color || Styles.globalColors.black_20OrWhite_20
+        disabled
+          ? disabledColor || theme.black_05OrWhite_10
+          : checked
+            ? checkedColor || theme.blue
+            : color || theme.black_20OrWhite_20
       }
       hoverColor={
-        props.disabled
-          ? props.disabledColor || Styles.globalColors.black_05OrWhite_10
-          : props.checked
-          ? props.checkedHoverColor || Styles.globalColors.blueDarkOrBlueLight
-          : props.hoverColor || Styles.globalColors.blue
+        disabled
+          ? disabledColor || theme.black_05OrWhite_10
+          : checked
+            ? checkedHoverColor || theme.blueDarkOrBlueLight
+            : hoverColor || theme.blue
       }
-      className={Styles.classNames(props.disabled && `checkCircle__disabled`, props.className)}
-      style={props.style}
+      className={Styles.classNames(disabled && `checkCircle__disabled`, className)}
+      style={style}
     />
   )
 }

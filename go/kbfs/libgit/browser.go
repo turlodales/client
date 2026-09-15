@@ -12,14 +12,14 @@ import (
 	"strings"
 	"time"
 
+	billy "github.com/go-git/go-billy/v5"
+	gogit "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/go-git/go-git/v5/storage"
 	"github.com/keybase/client/go/kbfs/libfs"
 	"github.com/keybase/client/go/kbfs/libkbfs"
 	"github.com/pkg/errors"
-	billy "gopkg.in/src-d/go-billy.v4"
-	gogit "gopkg.in/src-d/go-git.v4"
-	"gopkg.in/src-d/go-git.v4/plumbing"
-	"gopkg.in/src-d/go-git.v4/plumbing/object"
-	"gopkg.in/src-d/go-git.v4/storage"
 )
 
 const (
@@ -57,14 +57,17 @@ type Browser struct {
 var _ billy.Filesystem = (*Browser)(nil)
 
 // NewBrowser makes a new Browser instance, browsing the given branch
-// of the given repo.  If `gitBranchName` is empty,
-// "refs/heads/master" is used.  If `gitBranchName` is not empty, but
-// it doesn't begin with "refs/", then "refs/heads/" is prepended to
-// it.
+// of the given repo.  If `gitBranchName` is empty, HEAD is resolved
+// to determine the default branch; if HEAD is missing or points to a
+// nonexistent ref, NewBrowser falls back to "refs/heads/master" if it
+// exists, otherwise the repo is treated as empty.  If `gitBranchName`
+// is not empty but doesn't begin with "refs/", then "refs/heads/" is
+// prepended to it.
 func NewBrowser(
 	repoFS *libfs.FS, clock libkbfs.Clock,
 	gitBranchName plumbing.ReferenceName,
-	sharedCache sharedInBrowserCache) (*Browser, error) {
+	sharedCache sharedInBrowserCache,
+) (*Browser, error) {
 	var storage storage.Storer
 	storage, err := NewGitConfigWithoutRemotesStorer(repoFS)
 	if err != nil {
@@ -72,6 +75,7 @@ func NewBrowser(
 	}
 
 	const masterBranch = "refs/heads/master"
+	branchWasEmpty := gitBranchName == ""
 	if gitBranchName == "" {
 		gitBranchName = masterBranch
 	} else if !strings.HasPrefix(string(gitBranchName), "refs/") {
@@ -79,7 +83,7 @@ func NewBrowser(
 	}
 
 	repo, err := gogit.Open(storage, nil)
-	if errors.Cause(err) == gogit.ErrWorktreeNotProvided {
+	if errors.Is(err, gogit.ErrWorktreeNotProvided) {
 		// This is not a bare repo (it might be for a test).  So we
 		// need to pass in a working tree, but since `Browser` is
 		// read-only and doesn't even use the worktree, it doesn't
@@ -87,7 +91,7 @@ func NewBrowser(
 		repo, err = gogit.Open(storage, repoFS)
 	}
 
-	if err == gogit.ErrRepositoryNotExists && gitBranchName == masterBranch {
+	if errors.Is(err, gogit.ErrRepositoryNotExists) && gitBranchName == masterBranch {
 		// This repo is not initialized yet, so pretend it's empty.
 		return &Browser{
 			root:        string(gitBranchName),
@@ -97,9 +101,23 @@ func NewBrowser(
 		return nil, err
 	}
 
+	// If no branch was specified, try to resolve HEAD to find the
+	// default branch instead of hardcoding master.
+	if branchWasEmpty {
+		headRef, headErr := repo.Reference(plumbing.HEAD, false)
+		if headErr == nil && headRef.Type() == plumbing.SymbolicReference {
+			gitBranchName = headRef.Target()
+		}
+	}
+
 	ref, err := repo.Reference(gitBranchName, true)
-	if err == plumbing.ErrReferenceNotFound && gitBranchName == masterBranch {
-		// This branch has no commits, so pretend it's empty.
+	if errors.Is(err, plumbing.ErrReferenceNotFound) && branchWasEmpty && gitBranchName != masterBranch {
+		// HEAD points to a nonexistent ref; fall back to master.
+		gitBranchName = masterBranch
+		ref, err = repo.Reference(gitBranchName, true)
+	}
+	if errors.Is(err, plumbing.ErrReferenceNotFound) && (gitBranchName == masterBranch || branchWasEmpty) {
+		// No commits on this branch, so pretend it's empty.
 		return &Browser{
 			root:        string(gitBranchName),
 			sharedCache: sharedCache,
@@ -140,7 +158,8 @@ func NewBrowser(
 }
 
 func (b *Browser) getCommitFile(
-	ctx context.Context, hash plumbing.Hash) (*diffFile, error) {
+	ctx context.Context, hash plumbing.Hash,
+) (*diffFile, error) {
 	if b.repo == nil {
 		return nil, errors.New("Empty repo")
 	}
@@ -167,7 +186,7 @@ func (b *Browser) readLink(filename string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer r.Close()
+	defer func() { _ = r.Close() }()
 	data, err := io.ReadAll(r)
 	if err != nil {
 		return "", err
@@ -205,7 +224,7 @@ func (b *Browser) Open(filename string) (f billy.File, err error) {
 	}
 
 	defer translateGitError(&err)
-	for i := 0; i < maxSymlinkLevels; i++ {
+	for range maxSymlinkLevels {
 		fi, err := b.Lstat(filename)
 		if err != nil {
 			return nil, err
@@ -240,7 +259,8 @@ func (b *Browser) Open(filename string) (f billy.File, err error) {
 
 // OpenFile implements the billy.Filesystem interface for Browser.
 func (b *Browser) OpenFile(filename string, flag int, _ os.FileMode) (
-	f billy.File, err error) {
+	f billy.File, err error,
+) {
 	if b.tree == nil {
 		return nil, errors.New("Empty repo")
 	}
@@ -254,7 +274,8 @@ func (b *Browser) OpenFile(filename string, flag int, _ os.FileMode) (
 
 func (b *Browser) fileInfoForLFS(
 	filename string, oidLine string, fi os.FileInfo) (
-	newFi os.FileInfo, err error) {
+	newFi os.FileInfo, err error,
+) {
 	fields := strings.Fields(oidLine)
 	// An OID line looks like:
 	//     oid sha256:588b3683...
@@ -274,7 +295,8 @@ func (b *Browser) fileInfoForLFS(
 		return nil, err
 	}
 	return &lfsFileInfo{
-		filename, oid, lfsFI.Size(), b.mtime}, nil
+		filename, oid, lfsFI.Size(), b.mtime,
+	}, nil
 }
 
 // Lstat implements the billy.Filesystem interface for Browser.
@@ -283,8 +305,8 @@ func (b *Browser) Lstat(filename string) (fi os.FileInfo, err error) {
 		return nil, errors.New("Empty repo")
 	}
 
-	if strings.HasPrefix(filename, AutogitCommitPrefix) {
-		commit := strings.TrimPrefix(filename, AutogitCommitPrefix)
+	if after, ok := strings.CutPrefix(filename, AutogitCommitPrefix); ok {
+		commit := after
 		hash := plumbing.NewHash(commit)
 		f, err := b.getCommitFile(context.Background(), hash)
 		if err != nil {
@@ -344,7 +366,7 @@ func (b *Browser) Lstat(filename string) (fi os.FileInfo, err error) {
 // Stat implements the billy.Filesystem interface for Browser.
 func (b *Browser) Stat(filename string) (fi os.FileInfo, err error) {
 	defer translateGitError(&err)
-	for i := 0; i < maxSymlinkLevels; i++ {
+	for range maxSymlinkLevels {
 		fi, err := b.Lstat(filename)
 		if err != nil {
 			return nil, err

@@ -29,8 +29,8 @@ func (k keybaseDaemon) NewKeybaseService(config Config, params InitParams, ctx C
 		}
 
 		var additionalProtocols []rpc.Protocol
-		for _, creater := range params.AdditionalProtocolCreators {
-			p, err := creater(ctx, config)
+		for _, creature := range params.AdditionalProtocolCreators {
+			p, err := creature(ctx, config)
 			if err != nil {
 				return nil, err
 			}
@@ -133,7 +133,8 @@ func (k keybaseDaemon) NewCrypto(config Config, params InitParams, ctx Context, 
 
 func (k keybaseDaemon) NewChat(
 	config Config, params InitParams, ctx Context, log logger.Logger) (
-	chat Chat, err error) {
+	chat Chat, err error,
+) {
 	localUser := kbname.NewNormalizedUsername(params.LocalUser)
 	if localUser == "" {
 		chat = NewChatRPC(config, ctx)

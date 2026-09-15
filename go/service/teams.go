@@ -6,6 +6,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -22,7 +23,6 @@ import (
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 	"github.com/keybase/client/go/teams"
 	"github.com/keybase/go-framed-msgpack-rpc/rpc"
-	"golang.org/x/net/context"
 )
 
 type TeamsHandler struct {
@@ -64,7 +64,8 @@ func (h *TeamsHandler) TeamCreate(ctx context.Context, arg keybase1.TeamCreateAr
 }
 
 func (h *TeamsHandler) TeamCreateFancy(ctx context.Context, arg keybase1.TeamCreateFancyArg) (teamID keybase1.TeamID,
-	err error) {
+	err error,
+) {
 	ctx = libkb.WithLogTag(ctx, "TM")
 	mctx := h.MetaContext(ctx)
 	teamInfo := arg.TeamInfo
@@ -100,8 +101,10 @@ func (h *TeamsHandler) TeamCreateFancy(ctx context.Context, arg keybase1.TeamCre
 	}
 	if teamInfo.Avatar != nil {
 		avatar := teamInfo.Avatar
-		arg3 := keybase1.UploadTeamAvatarArg{Teamname: teamInfo.Name, Filename: avatar.AvatarFilename,
-			Crop: avatar.Crop, SendChatNotification: false}
+		arg3 := keybase1.UploadTeamAvatarArg{
+			Teamname: teamInfo.Name, Filename: avatar.AvatarFilename,
+			Crop: avatar.Crop, SendChatNotification: false,
+		}
 		err = teams.ChangeTeamAvatar(mctx, arg3)
 		if err != nil {
 			errs = append(errs, err)
@@ -252,11 +255,7 @@ func (h *TeamsHandler) TeamGetMembersByID(ctx context.Context, arg keybase1.Team
 	ctx = libkb.WithLogTag(ctx, "TM")
 	defer h.G().CTrace(ctx, fmt.Sprintf("TeamGetMembersByID(%s)", arg.Id), &err)()
 
-	t, err := teams.GetAnnotatedTeam(ctx, h.G().ExternalG(), arg.Id)
-	if err != nil {
-		return res, err
-	}
-	return t.Members, nil
+	return teams.GetAnnotatedTeamMembers(ctx, h.G().ExternalG(), arg.Id)
 }
 
 func (h *TeamsHandler) TeamListUnverified(ctx context.Context, arg keybase1.TeamListUnverifiedArg) (res keybase1.AnnotatedTeamList, err error) {
@@ -659,7 +658,7 @@ func (h *TeamsHandler) LoadTeamPlusApplicationKeys(ctx context.Context, arg keyb
 	defer h.G().CTrace(ctx, fmt.Sprintf("LoadTeamPlusApplicationKeys(%s)", arg.Id), &err)()
 
 	mctx := libkb.NewMetaContext(ctx, h.G().ExternalG())
-	loader := func(mctx libkb.MetaContext) (interface{}, error) {
+	loader := func(mctx libkb.MetaContext) (any, error) {
 		return teams.LoadTeamPlusApplicationKeys(ctx, h.G().ExternalG(), arg.Id, arg.Application, arg.Refreshers,
 			arg.IncludeKBFSKeys)
 	}
@@ -698,7 +697,8 @@ func (h *TeamsHandler) TeamCreateSeitanTokenV2(ctx context.Context, arg keybase1
 }
 
 func (h *TeamsHandler) TeamCreateSeitanInvitelink(ctx context.Context,
-	arg keybase1.TeamCreateSeitanInvitelinkArg) (invitelink keybase1.Invitelink, err error) {
+	arg keybase1.TeamCreateSeitanInvitelinkArg,
+) (invitelink keybase1.Invitelink, err error) {
 	ctx = libkb.WithLogTag(ctx, "TM")
 	if err := assertLoggedIn(ctx, h.G().ExternalG()); err != nil {
 		return invitelink, err
@@ -708,7 +708,8 @@ func (h *TeamsHandler) TeamCreateSeitanInvitelink(ctx context.Context,
 }
 
 func (h *TeamsHandler) TeamCreateSeitanInvitelinkWithDuration(ctx context.Context,
-	arg keybase1.TeamCreateSeitanInvitelinkWithDurationArg) (invitelink keybase1.Invitelink, err error) {
+	arg keybase1.TeamCreateSeitanInvitelinkWithDurationArg,
+) (invitelink keybase1.Invitelink, err error) {
 	ctx = libkb.WithLogTag(ctx, "TM")
 	if err := assertLoggedIn(ctx, h.G().ExternalG()); err != nil {
 		return invitelink, err
@@ -739,8 +740,7 @@ func (h *TeamsHandler) LookupImplicitTeam(ctx context.Context, arg keybase1.Look
 	ctx = libkb.WithLogTag(ctx, "TM")
 	defer h.G().CTrace(ctx, fmt.Sprintf("LookupImplicitTeam(%s)", arg.Name), &err)()
 	var team *teams.Team
-	team, res.Name, res.DisplayName, err =
-		teams.LookupImplicitTeam(ctx, h.G().ExternalG(), arg.Name, arg.Public, teams.ImplicitTeamOptions{})
+	team, res.Name, res.DisplayName, err = teams.LookupImplicitTeam(ctx, h.G().ExternalG(), arg.Name, arg.Public, teams.ImplicitTeamOptions{})
 	if err == nil {
 		res.TeamID = team.ID
 		res.TlfID = team.LatestKBFSTLFID()
@@ -906,7 +906,6 @@ func (h *TeamsHandler) Ftl(ctx context.Context, arg keybase1.FastTeamLoadArg) (r
 	defer h.G().CTrace(ctx, fmt.Sprintf("Ftl(%+v)", arg), &err)()
 	mctx := libkb.NewMetaContext(ctx, h.G().ExternalG())
 	return teams.FTL(mctx, arg)
-
 }
 
 func (h *TeamsHandler) GetTeamID(ctx context.Context, teamName string) (res keybase1.TeamID, err error) {
@@ -936,7 +935,8 @@ func (h *TeamsHandler) GetUntrustedTeamInfo(ctx context.Context, name keybase1.T
 }
 
 func (h *TeamsHandler) LoadTeamTreeMembershipsAsync(ctx context.Context,
-	arg keybase1.LoadTeamTreeMembershipsAsyncArg) (res keybase1.TeamTreeInitial, err error) {
+	arg keybase1.LoadTeamTreeMembershipsAsyncArg,
+) (res keybase1.TeamTreeInitial, err error) {
 	ctx = libkb.WithLogTag(ctx, "TM")
 	ctx = libkb.WithLogTag(ctx, "TMTREE")
 	defer h.G().CTrace(ctx, fmt.Sprintf("LoadTeamTreeMembershipsAsync(%s, %s, %d)",

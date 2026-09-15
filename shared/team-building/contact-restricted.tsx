@@ -1,6 +1,5 @@
-import * as React from 'react'
 import * as Kb from '@/common-adapters'
-import * as Container from '@/util/container'
+import {useSafeNavigation} from '@/util/safe-navigation'
 
 type Props = {
   source: 'newFolder' | 'teamAddSomeFailed' | 'teamAddAllFailed' | 'misc'
@@ -8,8 +7,10 @@ type Props = {
 }
 
 export const ContactRestricted = (props: Props) => {
-  const nav = Container.useSafeNavigation()
-  const onBack = React.useCallback(() => nav.safeNavigateUp(), [nav])
+  const styles = useStyles()
+  const theme = Kb.Styles.useTheme()
+  const nav = useSafeNavigation()
+  const onBack = () => nav.safeNavigateUp()
   let header = ''
   let description = ''
   let disallowedUsers: Array<string> = []
@@ -41,24 +42,7 @@ export const ContactRestricted = (props: Props) => {
     default:
   }
   return (
-    <Kb.Modal
-      onClose={onBack}
-      header={
-        Kb.Styles.isMobile
-          ? {
-              leftButton: <Kb.BackButton onClick={onBack} />,
-            }
-          : undefined
-      }
-      footer={{
-        content: (
-          <Kb.ButtonBar direction="row" fullWidth={true} style={styles.buttonBar}>
-            <Kb.WaitingButton type="Default" label="Okay" onClick={onBack} style={styles.button} />
-          </Kb.ButtonBar>
-        ),
-        hideBorder: true,
-      }}
-    >
+    <>
       <Kb.Box2
         alignItems="center"
         direction="vertical"
@@ -69,23 +53,19 @@ export const ContactRestricted = (props: Props) => {
         style={styles.container}
         noShrink={true}
       >
-        <Kb.Icon type="iconfont-warning" sizeType="Huge" color={Kb.Styles.globalColors.black_20} />
+        <Kb.Icon type="iconfont-warning" sizeType="Huge" color={theme.black_20} />
         <Kb.Text center={true} style={styles.text} type="Header" lineClamp={2}>
           {header}
         </Kb.Text>
         {disallowedUsers.length > 0 && (
           <>
             {disallowedUsers.map((username, idx) => (
-              <Kb.ListItem2
+              <Kb.ListItem
                 key={username}
-                type={Kb.Styles.isMobile ? 'Large' : 'Small'}
-                icon={<Kb.Avatar size={Kb.Styles.isMobile ? 48 : 32} username={username} />}
+                type={isMobile ? 'Large' : 'Small'}
+                icon={<Kb.Avatar size={isMobile ? 48 : 32} username={username} />}
                 firstItem={idx === 0}
-                body={
-                  <Kb.Box2 direction="vertical" fullWidth={true}>
-                    <Kb.Text type="BodySemibold">{username}</Kb.Text>
-                  </Kb.Box2>
-                }
+                body={<Kb.Text type="BodySemibold">{username}</Kb.Text>}
               />
             ))}
           </>
@@ -94,11 +74,16 @@ export const ContactRestricted = (props: Props) => {
           {description}
         </Kb.Text>
       </Kb.Box2>
-    </Kb.Modal>
+      <Kb.ModalFooter>
+        <Kb.ButtonBar direction="row" fullWidth={true} style={styles.buttonBar}>
+          <Kb.WaitingButton type="Default" label="Okay" onClick={onBack} style={styles.button} />
+        </Kb.ButtonBar>
+      </Kb.ModalFooter>
+    </>
   )
 }
 
-const styles = Kb.Styles.styleSheetCreate(() => ({
+const useStyles = Kb.Styles.createStyleHook(() => ({
   button: {
     flex: 1,
   },
@@ -113,21 +98,9 @@ const styles = Kb.Styles.styleSheetCreate(() => ({
       flex: 1,
     },
   }),
-  icon: {
-    marginBottom: Kb.Styles.globalMargins.medium,
-    marginTop: Kb.Styles.globalMargins.xlarge,
-  },
   text: {
     margin: Kb.Styles.globalMargins.small,
   },
 }))
 
-const ContactContainer = (ownProps: Props) => {
-  const props = {
-    source: ownProps.source,
-    usernames: ownProps.usernames,
-  }
-  return <ContactRestricted {...props} />
-}
-
-export default ContactContainer
+export default ContactRestricted

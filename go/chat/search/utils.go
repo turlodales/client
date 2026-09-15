@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/araddon/dateparse"
@@ -145,22 +146,26 @@ func searchMatches(msg chat1.MessageUnboxed, queryRe *regexp.Regexp) (validMatch
 
 // Order messages ascending by ID for presentation
 func getUIMsgs(ctx context.Context, g *globals.Context, convID chat1.ConversationID,
-	uid gregor1.UID, msgs []chat1.MessageUnboxed) (uiMsgs []chat1.UIMessage) {
-	for i := len(msgs) - 1; i >= 0; i-- {
-		msg := msgs[i]
+	uid gregor1.UID, msgs []chat1.MessageUnboxed,
+) (uiMsgs []chat1.UIMessage) {
+	for _, msg := range slices.Backward(msgs) {
+
 		uiMsg := utils.PresentMessageUnboxed(ctx, g, msg, uid, convID)
 		uiMsgs = append(uiMsgs, uiMsg)
 	}
 	return uiMsgs
 }
 
-const beforeFilter = "before:"
-const afterFilter = "after:"
-const fromFilter = "from:"
-const toFilter = "to:"
+const (
+	beforeFilter = "before:"
+	afterFilter  = "after:"
+	fromFilter   = "from:"
+	toFilter     = "to:"
+)
 
 var senderRegex = regexp.MustCompile(fmt.Sprintf(
 	"(%s|%s)(@?[a-z0-9][a-z0-9_]+)", fromFilter, toFilter))
+
 var dateRangeRegex = regexp.MustCompile(fmt.Sprintf(
 	`(%s|%s)(\d{1,4}[-/\.]+\d{1,2}[-/\.]+\d{1,4})`, beforeFilter, afterFilter))
 
@@ -225,13 +230,13 @@ func UpgradeSearchOptsFromQuery(query string, opts chat1.SearchOpts, username st
 	return query, opts
 }
 
-func MinMaxIDs(conv chat1.Conversation) (min, max chat1.MessageID) {
+func MinMaxIDs(conv chat1.Conversation) (minID, maxID chat1.MessageID) {
 	// lowest msgID we care about
-	min = conv.GetMaxDeletedUpTo()
-	if min == 0 {
-		min = 1
+	minID = conv.GetMaxDeletedUpTo()
+	if minID == 0 {
+		minID = 1
 	}
 	// highest msgID we care about
-	max = conv.GetMaxMessageID()
-	return min, max
+	maxID = max(minID, conv.GetMaxMessageID())
+	return minID, maxID
 }

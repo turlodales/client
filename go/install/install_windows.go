@@ -218,8 +218,10 @@ func WatchdogLogPath(logGlobPath string) (string, error) {
 	return logName, err
 }
 
-const autoRegPath = `Software\Microsoft\Windows\CurrentVersion\Run`
-const autoRegName = `Keybase.Keybase.GUI`
+const (
+	autoRegPath = `Software\Microsoft\Windows\CurrentVersion\Run`
+	autoRegName = `Keybase.Keybase.GUI`
+)
 
 // TODO Remove this in 2022.
 const autoRegDeprecatedName = `electron.app.keybase`
@@ -311,7 +313,7 @@ func getVersionAndDrivers(logFile *os.File) {
 	// Check whether the service shortcut is still present and not disabled
 	deprecatedStartupInfo(logFile)
 	status, err := autostartStatus()
-	logFile.WriteString(fmt.Sprintf("AutoStart: %v, %v\n", status, err))
+	fmt.Fprintf(logFile, "AutoStart: %v, %v\n", status, err)
 
 	// List filesystem drivers
 	outputBytes, err := exec.Command("driverquery").Output()

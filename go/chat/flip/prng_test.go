@@ -1,20 +1,23 @@
 package flip
 
 import (
-	"github.com/stretchr/testify/require"
 	"math/big"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestPRNG(t *testing.T) {
 	var secret Secret
 	secret[0] = 1
 	prng := NewPRNG(secret)
-	expected := []int{13, 59, 52, 48, 40, 15, 11, 21, 64, 31, 53, 61, 20, 28, 52, 41, 53, 45,
+	expected := []int{
+		13, 59, 52, 48, 40, 15, 11, 21, 64, 31, 53, 61, 20, 28, 52, 41, 53, 45,
 		54, 54, 23, 32, 19, 5, 53, 45, 18, 21, 13, 50, 57, 61, 26, 51, 62, 8, 62, 52, 10, 2, 64, 17,
 		53, 35, 35, 9, 30, 0, 49, 47, 10, 8, 39, 37, 14, 18, 17, 48, 23, 32, 11, 45, 40, 24, 40, 11, 46, 40,
 		46, 41, 3, 25, 16, 55, 16, 21, 8, 64, 22, 6, 9, 25, 49, 24, 12, 26, 48, 48, 28, 31, 34, 58, 21,
-		28, 52, 60, 28, 50, 49, 8}
+		28, 52, 60, 28, 50, 49, 8,
+	}
 
 	for _, a := range expected {
 		b := prng.Int(65)
@@ -41,7 +44,7 @@ func TestPRNG(t *testing.T) {
 		b := prng.Big(&ni)
 		var ai big.Int
 		ai.SetString(a, 10)
-		require.Equal(t, b.Cmp(&ai), 0)
+		require.Equal(t, 0, b.Cmp(&ai))
 	}
 
 	coinsExpected := []bool{
@@ -72,7 +75,8 @@ func TestPRNG(t *testing.T) {
 		-235, -92, -214, -243, -90, -11, -242, -150, -179, -218, -119, -156, -205, -204, -251, -143, -55, -15, -58,
 		-78, -110, -241, -142, -1, -35, -81, -102, -107, -90, -53, -134, -246, -14, -249, -82, -217, -3, -197,
 		-208, -64, -255, -202, -241, -70, -146, -20, -171, -182, -9, -213, -243, -221, -116, -171, -174, -121,
-		-19, -148, -23, -137, -43, -144, -210, -112, -192, -171, -251, -134, -178, -63, 0, -180, -94, -52, -137}
+		-19, -148, -23, -137, -43, -144, -210, -112, -192, -171, -251, -134, -178, -63, 0, -180, -94, -52, -137,
+	}
 
 	for _, a := range expectedNegatives {
 		b := prng.Int(-256)
@@ -80,19 +84,25 @@ func TestPRNG(t *testing.T) {
 	}
 }
 
-func TestPRNGRanges(t *testing.T) {
+func TestPermutationRejectsNegativeSize(t *testing.T) {
+	var secret Secret
+	prng := NewPRNG(secret)
+	require.Nil(t, prng.Permutation(-1))
+	require.Empty(t, prng.Permutation(0))
+}
 
+func TestPRNGRanges(t *testing.T) {
 	test := func(n int64) {
 		var secret Secret
 		secret[0] = 3
 		found0 := false
 		foundMax := false
 		prng := NewPRNG(secret)
-		max := n
-		if max > 0 {
-			max--
+		maxV := n
+		if maxV > 0 {
+			maxV--
 		} else {
-			max++
+			maxV++
 		}
 
 		for i := 0; i < 1000 && (!found0 || !foundMax); i++ {
@@ -100,7 +110,7 @@ func TestPRNGRanges(t *testing.T) {
 			if val == 0 {
 				found0 = true
 			}
-			if val == max {
+			if val == maxV {
 				foundMax = true
 			}
 		}
@@ -136,7 +146,7 @@ func TestPRNGCornerCases(t *testing.T) {
 	// failed when I went back and rebroke the shuffle function.
 	flips := 0
 	n := 40
-	for i := 0; i < n; i++ {
+	for range n {
 		res := prng.Permutation(2)
 		if res[0] == 1 {
 			flips++

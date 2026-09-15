@@ -122,7 +122,7 @@ func TestPerUserKeyUpgradeBackgroundShutdownMiddle(t *testing.T) {
 	expectMeta(t, metaCh, "woke-start")
 
 	n := 3
-	for i := 0; i < n; i++ {
+	for i := range n {
 		t.Logf("check %v", i)
 		select {
 		case x := <-roundResCh:
@@ -142,7 +142,7 @@ func TestPerUserKeyUpgradeBackgroundShutdownMiddle(t *testing.T) {
 	eng.Shutdown()
 	expectMeta(t, metaCh, "loop-exit")
 
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		advance(PerUserKeyUpgradeBackgroundSettings.Interval)
 		select {
 		case x := <-roundResCh:
@@ -191,7 +191,7 @@ func TestPerUserKeyUpgradeBackgroundUnnecessary(t *testing.T) {
 	// first run doesn't do anything
 	select {
 	case x := <-roundResCh:
-		require.Equal(t, nil, x, "round result")
+		require.NoError(t, x, "round result")
 	case <-time.After(5 * time.Second):
 		require.FailNow(t, "channel timed out")
 	}
@@ -242,7 +242,7 @@ func TestPerUserKeyUpgradeBackgroundWork(t *testing.T) {
 
 	select {
 	case x := <-roundResCh:
-		require.Equal(t, nil, x, "round result")
+		require.NoError(t, x, "round result")
 	case <-time.After(5 * time.Second):
 		require.FailNow(t, "channel timed out")
 	}
@@ -255,7 +255,7 @@ func TestPerUserKeyUpgradeBackgroundWork(t *testing.T) {
 	expectMeta(t, metaCh, "woke-wakeup") // this line has flaked before (CORE-5410)
 	select {
 	case x := <-roundResCh:
-		require.Equal(t, nil, x, "round result")
+		require.NoError(t, x, "round result")
 	case <-time.After(5 * time.Second):
 		require.FailNow(t, "channel timed out")
 	}
@@ -311,7 +311,7 @@ func TestPerUserKeyUpgradeBackgroundYield(t *testing.T) {
 	// first round runs, but yields to the guard
 	select {
 	case x := <-roundResCh:
-		require.Equal(t, nil, x, "round result")
+		require.NoError(t, x, "round result")
 	case <-time.After(5 * time.Second):
 		require.FailNow(t, "channel timed out")
 	}
@@ -328,7 +328,7 @@ func TestPerUserKeyUpgradeBackgroundYield(t *testing.T) {
 	expectMeta(t, metaCh, "woke-wakeup") // this line has flaked before (CORE-5410)
 	select {
 	case x := <-roundResCh:
-		require.Equal(t, nil, x, "round result")
+		require.NoError(t, x, "round result")
 	case <-time.After(5 * time.Second):
 		require.FailNow(t, "channel timed out")
 	}
@@ -396,7 +396,7 @@ func TestPerUserKeyUpgradeBackgroundLoginLate(t *testing.T) {
 	expectMeta(t, metaCh, "woke-wakeup")
 	select {
 	case x := <-roundResCh:
-		require.Equal(t, nil, x, "round result")
+		require.NoError(t, x, "round result")
 	case <-time.After(5 * time.Second):
 		require.FailNow(t, "channel timed out")
 	}

@@ -24,9 +24,11 @@ var txPattern = regexp.MustCompile(
 		`(?:[\s)\]}:;.,!?"']|\z)`,
 )
 
-var maxAmountLength = 100
-var maxUsernameLength = 16
-var maxTxsPerMessage = 3000
+var (
+	maxAmountLength   = 100
+	maxUsernameLength = 16
+	maxTxsPerMessage  = 3000
+)
 
 type ChatTxCandidate struct {
 	Amount       string
@@ -49,7 +51,7 @@ func FindChatTxCandidates(xs string) []ChatTxCandidate {
 	// adjacent matches of txPattern can overlap.
 	// For example: "+1xlm +2xlm" -> "+1xlm ", " +2xlm"
 	var matches []ChatTxCandidate
-	for i := 0; i < maxTxsPerMessage; i++ {
+	for range maxTxsPerMessage {
 		rawIndices := txPattern.FindStringSubmatchIndex(buf)
 		if rawIndices == nil {
 			break

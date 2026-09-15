@@ -1,8 +1,14 @@
 import * as C from '@/constants'
 import * as React from 'react'
+import * as Teams from '@/constants/teams'
 import * as Kb from '@/common-adapters'
-import * as Container from '@/util/container'
-import type * as T from '@/constants/types'
+import * as T from '@/constants/types'
+import {useNavigation} from '@react-navigation/native'
+import {useSafeNavigation} from '@/util/safe-navigation'
+import setRouteParamsIfPresent from './set-route-params-if-present'
+import {useLoadedTeam} from '../team/use-loaded-team'
+import {useTeamsListMap} from '../use-teams-list'
+import AvatarBadge from './avatar-badge'
 
 type Props = {
   members: string[]
@@ -10,68 +16,98 @@ type Props = {
 }
 
 const ConfirmKickOut = (props: Props) => {
-  const members = props.members
-  const teamID = props.teamID
+  const styles = useStyles()
+  const {members, teamID} = props
   const [subteamsToo, setSubteamsToo] = React.useState(false)
-
-  const _subteamIDs = C.useTeamsState(s => s.teamDetails.get(teamID)?.subteams) ?? new Set<string>()
-  const subteamIDs = Array.from(_subteamIDs)
-  const subteams = C.useTeamsState(
-    C.useShallow(s => subteamIDs.map(id => C.Teams.getTeamMeta(s, id).teamname))
+  const [kickedVisible, setKickedVisible] = React.useState(false)
+  const removeMemberRPC = C.useRPC(T.RPCGen.teamsTeamRemoveMemberRpcPromise)
+  const {reload, teamDetails, teamMeta} = useLoadedTeam(teamID)
+  const teamMetaByID = useTeamsListMap()
+  const subteamIDs = React.useMemo(() => Array.from(teamDetails.subteams), [teamDetails.subteams])
+  const subteams = React.useMemo(
+    () => subteamIDs.map(id => teamMetaByID.get(id)?.teamname ?? '').filter(Boolean),
+    [subteamIDs, teamMetaByID]
   )
-  const teamname = C.useTeamsState(s => C.Teams.getTeamMeta(s, teamID).teamname)
-  const waitingKeys = ([] as string[]).concat.apply(
-    members.map(member => C.Teams.removeMemberWaitingKey(teamID, member)),
-    members.map(member => subteamIDs.map(subteamID => C.Teams.removeMemberWaitingKey(subteamID, member)))
+  const teamname = teamMeta.teamname
+  const waitingKeys = [
+    ...members.map(member => C.waitingKeyTeamsRemoveMember(teamID, member)),
+    ...members.flatMap(member =>
+      subteamIDs.map(subteamID => C.waitingKeyTeamsRemoveMember(subteamID, member))
+    ),
+  ]
+  const waiting = C.Waiting.useAnyWaiting(waitingKeys)
+  const waitingError = C.Waiting.useAnyErrors(waitingKeys)
+  const navigation = useNavigation()
+  const nav = useSafeNavigation()
+  const onCancel = () => nav.safeNavigateUp()
+  const removeMember = React.useCallback(
+    async (targetTeamID: T.Teams.TeamID, username: string) =>
+      await new Promise<void>((resolve, reject) => {
+        removeMemberRPC(
+          [
+            {
+              member: {
+                assertion: {assertion: username, removeFromSubtree: false},
+                type: T.RPCGen.TeamMemberToRemoveType.assertion,
+              },
+              teamID: targetTeamID,
+            },
+            [C.waitingKeyTeamsTeam(targetTeamID), C.waitingKeyTeamsRemoveMember(targetTeamID, username)],
+          ],
+          () => resolve(),
+          reject
+        )
+      }),
+    [removeMemberRPC]
   )
-  const waiting = C.Waiting.useAnyWaiting(...waitingKeys)
-  const nav = Container.useSafeNavigation()
-  const onCancel = React.useCallback(() => nav.safeNavigateUp(), [nav])
-
-  const setMemberSelected = C.useTeamsState(s => s.dispatch.setMemberSelected)
-  const removeMember = C.useTeamsState(s => s.dispatch.removeMember)
-  // TODO(Y2K-1592): do this in one RPC
-  const onRemove = () => {
-    setMemberSelected(teamID, '', false, true)
-
-    members.forEach(member => removeMember(teamID, member))
-    if (subteamsToo) {
-      subteamIDs.forEach(subteamID => members.forEach(member => removeMember(subteamID, member)))
+  const onRemove = React.useCallback(() => {
+    const f = async () => {
+      for (const member of members) {
+        await removeMember(teamID, member)
+      }
+      if (subteamsToo) {
+        for (const subteamID of subteamIDs) {
+          for (const member of members) {
+            await removeMember(subteamID, member)
+          }
+        }
+      }
+      await reload()
     }
-  }
+    C.ignorePromise(f())
+  }, [members, reload, removeMember, subteamIDs, subteamsToo, teamID])
 
-  const wasWaiting = Container.usePrevious(waiting)
-  const navUpToScreen = C.useRouterState(s => s.dispatch.navUpToScreen)
+  const wasWaitingRef = React.useRef(waiting)
   React.useEffect(() => {
-    if (wasWaiting && !waiting) {
-      navUpToScreen('team')
+    if (wasWaitingRef.current && !waiting && !waitingError) {
+      setRouteParamsIfPresent(navigation, 'team', {selectedMembers: undefined})
+      setKickedVisible(true)
+      setTimeout(() => {
+        C.Router2.navigateUp()
+      }, 1000)
     }
-  }, [navUpToScreen, waiting, wasWaiting])
+    if (wasWaitingRef.current !== waiting) {
+      wasWaitingRef.current = waiting
+    }
+  }, [navigation, waiting, waitingError])
 
   const prompt = (
     <Kb.Text center={true} type="Header" style={styles.prompt}>
-      Kick {C.Teams.stringifyPeople(members)} out of {teamname}?
+      Kick {Teams.stringifyPeople(members)} out of {teamname}?
     </Kb.Text>
   )
   const header = (
-    <Kb.Box style={styles.positionRelative}>
+    <Kb.Box2 direction="vertical" relative={true}>
       <Kb.AvatarLine usernames={members} size={64} layout="horizontal" maxShown={5} />
-      <Kb.Box2
-        direction="horizontal"
-        centerChildren={true}
+      <AvatarBadge
+        icon="iconfont-block"
         style={Kb.Styles.collapseStyles([
           styles.iconContainer,
           members.length > 5 && styles.iconContainerMany,
         ])}
-      >
-        <Kb.Icon
-          type="iconfont-block"
-          color={Kb.Styles.globalColors.white}
-          fontSize={14}
-          style={styles.headerIcon}
-        />
-      </Kb.Box2>
-    </Kb.Box>
+        iconStyle={styles.headerIcon}
+      />
+    </Kb.Box2>
   )
   return (
     <Kb.ConfirmModal
@@ -95,10 +131,12 @@ const ConfirmKickOut = (props: Props) => {
               style={Kb.Styles.globalStyles.fullWidth}
             />
           )}
+          <Kb.SimpleToast visible={kickedVisible} text="Kicked" iconType="iconfont-check" />
         </Kb.Box2>
       }
+      error={waitingError?.message ?? ''}
       onCancel={onCancel}
-      onConfirm={onRemove}
+      onConfirm={kickedVisible ? undefined : onRemove}
       confirmText="Kick out"
       waitingKey={waitingKeys}
     />
@@ -106,7 +144,7 @@ const ConfirmKickOut = (props: Props) => {
 }
 export default ConfirmKickOut
 
-const styles = Kb.Styles.styleSheetCreate(() => ({
+const useStyles = Kb.Styles.createStyleHook(() => ({
   container: Kb.Styles.padding(0, Kb.Styles.globalMargins.small),
   headerIcon: Kb.Styles.platformStyles({
     common: {position: 'relative'},
@@ -114,23 +152,12 @@ const styles = Kb.Styles.styleSheetCreate(() => ({
     isMobile: {right: -0.5, top: 0.5},
   }),
   iconContainer: {
-    backgroundColor: Kb.Styles.globalColors.red,
-    borderColor: Kb.Styles.globalColors.white,
-    borderRadius: 12,
-    borderStyle: 'solid',
-    borderWidth: 3,
     bottom: -3,
-    height: 24,
-    overflow: 'hidden',
     position: 'absolute',
-    right: Kb.Styles.isMobile ? -24 : 0,
-    width: 24,
+    right: isMobile ? -24 : 0,
   },
   iconContainerMany: {
-    right: Kb.Styles.isMobile ? 0 : 20,
-  },
-  positionRelative: {
-    position: 'relative',
+    right: isMobile ? 0 : 20,
   },
   prompt: Kb.Styles.padding(0, Kb.Styles.globalMargins.small, Kb.Styles.globalMargins.tiny),
 }))

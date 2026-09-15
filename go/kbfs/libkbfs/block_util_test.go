@@ -1,6 +1,7 @@
 package libkbfs
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -9,11 +10,11 @@ import (
 	"github.com/keybase/client/go/kbfs/kbfsblock"
 	"github.com/keybase/client/go/kbfs/tlf"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/context"
 )
 
 func blockUtilInit(t *testing.T) (mockCtrl *gomock.Controller,
-	ctr *SafeTestReporter, bserver *MockBlockServer, ctx context.Context) {
+	ctr *SafeTestReporter, bserver *MockBlockServer, ctx context.Context,
+) {
 	ctr = NewSafeTestReporter(t)
 	mockCtrl = gomock.NewController(ctr)
 	bserver = NewMockBlockServer(mockCtrl)

@@ -1,9 +1,11 @@
-import * as C from '@/constants'
+import {ignorePromise} from '@/constants/utils'
 import * as T from '@/constants/types'
-import Text, {type StylesTextCrossPlatform} from '@/common-adapters/text'
-import Mention from '../../mention-container'
-import TeamMention from './team-container'
+import Text from '@/common-adapters/text'
+import type {StylesTextCrossPlatform} from '@/common-adapters/text.shared'
+import Mention from '../../mention'
+import TeamMention from './team'
 import UnknownMention from './unknown'
+import {useMaybeMentionInfo} from './context'
 
 const Kb = {Mention, Text}
 
@@ -16,38 +18,42 @@ type Props = {
   style?: StylesTextCrossPlatform
 }
 
+// Read every prop through one destructure: reaching through `props.x` in the body makes the react
+// compiler key its memo on the whole props object, so a mention re-renders on every parent render.
 const MaybeMention = (props: Props) => {
-  if (!props.info || props.info.status === T.RPCChat.UIMaybeMentionStatus.nothing) {
-    let text = `@${props.name}`
-    if (props.channel.length > 0) {
-      text += `#${props.channel}`
+  const {allowFontScaling, channel, info, name, onResolve, style} = props
+  if (!info || info.status === T.RPCChat.UIMaybeMentionStatus.nothing) {
+    let text = `@${name}`
+    if (channel.length > 0) {
+      text += `#${channel}`
     }
     return (
-      <Kb.Text type="Body" style={props.style} allowFontScaling={props.allowFontScaling}>
+      <Kb.Text type="Body" style={style} allowFontScaling={allowFontScaling}>
         {text}
       </Kb.Text>
     )
   }
-  switch (props.info.status) {
+  switch (info.status) {
     case T.RPCChat.UIMaybeMentionStatus.unknown:
       return (
         <UnknownMention
-          allowFontScaling={props.allowFontScaling}
-          channel={props.channel}
-          name={props.name}
-          onResolve={props.onResolve}
-          style={props.style}
+          allowFontScaling={allowFontScaling}
+          channel={channel}
+          name={name}
+          onResolve={onResolve}
+          style={style}
         />
       )
     case T.RPCChat.UIMaybeMentionStatus.user:
-      return <Kb.Mention username={props.name} />
+      return <Kb.Mention allowFontScaling={allowFontScaling} username={name} />
     case T.RPCChat.UIMaybeMentionStatus.team:
       return (
         <TeamMention
-          allowFontScaling={props.allowFontScaling}
-          style={props.style}
-          name={props.name}
-          channel={props.channel}
+          allowFontScaling={allowFontScaling}
+          style={style}
+          name={name}
+          channel={channel}
+          mentionInfo={info.team}
         />
       )
   }
@@ -60,22 +66,13 @@ type OwnProps = {
   style?: StylesTextCrossPlatform
 }
 
-const Container = (ownProps: OwnProps) => {
+const MaybeMentionContainer = (ownProps: OwnProps) => {
   const {name, channel} = ownProps
-  const info = C.useChatState(s => s.maybeMentionMap.get(C.Chat.getTeamMentionName(name, channel)))
-  const resolveMaybeMention = C.useChatContext(s => s.dispatch.resolveMaybeMention)
+  const info = useMaybeMentionInfo(name, channel)
   const onResolve = () => {
-    resolveMaybeMention(channel, name)
+    ignorePromise(T.RPCChat.localResolveMaybeMentionRpcPromise({mention: {channel, name}}))
   }
-  const props = {
-    allowFontScaling: ownProps.allowFontScaling,
-    channel: ownProps.channel,
-    info,
-    name: ownProps.name,
-    onResolve,
-    style: ownProps.style,
-  }
-  return <MaybeMention {...props} />
+  return <MaybeMention {...ownProps} info={info} onResolve={onResolve} />
 }
 
-export default Container
+export default MaybeMentionContainer

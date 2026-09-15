@@ -1,26 +1,43 @@
-import * as C from '@/constants'
 import type * as T from '@/constants/types'
-import OldProfileResetNotice from '.'
+import * as C from '@/constants'
+import {navigateToThread, previewConversation} from '@/constants/router'
+import {Text} from '@/common-adapters'
+import UserNotice from '../user-notice'
+import {useConversationThreadID, useThreadMeta} from '../../thread-context'
+import {useConversationParticipants} from '../../data-hooks'
 
-const Container = () => {
-  const participantInfo = C.useChatContext(s => s.participants)
-  const meta = C.useChatContext(s => s.meta)
+const SystemOldProfileResetNotice = () => {
+  const conversationIDKey = useConversationThreadID()
+  const meta = useThreadMeta(
+    C.useShallow(m => ({supersededBy: m.supersededBy, wasFinalizedBy: m.wasFinalizedBy}))
+  )
+  const participantInfo = useConversationParticipants(conversationIDKey)
   const _participants = participantInfo.all
   const nextConversationIDKey = meta.supersededBy
   const username = meta.wasFinalizedBy || ''
   const onOpenConversation = (conversationIDKey: T.Chat.ConversationIDKey) => {
-    C.getConvoState(conversationIDKey).dispatch.navigateToThread('jumpFromReset')
+    navigateToThread(conversationIDKey, 'jumpFromReset')
   }
-  const previewConversation = C.useChatState(s => s.dispatch.previewConversation)
   const startConversation = (participants: ReadonlyArray<string>) => {
     previewConversation({participants, reason: 'fromAReset'})
   }
-  const props = {
-    onOpenNewerConversation: nextConversationIDKey
-      ? () => onOpenConversation(nextConversationIDKey)
-      : () => startConversation(_participants),
-    username,
-  }
-  return <OldProfileResetNotice {...props} />
+  const onOpenNewerConversation = nextConversationIDKey
+    ? () => onOpenConversation(nextConversationIDKey)
+    : () => startConversation(_participants)
+
+  return (
+    <UserNotice>
+      <Text type="BodySmallSemibold" negative={true}>
+        {username} reset their profile
+      </Text>
+      <Text type="BodySmall" negative={true}>
+        Their encryption keys were replaced with new ones.
+      </Text>
+      <Text type="BodySmallPrimaryLink" negative={true} onClick={onOpenNewerConversation}>
+        Jump to new conversation
+      </Text>
+    </UserNotice>
+  )
 }
-export default Container
+
+export default SystemOldProfileResetNotice

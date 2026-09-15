@@ -2,19 +2,38 @@ import * as T from '@/constants/types'
 import * as C from '@/constants'
 import * as Kb from '@/common-adapters'
 import {PathItemAction, LastModifiedLine, ItemIcon, type ClickableProps} from '../common'
+import {
+  useFsDownload,
+  useFsErrorActionOrThrow,
+  useFsFileContext,
+  useOpenPathInSystemFileManagerDesktop,
+  useSystemFileManagerIntegration,
+} from '../common'
 import {hasShare} from '../common/path-item-action/layout'
+import * as FS from '@/constants/fs'
 
-type DefaultViewProps = {
-  download: () => void
-  sfmiEnabled: boolean
-  path: T.FS.Path
-  pathItem: T.FS.PathItem
-  showInSystemFileManager: () => void
+type OwnProps = {path: T.FS.Path}
+
+const Share = (p: ClickableProps) => {
+  const {onClick, mref} = p
+  return <Kb.Button key="share" label="Share" onClick={onClick} ref={mref} />
 }
 
-const Share = (p: ClickableProps) => <Kb.Button key="share" label="Share" onClick={p.onClick} ref={p.mref} />
-const DefaultView = (props: DefaultViewProps) => {
-  const fileContext = C.useFSState(s => s.fileContext.get(props.path) || C.FS.emptyFileContext)
+const Container = (ownProps: OwnProps) => {
+  const styles = useStyles()
+  const {path} = ownProps
+  const {fileContext, pathItem} = useFsFileContext(path)
+  const errorToActionOrThrow = useFsErrorActionOrThrow()
+  const _download = useFsDownload()
+  const {driverStatus} = useSystemFileManagerIntegration()
+  const openPathInSystemFileManagerDesktop = useOpenPathInSystemFileManagerDesktop()
+  const sfmiEnabled = driverStatus.type === T.FS.DriverStatusType.Enabled
+  const download = () => {
+    _download(path, 'download')
+  }
+  const showInSystemFileManager = () => {
+    openPathInSystemFileManagerDesktop(path, errorToActionOrThrow)
+  }
   return (
     <Kb.Box2 direction="vertical" fullWidth={true} fullHeight={true} style={styles.container}>
       <Kb.Box2
@@ -22,27 +41,30 @@ const DefaultView = (props: DefaultViewProps) => {
         fullWidth={true}
         fullHeight={true}
         centerChildren={true}
+        flex={1}
         style={styles.innerContainer}
       >
-        <ItemIcon path={props.path} size={96} />
+        <ItemIcon path={path} size={96} />
         <Kb.Text type="BodyBig" style={styles.filename}>
-          {props.pathItem.name}
+          {pathItem.name}
         </Kb.Text>
-        <Kb.Text type="BodySmall">{C.FS.humanReadableFileSize(props.pathItem.size)}</Kb.Text>
-        {C.isMobile && <LastModifiedLine path={props.path} mode="default" />}
-        {props.pathItem.type === T.FS.PathType.Symlink && (
+        {pathItem.type === T.FS.PathType.File && (
+          <Kb.Text type="BodySmall">{FS.humanReadableFileSize(pathItem.size)}</Kb.Text>
+        )}
+        {isMobile && <LastModifiedLine path={path} mode="default" />}
+        {pathItem.type === T.FS.PathType.Symlink && (
           <Kb.Text type="BodySmall" style={styles.symlink}>
-            {'This is a symlink' + (props.pathItem.linkTarget ? ` to: ${props.pathItem.linkTarget}.` : '.')}
+            {'This is a symlink' + (pathItem.linkTarget ? ` to: ${pathItem.linkTarget}.` : '.')}
           </Kb.Text>
         )}
-        {C.isMobile && (
+        {isMobile && (
           <Kb.Text center={true} type="BodySmall" style={styles.noOpenMobile}>
             This document can not be opened on mobile. You can still interact with it using the ••• menu.
           </Kb.Text>
         )}
         {
           // Enable this button for desktop when we have in-app sharing.
-          hasShare('screen', props.path, props.pathItem, fileContext) && (
+          hasShare('screen', path, pathItem, fileContext) && (
             <>
               <Kb.Box2 direction="vertical" gap="medium" gapStart={true} />
               <PathItemAction
@@ -50,21 +72,21 @@ const DefaultView = (props: DefaultViewProps) => {
                   component: Share,
                   type: 'component',
                 }}
-                path={props.path}
+                path={path}
                 initView={T.FS.PathItemActionMenuView.Share}
                 mode="screen"
               />
             </>
           )
         }
-        {!C.isIOS &&
-          (props.sfmiEnabled ? (
+        {!isIOS &&
+          (sfmiEnabled ? (
             <Kb.Button
               key="open"
               type="Dim"
               label={'Show in ' + C.fileUIName}
               style={{marginTop: Kb.Styles.globalMargins.small}}
-              onClick={props.showInSystemFileManager}
+              onClick={showInSystemFileManager}
             />
           ) : (
             <Kb.Button
@@ -72,7 +94,7 @@ const DefaultView = (props: DefaultViewProps) => {
               mode="Secondary"
               label="Download"
               style={{marginTop: Kb.Styles.globalMargins.small}}
-              onClick={props.download}
+              onClick={download}
             />
           ))}
       </Kb.Box2>
@@ -80,8 +102,8 @@ const DefaultView = (props: DefaultViewProps) => {
   )
 }
 
-const styles = Kb.Styles.styleSheetCreate(
-  () =>
+const useStyles = Kb.Styles.createStyleHook(
+  theme =>
     ({
       container: Kb.Styles.platformStyles({
         isElectron: {padding: Kb.Styles.globalMargins.medium},
@@ -93,16 +115,11 @@ const styles = Kb.Styles.styleSheetCreate(
       },
       innerContainer: Kb.Styles.platformStyles({
         common: {
-          ...Kb.Styles.globalStyles.flexBoxColumn,
+          backgroundColor: theme.white,
           ...Kb.Styles.globalStyles.flexGrow,
-          alignItems: 'center',
-          backgroundColor: Kb.Styles.globalColors.white,
-          flex: 1,
-          justifyContent: 'center',
         },
         isMobile: {
-          paddingLeft: Kb.Styles.globalMargins.large,
-          paddingRight: Kb.Styles.globalMargins.large,
+          ...Kb.Styles.paddingH(Kb.Styles.globalMargins.large),
         },
       }),
       noOpenMobile: {
@@ -114,4 +131,4 @@ const styles = Kb.Styles.styleSheetCreate(
     }) as const
 )
 
-export default DefaultView
+export default Container

@@ -1,13 +1,17 @@
 import * as C from '@/constants'
-import * as Constants from '@/constants/fs'
 import * as React from 'react'
 import * as Kb from '@/common-adapters'
 import * as Kbfs from '../common'
 import type * as T from '@/constants/types'
+import {useFolderViewFilterState} from '@/fs/common/folder-view-filter-state'
 import Actions from './actions'
-import MainBanner from './main-banner/container'
+import * as FS from '@/constants/fs'
+import AccountSwitchHeaderAvatar from '@/router-v2/account-switch-header-avatar'
 
 /*
+ *
+ * Android only: iOS uses the native header (see ios-header.tsx) so its items
+ * get the liquid glass treatment.
  *
  * If layout changes in this file cause mobile header height change, it's
  * important to update getBaseHeight otherwise KeyboardAvoidingView won't work
@@ -19,15 +23,27 @@ type Props = {
   path: T.FS.Path
 }
 
-const MaybePublicTag = ({path}: {path: T.FS.Path}) =>
-  Constants.hasPublicTag(path) ? (
-    <Kb.Meta title="public" backgroundColor={Kb.Styles.globalColors.green} />
-  ) : null
+const MaybePublicTag = ({path}: {path: T.FS.Path}) => {
+  const theme = Kb.Styles.useTheme()
+  return FS.hasPublicTag(path) ? <Kb.Meta title="public" backgroundColor={theme.green} /> : null
+}
 
-const NavMobileHeader = (props: Props) => {
-  const expanded = C.useFSState(s => s.folderViewFilter !== undefined)
+const FilesTabStatusIcon = () => {
+  const styles = useStyles()
+  const uploadIcon = Kbfs.useFilesTabUploadIcon()
+  return uploadIcon ? <Kbfs.UploadIcon uploadIcon={uploadIcon} style={styles.filesTabStatusIcon} /> : null
+}
+
+const NavMobileHeaderInner = (props: Props) => {
+  const styles = useStyles()
+  const {expanded, folderViewFilter, setFolderViewFilter} = useFolderViewFilterState(
+    C.useShallow(s => ({
+      expanded: s.folderViewFilter !== undefined,
+      folderViewFilter: s.folderViewFilter,
+      setFolderViewFilter: s.dispatch.setFolderViewFilter,
+    }))
+  )
   const {pop} = C.useNav()
-  const setFolderViewFilter = C.useFSState(s => s.dispatch.setFolderViewFilter)
 
   const filterDone = setFolderViewFilter
   const triggerFilterMobile = () => setFolderViewFilter('')
@@ -43,24 +59,31 @@ const NavMobileHeader = (props: Props) => {
     filterDone()
   }, [filterDone, props.path])
 
-  return props.path === Constants.defaultPath ? (
+  return props.path === FS.defaultPath ? (
     <Kb.SafeAreaViewTop>
-      <Kb.Box2 direction="vertical" fullWidth={true} style={styles.headerContainer} centerChildren={true}>
-        <Kb.Text type="BodyBig">Files</Kb.Text>
+      <Kb.Box2 direction="vertical" fullWidth={true} style={styles.headerContainer}>
+        <Kb.Box2 direction="horizontal" fullWidth={true} alignItems="center" style={styles.rootContainer}>
+          <AccountSwitchHeaderAvatar />
+          <Kb.Box2 direction="horizontal" centerChildren={true} flex={1} gap="xtiny">
+            <Kb.Text type="BodyBig">Files</Kb.Text>
+            <FilesTabStatusIcon />
+          </Kb.Box2>
+          <Kb.Box2 direction="vertical" style={styles.rootSpacer} />
+        </Kb.Box2>
       </Kb.Box2>
-      <MainBanner />
     </Kb.SafeAreaViewTop>
   ) : (
     <Kb.SafeAreaViewTop>
       <Kb.Box2 direction="vertical" fullWidth={true} style={styles.headerContainer}>
         {expanded ? (
-          <Kbfs.FolderViewFilter path={props.path} onCancel={filterDone} />
+          <Kbfs.FolderViewFilter filter={folderViewFilter} onCancel={filterDone} onChangeFilter={setFolderViewFilter} path={props.path} />
         ) : (
-          <Kb.Box2 direction="horizontal" fullWidth={true} style={styles.expandedTopContainer}>
+          <Kb.Box2 direction="horizontal" fullWidth={true} alignItems="center" style={styles.expandedTopContainer}>
             {pop ? (
               <Kb.BackButton badgeNumber={0 /* TODO KBFS-4109 */} onClick={pop} style={styles.backButton} />
             ) : null}
-            <Kb.Box style={styles.gap} />
+            <Kb.Box2 direction="horizontal" flex={1} />
+            <FilesTabStatusIcon />
             <Actions path={props.path} onTriggerFilterMobile={triggerFilterMobile} />
           </Kb.Box2>
         )}
@@ -77,48 +100,46 @@ const NavMobileHeader = (props: Props) => {
           </Kb.Box2>
           <MaybePublicTag path={props.path} />
         </Kb.Box2>
-        <MainBanner />
       </Kb.Box2>
     </Kb.SafeAreaViewTop>
   )
 }
 
-const styles = Kb.Styles.styleSheetCreate(
-  () =>
+const useStyles = Kb.Styles.createStyleHook(
+  theme =>
     ({
-      backButton: Kb.Styles.platformStyles({
-        common: {
-          opacity: 1,
-          paddingBottom: Kb.Styles.globalMargins.tiny,
-          paddingLeft: Kb.Styles.globalMargins.small,
-          paddingRight: Kb.Styles.globalMargins.tiny,
-          paddingTop: Kb.Styles.globalMargins.tiny,
-        },
-        isAndroid: {paddingRight: Kb.Styles.globalMargins.small},
-      }),
+      backButton: {
+        opacity: 1,
+        ...Kb.Styles.padding(Kb.Styles.globalMargins.tiny, Kb.Styles.globalMargins.tiny, Kb.Styles.globalMargins.tiny, Kb.Styles.globalMargins.small),
+        paddingRight: Kb.Styles.globalMargins.small,
+      },
       expandedTitleContainer: {
-        backgroundColor: Kb.Styles.globalColors.white,
+        backgroundColor: theme.white,
         padding: Kb.Styles.globalMargins.tiny,
         paddingBottom: Kb.Styles.globalMargins.xsmall + Kb.Styles.globalMargins.xxtiny,
       },
-      expandedTopContainer: Kb.Styles.platformStyles({
-        common: {
-          backgroundColor: Kb.Styles.globalColors.white,
-          paddingRight: Kb.Styles.globalMargins.tiny,
-        },
-        isAndroid: {height: 56},
-        isIOS: {height: 44},
-      }),
+      rootContainer: {height: 56},
+      rootSpacer: Kb.Styles.size(44),
+      expandedTopContainer: {
+        backgroundColor: theme.white,
+        height: 56,
+        paddingRight: Kb.Styles.globalMargins.tiny,
+      },
       filename: {marginLeft: Kb.Styles.globalMargins.xtiny},
-      gap: {flex: 1},
+      filesTabStatusIcon: Kb.Styles.size(Kb.Styles.globalMargins.small),
       headerContainer: {
-        backgroundColor: Kb.Styles.globalColors.white,
-        borderBottomColor: Kb.Styles.globalColors.black_10,
-        borderBottomWidth: 1,
-        borderStyle: 'solid',
-        minHeight: 44,
+        backgroundColor: theme.white,
+        ...Kb.Styles.bottomDivider(theme, 44),
       },
     }) as const
+)
+
+const NavMobileHeader = (props: Props) => (
+  <Kbfs.FsErrorProvider>
+    <Kbfs.FsDataProvider>
+      <NavMobileHeaderInner {...props} />
+    </Kbfs.FsDataProvider>
+  </Kbfs.FsErrorProvider>
 )
 
 export default NavMobileHeader

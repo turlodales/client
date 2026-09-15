@@ -1,6 +1,7 @@
 package attachments
 
 import (
+	"context"
 	"errors"
 	"io"
 	"path/filepath"
@@ -17,7 +18,6 @@ import (
 
 	"github.com/keybase/client/go/protocol/chat1"
 	"github.com/keybase/client/go/protocol/gregor1"
-	"golang.org/x/net/context"
 )
 
 type mockStore struct {
@@ -53,13 +53,13 @@ func newMockActivityNotifier() *mockActivityNotifier {
 }
 
 func (a *mockActivityNotifier) AttachmentUploadStart(ctx context.Context, uid gregor1.UID,
-	convID chat1.ConversationID, outboxID chat1.OutboxID) {
+	convID chat1.ConversationID, outboxID chat1.OutboxID,
+) {
 	a.startCh <- outboxID
 }
 
 func (a *mockActivityNotifier) AttachmentUploadProgress(ctx context.Context, uid gregor1.UID,
 	convID chat1.ConversationID, outboxID chat1.OutboxID, bytesComplete, bytesTotal int64) {
-
 }
 
 type mockDeliverer struct {
@@ -88,21 +88,24 @@ type mockInboxSource struct {
 }
 
 func (m mockInboxSource) ReadUnverified(ctx context.Context, uid gregor1.UID,
-	dataSource types.InboxSourceDataSourceTyp, rquery *chat1.GetInboxQuery) (types.Inbox, error) {
+	dataSource types.InboxSourceDataSourceTyp, rquery *chat1.GetInboxQuery,
+) (types.Inbox, error) {
 	return types.Inbox{
-		ConvsUnverified: []types.RemoteConversation{{
-			Conv: chat1.Conversation{
-				Metadata: chat1.ConversationMetadata{
-					ConversationID: chat1.ConversationID([]byte{0, 1, 0}),
-					IdTriple: chat1.ConversationIDTriple{
-						TopicType: chat1.TopicType_CHAT,
+		ConvsUnverified: []types.RemoteConversation{
+			{
+				Conv: chat1.Conversation{
+					Metadata: chat1.ConversationMetadata{
+						ConversationID: chat1.ConversationID([]byte{0, 1, 0}),
+						IdTriple: chat1.ConversationIDTriple{
+							TopicType: chat1.TopicType_CHAT,
+						},
 					},
 				},
 			},
 		},
-		},
 	}, nil
 }
+
 func (m mockInboxSource) Stop(context.Context) chan struct{} {
 	ch := make(chan struct{})
 	close(ch)
@@ -197,7 +200,7 @@ func TestAttachmentUploader(t *testing.T) {
 			require.Nil(t, res.Error)
 			require.Equal(t, md, res.Metadata)
 			require.Nil(t, res.Preview)
-			require.Equal(t, "", res.Object.MimeType)
+			require.Empty(t, res.Object.MimeType)
 		case <-time.After(20 * time.Second):
 			require.Fail(t, "no upload")
 		}
@@ -359,9 +362,9 @@ func TestAttachmentUploader(t *testing.T) {
 
 	uploadedPreviews, err = filepath.Glob(filepath.Join(baseDir, uploadedPreviewsDir, "*"))
 	require.NoError(t, err)
-	require.Zero(t, len(uploadedPreviews))
+	require.Empty(t, uploadedPreviews)
 
 	uploadedFulls, err = filepath.Glob(filepath.Join(baseDir, uploadedFullsDir, "*"))
 	require.NoError(t, err)
-	require.Zero(t, len(uploadedFulls))
+	require.Empty(t, uploadedFulls)
 }

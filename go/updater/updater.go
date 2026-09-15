@@ -71,12 +71,12 @@ type Config interface {
 
 // Log is the logging interface for this package
 type Log interface {
-	Debug(...interface{})
-	Info(...interface{})
-	Debugf(s string, args ...interface{})
-	Infof(s string, args ...interface{})
-	Warningf(s string, args ...interface{})
-	Errorf(s string, args ...interface{})
+	Debug(...any)
+	Info(...any)
+	Debugf(s string, args ...any)
+	Infof(s string, args ...any)
+	Warningf(s string, args ...any)
+	Errorf(s string, args ...any)
 }
 
 // NewUpdater constructs an Updater
@@ -199,7 +199,6 @@ func (u *Updater) ApplyDownloaded(ctx Context) (bool, error) {
 		return false, err
 	}
 	return applied, nil
-
 }
 
 // ApplyDownloaded will look for an previously downloaded update and attempt to apply it without prompting.
@@ -474,7 +473,7 @@ func report(ctx Context, err error, update *Update, options UpdateOptions) {
 // and will be removed after an update. The temp dir should already exist.
 func (u *Updater) tempDir() string {
 	tmpDir := util.TempPath("", "KeybaseUpdater.")
-	if err := util.MakeDirs(tmpDir, 0700, u.log); err != nil {
+	if err := util.MakeDirs(tmpDir, 0o700, u.log); err != nil {
 		u.log.Warningf("Error trying to create temp dir: %s", err)
 		return ""
 	}

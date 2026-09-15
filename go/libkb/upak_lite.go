@@ -3,6 +3,7 @@ package libkb
 import (
 	"fmt"
 	"io"
+	"slices"
 
 	"github.com/buger/jsonparser"
 	"github.com/keybase/client/go/jsonparserw"
@@ -115,7 +116,7 @@ func (hsc *HighSigChain) LoadFromServer(m MetaContext, t *MerkleTriple, selfUID 
 			"c3":  I{Val: int(sigCompression3Unstubbed)},
 		},
 	}
-	resp, finisher, err := m.G().API.GetResp(m, apiArg)
+	resp, finisher, err := m.G().API.GetResp(m, apiArg) //nolint:bodyclose // finisher closes the body
 	if err != nil {
 		return nil, err
 	}
@@ -170,8 +171,8 @@ func (hsc *HighSigChain) LoadFromServer(m MetaContext, t *MerkleTriple, selfUID 
 func (hsc *HighSigChain) VerifyChain(m MetaContext) (err error) {
 	defer m.Trace("HighSigChain.VerifyChain", &err)()
 
-	for i := len(hsc.chainLinks) - 1; i >= 0; i-- {
-		curr := hsc.chainLinks[i]
+	for i, curr := range slices.Backward(hsc.chainLinks) {
+
 		m.VLogf(VLog1, "| verify high chain link %d (%s)", curr.GetSeqno(), curr.id)
 		if err = curr.VerifyLink(); err != nil {
 			return err

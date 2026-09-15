@@ -1,10 +1,9 @@
 package teams
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/keybase/client/go/kbtest"
@@ -222,7 +221,7 @@ func TestTeamSigChainPlay1(t *testing.T) {
 
 	// Check once before and after serializing and deserializing
 	mctx := libkb.NewMetaContextForTest(tc)
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		if i == 0 {
 			t.Logf("testing fresh")
 		} else {
@@ -310,7 +309,7 @@ func TestTeamSigChainPlay2(t *testing.T) {
 	mctx := libkb.NewMetaContextForTest(tc)
 
 	// Check once before and after serializing and deserializing
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		require.Equal(t, "t_bfaadb41", string(state.LatestLastNamePart()))
 		require.False(t, state.IsSubteam())
 		ptk, err := state.GetLatestPerTeamKey(mctx)
@@ -343,13 +342,13 @@ func TestTeamSigChainPlay2(t *testing.T) {
 		require.Len(t, xs, 2)
 		xs, err = state.GetUsersWithRole(keybase1.TeamRole_READER)
 		require.NoError(t, err)
-		require.Len(t, xs, 0)
+		require.Empty(t, xs)
 		xs, err = state.GetUsersWithRole(keybase1.TeamRole_BOT)
 		require.NoError(t, err)
-		require.Len(t, xs, 0)
+		require.Empty(t, xs)
 		xs, err = state.GetUsersWithRole(keybase1.TeamRole_RESTRICTEDBOT)
 		require.NoError(t, err)
-		require.Len(t, xs, 0)
+		require.Empty(t, xs)
 
 		// Reserialize
 		bs, err := encode(state.inner)
@@ -360,7 +359,7 @@ func TestTeamSigChainPlay2(t *testing.T) {
 	}
 }
 
-func encode(input interface{}) ([]byte, error) {
+func encode(input any) ([]byte, error) {
 	mh := codec.MsgpackHandle{WriteExt: true}
 	var data []byte
 	enc := codec.NewEncoderBytes(&data, &mh)
@@ -370,7 +369,7 @@ func encode(input interface{}) ([]byte, error) {
 	return data, nil
 }
 
-func decode(data []byte, res interface{}) error {
+func decode(data []byte, res any) error {
 	mh := codec.MsgpackHandle{WriteExt: true}
 	dec := codec.NewDecoderBytes(data, &mh)
 	err := dec.Decode(res)
@@ -426,21 +425,21 @@ func TestTeamSigChainWithInvites(t *testing.T) {
 	})
 	checkInvite("b90e024124ddd80870759bae42143227", func(i *keybase1.TeamInvite) {
 		require.NotNil(t, i)
-		require.Equal(t, i.Role, keybase1.TeamRole_WRITER)
+		require.Equal(t, keybase1.TeamRole_WRITER, i.Role)
 		require.Equal(t, i.Type.Sbs(), keybase1.TeamInviteSocialNetwork("rooter"))
 		require.Equal(t, i.Name, keybase1.TeamInviteName("u_8114060fcef4"))
 	})
 	checkInvite("4f66ee0fa60ecb10b9f59ff6b7157527", func(i *keybase1.TeamInvite) {
 		require.NotNil(t, i)
-		require.Equal(t, i.Role, keybase1.TeamRole_WRITER)
+		require.Equal(t, keybase1.TeamRole_WRITER, i.Role)
 		typ, err := i.Type.C()
 		require.NoError(t, err)
-		require.Equal(t, typ, keybase1.TeamInviteCategory_EMAIL)
+		require.Equal(t, keybase1.TeamInviteCategory_EMAIL, typ)
 		require.Equal(t, i.Name, keybase1.TeamInviteName("max+8114060fcef4@keyba.se"))
 	})
 	checkInvite("6acd369ec6f5649c4ef83c8753b3aa27", func(i *keybase1.TeamInvite) {
 		require.NotNil(t, i)
-		require.Equal(t, i.Role, keybase1.TeamRole_ADMIN)
+		require.Equal(t, keybase1.TeamRole_ADMIN, i.Role)
 		require.Equal(t, i.Type.Sbs(), keybase1.TeamInviteSocialNetwork("twitter"))
 		require.Equal(t, i.Name, keybase1.TeamInviteName("u_8114060fcef4"))
 	})
@@ -506,7 +505,7 @@ func TestMemberCtime(t *testing.T) {
 
 	// user had a bunch of non-NONE roles, we should return the first join time
 	points = nil
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		points = append(points,
 			keybase1.UserLogPoint{
 				Role: keybase1.TeamRole_WRITER,

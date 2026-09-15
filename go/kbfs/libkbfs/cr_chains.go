@@ -5,7 +5,9 @@
 package libkbfs
 
 import (
+	"context"
 	"fmt"
+	"slices"
 	"sort"
 	"time"
 
@@ -19,7 +21,6 @@ import (
 	"github.com/keybase/client/go/logger"
 	"github.com/keybase/client/go/protocol/keybase1"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 )
 
 // crChain represents the set of operations that happened to a
@@ -45,7 +46,8 @@ type crChain struct {
 // This function returns the list of pointers that should be unreferenced
 // as part of an eventual resolution of the corresponding branch.
 func (cc *crChain) collapse(createdOriginals map[data.BlockPointer]bool,
-	originals map[data.BlockPointer]data.BlockPointer) (toUnrefs []data.BlockPointer) {
+	originals map[data.BlockPointer]data.BlockPointer,
+) (toUnrefs []data.BlockPointer) {
 	createsSeen := make(map[string]int)
 	indicesToRemove := make(map[int]bool)
 	var wr []WriteRange
@@ -54,8 +56,7 @@ func (cc *crChain) collapse(createdOriginals map[data.BlockPointer]bool,
 	for i, op := range cc.ops {
 		switch realOp := op.(type) {
 		case *createOp:
-			if prevCreateIndex, ok :=
-				createsSeen[realOp.NewName]; realOp.renamed && ok {
+			if prevCreateIndex, ok := createsSeen[realOp.NewName]; realOp.renamed && ok {
 				// A rename has papered over the first create, so
 				// just drop it.
 				indicesToRemove[prevCreateIndex] = true
@@ -145,7 +146,8 @@ func (cc *crChain) getCollapsedWriteRange() []WriteRange {
 }
 
 func writeRangesEquivalent(
-	wr1 []WriteRange, wr2 []WriteRange) bool {
+	wr1 []WriteRange, wr2 []WriteRange,
+) bool {
 	// Both empty?
 	if len(wr1) == 0 && len(wr2) == 0 {
 		return true
@@ -179,7 +181,8 @@ func (cc *crChain) removeSyncOps() {
 
 func (cc *crChain) getActionsToMerge(
 	ctx context.Context, renamer ConflictRenamer, mergedPath data.Path,
-	mergedChain *crChain) (crActionList, error) {
+	mergedChain *crChain,
+) (crActionList, error) {
 	var actions crActionList
 
 	// If this is a file, determine whether the unmerged chain
@@ -207,9 +210,8 @@ func (cc *crChain) getActionsToMerge(
 		conflict := false
 		if mergedChain != nil {
 			for _, mergedOp := range mergedChain.ops {
-				action, err :=
-					unmergedOp.checkConflict(
-						ctx, renamer, mergedOp, cc.isFile())
+				action, err := unmergedOp.checkConflict(
+					ctx, renamer, mergedOp, cc.isFile())
 				if err != nil {
 					return nil, err
 				}
@@ -240,7 +242,8 @@ func (cc *crChain) isFile() bool {
 // state, but setAttr(mtime) can apply to either type; in that case,
 // we need to fetch the block to figure out the type.
 func (cc *crChain) identifyType(ctx context.Context, fbo *folderBlockOps,
-	kmd libkey.KeyMetadata, chains *crChains) error {
+	kmd libkey.KeyMetadata, chains *crChains,
+) error {
 	if len(cc.ops) == 0 {
 		return nil
 	}
@@ -379,7 +382,8 @@ func (cc *crChain) identifyType(ctx context.Context, fbo *folderBlockOps,
 }
 
 func (cc *crChain) remove(ctx context.Context, log logger.Logger,
-	revision kbfsmd.Revision) bool {
+	revision kbfsmd.Revision,
+) bool {
 	anyRemoved := false
 	var newOps []op
 	for i, currOp := range cc.ops {
@@ -760,7 +764,8 @@ func (ccs *crChains) makeChainForOp(op op) error {
 }
 
 func (ccs *crChains) makeChainForNewOpWithUpdate(
-	targetPtr data.BlockPointer, newOp op, update *blockUpdate) error {
+	targetPtr data.BlockPointer, newOp op, update *blockUpdate,
+) error {
 	oldUpdate := *update
 	// so that most recent == original
 	var err error
@@ -825,7 +830,8 @@ func (ccs *crChains) makeChainForNewOp(targetPtr data.BlockPointer, newOp op) er
 }
 
 func (ccs *crChains) mostRecentFromOriginal(original data.BlockPointer) (
-	data.BlockPointer, error) {
+	data.BlockPointer, error,
+) {
 	chain, ok := ccs.byOriginal[original]
 	if !ok {
 		return data.BlockPointer{}, errors.WithStack(NoChainFoundError{original})
@@ -834,12 +840,15 @@ func (ccs *crChains) mostRecentFromOriginal(original data.BlockPointer) (
 }
 
 func (ccs *crChains) mostRecentFromOriginalOrSame(original data.BlockPointer) (
-	data.BlockPointer, error) {
+	data.BlockPointer, error,
+) {
 	ptr, err := ccs.mostRecentFromOriginal(original)
 	if err == nil {
 		// A satisfactory chain was found.
 		return ptr, nil
-	} else if _, ok := errors.Cause(err).(NoChainFoundError); !ok {
+	}
+	var noChainFoundErr NoChainFoundError
+	if !errors.As(err, &noChainFoundErr) {
 		// An unexpected error!
 		return data.BlockPointer{}, err
 	}
@@ -847,7 +856,8 @@ func (ccs *crChains) mostRecentFromOriginalOrSame(original data.BlockPointer) (
 }
 
 func (ccs *crChains) originalFromMostRecent(mostRecent data.BlockPointer) (
-	data.BlockPointer, error) {
+	data.BlockPointer, error,
+) {
 	chain, ok := ccs.byMostRecent[mostRecent]
 	if !ok {
 		return data.BlockPointer{}, errors.WithStack(NoChainFoundError{mostRecent})
@@ -856,12 +866,15 @@ func (ccs *crChains) originalFromMostRecent(mostRecent data.BlockPointer) (
 }
 
 func (ccs *crChains) originalFromMostRecentOrSame(mostRecent data.BlockPointer) (
-	data.BlockPointer, error) {
+	data.BlockPointer, error,
+) {
 	ptr, err := ccs.originalFromMostRecent(mostRecent)
 	if err == nil {
 		// A satisfactory chain was found.
 		return ptr, nil
-	} else if _, ok := errors.Cause(err).(NoChainFoundError); !ok {
+	}
+	var noChainFoundErr NoChainFoundError
+	if !errors.As(err, &noChainFoundErr) {
 		// An unexpected error!
 		return data.BlockPointer{}, err
 	}
@@ -877,7 +890,8 @@ func (ccs *crChains) isDeleted(original data.BlockPointer) bool {
 }
 
 func (ccs *crChains) renamedParentAndName(original data.BlockPointer) (
-	data.BlockPointer, string, bool) {
+	data.BlockPointer, string, bool,
+) {
 	info, ok := ccs.renamedOriginals[original]
 	if !ok {
 		return data.BlockPointer{}, "", false
@@ -902,10 +916,11 @@ func newCRChainsEmpty(makeObfuscator func() data.Obfuscator) *crChains {
 
 func (ccs *crChains) addOps(codec kbfscodec.Codec,
 	privateMD PrivateMetadata, winfo writerInfo,
-	localTimestamp time.Time) error {
+	localTimestamp time.Time,
+) error {
 	// Copy the ops since CR will change them.
 	var oldOps opsList
-	if privateMD.Changes.Info.BlockPointer.IsInitialized() {
+	if privateMD.Changes.Info.IsInitialized() {
 		// In some cases (e.g., journaling) we might not have been
 		// able to re-embed the block changes.  So use the cached
 		// version directly.
@@ -951,7 +966,8 @@ type chainMetadata interface {
 func newCRChains(
 	ctx context.Context, codec kbfscodec.Codec, osg idutil.OfflineStatusGetter,
 	chainMDs []chainMetadata, fbo *folderBlockOps, identifyTypes bool) (
-	ccs *crChains, err error) {
+	ccs *crChains, err error,
+) {
 	if fbo != nil {
 		ccs = newCRChainsEmpty(fbo.obfuscatorMaker())
 	} else {
@@ -1016,8 +1032,7 @@ func newCRChains(
 
 		if !ccs.originalRoot.IsInitialized() {
 			// Find the original pointer for the root directory
-			if rootChain, ok :=
-				ccs.byMostRecent[chainData.Dir.BlockPointer]; ok {
+			if rootChain, ok := ccs.byMostRecent[chainData.Dir.BlockPointer]; ok {
 				ccs.originalRoot = rootChain.original
 			}
 		}
@@ -1052,7 +1067,8 @@ func newCRChains(
 func newCRChainsForIRMDs(
 	ctx context.Context, codec kbfscodec.Codec, osg idutil.OfflineStatusGetter,
 	irmds []ImmutableRootMetadata, fbo *folderBlockOps,
-	identifyTypes bool) (ccs *crChains, err error) {
+	identifyTypes bool,
+) (ccs *crChains, err error) {
 	chainMDs := make([]chainMetadata, len(irmds))
 	for i, irmd := range irmds {
 		chainMDs[i] = irmd
@@ -1066,7 +1082,8 @@ type crChainSummary struct {
 }
 
 func (ccs *crChains) summary(identifyChains *crChains,
-	nodeCache NodeCache) (res []*crChainSummary) {
+	nodeCache NodeCache,
+) (res []*crChainSummary) {
 	for _, chain := range ccs.byOriginal {
 		summary := &crChainSummary{}
 		res = append(res, summary)
@@ -1152,7 +1169,8 @@ func (ccs *crChains) copyOpAndRevertUnrefsToOriginals(currOp op) op {
 // changeOriginal converts the original of a chain to a different
 // original, which originated in some other branch.
 func (ccs *crChains) changeOriginal(oldOriginal data.BlockPointer,
-	newOriginal data.BlockPointer) error {
+	newOriginal data.BlockPointer,
+) error {
 	if oldOriginal == newOriginal {
 		// This apparently can happen, but I'm not sure how.  (See
 		// KBFS-2946.)  Maybe because of a self-conflict in some weird
@@ -1210,18 +1228,16 @@ func (ccs *crChains) findPathForDeleted(mostRecent data.BlockPointer) data.Path 
 			if !ok {
 				continue
 			}
-			for _, unref := range ro.Unrefs() {
-				if unref == mostRecent {
-					// If the path isn't set yet, recurse.
-					p := ro.getFinalPath()
-					if !p.IsValid() {
-						p = ccs.findPathForDeleted(ptr)
-						ro.setFinalPath(p)
-					}
-					return p.ChildPath(
-						ro.obfuscatedOldName(), mostRecent,
-						ccs.makeObfuscator())
+			if slices.Contains(ro.Unrefs(), mostRecent) {
+				// If the path isn't set yet, recurse.
+				p := ro.getFinalPath()
+				if !p.IsValid() {
+					p = ccs.findPathForDeleted(ptr)
+					ro.setFinalPath(p)
 				}
+				return p.ChildPath(
+					ro.obfuscatedOldName(), mostRecent,
+					ccs.makeObfuscator())
 			}
 		}
 	}
@@ -1234,8 +1250,7 @@ func (ccs *crChains) findPathForDeleted(mostRecent data.BlockPointer) data.Path 
 	// and a fake name.
 	var rootMostRecent data.BlockPointer
 	if ccs.mostRecentChainMDInfo != nil {
-		rootMostRecent =
-			ccs.mostRecentChainMDInfo.GetRootDirEntry().BlockPointer
+		rootMostRecent = ccs.mostRecentChainMDInfo.GetRootDirEntry().BlockPointer
 	}
 	return data.Path{
 		FolderBranch: data.FolderBranch{
@@ -1260,18 +1275,16 @@ func (ccs *crChains) findPathForCreated(createdChain *crChain) data.Path {
 			if !ok {
 				continue
 			}
-			for _, ref := range co.Refs() {
-				if ref == createdChain.original {
-					// If the path isn't set yet, recurse.
-					p := co.getFinalPath()
-					if !p.IsValid() {
-						p = ccs.findPathForCreated(chain)
-						co.setFinalPath(p)
-					}
-					return p.ChildPath(
-						co.obfuscatedNewName(), mostRecent,
-						ccs.makeObfuscator())
+			if slices.Contains(co.Refs(), createdChain.original) {
+				// If the path isn't set yet, recurse.
+				p := co.getFinalPath()
+				if !p.IsValid() {
+					p = ccs.findPathForCreated(chain)
+					co.setFinalPath(p)
 				}
+				return p.ChildPath(
+					co.obfuscatedNewName(), mostRecent,
+					ccs.makeObfuscator())
 			}
 		}
 	}
@@ -1284,8 +1297,7 @@ func (ccs *crChains) findPathForCreated(createdChain *crChain) data.Path {
 	// and a fake name.
 	var rootMostRecent data.BlockPointer
 	if ccs.mostRecentChainMDInfo != nil {
-		rootMostRecent =
-			ccs.mostRecentChainMDInfo.GetRootDirEntry().BlockPointer
+		rootMostRecent = ccs.mostRecentChainMDInfo.GetRootDirEntry().BlockPointer
 	}
 	return data.Path{
 		FolderBranch: data.FolderBranch{
@@ -1312,7 +1324,8 @@ func (ccs *crChains) findPathForCreated(createdChain *crChain) data.Path {
 // paths should include the paths of newly-created nodes.
 func (ccs *crChains) getPaths(ctx context.Context, blocks *folderBlockOps,
 	log logger.Logger, nodeCache NodeCache, includeCreates bool,
-	checkOpFinalPaths bool) ([]data.Path, error) {
+	checkOpFinalPaths bool,
+) ([]data.Path, error) {
 	newPtrs := make(map[data.BlockPointer]bool)
 	var ptrs []data.BlockPointer
 	renameOps := make(map[data.BlockPointer][]*renameOp)
@@ -1432,7 +1445,8 @@ func (ccs *crChains) getPaths(ctx context.Context, blocks *folderBlockOps,
 // though, even when removing operations from the head of the chain.
 // It returns the set of chains with at least one operation removed.
 func (ccs *crChains) remove(ctx context.Context, log logger.Logger,
-	revision kbfsmd.Revision) []*crChain {
+	revision kbfsmd.Revision,
+) []*crChain {
 	var chainsWithRemovals []*crChain
 	for _, chain := range ccs.byOriginal {
 		if chain.remove(ctx, log, revision) {

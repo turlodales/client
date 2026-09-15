@@ -4,18 +4,17 @@
 package client
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"time"
-
 	"os"
+	"time"
 
 	"github.com/keybase/cli"
 	"github.com/keybase/client/go/libcmdline"
 	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/protocol/keybase1"
 	"github.com/keybase/client/go/status"
-	"golang.org/x/net/context"
 )
 
 func NewCmdLogSend(cl *libcmdline.CommandLine, g *libkb.GlobalContext) cli.Command {

@@ -3,7 +3,6 @@
 // license that can be found in the LICENSE file.
 
 //go:build !windows
-// +build !windows
 
 // Keybase file system
 
@@ -24,10 +23,12 @@ import (
 	"github.com/keybase/client/go/logger"
 )
 
-var runtimeDir = flag.String("runtime-dir", os.Getenv("KEYBASE_RUNTIME_DIR"), "runtime directory")
-var label = flag.String("label", os.Getenv("KEYBASE_LABEL"), "label to help identify if running as a service")
-var mountType = flag.String("mount-type", defaultMountType, "mount type: default, force, none")
-var version = flag.Bool("version", false, "Print version")
+var (
+	runtimeDir = flag.String("runtime-dir", os.Getenv("KEYBASE_RUNTIME_DIR"), "runtime directory")
+	label      = flag.String("label", os.Getenv("KEYBASE_LABEL"), "label to help identify if running as a service")
+	mountType  = flag.String("mount-type", defaultMountType, "mount type: default, force, none")
+	version    = flag.Bool("version", false, "Print version")
+)
 
 const usageFormatStr = `Usage:
   kbfsfuse -version

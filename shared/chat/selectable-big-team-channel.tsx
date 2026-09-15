@@ -2,134 +2,148 @@ import * as React from 'react'
 import * as Kb from '@/common-adapters'
 import {TeamAvatar} from './avatars'
 import {pluralize} from '@/util/string'
-import {BottomLine} from './inbox/row/small-team/bottom-line'
+import {BottomLine} from './inbox/row/small-team'
+import {useInboxRowBig} from '@/chat/inbox/rows-state'
 import type * as T from '@/constants/types'
-import {SnippetContext} from './inbox/row/small-team/contexts'
 
-type Props = {
+type OwnProps = {
+  conversationIDKey: T.Chat.ConversationIDKey
   isSelected: boolean
-  numSearchHits?: number
   maxSearchHits?: number
-  teamname: string
-  channelname: string
+  name: string
+  numSearchHits?: number
   onSelectConversation: () => void
-  showBadge: boolean
-  showBold: boolean
-  snippet?: string
-  snippetDecoration: T.RPCChat.SnippetDecoration
 }
 
-type State = {
-  isHovered: boolean
-}
+const SelectableBigTeamChannel = (ownProps: OwnProps) => {
+  const styles = useStyles()
+  const theme = Kb.Styles.useTheme()
+  const {conversationIDKey, isSelected, maxSearchHits, numSearchHits, onSelectConversation, name} = ownProps
+  const row = useInboxRowBig(conversationIDKey)
+  const showBadge = row.hasBadge
+  let teamname = row.teamname
+  let channelname = row.channelname
+  if (!teamname) {
+    const parts = name.split('#')
+    if (parts.length >= 2) {
+      teamname = parts[0]!
+      channelname = parts[1]!
+    }
+  }
+  const showBold = row.hasUnread && !isSelected
+  const snippet = row.snippet
+  const snippetDecoration = row.snippetDecoration
 
-class SelectableBigTeamChannel extends React.PureComponent<Props, State> {
-  state = {
-    isHovered: false,
+  const props = {
+    channelname,
+    conversationIDKey,
+    isSelected,
+    maxSearchHits,
+    numSearchHits,
+    onSelectConversation,
+    showBadge,
+    showBold,
+    snippet,
+    snippetDecoration,
+    teamname,
   }
 
-  _onMouseLeave = () => this.setState({isHovered: false})
-  _onMouseOver = () => this.setState({isHovered: true})
-  _getSearchHits = () => {
-    if (!this.props.numSearchHits) {
+  const [isHovered, setIsHovered] = React.useState(false)
+
+  const _onMouseLeave = () => setIsHovered(false)
+  const _onMouseOver = () => setIsHovered(true)
+  const _getSearchHits = () => {
+    if (!props.numSearchHits) {
       return ''
     }
-    if (this.props.maxSearchHits) {
-      return this.props.numSearchHits >= this.props.maxSearchHits
-        ? `${this.props.numSearchHits}+`
-        : `${this.props.numSearchHits}`
+    if (props.maxSearchHits) {
+      return props.numSearchHits >= props.maxSearchHits ? `${props.numSearchHits}+` : `${props.numSearchHits}`
     }
-    return `${this.props.numSearchHits}`
+    return `${props.numSearchHits}`
   }
 
-  render() {
-    const boldOverride = this.props.showBold ? Kb.Styles.globalStyles.fontBold : null
-    const rowLoadedContent = (
-      <>
-        <TeamAvatar
-          teamname={this.props.teamname}
-          isMuted={false}
-          isSelected={false}
-          isHovered={this.state.isHovered}
-        />
-        <Kb.Box2 direction="vertical" fullWidth={true} style={styles.textContainer}>
-          <Kb.Box2 direction="horizontal" fullWidth={true}>
-            <Kb.Text
-              type="BodySemibold"
-              style={Kb.Styles.collapseStyles([
-                styles.teamname,
-                {color: this.props.isSelected ? Kb.Styles.globalColors.white : Kb.Styles.globalColors.black},
-              ])}
-              title={this.props.teamname}
-              lineClamp={Kb.Styles.isMobile ? 1 : undefined}
-              ellipsizeMode="tail"
-            >
-              {this.props.teamname}
-            </Kb.Text>
-            <Kb.Text
-              type="BodySemibold"
-              style={Kb.Styles.collapseStyles([
-                boldOverride,
-                styles.channelname,
-                {color: this.props.isSelected ? Kb.Styles.globalColors.white : Kb.Styles.globalColors.black},
-              ])}
-              title={`#${this.props.channelname}`}
-              lineClamp={Kb.Styles.isMobile ? 1 : undefined}
-              ellipsizeMode="tail"
-            >
-              &nbsp;#
-              {this.props.channelname}
-            </Kb.Text>
-          </Kb.Box2>
-          {!this.props.numSearchHits && (
-            <SnippetContext.Provider value={this.props.snippet ?? ''}>
-              <BottomLine isSelected={this.props.isSelected} allowBold={false} />
-            </SnippetContext.Provider>
-          )}
-          {!!this.props.numSearchHits && (
-            <Kb.Text
-              type="BodySmall"
-              style={Kb.Styles.collapseStyles([this.props.isSelected && styles.selectedText])}
-            >
-              {this._getSearchHits()} {pluralize('result', this.props.numSearchHits)}
-            </Kb.Text>
-          )}
+  const boldOverride = props.showBold ? Kb.Styles.globalStyles.fontBold : null
+  const rowLoadedContent = (
+    <>
+      <TeamAvatar teamname={props.teamname} isMuted={false} isSelected={false} isHovered={isHovered} />
+      <Kb.Box2 direction="vertical" fullWidth={true} overflow="hidden" style={styles.textContainer}>
+        <Kb.Box2 direction="horizontal" fullWidth={true}>
+          <Kb.Text
+            type="BodySemibold"
+            style={Kb.Styles.collapseStyles([
+              styles.teamname,
+              {color: props.isSelected ? theme.white : theme.black},
+            ])}
+            title={props.teamname}
+            lineClamp={isMobile ? 1 : undefined}
+            ellipsizeMode="tail"
+          >
+            {props.teamname}
+          </Kb.Text>
+          <Kb.Text
+            type="BodySemibold"
+            style={Kb.Styles.collapseStyles([
+              boldOverride,
+              styles.channelname,
+              {color: props.isSelected ? theme.white : theme.black},
+            ])}
+            title={`#${props.channelname}`}
+            lineClamp={isMobile ? 1 : undefined}
+            ellipsizeMode="tail"
+          >
+            &nbsp;#
+            {props.channelname}
+          </Kb.Text>
         </Kb.Box2>
-        {this.props.showBadge && <Kb.Box2 direction="horizontal" style={styles.badge} />}
-      </>
-    )
-    return (
-      <Kb.ClickableBox onClick={this.props.onSelectConversation}>
-        <Kb.Box2
-          direction="horizontal"
-          fullWidth={true}
-          centerChildren={true}
-          className="hover_background_color_blueGreyDark"
-          style={Kb.Styles.collapseStyles([
-            styles.filteredRow,
-            {
-              backgroundColor: this.props.isSelected
-                ? Kb.Styles.globalColors.blue
-                : Kb.Styles.globalColors.white,
-            },
-          ])}
-          onMouseLeave={this._onMouseLeave}
-          onMouseOver={this._onMouseOver}
-        >
-          {this.props.teamname ? rowLoadedContent : <Kb.ProgressIndicator type="Small" />}
-        </Kb.Box2>
-      </Kb.ClickableBox>
-    )
-  }
+        {!props.numSearchHits && (
+          <BottomLine
+            conversationIDKey={props.conversationIDKey}
+            snippet={props.snippet}
+            snippetDecoration={props.snippetDecoration}
+            isSelected={props.isSelected}
+            allowBold={false}
+          />
+        )}
+        {!!props.numSearchHits && (
+          <Kb.Text
+            type="BodySmall"
+            style={Kb.Styles.collapseStyles([props.isSelected && styles.selectedText])}
+          >
+            {_getSearchHits()} {pluralize('result', props.numSearchHits)}
+          </Kb.Text>
+        )}
+      </Kb.Box2>
+      {props.showBadge && <Kb.Box2 direction="horizontal" style={styles.badge} />}
+    </>
+  )
+  return (
+    <Kb.ClickableBox
+      direction="horizontal"
+      fullWidth={true}
+      centerChildren={true}
+      className="hover_background_color_blueGreyDark"
+      onClick={props.onSelectConversation}
+      style={Kb.Styles.collapseStyles([
+        styles.filteredRow,
+        {
+          backgroundColor: props.isSelected ? theme.blue : theme.white,
+        },
+      ])}
+      onMouseLeave={_onMouseLeave}
+      onMouseOver={_onMouseOver}
+    >
+      {props.teamname ? rowLoadedContent : <Kb.ProgressIndicator type="Small" />}
+    </Kb.ClickableBox>
+  )
 }
 
-const rowHeight = Kb.Styles.isMobile ? 64 : 56
+const rowHeight = isMobile ? 64 : 56
 
-const styles = Kb.Styles.styleSheetCreate(
-  () =>
+const useStyles = Kb.Styles.createStyleHook(
+  theme =>
     ({
       badge: {
-        backgroundColor: Kb.Styles.globalColors.orange,
+        backgroundColor: theme.orange,
         borderRadius: 6,
         flexShrink: 0,
         height: Kb.Styles.globalMargins.tiny,
@@ -142,9 +156,7 @@ const styles = Kb.Styles.styleSheetCreate(
           maxWidth: '70%',
         },
         isElectron: {
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
+          ...Kb.Styles.textEllipsis,
         },
       }),
       filteredRow: Kb.Styles.platformStyles({
@@ -152,31 +164,26 @@ const styles = Kb.Styles.styleSheetCreate(
           height: rowHeight,
         },
         isElectron: {
-          paddingLeft: Kb.Styles.globalMargins.xsmall,
-          paddingRight: Kb.Styles.globalMargins.xsmall,
+          ...Kb.Styles.paddingH(Kb.Styles.globalMargins.xsmall),
         },
         isMobile: {
-          paddingLeft: Kb.Styles.globalMargins.small,
-          paddingRight: Kb.Styles.globalMargins.small,
+          ...Kb.Styles.paddingH(Kb.Styles.globalMargins.small),
         },
       }),
       selectedText: {
-        color: Kb.Styles.globalColors.white,
+        color: theme.white,
       },
       teamname: Kb.Styles.platformStyles({
         common: {
-          color: Kb.Styles.globalColors.black,
+          color: theme.black,
           flexShrink: 1,
         },
         isElectron: {
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
+          ...Kb.Styles.textEllipsis,
         },
       }),
       textContainer: {
         flexShrink: 1,
-        overflow: 'hidden',
         paddingRight: Kb.Styles.globalMargins.tiny,
       },
     }) as const

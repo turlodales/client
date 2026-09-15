@@ -1,5 +1,5 @@
-import type {OpenDialogOptions, SaveDialogOptions} from '@/util/electron.desktop'
-import type * as RPCTypes from '@/constants/types/rpc-gen'
+import type {OpenDialogOptions, SaveDialogOptions} from '@/util/electron'
+import type * as RPCTypes from '@/constants/rpc/rpc-gen'
 
 export type Action =
   | {type: 'appStartedUp'}
@@ -39,6 +39,13 @@ export type Action =
         windowParam: string
       }
     }
+  | {
+      type: 'getRemoteProps'
+      payload: {
+        windowComponent: string
+        windowParam: string
+      }
+    }
   | {type: 'showMainWindow'}
   | {type: 'showContextMenu'; payload: {url: string}}
   | {type: 'setupPreloadKB2'}
@@ -59,6 +66,7 @@ export type Action =
   | {type: 'quitApp'}
   | {type: 'exitApp'; payload: {code: number}}
   | {type: 'setOpenAtLogin'; payload: {enabled: boolean}}
+  | {type: 'setNativeTheme'; payload: {theme: 'system' | 'dark' | 'light'}}
   | {type: 'relaunchApp'}
   | {type: 'uninstallKBFSDialog'}
   | {type: 'uninstallDokanDialog'}
@@ -78,4 +86,3 @@ export type Action =
   | {type: 'clipboardAvailableFormats'}
   | {type: 'installCachedDokan'}
   | {type: 'uninstallDokan'; payload: {execPath: string}}
-  | {type: 'engineSend'; payload: {buf: Uint8Array}}

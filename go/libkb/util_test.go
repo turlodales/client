@@ -38,22 +38,17 @@ var nameCmpTest = []cmpTest{
 func TestNameCmp(t *testing.T) {
 	for _, test := range nameCmpTest {
 		eq := NameCmp(test.a, test.b)
-		if eq != test.eq {
-			t.Errorf("name compare %q == %q => %v, expected %v", test.a, test.b, eq, test.eq)
-		}
+		require.Equal(t, test.eq, eq, "name compare %q == %q => %v, expected %v", test.a, test.b, eq, test.eq)
 	}
 }
 
 func TestCombineErrors(t *testing.T) {
 	err := CombineErrors(fmt.Errorf("error1"), nil, fmt.Errorf("error3"))
 	expected := "There were multiple errors: error1; error3"
-	if err.Error() != expected {
-		t.Errorf("Wrong output for combine errors: %#v != %#v", err.Error(), expected)
-	}
+	require.Equal(t, expected, err.Error(), "Wrong output for combine errors: %#v != %#v", err.Error(), expected)
 }
 
 func TestWhitespaceNormalize(t *testing.T) {
-
 	data := []struct {
 		in, out string
 	}{
@@ -69,11 +64,8 @@ func TestWhitespaceNormalize(t *testing.T) {
 
 	for i, p := range data {
 		out := WhitespaceNormalize(p.in)
-		if out != p.out {
-			t.Errorf("Failed on test %d: %s != %s", i, out, p.out)
-		}
+		require.Equal(t, p.out, out, "Failed on test %d: %s != %s", i, out, p.out)
 	}
-
 }
 
 func TestMakeByte24(t *testing.T) {
@@ -191,7 +183,7 @@ func TestDecodeHexFixed(t *testing.T) {
 }
 
 func TestDownloadGetFilenames(t *testing.T) {
-	var tests = map[string]string{
+	tests := map[string]string{
 		"abc.def":       "abc.def",
 		"文件.def":        "文件.def",
 		"abc.\u202edef": "abc.%E2%80%AEdef",
@@ -206,7 +198,7 @@ func TestDownloadGetFilenames(t *testing.T) {
 func TestSecureRandomRndRange(t *testing.T) {
 	s := SecureRandom{}
 
-	var tests = []struct {
+	tests := []struct {
 		lo        int64
 		hi        int64
 		shouldErr bool
@@ -223,14 +215,14 @@ func TestSecureRandomRndRange(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			r, err := s.RndRange(test.lo, test.hi)
 			if test.shouldErr {
 				require.Error(t, err)
 				continue
 			}
-			require.True(t, r >= test.lo)
-			require.True(t, r <= test.hi)
+			require.GreaterOrEqual(t, r, test.lo)
+			require.LessOrEqual(t, r, test.hi)
 		}
 	}
 
@@ -249,7 +241,7 @@ func TestThrottleBatch(t *testing.T) {
 	clock := clockwork.NewFakeClock()
 	throttleBatchClock = clock
 	ch := make(chan int, 100)
-	handler := func(arg interface{}) {
+	handler := func(arg any) {
 		v, ok := arg.(int)
 		require.True(t, ok)
 		ch <- v
@@ -270,14 +262,14 @@ func TestThrottleBatch(t *testing.T) {
 		default:
 		}
 	}
-	batcher := func(batchedInt interface{}, singleInt interface{}) interface{} {
+	batcher := func(batchedInt any, singleInt any) any {
 		batched, ok := batchedInt.(int)
 		require.True(t, ok)
 		single, ok := singleInt.(int)
 		require.True(t, ok)
 		return batched + single
 	}
-	reset := func() interface{} {
+	reset := func() any {
 		return 0
 	}
 

@@ -26,13 +26,14 @@ type UIThreadLoader struct {
 	utils.DebugLabeler
 	sync.Mutex
 
-	clock          clockwork.Clock
-	convPageStatus map[chat1.ConvIDStr]chat1.Pagination
-	validatedDelay time.Duration
-	offlineMu      sync.Mutex
-	offline        bool
-	connectedCh    chan struct{}
-	ri             func() chat1.RemoteInterface
+	clock            clockwork.Clock
+	convPageStatusMu sync.Mutex
+	convPageStatus   map[chat1.ConvIDStr]chat1.Pagination
+	validatedDelay   time.Duration
+	offlineMu        sync.Mutex
+	offline          bool
+	connectedCh      chan struct{}
+	ri               func() chat1.RemoteInterface
 
 	activeConvLoadsMu sync.Mutex
 	activeConvLoads   map[chat1.ConvIDStr]context.CancelFunc
@@ -88,7 +89,8 @@ func (t *UIThreadLoader) IsOffline(ctx context.Context) bool {
 }
 
 func (t *UIThreadLoader) groupThreadView(ctx context.Context, uid gregor1.UID, convID chat1.ConversationID,
-	tv chat1.ThreadView, dataSource types.InboxSourceDataSourceTyp) (res chat1.ThreadView, err error) {
+	tv chat1.ThreadView, dataSource types.InboxSourceDataSourceTyp,
+) (res chat1.ThreadView, err error) {
 	// The following messages are consolidated for presentation
 	groupers := []msgGrouper{
 		newJoinLeaveGrouper(t.G(), uid, convID, dataSource),
@@ -104,7 +106,8 @@ func (t *UIThreadLoader) groupThreadView(ctx context.Context, uid gregor1.UID, c
 }
 
 func (t *UIThreadLoader) applyPagerModeIncoming(ctx context.Context, convID chat1.ConversationID,
-	pagination *chat1.Pagination, pgmode chat1.GetThreadNonblockPgMode) (res *chat1.Pagination) {
+	pagination *chat1.Pagination, pgmode chat1.GetThreadNonblockPgMode,
+) (res *chat1.Pagination) {
 	defer func() {
 		t.Debug(ctx, "applyPagerModeIncoming: mode: %v convID: %s xform: %s -> %s", pgmode, convID,
 			pagination, res)
@@ -114,6 +117,8 @@ func (t *UIThreadLoader) applyPagerModeIncoming(ctx context.Context, convID chat
 		if pagination == nil {
 			return nil
 		}
+		t.convPageStatusMu.Lock()
+		defer t.convPageStatusMu.Unlock()
 		oldStored := t.convPageStatus[convID.ConvIDStr()]
 		if len(pagination.Next) > 0 {
 			return &chat1.Pagination{
@@ -134,12 +139,15 @@ func (t *UIThreadLoader) applyPagerModeIncoming(ctx context.Context, convID chat
 }
 
 func (t *UIThreadLoader) applyPagerModeOutgoing(ctx context.Context, convID chat1.ConversationID,
-	pagination *chat1.Pagination, incoming *chat1.Pagination, pgmode chat1.GetThreadNonblockPgMode) {
+	pagination *chat1.Pagination, incoming *chat1.Pagination, pgmode chat1.GetThreadNonblockPgMode,
+) {
 	switch pgmode {
 	case chat1.GetThreadNonblockPgMode_SERVER:
 		if pagination == nil {
 			return
 		}
+		t.convPageStatusMu.Lock()
+		defer t.convPageStatusMu.Unlock()
 		if incoming.FirstPage() {
 			t.Debug(ctx, "applyPagerModeOutgoing: resetting pagination: convID: %s p: %s", convID, pagination)
 			t.convPageStatus[convID.ConvIDStr()] = *pagination
@@ -163,7 +171,8 @@ func (t *UIThreadLoader) applyPagerModeOutgoing(ctx context.Context, convID chat
 }
 
 func (t *UIThreadLoader) messageIDControlToPagination(ctx context.Context, uid gregor1.UID,
-	convID chat1.ConversationID, msgIDControl chat1.MessageIDControl) *chat1.Pagination {
+	convID chat1.ConversationID, msgIDControl chat1.MessageIDControl,
+) *chat1.Pagination {
 	var mcconv *types.RemoteConversation
 	conv, err := utils.GetUnverifiedConv(ctx, t.G(), uid, convID, types.InboxSourceDataSourceLocalOnly)
 	if err != nil {
@@ -192,7 +201,8 @@ func (t *UIThreadLoader) isConsolidateMsg(msg chat1.MessageUnboxed) bool {
 }
 
 func (t *UIThreadLoader) mergeLocalRemoteThread(ctx context.Context, remoteThread,
-	localThread *chat1.ThreadView, mode chat1.GetThreadNonblockCbMode) (res chat1.ThreadView, err error) {
+	localThread *chat1.ThreadView, mode chat1.GetThreadNonblockCbMode,
+) (res chat1.ThreadView, err error) {
 	defer func() {
 		if err != nil || localThread == nil {
 			return
@@ -282,7 +292,8 @@ func (t *UIThreadLoader) mergeLocalRemoteThread(ctx context.Context, remoteThrea
 }
 
 func (t *UIThreadLoader) dispatchOldPagesJob(ctx context.Context, uid gregor1.UID,
-	convID chat1.ConversationID, pagination *chat1.Pagination, resultPagination *chat1.Pagination) {
+	convID chat1.ConversationID, pagination *chat1.Pagination, resultPagination *chat1.Pagination,
+) {
 	// Fire off pageback background jobs if we fetched the first page
 	num := 50
 	count := 3
@@ -305,7 +316,8 @@ func (t *UIThreadLoader) dispatchOldPagesJob(ctx context.Context, uid gregor1.UI
 }
 
 func (t *UIThreadLoader) setUIStatus(ctx context.Context, chatUI libkb.ChatUI,
-	status chat1.UIChatThreadStatus, delay time.Duration) (cancelStatusFn func() bool) {
+	status chat1.UIChatThreadStatus, delay time.Duration,
+) (cancelStatusFn func() bool) {
 	resCh := make(chan bool, 1)
 	ctx, cancelFn := context.WithCancel(ctx)
 	t.Debug(ctx, "setUIStatus: delaying: %v", delay)
@@ -345,18 +357,14 @@ func (t *UIThreadLoader) shouldIgnoreError(err error) bool {
 	case TransientUnboxingError:
 		return t.shouldIgnoreError(terr.Inner())
 	}
-	switch err {
-	case context.Canceled:
-		return true
-	default:
-	}
-	return false
+	return errors.Is(err, context.Canceled)
 }
 
 func (t *UIThreadLoader) noopCancel() {}
 
 func (t *UIThreadLoader) singleFlightConv(ctx context.Context, convID chat1.ConversationID,
-	reason chat1.GetThreadReason) (context.Context, context.CancelFunc) {
+	reason chat1.GetThreadReason,
+) (context.Context, context.CancelFunc) {
 	t.activeConvLoadsMu.Lock()
 	defer t.activeConvLoadsMu.Unlock()
 	convIDStr := convID.ConvIDStr()
@@ -386,7 +394,7 @@ func (t *UIThreadLoader) waitForOnline(ctx context.Context) (err error) {
 		}
 	}()
 	// wait at most a second, and then charge forward
-	for i := 0; i < 40; i++ {
+	for range 40 {
 		if !t.IsOffline(ctx) {
 			return nil
 		}
@@ -409,7 +417,8 @@ type knownRemoteInterface struct {
 }
 
 func newKnownRemoteInterface(log logger.Logger, ri chat1.RemoteInterface,
-	conv types.RemoteConversation, knownMap map[chat1.MessageID]chat1.MessageBoxed) *knownRemoteInterface {
+	conv types.RemoteConversation, knownMap map[chat1.MessageID]chat1.MessageBoxed,
+) *knownRemoteInterface {
 	return &knownRemoteInterface{
 		knownMap:        knownMap,
 		log:             log,
@@ -452,7 +461,8 @@ func (i *knownRemoteInterface) GetMessagesRemote(ctx context.Context, arg chat1.
 }
 
 func (t *UIThreadLoader) makeRi(ctx context.Context, uid gregor1.UID, convID chat1.ConversationID,
-	knownRemotes []string) func() chat1.RemoteInterface {
+	knownRemotes []string,
+) func() chat1.RemoteInterface {
 	if len(knownRemotes) == 0 {
 		t.Debug(ctx, "makeRi: no known remotes")
 		return t.ri
@@ -487,10 +497,18 @@ func (t *UIThreadLoader) makeRi(ctx context.Context, uid gregor1.UID, convID cha
 func (t *UIThreadLoader) LoadNonblock(ctx context.Context, chatUI libkb.ChatUI, uid gregor1.UID,
 	convID chat1.ConversationID, reason chat1.GetThreadReason, pgmode chat1.GetThreadNonblockPgMode,
 	cbmode chat1.GetThreadNonblockCbMode, knownRemotes []string, query *chat1.GetThreadQuery,
-	uipagination *chat1.UIPagination) (err error) {
+	uipagination *chat1.UIPagination,
+) (err error) {
 	var pagination, resultPagination *chat1.Pagination
 	var fullErr error
+	reqID := libkb.RandStringB64(3)
+	fullSent := false
 	defer t.Trace(ctx, &err, "LoadNonblock")()
+	t.Debug(ctx, "LoadNonblock[%s]: begin convID: %s reason: %v", reqID, convID, reason)
+	defer func() {
+		t.Debug(ctx, "LoadNonblock[%s]: return convID: %s err: %v fullErr: %v fullSent: %v",
+			reqID, convID, err, fullErr, fullSent)
+	}()
 	defer func() {
 		// Detect any problem loading the thread, and queue it up in the retrier if there is a problem.
 		// Otherwise, send notice that we successfully loaded the conversation.
@@ -528,7 +546,7 @@ func (t *UIThreadLoader) LoadNonblock(ctx context.Context, chatUI libkb.ChatUI, 
 		return err
 	}
 	defer t.G().ConvSource.ReleaseConversationLock(ctx, uid, convID)
-	t.Debug(ctx, "LoadNonblock: conversation lock obtained")
+	t.Debug(ctx, "LoadNonblock[%s]: conversation lock obtained convID: %s", reqID, convID)
 
 	// Enable delete placeholders for supersede transform
 	if query == nil {
@@ -637,21 +655,19 @@ func (t *UIThreadLoader) LoadNonblock(ctx context.Context, chatUI libkb.ChatUI, 
 		} else {
 			t.Debug(ctx, "LoadNonblock: sending nil cached response")
 		}
-		start := time.Now()
+		t.Debug(ctx, "LoadNonblock[%s]: cached send begin convID: %s", reqID, convID)
 		if err := chatUI.ChatThreadCached(ctx, pthread); err != nil {
 			t.Debug(ctx, "LoadNonblock: failed to send cached thread: %s", err)
 		}
-		t.Debug(ctx, "LoadNonblock: cached response send time: %v", time.Since(start))
+		t.Debug(ctx, "LoadNonblock[%s]: cached send done convID: %s", reqID, convID)
 	}(localCtx)
 
 	startTime := t.clock.Now()
 	baseDelay := 3 * time.Second
 	getDelay := func() time.Duration {
-		return baseDelay - (t.clock.Now().Sub(startTime))
+		return baseDelay - t.clock.Now().Sub(startTime)
 	}
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		// Run the full Pull operation, and redo pagination
 		ctx = globals.CtxModifyUnboxMode(ctx, types.UnboxModeQuick)
 		cancelUIStatus := t.setUIStatus(ctx, chatUI, chat1.NewUIChatThreadStatusWithServer(), getDelay())
@@ -682,8 +698,7 @@ func (t *UIThreadLoader) LoadNonblock(ctx context.Context, chatUI libkb.ChatUI, 
 		if fullErr != nil {
 			return
 		}
-		if rthread, fullErr =
-			t.mergeLocalRemoteThread(ctx, &remoteThread, localSentThread, cbmode); fullErr != nil {
+		if rthread, fullErr = t.mergeLocalRemoteThread(ctx, &remoteThread, localSentThread, cbmode); fullErr != nil {
 			return
 		}
 		t.Debug(ctx, "LoadNonblock: presenting full response: messages: %d pager: %s",
@@ -698,23 +713,25 @@ func (t *UIThreadLoader) LoadNonblock(ctx context.Context, chatUI libkb.ChatUI, 
 		}
 		resultPagination = rthread.Pagination
 		t.applyPagerModeOutgoing(ctx, convID, rthread.Pagination, pagination, pgmode)
-		start = time.Now()
-		if fullErr = chatUI.ChatThreadFull(ctx, string(jsonUIRes)); err != nil {
-			t.Debug(ctx, "LoadNonblock: failed to send full result to UI: %s", err)
+		t.Debug(ctx, "LoadNonblock[%s]: full send begin convID: %s", reqID, convID)
+		if fullErr = chatUI.ChatThreadFull(ctx, string(jsonUIRes)); fullErr != nil {
+			t.Debug(ctx, "LoadNonblock: failed to send full result to UI: %s", fullErr)
 			return
 		}
-		t.Debug(ctx, "LoadNonblock: full response send time: %v", time.Since(start))
+		fullSent = true
+		t.Debug(ctx, "LoadNonblock[%s]: full send done convID: %s", reqID, convID)
 
 		// This means we transmitted with success, so cancel local thread
 		cancel()
-	}()
+	})
 	wg.Wait()
 
-	t.Debug(ctx, "LoadNonblock: thread payloads transferred, checking for resolve")
+	t.Debug(ctx, "LoadNonblock[%s]: payload transfer complete convID: %s fullSent: %v", reqID, convID, fullSent)
 	// Resolve any messages we didn't cache and get full information about
 	if fullErr == nil {
 		fullErr = func() error {
 			skips := globals.CtxMessageCacheSkips(ctx)
+			t.Debug(ctx, "LoadNonblock[%s]: post-send resolve begin convID: %s skips: %d", reqID, convID, len(skips))
 			cancelUIStatus := t.setUIStatus(ctx, chatUI, chat1.NewUIChatThreadStatusWithValidating(0),
 				getDelay())
 			defer func() {
@@ -787,13 +804,14 @@ func (t *UIThreadLoader) LoadNonblock(ctx context.Context, chatUI libkb.ChatUI, 
 				t.G().ActivityNotifier.Activity(ctx, uid, chat1.TopicType_CHAT,
 					&act, chat1.ChatActivitySource_LOCAL)
 			}
+			t.Debug(ctx, "LoadNonblock[%s]: post-send resolve done convID: %s", reqID, convID)
 			return nil
 		}()
 	}
 
 	// Clean up context and set final loading status
 	if getDisplayedStatus() {
-		t.Debug(ctx, "LoadNonblock: status displayed, clearing")
+		t.Debug(ctx, "LoadNonblock[%s]: final status clear begin convID: %s", reqID, convID)
 		t.clock.Sleep(t.validatedDelay)
 		// use a background context here in case our context has been canceled, we don't want to not
 		// get this banner off the screen.
@@ -810,7 +828,7 @@ func (t *UIThreadLoader) LoadNonblock(ctx context.Context, chatUI libkb.ChatUI, 
 				t.Debug(ctx, "LoadNonblock: failed to set status: %s", err)
 			}
 		}
-		t.Debug(ctx, "LoadNonblock: clear complete")
+		t.Debug(ctx, "LoadNonblock[%s]: final status clear done convID: %s", reqID, convID)
 	} else {
 		t.Debug(ctx, "LoadNonblock: no status displayed, not clearing")
 	}
@@ -820,7 +838,8 @@ func (t *UIThreadLoader) LoadNonblock(ctx context.Context, chatUI libkb.ChatUI, 
 }
 
 func (t *UIThreadLoader) Load(ctx context.Context, uid gregor1.UID, convID chat1.ConversationID,
-	reason chat1.GetThreadReason, knownRemotes []string, query *chat1.GetThreadQuery, pagination *chat1.Pagination) (res chat1.ThreadView, err error) {
+	reason chat1.GetThreadReason, knownRemotes []string, query *chat1.GetThreadQuery, pagination *chat1.Pagination,
+) (res chat1.ThreadView, err error) {
 	defer t.Trace(ctx, &err, "Load")()
 	// Xlate pager control into pagination if given
 	if query != nil && query.MessageIDControl != nil {

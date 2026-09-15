@@ -1,13 +1,13 @@
 package storage
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/keybase/client/go/chat/globals"
 	"github.com/keybase/client/go/encrypteddb"
 	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/protocol/keybase1"
-	"golang.org/x/net/context"
 )
 
 type baseBox struct {
@@ -15,8 +15,7 @@ type baseBox struct {
 	encryptedDB *encrypteddb.EncryptedDB
 }
 
-type SecretUI struct {
-}
+type SecretUI struct{}
 
 func (d SecretUI) GetPassphrase(pinentry keybase1.GUIEntryArg, terminal *keybase1.SecretEntryArg) (keybase1.GetPassphraseRes, error) {
 	return keybase1.GetPassphraseRes{}, fmt.Errorf("no secret UI available")
@@ -35,11 +34,11 @@ func newBaseBox(g *globals.Context) *baseBox {
 	}
 }
 
-func (i *baseBox) readDiskBox(ctx context.Context, key libkb.DbKey, res interface{}) (bool, error) {
+func (i *baseBox) readDiskBox(ctx context.Context, key libkb.DbKey, res any) (bool, error) {
 	return i.encryptedDB.Get(ctx, key, res)
 }
 
-func (i *baseBox) writeDiskBox(ctx context.Context, key libkb.DbKey, data interface{}) error {
+func (i *baseBox) writeDiskBox(ctx context.Context, key libkb.DbKey, data any) error {
 	return i.encryptedDB.Put(ctx, key, data)
 }
 

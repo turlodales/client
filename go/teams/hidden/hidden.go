@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/keybase/client/go/libkb"
-	"github.com/keybase/client/go/merkletree2"
 	"github.com/keybase/client/go/protocol/keybase1"
 	"github.com/keybase/client/go/sig3"
 )
@@ -55,8 +54,8 @@ func populateLink(mctx libkb.MetaContext, ret *keybase1.HiddenTeamChain, link si
 	// For each PTK (right now we really only expect one - the Reader PTK),
 	// update our maximum PTK generation
 	for _, ptk := range rotateKey.PTKs() {
-		max, ok := ret.LastPerTeamKeys[ptk.PTKType]
-		if !ok || max < q {
+		maxG, ok := ret.LastPerTeamKeys[ptk.PTKType]
+		if !ok || maxG < q {
 			ret.LastPerTeamKeys[ptk.PTKType] = q
 		}
 		if ptk.PTKType == keybase1.PTKType_READER {
@@ -93,7 +92,6 @@ type GenerateKeyRotationParams struct {
 // GenerateKeyRotation generates and signs a new sig3 KeyRotation. The result can be passed to
 // sig/multi.json and stored along with other sig1, sig2 or sig3 signatures in an atomic transaction.
 func GenerateKeyRotation(mctx libkb.MetaContext, p GenerateKeyRotationParams) (ret *libkb.SigMultiItem, ratchets *keybase1.HiddenTeamChainRatchetSet, err error) {
-
 	s3, ratchets, err := generateKeyRotationSig3(mctx, p)
 	if err != nil {
 		return nil, nil, err
@@ -120,7 +118,6 @@ func GenerateKeyRotation(mctx libkb.MetaContext, p GenerateKeyRotationParams) (r
 }
 
 func generateKeyRotationSig3(mctx libkb.MetaContext, p GenerateKeyRotationParams) (ret *sig3.ExportJSON, ratchets *keybase1.HiddenTeamChainRatchetSet, err error) {
-
 	outer := sig3.OuterLink{}
 	if p.HiddenPrev != nil {
 		outer.Seqno = p.HiddenPrev.Seqno + 1
@@ -326,15 +323,11 @@ func ProcessHiddenResponseFunc(m libkb.MetaContext, teamID keybase1.TeamID, apiR
 		}
 		m.Debug("the server is providing a blind tree root which is not included in the main tree. We trust the server on this as the blind tree is an experimental feature.")
 	}
-	blindRootHashBytes, err := hex.DecodeString(blindRootHashStr)
+	_, err = hex.DecodeString(blindRootHashStr)
 	if err != nil {
 		return nil, err
 	}
 
-	return ParseAndVerifyCommittedHiddenLinkID(m, teamID, apiRes, merkletree2.Hash(blindRootHashBytes))
-}
-
-func ParseAndVerifyCommittedHiddenLinkID(m libkb.MetaContext, teamID keybase1.TeamID, apiRes *libkb.APIRes, blindHash merkletree2.Hash) (hiddenResp *libkb.MerkleHiddenResponse, err error) {
 	lastHiddenSeqnoInt, err := apiRes.Body.AtKey("last_hidden_seqno").GetInt()
 	if err != nil {
 		m.Debug("Error decoding last_hidden_seqno (%v), assuming the server did not send it.", err.Error())

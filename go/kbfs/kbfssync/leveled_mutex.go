@@ -131,7 +131,8 @@ func (e levelViolationError) Error() string {
 }
 
 func (state *LockState) doLock(
-	level MutexLevel, exclusionType exclusionType, lock sync.Locker) error {
+	level MutexLevel, exclusionType exclusionType, lock sync.Locker,
+) error {
 	state.exclusionStatesLock.lock()
 	defer state.exclusionStatesLock.unlock()
 
@@ -177,11 +178,13 @@ func (e mismatchedUnlockError) Error() string {
 	return fmt.Sprintf(
 		"%sUnlock call for %s doesn't match %sLock call for %s",
 		e.exclusionType.prefix(), e.levelToString(e.level),
-		e.curr.exclusionType.prefix(), e.levelToString(e.curr.level))
+		e.curr.exclusionType.prefix(), e.levelToString(e.curr.level),
+	)
 }
 
 func (state *LockState) doUnlock(
-	level MutexLevel, exclusionType exclusionType, lock sync.Locker) error {
+	level MutexLevel, exclusionType exclusionType, lock sync.Locker,
+) error {
 	state.exclusionStatesLock.lock()
 	defer state.exclusionStatesLock.unlock()
 
@@ -299,7 +302,8 @@ func (e unexpectedExclusionTypeError) Error() string {
 		"%s unexpectedly not %sLocked; instead it is %sLocked",
 		e.levelToString(e.level),
 		e.expectedExclusionType.prefix(),
-		e.exclusionType.prefix())
+		e.exclusionType.prefix(),
+	)
 }
 
 // AssertLocked does nothing if m is locked with respect to the given
@@ -436,15 +440,15 @@ func (rw LeveledRWMutex) AssertAnyLocked(lockState *LockState) {
 
 // RLocker implements the RWMutex interface for LeveledRMMutex.
 func (rw LeveledRWMutex) RLocker() LeveledLocker {
-	return (leveledRLocker)(rw)
+	return leveledRLocker(rw)
 }
 
 type leveledRLocker LeveledRWMutex
 
 func (r leveledRLocker) Lock(lockState *LockState) {
-	(LeveledRWMutex)(r).RLock(lockState)
+	LeveledRWMutex(r).RLock(lockState)
 }
 
 func (r leveledRLocker) Unlock(lockState *LockState) {
-	(LeveledRWMutex)(r).RUnlock(lockState)
+	LeveledRWMutex(r).RUnlock(lockState)
 }

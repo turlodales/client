@@ -92,7 +92,7 @@ func Listen(bot Bot) error {
 }
 
 func MakeAPI(keybaseBinaryPath string) (*kbchat.API, error) {
-	runOptions := kbchat.RunOptions{KeybaseLocation: keybaseBinaryPath}
+	runOptions := kbchat.RunOptions{KeybaseLocation: keybaseBinaryPath, DebugTag: "tuxbot"}
 	return kbchat.Start(runOptions)
 }
 
@@ -121,13 +121,13 @@ func (l ChatLogger) VDebug(format string, args ...interface{}) {
 func (l ChatLogger) Debug(format string, args ...interface{}) {
 	msg := l.msg(format, args...)
 	fmt.Println(msg)
-	if _, err := l.API.SendMessage(l.DebugChannel, msg); err != nil {
+	if _, err := l.API.SendMessage(l.DebugChannel, "%s", msg); err != nil {
 		fmt.Printf("unable to SendMessage: %v", err)
 	}
 }
 
 func (l ChatLogger) Info(format string, args ...interface{}) {
-	if _, err := l.API.SendMessage(l.InfoChannel, l.msg(format, args...)); err != nil {
+	if _, err := l.API.SendMessage(l.InfoChannel, "%s", l.msg(format, args...)); err != nil {
 		fmt.Printf("unable to SendMessage: %v", err)
 	}
 	if l.InfoChannel.Name != l.DebugChannel.Name || l.InfoChannel.TopicName != l.DebugChannel.TopicName {
@@ -168,7 +168,7 @@ func Exec(bot Bot, dir string, timeout time.Duration, name string, arg ...string
 	cmd.Env = append(cmd.Env, fmt.Sprintf("HOME=%s", os.Getenv("HOME")))
 
 	// Fail immediately on git username/password request
-	cmd.Env = append(cmd.Env, fmt.Sprintf("GIT_TERMINAL_PROMPT=0"))
+	cmd.Env = append(cmd.Env, "GIT_TERMINAL_PROMPT=0")
 
 	cmd.Dir = dir
 

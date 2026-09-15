@@ -29,7 +29,7 @@ func TestImpTeamWithPhoneNumber(t *testing.T) {
 	teamObj := ann.loadTeamByID(teamID, true /* admin */)
 	require.Equal(t, 1, teamObj.NumActiveInvites())
 	var invite keybase1.TeamInvite
-	for _, invite = range teamObj.GetActiveAndObsoleteInvites() {
+	for _, invite = range teamObj.GetActiveAndObsoleteInvites() { // nolint
 		// Get first invite to local var
 	}
 	require.EqualValues(t, phone, invite.Name)
@@ -58,7 +58,7 @@ func TestResolvePhoneToUser(t *testing.T) {
 	for _, u := range tt.users {
 		_, res, err := u.tc.G.Resolver.ResolveUser(u.MetaContext(), assertion)
 		require.Error(t, err)
-		require.IsType(t, libkb.ResolutionError{}, err)
+		require.ErrorAs(t, err, new(libkb.ResolutionError))
 		require.Contains(t, err.Error(), assertion)
 		require.Contains(t, err.Error(), "No resolution found")
 		require.Empty(t, res.GetUID())
@@ -116,8 +116,8 @@ func TestServerTrustResolveInvalidInput(t *testing.T) {
 
 	checkErr := func(err error) {
 		require.Error(t, err)
-		require.IsType(t, libkb.ResolutionError{}, err)
-		resErr := err.(libkb.ResolutionError)
+		var resErr libkb.ResolutionError
+		require.ErrorAs(t, err, &resErr)
 		require.Equal(t, libkb.ResolutionErrorInvalidInput, resErr.Kind)
 	}
 
@@ -264,7 +264,7 @@ func TestImplicitTeamWithEmail(t *testing.T) {
 	teamObj := ann.loadTeamByID(teamID, true /* admin */)
 	require.Equal(t, 1, teamObj.NumActiveInvites())
 	var invite keybase1.TeamInvite
-	for _, invite = range teamObj.GetActiveAndObsoleteInvites() {
+	for _, invite = range teamObj.GetActiveAndObsoleteInvites() { // nolint
 		// Get first invite to local var
 	}
 	require.EqualValues(t, email, invite.Name)

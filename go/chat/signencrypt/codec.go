@@ -125,27 +125,33 @@ package signencrypt
 
 import (
 	"bytes"
+	"crypto/ed25519"
 	"crypto/sha512"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
+	"math"
 
 	"github.com/keybase/client/go/kbcrypto"
 	"github.com/keybase/client/go/msgpack"
-	"github.com/keybase/go-crypto/ed25519"
 	"golang.org/x/crypto/nacl/secretbox"
 )
 
-type Nonce *[NonceSize]byte
-type SecretboxKey *[SecretboxKeySize]byte
-type SecretboxNonce *[SecretboxNonceSize]byte
-type SignKey *[ed25519.PrivateKeySize]byte
-type VerifyKey *[ed25519.PublicKeySize]byte
+type (
+	Nonce          *[NonceSize]byte
+	SecretboxKey   *[SecretboxKeySize]byte
+	SecretboxNonce *[SecretboxNonceSize]byte
+	SignKey        *[ed25519.PrivateKeySize]byte
+	VerifyKey      *[ed25519.PublicKeySize]byte
+)
 
-const NonceSize = 16
-const SecretboxKeySize = 32
-const SecretboxNonceSize = 24
-const DefaultPlaintextChunkLength int64 = 1 << 20
+const (
+	NonceSize                         = 16
+	SecretboxKeySize                  = 32
+	SecretboxNonceSize                = 24
+	DefaultPlaintextChunkLength int64 = 1 << 20
+)
 
 // ===================================
 // single packet encoding and decoding
@@ -406,8 +412,10 @@ func (s *encoderCodecShim) Finish() ([]byte, error) {
 	return s.Encoder.Finish(), nil
 }
 
-var _ codec = (*Decoder)(nil)
-var _ codec = (*encoderCodecShim)(nil)
+var (
+	_ codec = (*Decoder)(nil)
+	_ codec = (*encoderCodecShim)(nil)
+)
 
 type codecReadWrapper struct {
 	codec       codec
@@ -441,7 +449,7 @@ func (r *codecReadWrapper) Read(callerBuf []byte) (int, error) {
 			r.outputBuf = append(r.outputBuf, newOutput...)
 		}
 		// Now handle EOF or other errors.
-		if ioErr == io.EOF {
+		if errors.Is(ioErr, io.EOF) {
 			// When we see EOF we finish the internal codec. We won't run this
 			// loop anymore, but we might still need to return bytes from our
 			// own buffer for many subsequent reads. Also nil out the codec and
@@ -508,12 +516,52 @@ func chunkFromIndex(index int64) (res chunkSpec) {
 	return res
 }
 
+func validChunkIndex(index int64) bool {
+	if index < 0 {
+		return false
+	}
+	packetLen := getPacketLen(DefaultPlaintextChunkLength)
+	return index <= (math.MaxInt64-DefaultPlaintextChunkLength)/DefaultPlaintextChunkLength &&
+		index <= (math.MaxInt64-packetLen)/packetLen
+}
+
+func getSealedSizeChecked(plaintextLen int64) (int64, bool) {
+	if plaintextLen < 0 {
+		return 0, false
+	}
+	packetLen := getPacketLen(DefaultPlaintextChunkLength)
+	fullChunks := plaintextLen / DefaultPlaintextChunkLength
+	remainingPlaintext := plaintextLen % DefaultPlaintextChunkLength
+	remainingPacketLen := getPacketLen(remainingPlaintext)
+	if fullChunks > (math.MaxInt64-remainingPacketLen)/packetLen {
+		return 0, false
+	}
+	return fullChunks*packetLen + remainingPacketLen, true
+}
+
 func getChunksInRange(plaintextBegin, plaintextEnd, plaintextLen int64) (res []chunkSpec) {
-	beginChunk := chunkFromIndex(plaintextBegin / DefaultPlaintextChunkLength)
-	endChunk := chunkFromIndex(plaintextEnd / DefaultPlaintextChunkLength)
-	cipherLen := GetSealedSize(plaintextLen)
-	for i := beginChunk.index; i <= endChunk.index; i++ {
+	if plaintextLen <= 0 || plaintextBegin < 0 || plaintextBegin >= plaintextLen || plaintextEnd <= plaintextBegin {
+		return nil
+	}
+	if plaintextEnd > plaintextLen {
+		plaintextEnd = plaintextLen
+	}
+	beginIndex := plaintextBegin / DefaultPlaintextChunkLength
+	endIndex := plaintextEnd / DefaultPlaintextChunkLength
+	if !validChunkIndex(beginIndex) || !validChunkIndex(endIndex) {
+		return nil
+	}
+	beginChunk := chunkFromIndex(beginIndex)
+	endChunk := chunkFromIndex(endIndex)
+	cipherLen, ok := getSealedSizeChecked(plaintextLen)
+	if !ok {
+		return nil
+	}
+	for i := beginChunk.index; ; i++ {
 		res = append(res, chunkFromIndex(i))
+		if i == endChunk.index {
+			break
+		}
 	}
 	if res[len(res)-1].ptEnd >= plaintextLen {
 		res[len(res)-1].ptEnd = plaintextLen
@@ -579,7 +627,7 @@ type AEADMessage struct {
 // SealWithAssociatedData is a wrapper around SealWhole which adds an associatedData object
 // (see AEAD ciphers) which must be message-packable into bytes. This exact object is required
 // to call OpenWithAssociatedData on the ciphertext.
-func SealWithAssociatedData(msg []byte, associatedData interface{}, encKey SecretboxKey, signKey SignKey, signaturePrefix kbcrypto.SignaturePrefix, nonce Nonce) (ret []byte, err error) {
+func SealWithAssociatedData(msg []byte, associatedData any, encKey SecretboxKey, signKey SignKey, signaturePrefix kbcrypto.SignaturePrefix, nonce Nonce) (ret []byte, err error) {
 	adEncoded, err := msgpack.Encode(associatedData)
 	if err != nil {
 		return ret, err
@@ -597,7 +645,7 @@ func SealWithAssociatedData(msg []byte, associatedData interface{}, encKey Secre
 	return SealWhole(clearBytes, encKey, signKey, signaturePrefix, nonce), nil
 }
 
-func OpenWithAssociatedData(sealed []byte, associatedData interface{}, encKey SecretboxKey, verifyKey VerifyKey, signaturePrefix kbcrypto.SignaturePrefix, nonce Nonce) (ret []byte, err error) {
+func OpenWithAssociatedData(sealed []byte, associatedData any, encKey SecretboxKey, verifyKey VerifyKey, signaturePrefix kbcrypto.SignaturePrefix, nonce Nonce) (ret []byte, err error) {
 	clearBytes, err := OpenWhole(sealed, encKey, verifyKey, signaturePrefix, nonce)
 	if err != nil {
 		return ret, err
@@ -642,7 +690,7 @@ type Error struct {
 	Message string
 }
 
-func NewError(errorType ErrorType, message string, args ...interface{}) error {
+func NewError(errorType ErrorType, message string, args ...any) error {
 	return Error{
 		Type:    errorType,
 		Message: fmt.Sprintf(message, args...),

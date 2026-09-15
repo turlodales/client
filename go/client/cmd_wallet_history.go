@@ -4,13 +4,14 @@
 package client
 
 import (
+	"context"
 	"errors"
+	"slices"
 
 	"github.com/keybase/cli"
 	"github.com/keybase/client/go/libcmdline"
 	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/protocol/stellar1"
-	"golang.org/x/net/context"
 )
 
 type cmdWalletHistory struct {
@@ -70,13 +71,13 @@ func (c *cmdWalletHistory) Run() (err error) {
 		return err
 	}
 	dui := c.G().UI.GetDumbOutputUI()
-	lineUnescaped := func(format string, args ...interface{}) {
+	lineUnescaped := func(format string, args ...any) {
 		_, _ = dui.PrintfUnescaped(format+"\n", args...)
 	}
 	// `payments` is sorted most recent first.
 	// Print most recent at the bottom.
-	for i := len(payments) - 1; i >= 0; i-- {
-		p := payments[i]
+	for _, p := range slices.Backward(payments) {
+
 		if p.Payment != nil {
 			printPayment(c.G(), *p.Payment, c.verbose, false /* details */, dui)
 		} else {

@@ -1,9 +1,8 @@
 package teams
 
 import (
+	"context"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	"github.com/keybase/client/go/kbtest"
 	"github.com/keybase/client/go/libkb"
@@ -34,10 +33,10 @@ func TestShowcaseTeam(t *testing.T) {
 
 	showcase, err := GetTeamShowcase(context.TODO(), tc.G, teamID)
 	require.NoError(t, err)
-	require.Equal(t, true, showcase.IsShowcased)
+	require.True(t, showcase.IsShowcased)
 	require.NotNil(t, showcase.SetByUID)
 	require.Equal(t, user.User.GetUID(), *showcase.SetByUID)
-	require.Nil(t, nil, showcase.Description)
+	require.Nil(t, showcase.Description)
 
 	description := "Hello world"
 	err = SetTeamShowcase(context.TODO(), tc.G, teamID, nil, &description, nil)
@@ -46,7 +45,7 @@ func TestShowcaseTeam(t *testing.T) {
 
 	showcase, err = GetTeamShowcase(context.TODO(), tc.G, teamID)
 	require.NoError(t, err)
-	require.Equal(t, true, showcase.IsShowcased)
+	require.True(t, showcase.IsShowcased)
 	require.NotNil(t, showcase.SetByUID)
 	require.Equal(t, user.User.GetUID(), *showcase.SetByUID)
 	require.NotNil(t, showcase.Description)
@@ -60,7 +59,7 @@ func TestShowcaseTeam(t *testing.T) {
 	showcase, err = GetTeamShowcase(context.TODO(), tc.G, teamID)
 	require.NoError(t, err)
 
-	require.Equal(t, false, showcase.IsShowcased)
+	require.False(t, showcase.IsShowcased)
 	require.NotNil(t, showcase.SetByUID)
 	require.Equal(t, user.User.GetUID(), *showcase.SetByUID)
 	require.NotNil(t, showcase.Description)
@@ -69,7 +68,7 @@ func TestShowcaseTeam(t *testing.T) {
 	tmShowcase, err := GetTeamAndMemberShowcase(context.TODO(), tc.G, teamID)
 	require.NoError(t, err)
 	require.Equal(t, showcase, tmShowcase.TeamShowcase)
-	require.Equal(t, false, tmShowcase.IsMemberShowcased)
+	require.False(t, tmShowcase.IsMemberShowcased)
 }
 
 func TestShowcaseMember(t *testing.T) {
@@ -86,11 +85,11 @@ func TestShowcaseMember(t *testing.T) {
 	name, id := createTeam2(tc)
 	t.Logf("Created team %q", name)
 
-	var defaultTeamShowcase = keybase1.TeamShowcase{IsShowcased: false, Description: nil, SetByUID: nil, AnyMemberShowcase: true}
+	defaultTeamShowcase := keybase1.TeamShowcase{IsShowcased: false, Description: nil, SetByUID: nil, AnyMemberShowcase: true}
 
 	tmShowcase, err := GetTeamAndMemberShowcase(context.TODO(), tc.G, id)
 	require.NoError(t, err)
-	require.Equal(t, false, tmShowcase.IsMemberShowcased)
+	require.False(t, tmShowcase.IsMemberShowcased)
 	require.Equal(t, defaultTeamShowcase, tmShowcase.TeamShowcase)
 
 	err = SetTeamMemberShowcase(context.TODO(), tc.G, id, true)
@@ -98,7 +97,7 @@ func TestShowcaseMember(t *testing.T) {
 
 	tmShowcase, err = GetTeamAndMemberShowcase(context.TODO(), tc.G, id)
 	require.NoError(t, err)
-	require.Equal(t, true, tmShowcase.IsMemberShowcased)
+	require.True(t, tmShowcase.IsMemberShowcased)
 	require.Equal(t, defaultTeamShowcase, tmShowcase.TeamShowcase)
 
 	isShowcased := true
@@ -109,10 +108,10 @@ func TestShowcaseMember(t *testing.T) {
 
 	tmShowcase, err = GetTeamAndMemberShowcase(context.TODO(), tc.G, id)
 	require.NoError(t, err)
-	require.Equal(t, true, tmShowcase.IsMemberShowcased)
+	require.True(t, tmShowcase.IsMemberShowcased)
 
 	showcase := tmShowcase.TeamShowcase
-	require.Equal(t, true, showcase.IsShowcased)
+	require.True(t, showcase.IsShowcased)
 	require.NotNil(t, showcase.SetByUID)
 	require.Equal(t, user.User.GetUID(), *showcase.SetByUID)
 	require.NotNil(t, showcase.Description)

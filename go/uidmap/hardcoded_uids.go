@@ -12,13 +12,17 @@ import (
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 )
 
-var offsets []uint32
-var usernames []byte
-var once sync.Once
+var (
+	offsets   []uint32
+	usernames []byte
+	once      sync.Once
+)
 
 // Map of sorted location -> unsorted location, so we can binary search the usernames
-var usernameSortOrder []uint16
-var usoOnce sync.Once
+var (
+	usernameSortOrder []uint16
+	usoOnce           sync.Once
+)
 
 func findInit() {
 	once.Do(func() {
@@ -44,8 +48,8 @@ func usernameAtSortedIndex(i int) string {
 func initUsernameSort() {
 	findInit()
 	usernameSortOrder = make([]uint16, len(lengths))
-	for i := 0; i < len(lengths); i++ {
-		usernameSortOrder[i] = uint16(i)
+	for i := range len(lengths) {
+		usernameSortOrder[i] = uint16(i) //nolint:gosec // G115: Hardcoded username list is small and bounded, safe to convert
 	}
 	sort.SliceStable(usernameSortOrder, func(i, j int) bool {
 		return bytes.Compare(usernameBytesAtSortedIndex(i), usernameBytesAtSortedIndex(j)) < 0
@@ -88,6 +92,7 @@ func initUsernames() {
 	}
 	usernames = make([]byte, usernamesLen)
 	buf := bufWriter{usernames, 0}
+	//nolint:gosec // G110: Decompressing hardcoded embedded data with known size; bomb protection via usernamesLen check
 	n, err := io.Copy(&buf, zip)
 	if err != nil {
 		panic(err)

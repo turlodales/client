@@ -1,10 +1,11 @@
 package engine
 
 import (
+	"testing"
+
 	"github.com/keybase/client/go/libkb"
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestLoginOneshot(t *testing.T) {
@@ -25,7 +26,7 @@ func TestLoginOneshot(t *testing.T) {
 	m := NewMetaContextForTest(tc).WithUIs(uis)
 	err := RunEngine2(m, s)
 	require.NoError(t, err)
-	require.True(t, len(loginUI.PaperPhrase) > 0)
+	require.NotEmpty(t, loginUI.PaperPhrase)
 
 	assertNumDevicesAndKeys(tc, fu, 2, 4)
 	assertSecretStored(tc, fu.Username)
@@ -56,14 +57,13 @@ func TestLoginOneshot(t *testing.T) {
 	m = m.WithUIs(uis)
 	err = RunEngine2(m, eng2)
 	require.NoError(t, err)
-	require.NotZero(t, len(eng2.Passphrase()))
+	require.NotEmpty(t, eng2.Passphrase())
 
 	testSign(t, tc2)
 	trackAlice(tc2, fu, 2)
 	err = m.LogoutAndDeprovisionIfRevoked()
 	require.NoError(t, err)
 	testSign(t, tc2)
-
 }
 
 // Test for the case that we hit, where a user has a regular keybase service + electron running,
@@ -87,7 +87,7 @@ func TestLoginOneshotNoLogout(t *testing.T) {
 	m := NewMetaContextForTest(tc).WithUIs(uis)
 	err := RunEngine2(m, s)
 	require.NoError(t, err)
-	require.True(t, len(loginUI.PaperPhrase) > 0)
+	require.NotEmpty(t, loginUI.PaperPhrase)
 
 	assertNumDevicesAndKeys(tc, fu, 2, 4)
 	assertSecretStored(tc, fu.Username)

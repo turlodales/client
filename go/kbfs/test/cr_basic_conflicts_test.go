@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/keybase/client/go/kbfs/libkbfs"
+	"github.com/stretchr/testify/require"
 )
 
 // bob and alice both write(to the same file),
@@ -48,9 +49,10 @@ func TestCrConflictWriteFile(t *testing.T) {
 
 func TestCrConflictWriteFileWithObfuscation(t *testing.T) {
 	oldEnv := os.Getenv(libkbfs.EnvKeybaseTestObfuscateLogsForTest)
-	os.Setenv(libkbfs.EnvKeybaseTestObfuscateLogsForTest, "1")
+	err := os.Setenv(libkbfs.EnvKeybaseTestObfuscateLogsForTest, "1")
+	require.NoError(t, err)
 	defer func() {
-		os.Setenv(libkbfs.EnvKeybaseTestObfuscateLogsForTest, oldEnv)
+		_ = os.Setenv(libkbfs.EnvKeybaseTestObfuscateLogsForTest, oldEnv)
 	}()
 	testCrConflictWriteFile(t)
 }
@@ -72,15 +74,19 @@ func TestCrConflictCreateWithDifferentTypes(t *testing.T) {
 		as(bob, noSync(),
 			mkfile("a/c", ""),
 			reenableUpdates(),
-			lsdir("a/", m{"b$": "FILE", "c$": "DIR",
-				crnameEsc("c", bob): "FILE"}),
+			lsdir("a/", m{
+				"b$": "FILE", "c$": "DIR",
+				crnameEsc("c", bob): "FILE",
+			}),
 			read("a/b", "hello"),
 			lsdir("a/c", m{}),
 			read(crname("a/c", bob), ""),
 		),
 		as(alice,
-			lsdir("a/", m{"b$": "FILE", "c$": "DIR",
-				crnameEsc("c", bob): "FILE"}),
+			lsdir("a/", m{
+				"b$": "FILE", "c$": "DIR",
+				crnameEsc("c", bob): "FILE",
+			}),
 			read("a/b", "hello"),
 			lsdir("a/c", m{}),
 			read(crname("a/c", bob), ""),
@@ -106,15 +112,19 @@ func TestCrConflictCreateFileWithDifferentTypes(t *testing.T) {
 		as(bob, noSync(),
 			link("a/c", "b"),
 			reenableUpdates(),
-			lsdir("a/", m{"b$": "FILE", "c$": "FILE",
-				crnameEsc("c", bob): "SYM"}),
+			lsdir("a/", m{
+				"b$": "FILE", "c$": "FILE",
+				crnameEsc("c", bob): "SYM",
+			}),
 			read("a/b", "hello"),
 			read("a/c", ""),
 			read(crname("a/c", bob), "hello"),
 		),
 		as(alice,
-			lsdir("a/", m{"b$": "FILE", "c$": "FILE",
-				crnameEsc("c", bob): "SYM"}),
+			lsdir("a/", m{
+				"b$": "FILE", "c$": "FILE",
+				crnameEsc("c", bob): "SYM",
+			}),
 			read("a/b", "hello"),
 			read("a/c", ""),
 			read(crname("a/c", bob), "hello"),
@@ -141,16 +151,20 @@ func TestCrConflictCreateSymlinkWithDifferentContents(t *testing.T) {
 		as(bob, noSync(),
 			link("a/d", "c"),
 			reenableUpdates(),
-			lsdir("a/", m{"b$": "FILE", "c$": "FILE", "d$": "SYM",
-				crnameEsc("d", bob): "SYM"}),
+			lsdir("a/", m{
+				"b$": "FILE", "c$": "FILE", "d$": "SYM",
+				crnameEsc("d", bob): "SYM",
+			}),
 			read("a/b", "hello"),
 			read("a/c", "world"),
 			read("a/d", "hello"),
 			read(crname("a/d", bob), "world"),
 		),
 		as(alice,
-			lsdir("a/", m{"b$": "FILE", "c$": "FILE", "d$": "SYM",
-				crnameEsc("d", bob): "SYM"}),
+			lsdir("a/", m{
+				"b$": "FILE", "c$": "FILE", "d$": "SYM",
+				crnameEsc("d", bob): "SYM",
+			}),
 			read("a/b", "hello"),
 			read("a/c", "world"),
 			read("a/d", "hello"),
@@ -177,14 +191,18 @@ func TestCrConflictWriteFileWithAddTime(t *testing.T) {
 		as(bob, noSync(),
 			write("a/b", "uh oh"),
 			reenableUpdates(),
-			lsdir("a/", m{"b$": "FILE",
-				crnameAtTimeEsc("b", bob, timeInc): "FILE"}),
+			lsdir("a/", m{
+				"b$":                               "FILE",
+				crnameAtTimeEsc("b", bob, timeInc): "FILE",
+			}),
 			read("a/b", "world"),
 			read(crnameAtTime("a/b", bob, timeInc), "uh oh"),
 		),
 		as(alice,
-			lsdir("a/", m{"b$": "FILE",
-				crnameAtTimeEsc("b", bob, timeInc): "FILE"}),
+			lsdir("a/", m{
+				"b$":                               "FILE",
+				crnameAtTimeEsc("b", bob, timeInc): "FILE",
+			}),
 			read("a/b", "world"),
 			read(crnameAtTime("a/b", bob, timeInc), "uh oh"),
 		),

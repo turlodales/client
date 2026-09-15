@@ -15,10 +15,11 @@ func (f fileInfoForActivesGetterTest) Size() int64        { return 0 }
 func (f fileInfoForActivesGetterTest) Mode() os.FileMode  { return 0 }
 func (f fileInfoForActivesGetterTest) ModTime() time.Time { return time.Time(f) }
 func (f fileInfoForActivesGetterTest) IsDir() bool        { return false }
-func (f fileInfoForActivesGetterTest) Sys() interface{}   { return nil }
+func (f fileInfoForActivesGetterTest) Sys() any           { return nil }
 
 func makeFileInfoActivesGetterForTest(
-	tlfModTimes, hostModTimes []time.Time) fileinfoActivesGetter {
+	tlfModTimes, hostModTimes []time.Time,
+) fileinfoActivesGetter {
 	tlfs := make([]os.FileInfo, 0, len(tlfModTimes))
 	hosts := make([]os.FileInfo, 0, len(hostModTimes))
 	for _, m := range tlfModTimes {
@@ -37,14 +38,14 @@ func TestGetActives(t *testing.T) {
 	now := time.Now()
 	getter := makeFileInfoActivesGetterForTest(
 		[]time.Time{
-			now.Add(-(time.Minute)),
+			now.Add(-time.Minute),
 			now.Add(-(time.Minute * 12)),
 			now.Add(-(time.Hour + time.Minute)),
 			now.Add(-(time.Hour*24 + time.Minute)),
 			now.Add(-(time.Hour*24*7 + time.Minute)),
 		}, // tlfs
 		[]time.Time{
-			now.Add(-(time.Minute)),
+			now.Add(-time.Minute),
 			now.Add(-(time.Minute * 12)),
 			now.Add(-(time.Hour + time.Minute)),
 			now.Add(-(time.Hour*24 + time.Minute)),

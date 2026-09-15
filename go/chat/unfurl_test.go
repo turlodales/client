@@ -19,6 +19,7 @@ import (
 	"github.com/keybase/client/go/kbhttp/manager"
 
 	"github.com/keybase/client/go/chat/attachments"
+	"github.com/keybase/client/go/kbtest"
 	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/clockwork"
 
@@ -26,6 +27,7 @@ import (
 	"github.com/keybase/client/go/protocol/chat1"
 	"github.com/keybase/client/go/protocol/gregor1"
 	"github.com/keybase/client/go/protocol/keybase1"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -52,8 +54,9 @@ func (d *dummyHTTPSrv) Start() string {
 	mux.HandleFunc("/favicon.ico", d.handleFavicon)
 	mux.HandleFunc("/apple-touch-icon.png", d.handleApple)
 	d.srv = &http.Server{
-		Addr:    fmt.Sprintf("%s:%d", localhost, port),
-		Handler: mux,
+		Addr:              fmt.Sprintf("%s:%d", localhost, port),
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second, // Prevent Slowloris attacks
 	}
 	go func() { _ = d.srv.Serve(listener) }()
 	return d.srv.Addr
@@ -63,30 +66,30 @@ func (d *dummyHTTPSrv) Stop() {
 	require.NoError(d.t, d.srv.Close())
 }
 
-func (d *dummyHTTPSrv) handleApple(w http.ResponseWriter, r *http.Request) {
+func (d *dummyHTTPSrv) handleApple(w http.ResponseWriter, _ *http.Request) {
 	d.Lock()
 	defer d.Unlock()
 	w.WriteHeader(404)
 }
 
-func (d *dummyHTTPSrv) handleFavicon(w http.ResponseWriter, r *http.Request) {
+func (d *dummyHTTPSrv) handleFavicon(w http.ResponseWriter, _ *http.Request) {
 	d.Lock()
 	defer d.Unlock()
 	w.WriteHeader(200)
 	f, err := os.Open(filepath.Join("unfurl", "testcases", "nytimes.ico"))
-	require.NoError(d.t, err)
+	assert.NoError(d.t, err)
 	_, err = io.Copy(w, f)
-	require.NoError(d.t, err)
+	assert.NoError(d.t, err)
 }
 
-func (d *dummyHTTPSrv) handle(w http.ResponseWriter, r *http.Request) {
+func (d *dummyHTTPSrv) handle(w http.ResponseWriter, _ *http.Request) {
 	d.Lock()
 	defer d.Unlock()
 	if d.succeed {
 		html := "<html><head><title>MIKE</title></head></html>"
 		w.WriteHeader(200)
 		_, err := io.Copy(w, bytes.NewBuffer([]byte(html)))
-		require.NoError(d.t, err)
+		assert.NoError(d.t, err)
 		return
 	}
 	w.WriteHeader(500)
@@ -189,7 +192,7 @@ func TestChatSrvUnfurl(t *testing.T) {
 			}
 			_, _, err := unfurler.Status(ctx, outboxID)
 			require.Error(t, err)
-			require.IsType(t, libkb.NotFoundError{}, err)
+			require.ErrorAs(t, err, new(libkb.NotFoundError))
 			select {
 			case <-listener0.newMessageRemote:
 				require.Fail(t, "no more messages")
@@ -197,30 +200,28 @@ func TestChatSrvUnfurl(t *testing.T) {
 			}
 			// We get two of these, one for local and remote, but its hard to know where they
 			// come from at the source, so just check twice.
-			for i := 0; i < 2; i++ {
+			for range 2 {
 				select {
 				case mu := <-listener0.messagesUpdated:
-					require.Equal(t, 1, len(mu.Updates))
+					require.Len(t, mu.Updates, 1)
 					require.Equal(t, conv.Id, mu.ConvID)
 					require.Equal(t, msgID, mu.Updates[0].GetMessageID())
 					require.True(t, mu.Updates[0].IsValid())
-					require.Equal(t, 1, len(mu.Updates[0].Valid().Unfurls))
+					require.Len(t, mu.Updates[0].Valid().Unfurls, 1)
 					typ, err := mu.Updates[0].Valid().Unfurls[0].Unfurl.UnfurlType()
 					require.NoError(t, err)
 					require.Equal(t, chat1.UnfurlType_GENERIC, typ)
 					generic := mu.Updates[0].Valid().Unfurls[0].Unfurl.Generic()
 					require.Nil(t, generic.Media)
 					require.NotNil(t, generic.Favicon)
-					require.NotZero(t, len(generic.Favicon.Url))
+					require.NotEmpty(t, generic.Favicon.Url)
 					resp, err := http.Get(generic.Favicon.Url)
 					require.NoError(t, err)
 					defer resp.Body.Close()
 					var buf bytes.Buffer
 					_, err = io.Copy(&buf, resp.Body)
 					require.NoError(t, err)
-					refBytes, err := os.ReadFile(filepath.Join("unfurl", "testcases", "nytimes_sol.ico"))
-					require.NoError(t, err)
-					require.True(t, bytes.Equal(refBytes, buf.Bytes()))
+					kbtest.RequireDecodedImageNear(t, filepath.Join("unfurl", "testcases", "nytimes_sol.ico"), buf.Bytes())
 					require.Equal(t, "MIKE", generic.Title)
 				case <-time.After(timeout):
 					require.Fail(t, "no message unfurl")
@@ -249,7 +250,7 @@ func TestChatSrvUnfurl(t *testing.T) {
 			chat1.ResolveUnfurlPromptArg{
 				ConvID:           conv.Id,
 				MsgID:            origID,
-				Result:           chat1.NewUnfurlPromptResultWithAccept("0.1"),
+				Result:           chat1.NewUnfurlPromptResultWithAccept("127.0.0.1"),
 				IdentifyBehavior: keybase1.TLFIdentifyBehavior_GUI,
 			}))
 		consumeNewMsgRemote(t, listener0, chat1.MessageType_TEXT) // from whitelist add
@@ -271,7 +272,7 @@ func TestChatSrvUnfurl(t *testing.T) {
 		httpSrv.setSucceed(true)
 
 		var u *chat1.Unfurl
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			tc.Context().MessageDeliverer.ForceDeliverLoop(context.TODO())
 			recvSingleRetry()
 			u = recvUnfurl()
@@ -292,7 +293,7 @@ func TestChatSrvUnfurl(t *testing.T) {
 			chat1.ResolveUnfurlPromptArg{
 				ConvID:           conv.Id,
 				MsgID:            origID,
-				Result:           chat1.NewUnfurlPromptResultWithAccept("0.1"),
+				Result:           chat1.NewUnfurlPromptResultWithAccept("127.0.0.1"),
 				IdentifyBehavior: keybase1.TLFIdentifyBehavior_GUI,
 			}))
 		time.Sleep(200 * time.Millisecond)
@@ -311,10 +312,10 @@ func TestChatSrvUnfurl(t *testing.T) {
 			IdentifyBehavior: keybase1.TLFIdentifyBehavior_GUI,
 		})
 		require.NoError(t, err)
-		require.Equal(t, 1, len(threadRes.Thread.Messages))
+		require.Len(t, threadRes.Thread.Messages, 1)
 		unfurlMsg := threadRes.Thread.Messages[0]
 		require.True(t, unfurlMsg.IsValid())
-		require.Equal(t, 1, len(unfurlMsg.Valid().Unfurls))
+		require.Len(t, unfurlMsg.Valid().Unfurls, 1)
 		unfurlMsgID := func() chat1.MessageID {
 			for k := range unfurlMsg.Valid().Unfurls {
 				return k
@@ -339,15 +340,15 @@ func TestChatSrvUnfurl(t *testing.T) {
 		})
 		require.NoError(t, err)
 		thread := filterOutboxMessages(threadRes.Thread)
-		require.Equal(t, 1, len(thread))
+		require.Len(t, thread, 1)
 		unfurlMsg = thread[0]
 		require.True(t, unfurlMsg.IsValid())
-		require.Zero(t, len(unfurlMsg.Valid().Unfurls))
+		require.Empty(t, unfurlMsg.Valid().Unfurls)
 		select {
 		case mu := <-listener0.messagesUpdated:
-			require.Equal(t, 1, len(mu.Updates))
+			require.Len(t, mu.Updates, 1)
 			require.True(t, mu.Updates[0].IsValid())
-			require.Zero(t, len(mu.Updates[0].Valid().Unfurls))
+			require.Empty(t, mu.Updates[0].Valid().Unfurls)
 		case <-time.After(timeout):
 			require.Fail(t, "no update")
 		}
@@ -378,6 +379,5 @@ func TestChatSrvUnfurl(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, chat1.UnfurlMode_NEVER, settings.Mode)
 		require.Equal(t, []string{"cnn.com", "nytimes.com"}, settings.Whitelist)
-
 	})
 }

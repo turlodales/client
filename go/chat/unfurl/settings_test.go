@@ -24,7 +24,7 @@ func newMemConversationBackedStorage() *memConversationBackedStorage {
 	}
 }
 
-func (s *memConversationBackedStorage) Get(ctx context.Context, uid gregor1.UID, name string, res interface{}) (bool, error) {
+func (s *memConversationBackedStorage) Get(ctx context.Context, uid gregor1.UID, name string, res any) (bool, error) {
 	s.Lock()
 	defer s.Unlock()
 	dat, ok := s.storage[name]
@@ -35,7 +35,7 @@ func (s *memConversationBackedStorage) Get(ctx context.Context, uid gregor1.UID,
 	return true, err
 }
 
-func (s *memConversationBackedStorage) Put(ctx context.Context, uid gregor1.UID, name string, src interface{}) error {
+func (s *memConversationBackedStorage) Put(ctx context.Context, uid gregor1.UID, name string, src any) error {
 	s.Lock()
 	defer s.Unlock()
 	dat, err := json.Marshal(src)
@@ -56,30 +56,30 @@ func TestUnfurlSetting(t *testing.T) {
 	res, err := settings.Get(context.TODO(), uid)
 	require.NoError(t, err)
 	require.Equal(t, chat1.UnfurlMode_WHITELISTED, res.Mode)
-	require.Zero(t, len(res.Whitelist))
+	require.Empty(t, res.Whitelist)
 	require.NoError(t, settings.WhitelistAdd(context.TODO(), uid, "yahoo.com"))
 	res, err = settings.Get(context.TODO(), uid)
 	require.NoError(t, err)
 	require.Equal(t, chat1.UnfurlMode_WHITELISTED, res.Mode)
-	require.Equal(t, 1, len(res.Whitelist))
+	require.Len(t, res.Whitelist, 1)
 	require.True(t, res.Whitelist["yahoo.com"])
 	require.NoError(t, settings.WhitelistAdd(context.TODO(), uid, "google.com"))
 	res, err = settings.Get(context.TODO(), uid)
 	require.NoError(t, err)
 	require.Equal(t, chat1.UnfurlMode_WHITELISTED, res.Mode)
-	require.Equal(t, 2, len(res.Whitelist))
+	require.Len(t, res.Whitelist, 2)
 	require.True(t, res.Whitelist["google.com"])
 	require.True(t, res.Whitelist["yahoo.com"])
 	require.NoError(t, settings.SetMode(context.TODO(), uid, chat1.UnfurlMode_NEVER))
 	res, err = settings.Get(context.TODO(), uid)
 	require.NoError(t, err)
 	require.Equal(t, chat1.UnfurlMode_NEVER, res.Mode)
-	require.Equal(t, 2, len(res.Whitelist))
+	require.Len(t, res.Whitelist, 2)
 	require.True(t, res.Whitelist["google.com"])
 	require.True(t, res.Whitelist["yahoo.com"])
 	require.NoError(t, settings.WhitelistRemove(context.TODO(), uid, "google.com"))
 	res, err = settings.Get(context.TODO(), uid)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(res.Whitelist))
+	require.Len(t, res.Whitelist, 1)
 	require.True(t, res.Whitelist["yahoo.com"])
 }

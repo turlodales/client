@@ -1,17 +1,18 @@
 package libkb
 
 import (
+	"context"
 	"encoding/base64"
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"sync"
 	"time"
 
 	"github.com/keybase/client/go/kbcrypto"
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 	"github.com/keybase/go-codec/codec"
-	context "golang.org/x/net/context"
 )
 
 type SKBKeyringFile struct {
@@ -200,9 +201,9 @@ func (k *SKBKeyringFile) SearchWithComputedKeyFamily(ckf *ComputedKeyFamily, ska
 	}()
 	k.G().Log.Debug("| Searching %d possible blocks", len(k.Blocks))
 	var blocks []*SKB
-	for i := len(k.Blocks) - 1; i >= 0; i-- {
+	for i, v := range slices.Backward(k.Blocks) {
 		k.G().Log.Debug("| trying key index# -> %d", i)
-		if key, err := k.Blocks[i].GetPubKey(); err == nil && key != nil {
+		if key, err := v.GetPubKey(); err == nil && key != nil {
 			kid = key.GetKID()
 			active := ckf.GetKeyRole(kid)
 			k.G().Log.Debug("| Checking KID: %s -> %d", kid, int(active))
@@ -210,11 +211,10 @@ func (k *SKBKeyringFile) SearchWithComputedKeyFamily(ckf *ComputedKeyFamily, ska
 				k.G().Log.Debug("| Skipped, doesn't match type=%s", ska.KeyType)
 			} else if !KeyMatchesQuery(key, ska.KeyQuery, ska.ExactMatch) {
 				k.G().Log.Debug("| Skipped, doesn't match query=%s", ska.KeyQuery)
-
 			} else if active != DLGSibkey {
 				k.G().Log.Debug("| Skipped, active=%d", int(active))
 			} else {
-				blocks = append(blocks, k.Blocks[i])
+				blocks = append(blocks, v)
 			}
 		} else {
 			k.G().Log.Debug("| failed --> %v", err)

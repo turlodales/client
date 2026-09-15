@@ -2,6 +2,7 @@ package avatars
 
 import (
 	"fmt"
+	"maps"
 	"time"
 
 	"github.com/keybase/client/go/libkb"
@@ -36,7 +37,7 @@ func (c *URLCachingSource) StopBackgroundTasks(m libkb.MetaContext) {
 	c.diskLRU.Flush(m.Ctx(), m.G())
 }
 
-func (c *URLCachingSource) debug(m libkb.MetaContext, msg string, args ...interface{}) {
+func (c *URLCachingSource) debug(m libkb.MetaContext, msg string, args ...any) {
 	m.Debug("Avatars.URLCachingSource: %s", fmt.Sprintf(msg, args...))
 }
 
@@ -52,7 +53,8 @@ func (c *URLCachingSource) monitorAppState(m libkb.MetaContext) {
 	c.debug(m, "monitorAppState: starting up")
 	state := keybase1.MobileAppState_FOREGROUND
 	for {
-		state = <-m.G().MobileAppState.NextUpdate(&state)
+		<-m.G().MobileAppState.NextUpdate(state)
+		state = m.G().MobileAppState.State()
 		if state == keybase1.MobileAppState_BACKGROUND {
 			c.debug(m, "monitorAppState: backgrounded")
 			c.diskLRU.Flush(m.Ctx(), m.G())
@@ -89,9 +91,7 @@ func (c *URLCachingSource) specLoad(m libkb.MetaContext, names []string, formats
 
 func (c *URLCachingSource) mergeRes(res *keybase1.LoadAvatarsRes, m keybase1.LoadAvatarsRes) {
 	for username, rec := range m.Picmap {
-		for format, url := range rec {
-			res.Picmap[username][format] = url
-		}
+		maps.Copy(res.Picmap[username], rec)
 	}
 }
 
@@ -106,7 +106,8 @@ func (c *URLCachingSource) commitURLs(m libkb.MetaContext, res keybase1.LoadAvat
 }
 
 func (c *URLCachingSource) loadNames(m libkb.MetaContext, names []string, formats []keybase1.AvatarFormat,
-	remoteFetch func(libkb.MetaContext, []string, []keybase1.AvatarFormat) (keybase1.LoadAvatarsRes, error)) (res keybase1.LoadAvatarsRes, err error) {
+	remoteFetch func(libkb.MetaContext, []string, []keybase1.AvatarFormat) (keybase1.LoadAvatarsRes, error),
+) (res keybase1.LoadAvatarsRes, err error) {
 	loadSpec, err := c.specLoad(m, names, formats)
 	if err != nil {
 		return res, err

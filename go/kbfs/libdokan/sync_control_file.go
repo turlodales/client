@@ -5,12 +5,12 @@
 package libdokan
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/keybase/client/go/kbfs/dokan"
 	"github.com/keybase/client/go/kbfs/libfs"
 	"github.com/keybase/client/go/kbfs/libkbfs"
-	"golang.org/x/net/context"
 )
 
 // SyncControlFile is a special file used to control sync
@@ -23,7 +23,8 @@ type SyncControlFile struct {
 
 // WriteFile implements writes for dokan.
 func (f *SyncControlFile) WriteFile(ctx context.Context,
-	fi *dokan.FileInfo, bs []byte, offset int64) (n int, err error) {
+	fi *dokan.FileInfo, bs []byte, offset int64,
+) (n int, err error) {
 	f.folder.fs.logEnter(ctx,
 		fmt.Sprintf("SyncControlFile (f.action=%s) Write", f.action))
 	defer func() { f.folder.reportErr(ctx, libkbfs.WriteMode, err) }()

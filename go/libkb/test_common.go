@@ -2,11 +2,11 @@
 // this source code is governed by the included BSD license.
 
 //go:build !production
-// +build !production
 
 package libkb
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
@@ -18,7 +18,6 @@ import (
 	"sync"
 	"time"
 
-	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/keybase/client/go/gregor"
@@ -39,19 +38,19 @@ func (c *TestConfig) GetConfigFileName() string { return c.configFileName }
 // this in order to avoid pulling in the "testing" package in exported
 // code.
 type TestingTB interface {
-	Error(args ...interface{})
-	Errorf(format string, args ...interface{})
+	Error(args ...any)
+	Errorf(format string, args ...any)
 	Fail()
 	FailNow()
 	Failed() bool
-	Fatal(args ...interface{})
-	Fatalf(format string, args ...interface{})
-	Log(args ...interface{})
-	Logf(format string, args ...interface{})
+	Fatal(args ...any)
+	Fatalf(format string, args ...any)
+	Log(args ...any)
+	Logf(format string, args ...any)
 	Name() string
-	Skip(args ...interface{})
+	Skip(args ...any)
 	SkipNow()
-	Skipf(format string, args ...interface{})
+	Skipf(format string, args ...any)
 	Skipped() bool
 	Helper()
 }
@@ -133,7 +132,6 @@ func (tc *TestContext) Logout() error {
 }
 
 func (tc TestContext) MoveGpgKeyringTo(dst TestContext) error {
-
 	mv := func(f string) (err error) {
 		return os.Rename(path.Join(tc.Tp.GPGHome, f), filepath.Join(dst.Tp.GPGHome, f))
 	}
@@ -168,7 +166,7 @@ func (tc *TestContext) GenerateGPGKeyring(ids ...string) error {
 			return err
 		}
 
-		err = bundle.Entity.Serialize(fpk)
+		err = bundle.Serialize(fpk)
 		if err != nil {
 			return err
 		}
@@ -338,9 +336,7 @@ func setupTestContext(tb TestingTB, name string, tcPrev *TestContext) (tc TestCo
 func SetupTest(tb TestingTB, name string, depth int) (tc TestContext) {
 	var err error
 	tc, err = setupTestContext(tb, name, nil)
-	if err != nil {
-		tb.Fatal(err)
-	}
+	require.NoError(tb, err)
 	if os.Getenv("KEYBASE_LOG_SETUPTEST_FUNCS") != "" {
 		depth := 0
 		// Walk up the stackframe looking for the function that starts with "Test".
@@ -380,9 +376,7 @@ func (tc *TestContext) SetRuntimeDir(s string) {
 func (tc TestContext) Clone() (ret TestContext) {
 	var err error
 	ret, err = setupTestContext(tc.T, "", &tc)
-	if err != nil {
-		tc.T.Fatal(err)
-	}
+	require.NoError(tc.T, err)
 	return ret
 }
 
@@ -390,15 +384,15 @@ type nullui struct {
 	gctx *GlobalContext
 }
 
-func (n *nullui) Printf(f string, args ...interface{}) (int, error) {
+func (n *nullui) Printf(f string, args ...any) (int, error) {
 	return fmt.Printf(f, args...)
 }
 
-func (n *nullui) PrintfStderr(f string, args ...interface{}) (int, error) {
+func (n *nullui) PrintfStderr(f string, args ...any) (int, error) {
 	return fmt.Fprintf(os.Stderr, f, args...)
 }
 
-func (n *nullui) PrintfUnescaped(f string, args ...interface{}) (int, error) {
+func (n *nullui) PrintfUnescaped(f string, args ...any) (int, error) {
 	return fmt.Printf(f, args...)
 }
 
@@ -409,42 +403,55 @@ func (n *nullui) GetDumbOutputUI() DumbOutputUI {
 func (n *nullui) GetIdentifyUI() IdentifyUI {
 	return nil
 }
+
 func (n *nullui) GetIdentifyTrackUI() IdentifyUI {
 	return nil
 }
+
 func (n *nullui) GetLoginUI() LoginUI {
 	return nil
 }
+
 func (n *nullui) GetTerminalUI() TerminalUI {
 	return nil
 }
+
 func (n *nullui) GetSecretUI() SecretUI {
 	return nil
 }
+
 func (n *nullui) GetProveUI() ProveUI {
 	return nil
 }
+
 func (n *nullui) GetGPGUI() GPGUI {
 	return nil
 }
+
 func (n *nullui) GetLogUI() LogUI {
 	return n.gctx.Log
 }
+
 func (n *nullui) GetPgpUI() PgpUI {
 	return nil
 }
+
 func (n *nullui) GetProvisionUI(KexRole) ProvisionUI {
 	return nil
 }
+
 func (n *nullui) Prompt(string, bool, Checker) (string, error) {
 	return "", nil
 }
+
 func (n *nullui) PromptForConfirmation(prompt string) error {
 	return nil
 }
+
 func (n *nullui) Configure() error {
 	return nil
 }
+
 func (n *nullui) Shutdown() error {
 	return nil
 }
@@ -556,7 +563,8 @@ func (f *FakeGregorState) State(_ context.Context) (gregor.State, error) {
 }
 
 func (f *FakeGregorState) UpdateCategory(ctx context.Context, cat string, body []byte,
-	dtime gregor1.TimeOrOffset) (gregor1.MsgID, error) {
+	dtime gregor1.TimeOrOffset,
+) (gregor1.MsgID, error) {
 	return gregor1.MsgID{}, nil
 }
 
@@ -627,7 +635,6 @@ func (t TestUIDMapper) MapUIDsToUsernamePackages(ctx context.Context, g UIDMappe
 }
 
 func (t TestUIDMapper) SetTestingNoCachingMode(enabled bool) {
-
 }
 
 func (t TestUIDMapper) MapUIDsToUsernamePackagesOffline(ctx context.Context, g UIDMapperContext, uids []keybase1.UID, fullNameFreshness time.Duration) ([]UsernamePackage, error) {
@@ -714,7 +721,7 @@ func CreateReadOnlySecretStoreDir(tc TestContext) (string, func()) {
 	fi, err := os.Stat(td)
 	require.NoError(tc.T, err)
 	oldMode := fi.Mode()
-	_ = os.Chmod(td, 0400)
+	_ = os.Chmod(td, 0o400)
 
 	cleanup := func() {
 		_ = os.Chmod(td, oldMode)

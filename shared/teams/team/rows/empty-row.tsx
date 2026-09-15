@@ -1,7 +1,14 @@
 import type * as T from '@/constants/types'
 import * as C from '@/constants'
-import * as Container from '@/util/container'
 import * as Kb from '@/common-adapters'
+import * as React from 'react'
+import {useSafeNavigation} from '@/util/safe-navigation'
+import {useCurrentUserState} from '@/stores/current-user'
+import {makeAddMembersWizard} from '@/teams/add-members-wizard/state'
+import {makeNewTeamWizard} from '@/teams/new-team/wizard/state'
+import {useLoadedTeam} from '../use-loaded-team'
+import {joinConversation} from '@/chat/conversation/status-actions'
+import {useAddToTeam} from '../../common/use-add-to-team'
 
 type Props = {
   type: 'channelsEmpty' | 'channelsFew' | 'members' | 'subteams'
@@ -25,29 +32,33 @@ const buttonLabel = {
 
 const useSecondaryAction = (props: Props) => {
   const {teamID, conversationIDKey} = props
-  const nav = Container.useSafeNavigation()
-  const startAddMembersWizard = C.useTeamsState(s => s.dispatch.startAddMembersWizard)
-  const launchNewTeamWizardOrModal = C.useTeamsState(s => s.dispatch.launchNewTeamWizardOrModal)
+  const nav = useSafeNavigation()
   const onSecondaryAction = () => {
     switch (props.type) {
       case 'members':
         if (conversationIDKey) {
           nav.safeNavigateAppend({
-            props: {conversationIDKey: conversationIDKey, teamID},
-            selected: 'chatAddToChannel',
+            name: 'chatAddToChannel',
+            params: {conversationIDKey: conversationIDKey, teamID},
           })
         } else {
-          startAddMembersWizard(teamID)
+          nav.safeNavigateAppend({
+            name: 'teamAddToTeamFromWhere',
+            params: {wizard: makeAddMembersWizard(teamID)},
+          })
         }
         break
       case 'subteams':
-        launchNewTeamWizardOrModal(teamID)
+        nav.safeNavigateAppend({
+          name: 'teamWizard2TeamInfo',
+          params: {wizard: makeNewTeamWizard({parentTeamID: teamID, teamType: 'subteam'})},
+        })
         break
       case 'channelsFew':
-        nav.safeNavigateAppend({props: {teamID}, selected: 'chatCreateChannel'})
+        nav.safeNavigateAppend({name: 'chatCreateChannel', params: {teamID}})
         break
       case 'channelsEmpty':
-        nav.safeNavigateAppend({props: {teamID}, selected: 'teamCreateChannels'})
+        nav.safeNavigateAppend({name: 'teamCreateChannels', params: {teamID}})
         break
     }
   }
@@ -76,32 +87,40 @@ Make it a big team by creating chat channels.`
 }
 
 const EmptyRow = (props: Props) => {
+  const styles = useStyles()
   const {conversationIDKey, teamID} = props
-  const teamMeta = C.useTeamsState(s => C.Teams.getTeamMeta(s, teamID))
+  const {teamMeta} = useLoadedTeam(teamID)
   const notIn = teamMeta.role === 'none' || props.notChannelMember
-  const you = C.useCurrentUserState(s => s.username)
+  const you = useCurrentUserState(s => s.username)
   const onSecondaryAction = useSecondaryAction(props)
-  const addToTeam = C.useTeamsState(s => s.dispatch.addToTeam)
-  const joinConversation = C.useConvoState(
-    conversationIDKey ?? C.Chat.noConversationIDKey,
-    s => s.dispatch.joinConversation
-  )
+  const addToTeam = useAddToTeam()
+  const [error, setError] = React.useState('')
   const onAddSelf = () => {
     if (conversationIDKey) {
-      joinConversation()
+      joinConversation(conversationIDKey)
     } else {
-      addToTeam(teamID, [{assertion: you, role: 'admin'}], false)
+      setError('')
+      addToTeam({
+        onError: setError,
+        sendChatNotification: false,
+        teamID,
+        users: [{assertion: you, role: 'admin'}],
+      })
     }
   }
-  const waiting = C.Waiting.useAnyWaiting(C.Teams.addMemberWaitingKey(teamID, you))
+  const waiting = C.Waiting.useAnyWaiting(C.waitingKeyTeamsAddMember(teamID, you))
 
   const teamOrChannel = props.conversationIDKey ? 'channel' : 'team'
   const teamOrChannelName = props.conversationIDKey ? 'This channel' : teamMeta.teamname
   return (
-    <Kb.Box2 direction="vertical" gap="small" alignItems="center" style={styles.container} fullWidth={true}>
-      <Kb.Box2 direction="horizontal">
-        <Kb.Icon type={icon[props.type]} style={styles.iconHeight} />
-      </Kb.Box2>
+    <Kb.Box2
+      direction="vertical"
+      gap="small"
+      alignItems="center"
+      style={styles.container}
+      fullWidth={true}
+    >
+      <Kb.ImageIcon type={icon[props.type]} style={styles.iconHeight} />
       <Kb.Text type="BodySmall" center={true} style={styles.text}>
         {getFirstText(props.type, teamOrChannel, teamOrChannelName, notIn)}
       </Kb.Text>
@@ -111,7 +130,7 @@ const EmptyRow = (props: Props) => {
           .istanbul, ...
         </Kb.Text>
       )}
-      <Kb.Box2 direction={Kb.Styles.isMobile ? 'vertical' : 'horizontal'} gap="tiny">
+      <Kb.Box2 direction={isMobile ? 'vertical' : 'horizontal'} gap="tiny">
         {props.type === 'members' && notIn && (
           <Kb.Button small={true} mode="Primary" label="Add yourself" onClick={onAddSelf} waiting={waiting} />
         )}
@@ -122,17 +141,21 @@ const EmptyRow = (props: Props) => {
           onClick={onSecondaryAction}
         />
       </Kb.Box2>
+      {!!error && (
+        <Kb.Text type="BodySmallError" center={true} style={styles.text}>
+          {error}
+        </Kb.Text>
+      )}
     </Kb.Box2>
   )
 }
 
-const styles = Kb.Styles.styleSheetCreate(
-  () =>
+const useStyles = Kb.Styles.createStyleHook(
+  theme =>
     ({
       container: {
         ...Kb.Styles.padding(40, 0),
-        backgroundColor: Kb.Styles.globalColors.blueGrey,
-        justifyContent: 'flex-start',
+        backgroundColor: theme.blueGrey,
       },
       iconHeight: {height: 96},
       text: Kb.Styles.platformStyles({

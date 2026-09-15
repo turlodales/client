@@ -1,7 +1,6 @@
 // A box that flex grows but constrains children
-import * as React from 'react'
 import * as Styles from '@/styles'
-import Box, {Box2, type LayoutEvent} from './box'
+import {Box2, type LayoutEvent} from './box'
 
 type Props = {
   children?: React.ReactNode
@@ -9,42 +8,40 @@ type Props = {
   onLayout?: (e: LayoutEvent) => void
 }
 
-const BoxGrow = (p: Props) => {
+const BoxGrowImpl = (p: Props & {direction: 'vertical' | 'horizontal'}) => {
+  const styles = useStyles()
+  const {direction, onLayout, style, children} = p
   return (
-    <Box style={Styles.collapseStyles([styles.outer, p.style])} onLayout={p.onLayout}>
-      <Box style={styles.inner}>{p.children}</Box>
-    </Box>
-  )
-}
-
-const styles = Styles.styleSheetCreate(
-  () =>
-    ({
-      inner: {...Styles.globalStyles.fillAbsolute},
-      inner2: {...Styles.globalStyles.fillAbsolute, display: 'flex'},
-      outer: {
-        flexGrow: 1,
-        position: 'relative',
-      },
-      outer2: {
-        alignSelf: 'stretch',
-        display: 'flex',
-        flexGrow: 1,
-        flexShrink: 1,
-        position: 'relative',
-      },
-    }) as const
-)
-
-export default BoxGrow
-
-export const BoxGrow2 = (p: Props) => {
-  const {onLayout, style, children} = p
-  return (
-    <Box2 direction="horizontal" style={Styles.collapseStyles([styles.outer2, style])} onLayout={onLayout}>
-      <Box2 direction="horizontal" style={styles.inner2}>
+    <Box2
+      direction={direction}
+      alignSelf="stretch"
+      relative={true}
+      style={Styles.collapseStyles([direction === 'vertical' ? styles.outer : styles.outer2, style])}
+      onLayout={onLayout}
+    >
+      <Box2 direction={direction} style={styles.inner}>
         {children}
       </Box2>
     </Box2>
   )
 }
+
+const BoxGrow = (p: Props) => <BoxGrowImpl {...p} direction="vertical" />
+export const BoxGrow2 = (p: Props) => <BoxGrowImpl {...p} direction="horizontal" />
+
+const useStyles = Styles.createStyleHook(
+  () =>
+    ({
+      inner: {...Styles.globalStyles.fillAbsolute, height: '100%', width: '100%'},
+      outer: {
+        flexGrow: 1,
+      },
+      // horizontal variant also shrinks so it can't overflow its parent
+      outer2: {
+        flexGrow: 1,
+        flexShrink: 1,
+      },
+    }) as const
+)
+
+export default BoxGrow

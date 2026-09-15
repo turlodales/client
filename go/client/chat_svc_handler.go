@@ -1,8 +1,10 @@
 package client
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"strings"
 	"time"
 
@@ -15,7 +17,6 @@ import (
 	gregor1 "github.com/keybase/client/go/protocol/gregor1"
 	"github.com/keybase/client/go/protocol/keybase1"
 	"github.com/keybase/go-framed-msgpack-rpc/rpc"
-	"golang.org/x/net/context"
 )
 
 // ChatServiceHandler can call the service.
@@ -266,7 +267,7 @@ func (c *chatServiceHandler) GetUnfurlSettingsV1(ctx context.Context) Reply {
 		return c.errReply(err)
 	}
 	return Reply{
-		Result: map[string]interface{}{
+		Result: map[string]any{
 			"mode":      strings.ToLower(chat1.UnfurlModeRevMap[res.Mode]),
 			"whitelist": res.Whitelist,
 		},
@@ -509,15 +510,14 @@ func (c *chatServiceHandler) reactionMapToUI(reactions chat1.ReactionMap) (res c
 		res.Reactions[emoji] = chat1.UIReactionDesc{
 			Users: make(map[string]chat1.Reaction),
 		}
-		for username, reaction := range users {
-			res.Reactions[emoji].Users[username] = reaction
-		}
+		maps.Copy(res.Reactions[emoji].Users, users)
 	}
 	return res
 }
 
 func (c *chatServiceHandler) formatMessages(ctx context.Context, messages []chat1.MessageUnboxed,
-	conv chat1.ConversationLocal, selfUID keybase1.UID, readMsgID chat1.MessageID, unreadOnly bool) (ret []chat1.Message, err error) {
+	conv chat1.ConversationLocal, selfUID keybase1.UID, readMsgID chat1.MessageID, unreadOnly bool,
+) (ret []chat1.Message, err error) {
 	for _, m := range messages {
 		st, err := m.State()
 		if err != nil {
@@ -798,7 +798,8 @@ func (c *chatServiceHandler) ReactionV1(ctx context.Context, opts reactionOption
 
 // AttachV1 implements ChatServiceHandler.AttachV1.
 func (c *chatServiceHandler) AttachV1(ctx context.Context, opts attachOptionsV1,
-	chatUI chat1.ChatUiInterface, notifyUI chat1.NotifyChatInterface) Reply {
+	chatUI chat1.ChatUiInterface, notifyUI chat1.NotifyChatInterface,
+) Reply {
 	var rl []chat1.RateLimit
 	convID, err := chat1.MakeConvID(opts.ConversationID.String())
 	if err != nil {
@@ -892,7 +893,8 @@ func (c *chatServiceHandler) AttachV1(ctx context.Context, opts attachOptionsV1,
 
 // DownloadV1 implements ChatServiceHandler.DownloadV1.
 func (c *chatServiceHandler) DownloadV1(ctx context.Context, opts downloadOptionsV1,
-	chatUI chat1.ChatUiInterface, notifyUI chat1.NotifyChatInterface) Reply {
+	chatUI chat1.ChatUiInterface, notifyUI chat1.NotifyChatInterface,
+) Reply {
 	if opts.NoStream && opts.Output != "-" {
 		return c.downloadV1NoStream(ctx, opts, chatUI, notifyUI)
 	}
@@ -966,7 +968,8 @@ func (c *chatServiceHandler) DownloadV1(ctx context.Context, opts downloadOption
 
 // downloadV1NoStream uses DownloadFileAttachmentLocal instead of DownloadAttachmentLocal.
 func (c *chatServiceHandler) downloadV1NoStream(ctx context.Context, opts downloadOptionsV1,
-	chatUI chat1.ChatUiInterface, notifyUI chat1.NotifyChatInterface) Reply {
+	chatUI chat1.ChatUiInterface, notifyUI chat1.NotifyChatInterface,
+) Reply {
 	c.chatUI.RegisterChatUI(chatUI)
 	defer c.chatUI.DeregisterChatUI(chatUI)
 	client, err := GetChatLocalClient(c.G())
@@ -1556,7 +1559,8 @@ func (c *chatServiceHandler) getAllTeamConvs(ctx context.Context, name string, t
 }
 
 func (c *chatServiceHandler) getExistingConvs(ctx context.Context, convID chat1.ConversationID,
-	channel ChatChannel) ([]chat1.ConversationLocal, []chat1.RateLimit, error) {
+	channel ChatChannel,
+) ([]chat1.ConversationLocal, []chat1.RateLimit, error) {
 	client, err := GetChatLocalClient(c.G())
 	if err != nil {
 		return nil, nil, err
@@ -1700,7 +1704,8 @@ func (c *chatServiceHandler) aggRateLimits(rlimits []chat1.RateLimit) (res []cha
 // Prefers using ChatChannel but if it is blank (default-valued) then uses ConvIDStr.
 // Uses tlfclient and GetInboxAndUnboxLocal's ConversationsUnverified.
 func (c *chatServiceHandler) resolveAPIConvID(ctx context.Context, convID chat1.ConvIDStr,
-	channel ChatChannel) (chat1.ConversationID, []chat1.RateLimit, error) {
+	channel ChatChannel,
+) (chat1.ConversationID, []chat1.RateLimit, error) {
 	conv, limits, err := c.findConversation(ctx, convID, channel)
 	if err != nil {
 		return chat1.ConversationID{}, nil, err
@@ -1712,7 +1717,8 @@ func (c *chatServiceHandler) resolveAPIConvID(ctx context.Context, convID chat1.
 // It prefers using ChatChannel but if it is blank (default-valued) then uses ConvIDStr.
 // Uses tlfclient and GetInboxAndUnboxLocal's ConversationsUnverified.
 func (c *chatServiceHandler) findConversation(ctx context.Context, convIDStr chat1.ConvIDStr,
-	channel ChatChannel) (chat1.ConversationLocal, []chat1.RateLimit, error) {
+	channel ChatChannel,
+) (chat1.ConversationLocal, []chat1.RateLimit, error) {
 	var conv chat1.ConversationLocal
 	var rlimits []chat1.RateLimit
 

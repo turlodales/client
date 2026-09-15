@@ -12,6 +12,7 @@ import (
 	"github.com/keybase/client/go/kbfs/libkbfs"
 	"github.com/keybase/client/go/kbfs/tlf"
 	kbname "github.com/keybase/client/go/kbun"
+	"github.com/stretchr/testify/require"
 )
 
 func setBlockSizes(t testing.TB, config libkbfs.Config, blockSize, blockChangeSize int64) {
@@ -20,22 +21,19 @@ func setBlockSizes(t testing.TB, config libkbfs.Config, blockSize, blockChangeSi
 		if blockSize == 0 {
 			blockSize = 512 * 1024
 		}
-		if blockChangeSize < 0 {
-			t.Fatal("Can't handle negative blockChangeSize")
-		}
+		require.GreaterOrEqual(t, blockChangeSize, int64(0),
+			"Can't handle negative blockChangeSize")
 		if blockChangeSize == 0 {
 			blockChangeSize = 8 * 1024
 		}
 		bsplit, err := data.NewBlockSplitterSimple(blockSize,
-			uint64(blockChangeSize), config.Codec())
-		if err != nil {
-			t.Fatalf("Couldn't make block splitter for block size %d,"+
+			uint64(blockChangeSize), config.Codec()) //nolint:gosec // G115: Test config with bounded values
+		require.NoError(t, err,
+			"Couldn't make block splitter for block size %d,"+
 				" blockChangeSize %d: %v", blockSize, blockChangeSize, err)
-		}
 		err = bsplit.SetMaxDirEntriesByBlockSize(config.Codec())
-		if err != nil {
-			t.Fatalf("Couldn't set max dir entries: %v", err)
-		}
+		require.NoError(t, err,
+			"Couldn't set max dir entries: %v", err)
 		config.SetBlockSplitter(bsplit)
 	}
 }
@@ -51,7 +49,8 @@ func maybeSetBw(t testing.TB, config libkbfs.Config, bwKBps int) {
 }
 
 func makeTeams(t testing.TB, config libkbfs.Config, e Engine, teams teamMap,
-	users map[kbname.NormalizedUsername]User) {
+	users map[kbname.NormalizedUsername]User,
+) {
 	teamNames := make([]kbname.NormalizedUsername, 0, len(teams))
 	for name := range teams {
 		teamNames = append(teamNames, name)
@@ -75,12 +74,11 @@ func makeTeams(t testing.TB, config libkbfs.Config, e Engine, teams teamMap,
 }
 
 func makeImplicitTeams(t testing.TB, config libkbfs.Config, e Engine,
-	implicitTeams teamMap, users map[kbname.NormalizedUsername]User) {
+	implicitTeams teamMap, users map[kbname.NormalizedUsername]User,
+) {
 	if len(implicitTeams) > 0 {
 		err := libkbfs.EnableImplicitTeamsForTest(config)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 	}
 
 	counter := byte(1)

@@ -1,6 +1,7 @@
 package systests
 
 import (
+	"slices"
 	"testing"
 	"time"
 
@@ -14,17 +15,15 @@ import (
 )
 
 func checkNewTeambotKeyNotifications(tc *libkb.TestContext, notifications *teamNotifyHandler,
-	expectedArgs []keybase1.NewTeambotKeyArg) {
+	expectedArgs []keybase1.NewTeambotKeyArg,
+) {
 	matches := map[keybase1.NewTeambotKeyArg]struct{}{}
 	numFound := 0
 	for {
 		select {
 		case arg := <-notifications.newTeambotKeyCh:
-			for _, expectedArg := range expectedArgs {
-				if expectedArg == arg {
-					matches[arg] = struct{}{}
-					break
-				}
+			if slices.Contains(expectedArgs, arg) {
+				matches[arg] = struct{}{}
 			}
 			// make don't have any unexpected notifications
 			if len(matches) <= numFound {
@@ -41,7 +40,8 @@ func checkNewTeambotKeyNotifications(tc *libkb.TestContext, notifications *teamN
 }
 
 func checkTeambotKeyNeededNotifications(tc *libkb.TestContext, notifications *teamNotifyHandler,
-	expectedArg keybase1.TeambotKeyNeededArg) {
+	expectedArg keybase1.TeambotKeyNeededArg,
+) {
 	select {
 	case arg := <-notifications.teambotKeyNeededCh:
 		require.Equal(tc.T, expectedArg, arg)
@@ -132,7 +132,7 @@ func TestTeambotKey(t *testing.T) {
 
 	// initial get, bot has no key to access
 	_, err = botKeyer.GetLatestTeambotKey(mctx3, teamID, keybase1.TeamApplication_CHAT)
-	require.IsType(t, teambot.TeambotTransientKeyError{}, err)
+	require.ErrorAs(t, err, new(teambot.TeambotTransientKeyError))
 
 	// cry for help has been issued.
 	keyNeededArg := keybase1.TeambotKeyNeededArg{
@@ -162,7 +162,7 @@ func TestTeambotKey(t *testing.T) {
 
 	// check for wrong application
 	_, err = botKeyer.GetLatestTeambotKey(mctx3, teamID, keybase1.TeamApplication_KBFS)
-	require.IsType(t, teambot.TeambotTransientKeyError{}, err)
+	require.ErrorAs(t, err, new(teambot.TeambotTransientKeyError))
 
 	// cry for help has been issued.
 	keyNeededArg = keybase1.TeambotKeyNeededArg{
@@ -240,7 +240,7 @@ func TestTeambotKey(t *testing.T) {
 	require.Equal(t, expired, ctime)
 
 	_, err = botKeyer.GetLatestTeambotKey(mctx3, teamID, keybase1.TeamApplication_CHAT)
-	require.IsType(t, teambot.TeambotPermanentKeyError{}, err)
+	require.ErrorAs(t, err, new(teambot.TeambotPermanentKeyError))
 	require.False(t, created)
 	keyNeededArg = keybase1.TeambotKeyNeededArg{
 		Id:          teamID,
@@ -357,7 +357,7 @@ func TestTeambotKey(t *testing.T) {
 	// bot asks for a non-existent generation, no new key is created.
 	badGen := teambotKey.Metadata.Generation + 50
 	_, err = botKeyer.GetTeambotKeyAtGeneration(mctx3, teamID, keybase1.TeamApplication_CHAT, badGen)
-	require.IsType(t, teambot.TeambotTransientKeyError{}, err)
+	require.ErrorAs(t, err, new(teambot.TeambotTransientKeyError))
 	keyNeededArg = keybase1.TeambotKeyNeededArg{
 		Id:          teamID,
 		Uid:         botua.uid,
@@ -377,8 +377,15 @@ func TestTeambotKeyRemovedMember(t *testing.T) {
 	botua := tt.addUser("botua")
 	botuaUID := gregor1.UID(botua.uid.ToBytes())
 	mctx1 := libkb.NewMetaContextForTest(*user1.tc)
+	mctxBotua := libkb.NewMetaContextForTest(*botua.tc)
 	ekLib1 := mctx1.G().GetEKLib()
 	memberKeyer1 := mctx1.G().GetTeambotMemberKeyer()
+
+	// Ensure the bot has generated their ephemeral keys before adding to team
+	// This prevents a race condition where the teambot EK creation fails because
+	// the bot's user EK hasn't been generated yet
+	err := mctxBotua.G().GetEKLib().KeygenIfNeeded(mctxBotua)
+	require.NoError(t, err)
 
 	teamID, teamName := user1.createTeam2()
 	user1.addRestrictedBotTeamMember(teamName.String(), botua.username, keybase1.TeamBotSettings{})
@@ -395,6 +402,11 @@ func TestTeambotKeyRemovedMember(t *testing.T) {
 		},
 	}
 	checkNewTeambotKeyNotifications(botua.tc, botua.notifications, newKeyArgs)
+	newEkArg := keybase1.NewTeambotEkArg{
+		Id:         teamID,
+		Generation: 1,
+	}
+	checkNewTeambotEKNotifications(botua.tc, botua.notifications, newEkArg)
 	user1.removeTeamMember(teamName.String(), botua.username)
 
 	team, err := teams.Load(mctx1.Ctx(), mctx1.G(), keybase1.LoadTeamArg{

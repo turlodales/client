@@ -36,11 +36,23 @@ func TestNewTeambotEK(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, botua.Username, res.User.Username)
 
+	// Ensure the bot user has valid ephemeral keys before creating teambot EK.
+	// On slower systems like Windows, the bot's UserEK may not be ready immediately.
+	t.Logf("Ensuring bot user %s has valid UserEK before creating teambot EK", botua.Username)
+	ekLib2, ok := mctx2.G().GetEKLib().(*EKLib)
+	require.True(t, ok)
+	// shutdown to prevent any background ops from running during the test
+	err = ekLib2.Shutdown(mctx2)
+	require.NoError(t, err)
+	err = ekLib2.KeygenIfNeeded(mctx2)
+	require.NoError(t, err)
+
 	ek, _, err := mctx.G().GetEKLib().GetOrCreateLatestTeambotEK(mctx, teamID, botuaUID.ToBytes())
 	require.NoError(t, err)
 	typ, err := ek.KeyType()
 	require.NoError(t, err)
 	require.True(t, typ.IsTeambot())
+	t.Logf("Successfully created teambot EK for bot user %s", botua.Username)
 
 	metaPtr, wrongKID, err := fetchLatestTeambotEK(mctx2, teamID)
 	require.NoError(t, err)

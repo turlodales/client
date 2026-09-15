@@ -33,7 +33,7 @@ type V1 struct {
 
 	bcryptLimiter *rate.Limiter
 
-	// ACLs is deprecated, and kept around for back-compability. Now it serves
+	// ACLs is deprecated, and kept around for back-compatibility. Now it serves
 	// as an alias to PerPathConfigs. If both ACLs and PerPathConfigs are
 	// present, it's a parsing error.
 	ACLs map[string]PerPathConfigV1 `json:"acls,omitempty"`
@@ -86,8 +86,7 @@ func (c *V1) init() {
 	if c.perPathConfigsReaderInitErr != nil {
 		return
 	}
-	c.perPathConfigsReader, c.perPathConfigsReaderInitErr =
-		makePerPathConfigsReaderV1(c.PerPathConfigs, c.Users)
+	c.perPathConfigsReader, c.perPathConfigsReaderInitErr = makePerPathConfigsReaderV1(c.PerPathConfigs, c.Users)
 	if c.perPathConfigsReaderInitErr != nil {
 		return
 	}
@@ -135,7 +134,8 @@ func (c *V1) Authenticate(ctx context.Context, username, cleartextPassword strin
 func (c *V1) GetPermissions(path string, username *string) (
 	read, list bool,
 	possibleRead, possibleList bool,
-	realm string, err error) {
+	realm string, err error,
+) {
 	if err = c.EnsureInit(); err != nil {
 		return false, false, false, false, "", err
 	}

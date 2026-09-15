@@ -1,12 +1,10 @@
 package chat
 
 import (
+	"context"
 	"fmt"
-	"testing"
-
 	"sync"
-
-	context "golang.org/x/net/context"
+	"testing"
 
 	"github.com/keybase/client/go/chat/storage"
 	"github.com/keybase/client/go/chat/types"
@@ -14,6 +12,7 @@ import (
 	"github.com/keybase/client/go/kbtest"
 	"github.com/keybase/client/go/protocol/chat1"
 	"github.com/keybase/client/go/protocol/gregor1"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -50,20 +49,16 @@ func TestInboxSourceUpdateRace(t *testing.T) {
 	t.Logf("spawning update goroutines")
 	var wg sync.WaitGroup
 
-	wg.Add(1)
-	go func() {
+	wg.Go(func() {
 		_, err = tc.ChatG.InboxSource.SetStatus(ctx, uid, 0, conv.GetConvID(),
 			chat1.ConversationStatus_UNFILED)
-		require.NoError(t, err)
-		wg.Done()
-	}()
-	wg.Add(1)
-	go func() {
+		assert.NoError(t, err)
+	})
+	wg.Go(func() {
 		_, err = tc.ChatG.InboxSource.SetStatus(ctx, uid, 1, conv.GetConvID(),
 			chat1.ConversationStatus_UNFILED)
-		require.NoError(t, err)
-		wg.Done()
-	}()
+		assert.NoError(t, err)
+	})
 	wg.Wait()
 
 	ib, _, err = tc.ChatG.InboxSource.Read(ctx, u.User.GetUID().ToBytes(),
@@ -88,12 +83,12 @@ func TestInboxSourceSkipAhead(t *testing.T) {
 	assertInboxVersion := func(v int) {
 		ib, _, err := tc.ChatG.InboxSource.Read(ctx, u.User.GetUID().ToBytes(),
 			types.ConversationLocalizerBlocking, types.InboxSourceDataSourceAll, nil, nil)
-		require.Equal(t, chat1.InboxVers(v), ib.Version, "wrong version")
+		require.Equal(t, chat1.InboxVers(v), ib.Version, "wrong version") //nolint:gosec // G115: Test code comparing version numbers, safe to convert
 		require.NoError(t, err)
 	}
 
-	fatal := func(msg string, args ...interface{}) error {
-		t.Fatalf(msg, args...)
+	fatal := func(msg string, args ...any) error {
+		require.FailNow(t, fmt.Sprintf(msg, args...))
 		return fmt.Errorf(msg, args...)
 	}
 
@@ -115,7 +110,7 @@ func TestInboxSourceSkipAhead(t *testing.T) {
 	localConvs, _, err := tc.Context().InboxSource.Localize(ctx, uid, []types.RemoteConversation{rc},
 		types.ConversationLocalizerBlocking)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(localConvs))
+	require.Len(t, localConvs, 1)
 	prepareRes, err := sender.Prepare(ctx, chat1.MessagePlaintext{
 		ClientHeader: chat1.MessageClientHeader{
 			Conv:        conv.Metadata.IdTriple,
@@ -196,11 +191,11 @@ func TestInboxSourceLocalOnly(t *testing.T) {
 			})
 		if success {
 			require.NoError(t, err)
-			require.Equal(t, 1, len(ib.ConvsUnverified))
+			require.Len(t, ib.ConvsUnverified, 1)
 			require.Equal(t, conv.Id, ib.ConvsUnverified[0].GetConvID())
 		} else {
 			require.Error(t, err)
-			require.IsType(t, storage.MissError{}, err)
+			require.ErrorAs(t, err, new(storage.MissError))
 		}
 	}
 
@@ -212,6 +207,135 @@ func TestInboxSourceLocalOnly(t *testing.T) {
 	attempt(types.InboxSourceDataSourceLocalOnly, false)
 	attempt(types.InboxSourceDataSourceAll, true)
 	attempt(types.InboxSourceDataSourceLocalOnly, true)
+}
+
+// TestIsConvSearchHitCaseInsensitive verifies that channel name matching is
+// case-insensitive. Queries are lowercased before matching, so conv names must
+// also be lowercased before comparison or uppercase channel names (e.g. "AB")
+// will never match a user-typed query.
+func TestIsConvSearchHitCaseInsensitive(t *testing.T) {
+	src := &HybridInboxSource{}
+	ctx := context.TODO()
+	username := "alice"
+
+	makeTeamChannel := func(teamName, channelName string) types.RemoteConversation {
+		convID := chat1.ConversationID([]byte(teamName + "#" + channelName))
+		rc := types.RemoteConversation{
+			Conv: chat1.Conversation{
+				Metadata: chat1.ConversationMetadata{
+					ConversationID: convID,
+					IdTriple: chat1.ConversationIDTriple{
+						Tlfid: chat1.TLFID([]byte(teamName)),
+					},
+					TeamType:    chat1.TeamType_COMPLEX,
+					MembersType: chat1.ConversationMembersType_TEAM,
+					Status:      chat1.ConversationStatus_UNFILED,
+				},
+				ReaderInfo: &chat1.ConversationReaderInfo{
+					Status: chat1.ConversationMemberStatus_ACTIVE,
+				},
+				MaxMsgSummaries: []chat1.MessageSummary{{MsgID: 1}},
+			},
+			ConvIDStr: chat1.ConvIDStr(teamName + "#" + channelName),
+			LocalMetadata: &types.RemoteConversationMetadata{
+				Name:      teamName,
+				TopicName: channelName,
+			},
+		}
+		return rc
+	}
+
+	queryToks := func(q string) []string { return []string{q} }
+
+	// Uppercase two-letter channel name must match a lowercase query.
+	rcUpper := makeTeamChannel("acme", "AB")
+	hit := src.isConvSearchHit(ctx, rcUpper, queryToks("ab"), username,
+		types.InboxSourceSearchEmptyModeAll)
+	require.True(t, hit.valid(), "uppercase channel 'AB' should match lowercase query 'ab'")
+
+	// Lowercase channel name must still match.
+	rcLower := makeTeamChannel("acme", "ab")
+	hit = src.isConvSearchHit(ctx, rcLower, queryToks("ab"), username,
+		types.InboxSourceSearchEmptyModeAll)
+	require.True(t, hit.valid(), "lowercase channel 'ab' should match query 'ab'")
+
+	// Uppercase team name must match a lowercase query.
+	rcUpperTeam := makeTeamChannel("ACME", "general")
+	hit = src.isConvSearchHit(ctx, rcUpperTeam, queryToks("acme"), username,
+		types.InboxSourceSearchEmptyModeAll)
+	require.True(t, hit.valid(), "uppercase team 'ACME' should match lowercase query 'acme'")
+
+	// Query that is not a substring of the channel name must not match.
+	hit = src.isConvSearchHit(ctx, rcUpper, queryToks("zz"), username,
+		types.InboxSourceSearchEmptyModeAll)
+	require.False(t, hit.valid(), "query 'zz' should not match channel 'AB'")
+}
+
+// TestSearchQueryTokenization verifies that the Search query tokenizer correctly
+// splits and discards whitespace (including tabs and other unicode space chars)
+// so that tokens containing whitespace do not fail to match channel names.
+func TestSearchQueryTokenization(t *testing.T) {
+	cases := []struct {
+		query    string
+		expected []string
+		desc     string
+	}{
+		{"ab", []string{"ab"}, "plain query"},
+		{"  ab  ", []string{"ab"}, "leading/trailing spaces"},
+		{"ab\t", []string{"ab"}, "trailing tab"},
+		{"\tab\t", []string{"ab"}, "surrounding tabs"},
+		{"ab\n", []string{"ab"}, "trailing newline"},
+		{"ab\u00a0cd", []string{"ab", "cd"}, "unicode whitespace separated tokens"},
+		{"ab cd", []string{"ab", "cd"}, "space-separated tokens"},
+		{"ab,cd", []string{"ab", "cd"}, "comma-separated tokens"},
+		{"AB", []string{"ab"}, "uppercase lowercased"},
+		{"  ,,\u00a0\t ", nil, "whitespace/commas only yields no tokens"},
+	}
+	for _, tc := range cases {
+		got := tokenizeSearchQuery(tc.query)
+		require.Equal(t, tc.expected, got, tc.desc)
+	}
+}
+
+// TestIsSearchableConvExistence verifies that convs which no longer exist
+// (deleted team channels, for instance) are kept out of conversation pickers.
+// They stay in local inbox storage after deletion, and since they were never
+// localized they all display as the bare team name, so leaking them shows up
+// as a pile of identical rows.
+func TestIsSearchableConvExistence(t *testing.T) {
+	src := &HybridInboxSource{
+		searchStatusMap: map[chat1.ConversationStatus]bool{
+			chat1.ConversationStatus_UNFILED: true,
+		},
+		searchMemberStatusMap: map[chat1.ConversationMemberStatus]bool{
+			chat1.ConversationMemberStatus_ACTIVE: true,
+		},
+	}
+
+	makeConv := func(existence chat1.ConversationExistence) types.RemoteConversation {
+		return types.RemoteConversation{
+			Conv: chat1.Conversation{
+				Metadata: chat1.ConversationMetadata{
+					IdTriple:    chat1.ConversationIDTriple{TopicType: chat1.TopicType_CHAT},
+					Existence:   existence,
+					TeamType:    chat1.TeamType_COMPLEX,
+					MembersType: chat1.ConversationMembersType_TEAM,
+					Status:      chat1.ConversationStatus_UNFILED,
+				},
+				ReaderInfo: &chat1.ConversationReaderInfo{
+					Status: chat1.ConversationMemberStatus_ACTIVE,
+				},
+				MaxMsgSummaries: []chat1.MessageSummary{{MsgID: 1, MessageType: chat1.MessageType_TEXT}},
+			},
+		}
+	}
+
+	require.True(t, src.isSearchableConv(makeConv(chat1.ConversationExistence_ACTIVE)),
+		"an active conv should be searchable")
+	require.False(t, src.isSearchableConv(makeConv(chat1.ConversationExistence_DELETED)),
+		"a deleted conv should not be searchable")
+	require.False(t, src.isSearchableConv(makeConv(chat1.ConversationExistence_ABANDONED)),
+		"an abandoned conv should not be searchable")
 }
 
 func TestChatConversationDeleted(t *testing.T) {

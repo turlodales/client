@@ -4,7 +4,8 @@
 package engine
 
 import (
-	"golang.org/x/net/context"
+	"context"
+	"errors"
 
 	"github.com/keybase/client/go/kex2"
 	"github.com/keybase/client/go/libkb"
@@ -52,14 +53,14 @@ func (e *DeviceAdd) promptLoop(m libkb.MetaContext, provisioner *Kex2Provisioner
 		Phrase:          secret.Phrase(),
 		OtherDeviceType: provisioneeType,
 	}
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		receivedSecret, err := m.UIs().ProvisionUI.DisplayAndPromptSecret(m.Ctx(), arg)
 		if err != nil {
 			m.Warning("DisplayAndPromptSecret error: %s", err)
 			return err
 		}
 
-		if receivedSecret.Secret != nil && len(receivedSecret.Secret) > 0 {
+		if len(receivedSecret.Secret) > 0 {
 			m.Debug("received secret, adding to provisioner")
 			var ks kex2.Secret
 			copy(ks[:], receivedSecret.Secret)
@@ -151,7 +152,7 @@ func (e *DeviceAdd) Run(m libkb.MetaContext) (err error) {
 	}()
 
 	if err := RunEngine2(m, provisioner); err != nil {
-		if err == kex2.ErrHelloTimeout {
+		if errors.Is(err, kex2.ErrHelloTimeout) {
 			err = libkb.CanceledError{M: "Failed to provision device: are you sure you typed the secret properly?"}
 		}
 		return err

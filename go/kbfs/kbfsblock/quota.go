@@ -74,7 +74,7 @@ func UsageStatFromProtocol(stat keybase1.UsageStat) *UsageStat {
 
 // NonZero checks whether UsageStat has accumulated any usage info
 func (u *UsageStat) NonZero() bool {
-	for i := UsageType(0); i < NumUsage; i++ {
+	for i := range NumUsage {
 		if u.Bytes[i] != 0 {
 			return true
 		}
@@ -214,7 +214,8 @@ func (u *QuotaInfo) ToProtocol() (res keybase1.BlockQuotaInfo) {
 
 // QuotaInfoDecode decodes b into a QuotaInfo
 func QuotaInfoDecode(b []byte, codec kbfscodec.Codec) (
-	*QuotaInfo, error) {
+	*QuotaInfo, error,
+) {
 	var info QuotaInfo
 	err := codec.Decode(b, &info)
 	if err != nil {

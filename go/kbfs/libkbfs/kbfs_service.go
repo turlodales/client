@@ -15,19 +15,19 @@ import (
 )
 
 // KBFSErrorUnwrapper unwraps errors from the KBFS service.
-type KBFSErrorUnwrapper struct {
-}
+type KBFSErrorUnwrapper struct{}
 
 var _ rpc.ErrorUnwrapper = KBFSErrorUnwrapper{}
 
 // MakeArg implements rpc.ErrorUnwrapper.
-func (eu KBFSErrorUnwrapper) MakeArg() interface{} {
+func (eu KBFSErrorUnwrapper) MakeArg() any {
 	return &keybase1.Status{}
 }
 
 // UnwrapError implements rpc.ErrorUnwrapper.
-func (eu KBFSErrorUnwrapper) UnwrapError(arg interface{}) (appError error,
-	dispatchError error) {
+func (eu KBFSErrorUnwrapper) UnwrapError(arg any) (appError error,
+	dispatchError error,
+) {
 	s, ok := arg.(*keybase1.Status)
 	if !ok {
 		return nil, errors.New("Error converting arg to keybase1.Status object in DiskCacheErrorUnwrapper.UnwrapError")
@@ -73,7 +73,8 @@ type KBFSService struct {
 
 // NewKBFSService creates a new KBFSService.
 func NewKBFSService(kbCtx Context, config kbfsServiceConfig) (
-	*KBFSService, error) {
+	*KBFSService, error,
+) {
 	log := config.MakeLogger("FSS")
 	// Check to see if we're receiving a socket from systemd. If not, create
 	// one and bind to it.
@@ -106,7 +107,8 @@ func (k *KBFSService) Run(l net.Listener) {
 
 // registerProtocols registers protocols for this KBFSService.
 func (k *KBFSService) registerProtocols(
-	srv *rpc.Server, xp rpc.Transporter) error {
+	srv *rpc.Server, xp rpc.Transporter,
+) error {
 	// TODO: fill in with actual protocols.
 	protocols := []rpc.Protocol{
 		kbgitkbfs.DiskBlockCacheProtocol(NewDiskBlockCacheService(k.config)),
@@ -127,7 +129,6 @@ func (k *KBFSService) handle(c net.Conn) {
 	server := rpc.NewServer(xp, libkb.WrapError)
 
 	err := k.registerProtocols(server, xp)
-
 	if err != nil {
 		k.log.Warning("RegisterProtocols error: %s", err)
 		return
@@ -141,13 +142,13 @@ func (k *KBFSService) handle(c net.Conn) {
 		case <-serverCh:
 		}
 		// Close is idempotent, so always close when we're done.
-		c.Close()
+		_ = c.Close()
 	}()
 	<-serverCh
 
 	// err is always non-nil.
 	err = server.Err()
-	if err != io.EOF {
+	if !errors.Is(err, io.EOF) {
 		k.log.Warning("Run error: %s", err)
 	}
 
@@ -159,9 +160,9 @@ func (k *KBFSService) handle(c net.Conn) {
 func (k *KBFSService) listenLoop(l net.Listener) error {
 	go func() {
 		<-k.stopCh
-		l.Close()
+		_ = l.Close()
 	}()
-	defer l.Close()
+	defer func() { _ = l.Close() }()
 	for {
 		c, err := l.Accept()
 		if err != nil {

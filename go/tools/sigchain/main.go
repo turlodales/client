@@ -15,12 +15,14 @@ import (
 	"github.com/keybase/client/go/protocol/keybase1"
 )
 
-var uid = flag.String("uid", "", "uid of sigchain owner")
-var username = flag.String("username", "", "username of sigchain owner")
-var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
+var (
+	uid        = flag.String("uid", "", "uid of sigchain owner")
+	username   = flag.String("username", "", "username of sigchain owner")
+	cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
+)
 
 func errout(msg string) {
-	fmt.Fprintf(os.Stderr, msg+"\n")
+	fmt.Fprintf(os.Stderr, "%s", msg+"\n")
 	os.Exit(1)
 }
 
@@ -59,16 +61,19 @@ func memstats() {
 }
 
 func memprof() {
-	f, err := os.Create("/tmp/sc_memprof")
+	f, err := os.CreateTemp("", "sc_memprof")
 	if err != nil {
-		log.Fatal("could not create memory profile: ", err)
+		log.Printf("could not create memory profile: %v", err)
+		return
 	}
+	defer f.Close()
+	defer os.Remove(f.Name())
 	runtime.GC() // get up-to-date statistics
 	if err := pprof.WriteHeapProfile(f); err != nil {
-		log.Fatal("could not write memory profile: ", err)
+		log.Printf("could not write memory profile: %v", err)
+		return
 	}
-	f.Close()
-	fmt.Printf("wrote memory profile to /tmp/sc_memprof\n")
+	fmt.Printf("wrote memory profile to %s\n", f.Name())
 }
 
 // don't GC me

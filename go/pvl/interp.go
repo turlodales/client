@@ -7,11 +7,10 @@ import (
 	"bytes"
 	b64 "encoding/base64"
 	"fmt"
+	"net"
 	"net/url"
 	"regexp"
 	"strings"
-
-	"net"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/keybase/client/go/jsonhelpers"
@@ -326,12 +325,12 @@ func validateScript(m metaContext, script *scriptT, service keybase1.ProofType, 
 	// Does not validate each instruction's format. (That is done when running it)
 	// Validate each instruction's "error" field.
 
-	logerr := func(m metaContext, service keybase1.ProofType, whichscript int, pc int, format string, arg ...interface{}) libkb.ProofError {
+	logerr := func(m metaContext, service keybase1.ProofType, whichscript int, pc int, format string, arg ...any) libkb.ProofError {
 		debugWithPosition(m, service, whichscript, pc, format, arg...)
 		return libkb.NewProofError(keybase1.ProofStatus_INVALID_PVL, format, arg...)
 	}
 
-	var modeknown = false
+	modeknown := false
 	var mode fetchMode
 	if service == keybase1.ProofType_DNS {
 		modeknown = true
@@ -440,7 +439,7 @@ func runDNS(m metaContext, userdomain string, scripts []scriptT, mknewstate stat
 		descs = append(descs, err.GetDesc())
 	}
 	// Use the code from the first error
-	return libkb.NewProofError(errs[0].GetProofStatus(), strings.Join(descs, "; "))
+	return libkb.NewProofError(errs[0].GetProofStatus(), "%s", strings.Join(descs, "; "))
 }
 
 func formatDNSServer(srv string) string {
@@ -451,7 +450,6 @@ func formatDNSServer(srv string) string {
 }
 
 func runDNSTXTQuery(m metaContext, domain string) (res []string, err error) {
-
 	// Attempt to use the built-in resolver first, but this might fail on mobile.
 	// The reason for that is currently (as of Go 1.8), LookupTXT does not properly
 	// use the cgo DNS routines if they are configured to be used (like they are for mobile).
@@ -551,7 +549,7 @@ func runDNSOne(m metaContext, domain string, scripts []scriptT, mknewstate state
 }
 
 func runScript(m metaContext, script *scriptT, startstate scriptState) libkb.ProofError {
-	var state = startstate
+	state := startstate
 	if len(script.Instructions) < 1 {
 		perr := libkb.NewProofError(keybase1.ProofStatus_INVALID_PVL,
 			"Empty scripts are not allowed.")
@@ -634,7 +632,6 @@ func stepInstruction(m metaContext, ins instructionT, state scriptState) (script
 		stepErr = replaceCustomError(m, state, customErrSpec, stepErr)
 	}
 	return newState, stepErr
-
 }
 
 func stepAssertRegexMatch(m metaContext, ins assertRegexMatchT, state scriptState) (scriptState, libkb.ProofError) {
@@ -987,7 +984,8 @@ func stepFill(m metaContext, ins fillT, state scriptState) (scriptState, libkb.P
 // selectors is a list like [ "div .foo", 0, ".bar"] ].
 // Each string runs a selector, each integer runs a Eq.
 func runCSSSelectorInner(m metaContext, html *goquery.Selection,
-	selectors []keybase1.SelectorEntry) (*goquery.Selection, libkb.ProofError) {
+	selectors []keybase1.SelectorEntry,
+) (*goquery.Selection, libkb.ProofError) {
 	if len(selectors) < 1 {
 		return nil, libkb.NewProofError(keybase1.ProofStatus_INVALID_PVL,
 			"CSS selectors array must not be empty")
@@ -1012,9 +1010,10 @@ func runCSSSelectorInner(m metaContext, html *goquery.Selection,
 }
 
 func runSelectorJSONInner(m metaContext, state scriptState, selectedObject *jsonw.Wrapper,
-	selectors []keybase1.SelectorEntry) ([]string, libkb.ProofError) {
-	logger := func(format string, args ...interface{}) {
-		debugWithState(m, state, format, args)
+	selectors []keybase1.SelectorEntry,
+) ([]string, libkb.ProofError) {
+	logger := func(format string, args ...any) {
+		debugWithState(m, state, format, args...)
 	}
 	jsonResults, perr := jsonhelpers.AtSelectorPath(selectedObject, selectors, logger, libkb.NewInvalidPVLSelectorError)
 	if perrInner, _ := perr.(libkb.ProofError); perrInner != nil {
@@ -1047,7 +1046,7 @@ func interpretRegex(m metaContext, state scriptState, rdesc regexDescriptor) (*r
 			"Could not build regex: %v (%v)", "must end with '$'", rdesc.Template)
 	}
 
-	var optstring = ""
+	optstring := ""
 	if rdesc.CaseInsensitive {
 		optstring += "i"
 	}
@@ -1055,7 +1054,7 @@ func interpretRegex(m metaContext, state scriptState, rdesc regexDescriptor) (*r
 		optstring += "m"
 	}
 
-	var prefix = ""
+	prefix := ""
 	if len(optstring) > 0 {
 		prefix = "(?" + optstring + ")"
 	}
@@ -1100,7 +1099,7 @@ func replaceCustomError(m metaContext, state scriptState, spec *errorT, err1 lib
 		if subErr == nil {
 			newDesc = subbedDesc
 		}
-		err2 := libkb.NewProofError(spec.Status, newDesc)
+		err2 := libkb.NewProofError(spec.Status, "%s", newDesc)
 		debugWithState(m, state, "Replacing error with custom error")
 		debugWithStateError(m, state, err2)
 

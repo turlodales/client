@@ -1,6 +1,6 @@
 import * as Kb from '@/common-adapters'
-import * as Container from '@/util/container'
-import openURL from '@/util/open-url'
+import {useSafeNavigation} from '@/util/safe-navigation'
+import {openURL} from '@/util/misc'
 
 type PunycodeLinkWarningProps = {
   display: string
@@ -9,18 +9,19 @@ type PunycodeLinkWarningProps = {
 }
 
 const PunycodeLinkWarning = (props: PunycodeLinkWarningProps) => {
+  const theme = Kb.Styles.useTheme()
   const {url, display, punycode} = props
-  const nav = Container.useSafeNavigation()
+  const nav = useSafeNavigation()
   const onCancel = () => nav.safeNavigateUp()
   const onConfirm = () => {
-    openURL(url)
+    void openURL(url)
     nav.safeNavigateUp()
   }
   const description = `The link you clicked on appears to be ${display}, but actually points to ${punycode}.`
   return (
     <Kb.ConfirmModal
       icon="iconfont-open-browser"
-      iconColor={Kb.Styles.globalColors.red}
+      iconColor={theme.red}
       prompt={'Open URL?'}
       description={description}
       onCancel={onCancel}

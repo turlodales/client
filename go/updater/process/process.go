@@ -15,14 +15,16 @@ import (
 
 // Log is the logging interface for the process package
 type Log interface {
-	Debugf(s string, args ...interface{})
-	Infof(s string, args ...interface{})
-	Warningf(s string, args ...interface{})
-	Errorf(s string, args ...interface{})
+	Debugf(s string, args ...any)
+	Infof(s string, args ...any)
+	Warningf(s string, args ...any)
+	Errorf(s string, args ...any)
 }
 
-type processesFn func() ([]ps.Process, error)
-type breakFn func([]ps.Process) bool
+type (
+	processesFn func() ([]ps.Process, error)
+	breakFn     func([]ps.Process) bool
+)
 
 // FindProcesses returns processes containing string matching process path
 func FindProcesses(matcher Matcher, wait time.Duration, delay time.Duration, log Log) ([]ps.Process, error) {
@@ -79,7 +81,7 @@ var _ = findProcessWithPID
 
 // findProcessesWithFn finds processes using match function.
 // If max is != 0, then we will return that max number of processes.
-func findProcessesWithFn(fn processesFn, matchFn MatchFn, max int) ([]ps.Process, error) {
+func findProcessesWithFn(fn processesFn, matchFn MatchFn, maxV int) ([]ps.Process, error) {
 	processes, err := fn()
 	if err != nil {
 		return nil, fmt.Errorf("Error listing processes: %s", err)
@@ -92,7 +94,7 @@ func findProcessesWithFn(fn processesFn, matchFn MatchFn, max int) ([]ps.Process
 		if matchFn(p) {
 			procs = append(procs, p)
 		}
-		if max != 0 && len(procs) >= max {
+		if maxV != 0 && len(procs) >= maxV {
 			break
 		}
 	}

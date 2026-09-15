@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -10,7 +11,6 @@ import (
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 	"github.com/keybase/clockwork"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/context"
 )
 
 // Test "end-to-end" syncing contact (by using SaveContactList RPC with raw
@@ -99,9 +99,9 @@ func TestContactSyncAndSearch(t *testing.T) {
 	newlyResolved := result.NewlyResolved
 	// We should only have 1 resolved, since we dedupe.
 	require.Len(t, newlyResolved, 1)
-	require.Equal(t, newlyResolved[0].ContactName, "Alice A")
-	require.Equal(t, newlyResolved[0].Username, "alice")
-	require.Equal(t, newlyResolved[0].Assertion, "48111222333@phone")
+	require.Equal(t, "Alice A", newlyResolved[0].ContactName)
+	require.Equal(t, "alice", newlyResolved[0].Username)
+	require.Equal(t, "48111222333@phone", newlyResolved[0].Assertion)
 
 	{
 		// Try raw contact list lookup.

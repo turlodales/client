@@ -3,7 +3,6 @@ package teams
 import (
 	"context"
 	"encoding/json"
-
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -133,9 +132,8 @@ func TestUnits(t *testing.T) {
 			t.Logf("  ⏭️ %s", name)
 		}
 	}
-	if len(selectUnit) > 0 {
-		t.Fatalf("test passed but only ran selected unit: %v", runLog)
-	}
+	require.Empty(t, selectUnit,
+		"test passed but only ran selected unit: %v", runLog)
 }
 
 func runUnitFile(t *testing.T, jsonPath string) (*Team, bool) {
@@ -192,11 +190,11 @@ func runUnit(t *testing.T, unit TestCase) (lastLoadRet *Team, didRun bool) {
 			}
 			err := json.Unmarshal(link, &outer)
 			require.NoError(t, err)
-			var inner interface{}
+			var inner any
 
 			err = jsonw.EnsureMaxDepthBytesDefault([]byte(outer.PayloadJSON))
 			if err != nil {
-				t.Logf("team link '%v' #'%v': JSON exceeds max depth permissable: %v", teamLabel, i+1, err)
+				t.Logf("team link '%v' #'%v': JSON exceeds max depth permissible: %v", teamLabel, i+1, err)
 			}
 			require.NoError(t, err)
 			err = json.Unmarshal([]byte(outer.PayloadJSON), &inner)

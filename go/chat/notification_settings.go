@@ -10,18 +10,24 @@ import (
 )
 
 func getGlobalAppNotificationSettings(ctx context.Context, g *globals.Context, ri func() chat1.RemoteInterface) (
-	res chat1.GlobalAppNotificationSettings, err error) {
+	res chat1.GlobalAppNotificationSettings, err error,
+) {
 	settings, err := ri().GetGlobalAppNotificationSettings(ctx)
 	if err != nil {
 		return res, err
 	}
-	plaintextDesktopDisabled, err := utils.GetGregorBool(ctx, g, utils.DisablePlaintextDesktopGregorKey, false)
+	state, err := g.GregorState.State(ctx)
+	if err != nil {
+		return res, err
+	}
+	plaintextDesktopDisabled, err := utils.GetGregorBoolFromState(state,
+		utils.DisablePlaintextDesktopGregorKey, false)
 	if err != nil {
 		return res, err
 	}
 	settings.Settings[chat1.GlobalAppNotificationSetting_PLAINTEXTDESKTOP] = !plaintextDesktopDisabled
 
-	convertHeic, err := utils.GetGregorBool(ctx, g, utils.ConvertHEICGregorKey, true)
+	convertHeic, err := utils.GetGregorBoolFromState(state, utils.ConvertHEICGregorKey, true)
 	if err != nil {
 		return res, err
 	}
@@ -30,8 +36,8 @@ func getGlobalAppNotificationSettings(ctx context.Context, g *globals.Context, r
 }
 
 func setGlobalAppNotificationSettings(ctx context.Context, g *globals.Context, ri func() chat1.RemoteInterface,
-	strSettings map[string]bool) error {
-
+	strSettings map[string]bool,
+) error {
 	var settings chat1.GlobalAppNotificationSettings
 	settings.Settings = make(map[chat1.GlobalAppNotificationSetting]bool)
 	for k, v := range strSettings {

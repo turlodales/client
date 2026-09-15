@@ -1,22 +1,27 @@
 import * as C from '@/constants'
+import * as Chat from '@/constants/chat'
+import {PerfProfiler} from '@/perf/react-profiler'
 import Normal from './normal'
-import Preview from './preview/container'
-import ThreadSearch from '../search/container'
+import Preview from './preview'
+import ThreadSearch from '../search'
+import {useThreadSearchRoute} from '../thread-search-route'
+import {useConversationThreadID, useThreadMeta} from '../thread-context'
 
 const InputAreaContainer = () => {
-  const conversationIDKey = C.useChatContext(s => s.id)
-  const showThreadSearch = C.useChatContext(s => s.threadSearchInfo.visible)
-  const {membershipType, resetParticipants, wasFinalizedBy} = C.useChatContext(
-    C.useShallow(s => {
-      const {membershipType, resetParticipants, wasFinalizedBy} = s.meta
-      return {membershipType, resetParticipants, wasFinalizedBy}
-    })
+  const conversationIDKey = useConversationThreadID()
+  const showThreadSearch = !!useThreadSearchRoute()
+  const {membershipType, resetParticipants, wasFinalizedBy} = useThreadMeta(
+    C.useShallow(m => ({
+      membershipType: m.membershipType,
+      resetParticipants: m.resetParticipants,
+      wasFinalizedBy: m.wasFinalizedBy,
+    }))
   )
 
   let noInput = resetParticipants.size > 0 || !!wasFinalizedBy
   if (
-    conversationIDKey === C.Chat.pendingWaitingConversationIDKey ||
-    conversationIDKey === C.Chat.pendingErrorConversationIDKey
+    conversationIDKey === Chat.pendingWaitingConversationIDKey ||
+    conversationIDKey === Chat.pendingErrorConversationIDKey
   ) {
     noInput = true
   }
@@ -29,9 +34,9 @@ const InputAreaContainer = () => {
   if (isPreview) {
     return <Preview />
   }
-  if (showThreadSearch && C.isMobile) {
+  if (showThreadSearch && isMobile) {
     return <ThreadSearch />
   }
-  return <Normal />
+  return <PerfProfiler id="ChatInput"><Normal /></PerfProfiler>
 }
 export default InputAreaContainer

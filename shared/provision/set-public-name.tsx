@@ -1,118 +1,94 @@
 import * as C from '@/constants'
-import * as Constants from '@/constants/provision'
-import * as Container from '@/util/container'
-import * as Devices from '@/constants/devices'
+import {useSafeSubmit} from '@/util/safe-submit'
 import * as Kb from '@/common-adapters'
-import * as Platform from '@/constants/platform'
 import * as React from 'react'
 import debounce from 'lodash/debounce'
 import {SignupScreen, errorBanner} from '../signup/common'
-
-const PublicNameContainer = () => {
-  const devices = C.useProvisionState(s => s.devices)
-  const error = C.useProvisionState(s => s.error)
-  const waiting = C.Waiting.useAnyWaiting(C.Provision.waitingKey)
-  const navigateUp = C.useRouterState(s => s.dispatch.navigateUp)
-  const _onBack = navigateUp
-  const onBack = Container.useSafeSubmit(_onBack, !!error)
-  const setDeviceName = C.useProvisionState(s => s.dispatch.dynamic.setDeviceName)
-  const onSubmit = React.useCallback(
-    (name: string) => {
-      !waiting && setDeviceName?.(name)
-    },
-    [waiting, setDeviceName]
-  )
-  const deviceNumbers = devices
-    .filter(d => d.type === (Platform.isMobile ? 'mobile' : 'desktop'))
-    .map(d => d.deviceNumberOfType)
-  const maxDeviceNumber = deviceNumbers.length > 0 ? Math.max(...deviceNumbers) : -1
-  const deviceIconNumber = ((maxDeviceNumber + 1) % Devices.numBackgrounds) + 1
-
-  return (
-    <SetPublicName
-      onBack={onBack}
-      onSubmit={onSubmit}
-      deviceIconNumber={deviceIconNumber}
-      error={error}
-      waiting={waiting}
-    />
-  )
-}
-export default PublicNameContainer
+import * as Provision from '@/constants/provision'
+import * as T from '@/constants/types'
+import {submitProvisionDeviceName} from './flow'
+// shared with the signup flow so the two device-name screens cannot drift
+import {isDeviceNameDisabled, makeCleanDeviceName} from '../signup/device-name'
 
 type Props = {
-  onBack: () => void
-  onSubmit: (name: string) => void
-  deviceIconNumber: number
-  error: string
-  waiting: boolean
+  route: {
+    params: {
+      devices?: ReadonlyArray<Provision.Device>
+      error?: string
+    }
+  }
 }
 
-const SetPublicName = (props: Props) => {
-  const [deviceName, setDeviceName] = React.useState(C.Signup.defaultDevicename)
+const SetPublicName = ({route}: Props) => {
+  const styles = useStyles()
+  const devices = route.params.devices ?? []
+  const error = route.params.error ?? ''
+  const waiting = C.Waiting.useAnyWaiting(C.waitingKeyProvision)
+  const onBack = useSafeSubmit(C.Router2.navigateUp, !!error)
+  const iconNumbers = T.Devices.nextDeviceIconNumbers(devices)
+  const deviceIconNumber = isMobile ? iconNumbers.mobile : iconNumbers.desktop
+
+  const [deviceName, setDeviceName] = React.useState(C.defaultDevicename)
   const [readyToShowError, setReadyToShowError] = React.useState(false)
   const debouncedSetReadyToShowError = debounce((ready: boolean) => setReadyToShowError(ready), 1000)
-  const cleanDeviceName = Constants.cleanDeviceName(deviceName)
-  const normalized = cleanDeviceName.replace(Constants.normalizeDeviceRE, '')
-  const disabled =
-    normalized.length < 3 ||
-    normalized.length > 64 ||
-    !Constants.goodDeviceRE.test(cleanDeviceName) ||
-    Constants.badDeviceRE.test(cleanDeviceName)
+  const cleanDeviceName = makeCleanDeviceName(deviceName)
+  const disabled = isDeviceNameDisabled(cleanDeviceName)
   const showDisabled = disabled && !!cleanDeviceName && readyToShowError
-  const _onSubmit = props.onSubmit
-  const onSubmit = React.useCallback(() => {
-    _onSubmit(Constants.cleanDeviceName(cleanDeviceName))
-  }, [cleanDeviceName, _onSubmit])
-  const _setDeviceName = (deviceName: string) => {
+  const onSubmit = () => {
+    if (!waiting) submitProvisionDeviceName(cleanDeviceName)
+  }
+  const onChangeDeviceName = (name: string) => {
     setReadyToShowError(false)
-    setDeviceName(deviceName.replace(Constants.badDeviceChars, ''))
+    setDeviceName(makeCleanDeviceName(name))
     debouncedSetReadyToShowError(true)
   }
 
-  const maybeIcon = Kb.Styles.isMobile
-    ? Platform.isLargeScreen
-      ? `icon-phone-background-${props.deviceIconNumber}-96`
-      : `icon-phone-background-${props.deviceIconNumber}-64`
-    : `icon-computer-background-${props.deviceIconNumber}-96`
+  const maybeIcon = isMobile
+    ? C.isLargeScreen
+      ? `icon-phone-background-${deviceIconNumber}-96`
+      : `icon-phone-background-${deviceIconNumber}-64`
+    : `icon-computer-background-${deviceIconNumber}-96`
 
-  const defaultIcon = Kb.Styles.isMobile
-    ? Platform.isLargeScreen
+  const defaultIcon = isMobile
+    ? C.isLargeScreen
       ? `icon-phone-96`
       : `icon-phone-64`
     : `icon-computer-96`
 
   return (
     <SignupScreen
-      banners={errorBanner(props.error)}
+      hideDesktopHeader={!isMobile}
+      waitingOverlay={true}
+      banners={errorBanner(error)}
       buttons={[
         {
           disabled,
           label: 'Continue',
           onClick: onSubmit,
           type: 'Success',
-          waiting: props.waiting,
+          waiting,
         },
       ]}
-      onBack={props.onBack}
-      title={Kb.Styles.isMobile ? 'Name this device' : 'Name this computer'}
+      onBack={onBack}
+      title={isMobile ? 'Name this device' : 'Name this computer'}
     >
       <Kb.Box2 direction="vertical" style={styles.contents} centerChildren={true} gap="medium">
-        <Kb.Icon type={Kb.isValidIconType(maybeIcon) ? maybeIcon : defaultIcon} />
+        <Kb.ImageIcon type={Kb.isValidIconType(maybeIcon) ? maybeIcon : defaultIcon} />
         <Kb.Box2 direction="vertical" style={styles.wrapper} gap="xsmall">
-          <Kb.NewInput
+          <Kb.Input3
+            textType="BodySemibold"
             autoFocus={true}
             error={showDisabled}
             maxLength={64}
             placeholder="Pick a device name"
             onEnterKeyDown={onSubmit}
-            onChangeText={_setDeviceName}
+            onChangeText={onChangeDeviceName}
             value={cleanDeviceName}
-            style={styles.nameInput}
+            containerStyle={styles.nameInput}
           />
           {showDisabled ? (
             <Kb.Text type="BodySmall" style={styles.deviceNameError}>
-              {Constants.deviceNameInstructions}
+              {Provision.deviceNameInstructions}
             </Kb.Text>
           ) : (
             <Kb.Text type="BodySmall">
@@ -125,41 +101,21 @@ const SetPublicName = (props: Props) => {
   )
 }
 
-const styles = Kb.Styles.styleSheetCreate(() => ({
-  backButton: Kb.Styles.platformStyles({
-    isElectron: {
-      marginLeft: Kb.Styles.globalMargins.medium,
-      marginTop: Kb.Styles.globalMargins.medium,
-    },
-    isMobile: {
-      marginLeft: 0,
-      marginTop: 0,
-    },
-  }),
+const useStyles = Kb.Styles.createStyleHook(theme => ({
   contents: Kb.Styles.platformStyles({
     common: {width: '100%'},
     isTablet: {width: undefined},
   }),
-  deviceNameError: {
-    color: Kb.Styles.globalColors.redDark,
-  },
+  deviceNameError: {color: theme.redDark},
   nameInput: Kb.Styles.platformStyles({
-    common: {
-      padding: Kb.Styles.globalMargins.tiny,
-    },
-    isMobile: {
-      minHeight: 48,
-    },
-    isTablet: {
-      maxWidth: 368,
-    },
+    common: {padding: Kb.Styles.globalMargins.tiny},
+    isMobile: {minHeight: 48},
+    isTablet: {maxWidth: 368},
   }),
   wrapper: Kb.Styles.platformStyles({
-    isElectron: {
-      width: 400,
-    },
-    isMobile: {
-      width: '100%',
-    },
+    isElectron: {width: 400},
+    isMobile: {width: '100%'},
   }),
 }))
+
+export default SetPublicName

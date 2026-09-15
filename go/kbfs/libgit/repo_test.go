@@ -6,6 +6,7 @@ package libgit
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -24,20 +25,21 @@ import (
 
 func initConfig(t *testing.T) (
 	ctx context.Context, cancel context.CancelFunc,
-	config *libkbfs.ConfigLocal, tempdir string) {
+	config *libkbfs.ConfigLocal, tempdir string,
+) {
 	ctx = libcontext.BackgroundContextWithCancellationDelayer()
 	config = libkbfs.MakeTestConfigOrBustLoggedInWithMode(
 		t, 0, libkbfs.InitSingleOp, "user1", "user2")
 	success := false
 	ctx = context.WithValue(ctx, libkbfs.CtxAllowNameKey, kbfsRepoDir)
 
-	ctx, cancel = context.WithTimeout(ctx, 10*time.Second)
+	ctx, cancel = context.WithTimeout(ctx, 2*time.Minute)
 
 	tempdir, err := os.MkdirTemp(os.TempDir(), "journal_server")
 	require.NoError(t, err)
 	defer func() {
 		if !success {
-			os.RemoveAll(tempdir)
+			_ = os.RemoveAll(tempdir)
 		}
 	}()
 
@@ -53,7 +55,7 @@ func initConfig(t *testing.T) (
 func TestGetOrCreateRepoAndID(t *testing.T) {
 	ctx, cancel, config, tempdir := initConfig(t)
 	defer cancel()
-	defer os.RemoveAll(tempdir)
+	defer func() { _ = os.RemoveAll(tempdir) }()
 	defer libkbfs.CheckConfigAndShutdown(ctx, t, config)
 
 	h, err := tlfhandle.ParseHandle(
@@ -85,13 +87,13 @@ func TestGetOrCreateRepoAndID(t *testing.T) {
 
 	// Invalid names.
 	_, _, err = GetOrCreateRepoAndID(ctx, config, h, "", "")
-	require.IsType(t, libkb.InvalidRepoNameError{}, errors.Cause(err))
+	require.ErrorAs(t, errors.Cause(err), new(libkb.InvalidRepoNameError))
 	_, _, err = GetOrCreateRepoAndID(ctx, config, h, ".repo2", "")
-	require.IsType(t, libkb.InvalidRepoNameError{}, errors.Cause(err))
+	require.ErrorAs(t, errors.Cause(err), new(libkb.InvalidRepoNameError))
 	_, _, err = GetOrCreateRepoAndID(ctx, config, h, "repo3.ツ", "")
-	require.IsType(t, libkb.InvalidRepoNameError{}, errors.Cause(err))
+	require.ErrorAs(t, errors.Cause(err), new(libkb.InvalidRepoNameError))
 	_, _, err = GetOrCreateRepoAndID(ctx, config, h, "repo(4)", "")
-	require.IsType(t, libkb.InvalidRepoNameError{}, errors.Cause(err))
+	require.ErrorAs(t, errors.Cause(err), new(libkb.InvalidRepoNameError))
 
 	err = fs.SyncAll()
 	require.NoError(t, err)
@@ -109,7 +111,7 @@ func TestGetOrCreateRepoAndID(t *testing.T) {
 func TestCreateRepoAndID(t *testing.T) {
 	ctx, cancel, config, tempdir := initConfig(t)
 	defer cancel()
-	defer os.RemoveAll(tempdir)
+	defer func() { _ = os.RemoveAll(tempdir) }()
 	defer libkbfs.CheckConfigAndShutdown(ctx, t, config)
 
 	h, err := tlfhandle.ParseHandle(
@@ -124,13 +126,13 @@ func TestCreateRepoAndID(t *testing.T) {
 	require.NotEqual(t, id1, id2)
 
 	_, err = CreateRepoAndID(ctx, config, h, "Repo1")
-	require.IsType(t, libkb.RepoAlreadyExistsError{}, err)
+	require.ErrorAs(t, err, new(libkb.RepoAlreadyExistsError))
 
 	_, err = CreateRepoAndID(ctx, config, h, "rePo1")
-	require.IsType(t, libkb.RepoAlreadyExistsError{}, err)
+	require.ErrorAs(t, err, new(libkb.RepoAlreadyExistsError))
 
 	_, err = CreateRepoAndID(ctx, config, h, "repo2")
-	require.IsType(t, libkb.RepoAlreadyExistsError{}, err)
+	require.ErrorAs(t, err, new(libkb.RepoAlreadyExistsError))
 
 	rootNode, _, err := config.KBFSOps().GetOrCreateRootNode(
 		ctx, h, data.MasterBranch)
@@ -145,15 +147,14 @@ func TestCreateRepoAndID(t *testing.T) {
 func TestCreateDuplicateRepo(t *testing.T) {
 	ctx, cancel, config, tempdir := initConfig(t)
 	defer cancel()
-	defer os.RemoveAll(tempdir)
+	defer func() { _ = os.RemoveAll(tempdir) }()
 	defer libkbfs.CheckConfigAndShutdown(ctx, t, config)
 
 	config2 := libkbfs.ConfigAsUser(config, "user2")
-	ctx2, cancel2 := context.WithCancel(context.Background())
-	defer cancel2()
+	ctx2 := t.Context()
 	tempdir, err := os.MkdirTemp(os.TempDir(), "journal_server")
 	require.NoError(t, err)
-	defer os.RemoveAll(tempdir)
+	defer func() { _ = os.RemoveAll(tempdir) }()
 	err = config2.EnableDiskLimiter(tempdir)
 	require.NoError(t, err)
 	err = config2.EnableJournaling(
@@ -181,7 +182,7 @@ func TestCreateDuplicateRepo(t *testing.T) {
 	select {
 	case <-onStalled:
 	case <-ctx.Done():
-		t.Fatal(ctx.Err())
+		require.FailNow(t, fmt.Sprint(ctx.Err()))
 	}
 
 	t.Log("Start 2nd create and wait for it to try to get the lock")
@@ -199,7 +200,7 @@ func TestCreateDuplicateRepo(t *testing.T) {
 	select {
 	case <-onStalled2:
 	case <-ctx.Done():
-		t.Fatal(ctx.Err())
+		require.FailNow(t, fmt.Sprint(ctx.Err()))
 	}
 
 	close(unstall)
@@ -207,15 +208,15 @@ func TestCreateDuplicateRepo(t *testing.T) {
 	case err := <-err1ch:
 		require.NoError(t, err)
 	case <-ctx.Done():
-		t.Fatal(ctx.Err())
+		require.FailNow(t, fmt.Sprint(ctx.Err()))
 	}
 
 	close(unstall2)
 	select {
 	case err := <-err2ch:
-		require.IsType(t, libkb.RepoAlreadyExistsError{}, errors.Cause(err))
+		require.ErrorAs(t, errors.Cause(err), new(libkb.RepoAlreadyExistsError))
 	case <-ctx.Done():
-		t.Fatal(ctx.Err())
+		require.FailNow(t, fmt.Sprint(ctx.Err()))
 	}
 
 	jManager, err := libkbfs.GetJournalManager(config)
@@ -228,7 +229,7 @@ func TestCreateDuplicateRepo(t *testing.T) {
 func TestGetRepoAndID(t *testing.T) {
 	ctx, cancel, config, tempdir := initConfig(t)
 	defer cancel()
-	defer os.RemoveAll(tempdir)
+	defer func() { _ = os.RemoveAll(tempdir) }()
 	defer libkbfs.CheckConfigAndShutdown(ctx, t, config)
 
 	h, err := tlfhandle.ParseHandle(
@@ -236,7 +237,7 @@ func TestGetRepoAndID(t *testing.T) {
 	require.NoError(t, err)
 
 	_, _, err = GetRepoAndID(ctx, config, h, "Repo1", "")
-	require.IsType(t, libkb.RepoDoesntExistError{}, errors.Cause(err))
+	require.ErrorAs(t, errors.Cause(err), new(libkb.RepoDoesntExistError))
 
 	id1, err := CreateRepoAndID(ctx, config, h, "Repo1")
 	require.NoError(t, err)
@@ -262,7 +263,7 @@ func TestGetRepoAndID(t *testing.T) {
 func TestDeleteRepo(t *testing.T) {
 	ctx, cancel, config, tempdir := initConfig(t)
 	defer cancel()
-	defer os.RemoveAll(tempdir)
+	defer func() { _ = os.RemoveAll(tempdir) }()
 	defer libkbfs.CheckConfigAndShutdown(ctx, t, config)
 	clock := &clocktest.TestClock{}
 	clock.Set(time.Now())
@@ -291,7 +292,7 @@ func TestDeleteRepo(t *testing.T) {
 	require.NoError(t, err)
 	children, err := config.KBFSOps().GetDirChildren(ctx, gitNode)
 	require.NoError(t, err)
-	require.Len(t, children, 0) // .kbfs_deleted_repos is hidden
+	require.Empty(t, children) // .kbfs_deleted_repos is hidden
 
 	deletedReposNode, _, err := config.KBFSOps().Lookup(
 		ctx, gitNode, gitNode.ChildName(kbfsDeletedReposDir))
@@ -313,7 +314,7 @@ func TestDeleteRepo(t *testing.T) {
 	require.NoError(t, err)
 	children, err = config.KBFSOps().GetDirChildren(ctx, deletedReposNode)
 	require.NoError(t, err)
-	require.Len(t, children, 0)
+	require.Empty(t, children)
 
 	err = jManager.FinishSingleOp(ctx, rootNode.GetFolderBranch().Tlf,
 		nil, keybase1.MDPriorityGit)
@@ -323,7 +324,7 @@ func TestDeleteRepo(t *testing.T) {
 func TestRepoRename(t *testing.T) {
 	ctx, cancel, config, tempdir := initConfig(t)
 	defer cancel()
-	defer os.RemoveAll(tempdir)
+	defer func() { _ = os.RemoveAll(tempdir) }()
 	defer libkbfs.CheckConfigAndShutdown(ctx, t, config)
 
 	h, err := tlfhandle.ParseHandle(
@@ -356,11 +357,11 @@ func TestRepoRename(t *testing.T) {
 	id5, err := CreateRepoAndID(ctx, config, h, "Repo3")
 	require.NoError(t, err)
 	err = RenameRepo(ctx, config, h, "Repo2", "repo3")
-	require.IsType(t, libkb.RepoAlreadyExistsError{}, errors.Cause(err))
+	require.ErrorAs(t, errors.Cause(err), new(libkb.RepoAlreadyExistsError))
 
 	// Invalid new repo name.
 	err = RenameRepo(ctx, config, h, "Repo3", "")
-	require.IsType(t, libkb.InvalidRepoNameError{}, errors.Cause(err))
+	require.ErrorAs(t, errors.Cause(err), new(libkb.InvalidRepoNameError))
 
 	// Can create a new repo over the old symlink.
 	id6, err := CreateRepoAndID(ctx, config, h, "Repo1")

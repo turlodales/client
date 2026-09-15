@@ -15,7 +15,7 @@ type OneTimeWhitelistExemption struct {
 	domain string
 }
 
-var _ (types.WhitelistExemption) = (*OneTimeWhitelistExemption)(nil)
+var _ types.WhitelistExemption = (*OneTimeWhitelistExemption)(nil)
 
 func NewOneTimeWhitelistExemption(convID chat1.ConversationID, msgID chat1.MessageID, domain string) *OneTimeWhitelistExemption {
 	return &OneTimeWhitelistExemption{
@@ -34,7 +34,8 @@ func (o *OneTimeWhitelistExemption) Use() bool {
 }
 
 func (o *OneTimeWhitelistExemption) Matches(convID chat1.ConversationID, msgID chat1.MessageID,
-	domain string) bool {
+	domain string,
+) bool {
 	return o.convID.Eq(convID) && o.msgID == msgID && o.domain == domain
 }
 
@@ -51,7 +52,7 @@ type SingleMessageWhitelistExemption struct {
 	domain string
 }
 
-var _ (types.WhitelistExemption) = (*SingleMessageWhitelistExemption)(nil)
+var _ types.WhitelistExemption = (*SingleMessageWhitelistExemption)(nil)
 
 func NewSingleMessageWhitelistExemption(convID chat1.ConversationID, msgID chat1.MessageID, domain string) *SingleMessageWhitelistExemption {
 	return &SingleMessageWhitelistExemption{
@@ -68,7 +69,8 @@ func (o *SingleMessageWhitelistExemption) Use() bool {
 }
 
 func (o *SingleMessageWhitelistExemption) Matches(convID chat1.ConversationID, msgID chat1.MessageID,
-	domain string) bool {
+	domain string,
+) bool {
 	return o.convID.Eq(convID) && o.msgID == msgID && o.domain == domain
 }
 

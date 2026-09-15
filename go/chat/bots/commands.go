@@ -18,10 +18,11 @@ import (
 	"github.com/keybase/client/go/protocol/chat1"
 	"github.com/keybase/client/go/protocol/gregor1"
 	"github.com/keybase/client/go/protocol/keybase1"
+	"github.com/keybase/pipeliner"
 	"golang.org/x/sync/errgroup"
 )
 
-const storageVersion = 1
+const storageVersion = 2
 
 type uiResult struct {
 	err      error
@@ -50,7 +51,12 @@ type storageCommandAdvertisement struct {
 
 type commandsStorage struct {
 	Advertisements []storageCommandAdvertisement `codec:"A"`
+	InfoHash       chat1.BotInfoHash             `codec:"H"`
 	Version        int                           `codec:"V"`
+}
+
+func (s commandsStorage) matchesInfoHash(infoHash chat1.BotInfoHash) bool {
+	return s.Version == storageVersion && len(s.InfoHash) > 0 && s.InfoHash.Eq(infoHash)
 }
 
 var commandsPublicTopicName = "___keybase_botcommands_public"
@@ -76,7 +82,8 @@ type CachingBotCommandManager struct {
 }
 
 func NewCachingBotCommandManager(g *globals.Context, ri func() chat1.RemoteInterface,
-	nameInfoSource nameInfoSourceFn) *CachingBotCommandManager {
+	nameInfoSource nameInfoSourceFn,
+) *CachingBotCommandManager {
 	keyFn := func(ctx context.Context) ([32]byte, error) {
 		return storage.GetSecretBoxKey(ctx, g.ExternalG())
 	}
@@ -137,7 +144,8 @@ func (b *CachingBotCommandManager) getMyUsername(ctx context.Context) (string, e
 }
 
 func (b *CachingBotCommandManager) createConv(ctx context.Context, typ chat1.BotCommandsAdvertisementTyp,
-	teamName *string, convID *chat1.ConversationID) (res chat1.ConversationLocal, err error) {
+	teamName *string, convID *chat1.ConversationID,
+) (res chat1.ConversationLocal, err error) {
 	username, err := b.getMyUsername(ctx)
 	if err != nil {
 		return res, err
@@ -157,7 +165,7 @@ func (b *CachingBotCommandManager) createConv(ctx context.Context, typ chat1.Bot
 		if teamName == nil {
 			return res, errors.New("missing team name")
 		} else if convID != nil {
-			return res, errors.New("convID cannot be specified for team advertisments use type 'conv'")
+			return res, errors.New("convID cannot be specified for team advertisements use type 'conv'")
 		}
 
 		topicName := fmt.Sprintf("___keybase_botcommands_team_%s_%v", username, typ)
@@ -202,7 +210,8 @@ func (b *CachingBotCommandManager) PublicCommandsConv(ctx context.Context, usern
 }
 
 func (b *CachingBotCommandManager) Advertise(ctx context.Context, alias *string,
-	ads []chat1.AdvertiseCommandsParam) (err error) {
+	ads []chat1.AdvertiseCommandsParam,
+) (err error) {
 	defer b.Trace(ctx, &err, "Advertise")()
 	remotes := make([]chat1.RemoteBotCommandsAdvertisement, 0, len(ads))
 	for _, ad := range ads {
@@ -297,6 +306,30 @@ func (b *CachingBotCommandManager) dbCommandsKey(convID chat1.ConversationID) li
 	}
 }
 
+func (b *CachingBotCommandManager) commandCacheMatchesInfoHash(ctx context.Context,
+	convID chat1.ConversationID, infoHash chat1.BotInfoHash,
+) bool {
+	dbKey := b.dbCommandsKey(convID)
+	var s commandsStorage
+	found, err := b.edb.Get(ctx, dbKey, &s)
+	if err != nil {
+		b.Debug(ctx, "commandCacheMatchesInfoHash: failed to read cache: %s", err)
+		return false
+	}
+	if !found {
+		b.Debug(ctx, "commandCacheMatchesInfoHash: command cache not found")
+		return false
+	}
+	if !s.matchesInfoHash(infoHash) {
+		b.Debug(ctx, "commandCacheMatchesInfoHash: command cache is stale")
+		if err := b.edb.Delete(ctx, dbKey); err != nil {
+			b.Debug(ctx, "commandCacheMatchesInfoHash: failed to delete stale cache: %s", err)
+		}
+		return false
+	}
+	return true
+}
+
 func (b *CachingBotCommandManager) ListCommands(ctx context.Context, convID chat1.ConversationID) (res []chat1.UserBotCommandOutput, alias map[string]string, err error) {
 	defer b.Trace(ctx, &err, "ListCommands")()
 	alias = make(map[string]string)
@@ -348,15 +381,15 @@ func (b *CachingBotCommandManager) ListCommands(ctx context.Context, convID chat
 			return true
 		} else if l.Username > r.Username {
 			return false
-		} else {
-			return l.Name < r.Name
 		}
+		return l.Name < r.Name
 	})
 	return res, alias, nil
 }
 
 func (b *CachingBotCommandManager) UpdateCommands(ctx context.Context, convID chat1.ConversationID,
-	info *chat1.BotInfo) (completeCh chan error, err error) {
+	info *chat1.BotInfo,
+) (completeCh chan error, err error) {
 	defer b.Trace(ctx, &err, "UpdateCommands")()
 	completeCh = make(chan error, 1)
 	uiCh := make(chan uiResult, 1)
@@ -425,7 +458,7 @@ func (b *CachingBotCommandManager) queueCommandUpdate(ctx context.Context, job *
 }
 
 func (b *CachingBotCommandManager) getBotInfo(ctx context.Context, job *commandUpdaterJob) (botInfo chat1.BotInfo, doUpdate bool, err error) {
-	defer b.Trace(ctx, &err, fmt.Sprintf("getBotInfo: %v", job.convID))()
+	defer b.Trace(ctx, &err, "getBotInfo: %v", job.convID)()
 	if job.info != nil {
 		return *job.info, true, nil
 	}
@@ -456,6 +489,9 @@ func (b *CachingBotCommandManager) getBotInfo(ctx context.Context, job *commandU
 	}
 	switch rtyp {
 	case chat1.BotInfoResponseTyp_UPTODATE:
+		if found && !b.commandCacheMatchesInfoHash(ctx, convID, infoHash) {
+			return botInfo, true, nil
+		}
 		return botInfo, false, nil
 	case chat1.BotInfoResponseTyp_INFO:
 		if err := b.edb.Put(ctx, b.dbInfoKey(convID), res.Response.Info()); err != nil {
@@ -467,7 +503,8 @@ func (b *CachingBotCommandManager) getBotInfo(ctx context.Context, job *commandU
 }
 
 func (b *CachingBotCommandManager) getConvAdvertisement(ctx context.Context, convID chat1.ConversationID,
-	botUID gregor1.UID, untrustedTeamRole keybase1.TeamRole, typ chat1.BotCommandsAdvertisementTyp) (res *storageCommandAdvertisement) {
+	botUID gregor1.UID, untrustedTeamRole keybase1.TeamRole, typ chat1.BotCommandsAdvertisementTyp,
+) (res *storageCommandAdvertisement) {
 	b.Debug(ctx, "getConvAdvertisement: reading commands from: %s for uid: %s", convID, botUID)
 	tv, err := b.G().ConvSource.Pull(ctx, convID, b.uid, chat1.GetThreadReason_BOTCOMMANDS, nil,
 		&chat1.GetThreadQuery{
@@ -536,10 +573,24 @@ func (b *CachingBotCommandManager) commandUpdate(ctx context.Context, job *comma
 			return nil
 		}
 		s := commandsStorage{
-			Version: storageVersion,
+			Version:  storageVersion,
+			InfoHash: botInfo.Hash(),
 		}
-		for _, cconv := range botInfo.CommandConvs {
-			ad := b.getConvAdvertisement(ctx, cconv.ConvID, cconv.Uid, cconv.UntrustedTeamRole, cconv.Typ)
+		ads := make([]*storageCommandAdvertisement, len(botInfo.CommandConvs))
+		pipe := pipeliner.NewPipeliner(5)
+		for i, cconv := range botInfo.CommandConvs {
+			if err := pipe.WaitForRoom(ctx); err != nil {
+				return err
+			}
+			go func() {
+				ads[i] = b.getConvAdvertisement(ctx, cconv.ConvID, cconv.Uid, cconv.UntrustedTeamRole, cconv.Typ)
+				pipe.CompleteOne(nil)
+			}()
+		}
+		if err := pipe.Flush(ctx); err != nil {
+			return err
+		}
+		for _, ad := range ads {
 			if ad != nil {
 				s.Advertisements = append(s.Advertisements, *ad)
 			}

@@ -6,6 +6,7 @@ package data
 
 import (
 	"fmt"
+	"maps"
 	"strconv"
 	"sync"
 
@@ -204,7 +205,8 @@ func NewCommonBlock() Block {
 // NewCommonBlockForTesting returns a common block with some of the
 // internal state set, which is useful for testing.
 func NewCommonBlockForTesting(
-	isInd bool, cachedEncodedSize uint32) CommonBlock {
+	isInd bool, cachedEncodedSize uint32,
+) CommonBlock {
 	return CommonBlock{
 		IsInd:             isInd,
 		cachedEncodedSize: cachedEncodedSize,
@@ -285,9 +287,7 @@ func (db *DirBlock) Set(other Block) {
 // DeepCopy makes a complete copy of a DirBlock
 func (db *DirBlock) DeepCopy() *DirBlock {
 	childrenCopy := make(map[string]DirEntry, len(db.Children))
-	for k, v := range db.Children {
-		childrenCopy[k] = v
-	}
+	maps.Copy(childrenCopy, db.Children)
 	var iptrsCopy []IndirectDirPtr
 	if db.IsInd {
 		iptrsCopy = make([]IndirectDirPtr, len(db.IPtrs))
@@ -408,7 +408,8 @@ func (db *DirBlock) SetIndirectPtrInfo(i int, info BlockInfo) {
 // TotalPlainSizeEstimate returns an estimate of the plaintext size of
 // this directory block.
 func (db *DirBlock) TotalPlainSizeEstimate(
-	plainSize int, bsplit BlockSplitter) int {
+	plainSize int, bsplit BlockSplitter,
+) int {
 	if !db.IsIndirect() || len(db.IPtrs) == 0 {
 		return plainSize
 	}

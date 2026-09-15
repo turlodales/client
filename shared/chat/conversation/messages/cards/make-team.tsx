@@ -1,52 +1,47 @@
 import * as C from '@/constants'
 import * as Kb from '@/common-adapters'
+import {useConversationThreadID} from '../../thread-context'
 
 const MakeTeam = () => {
-  const navigateAppend = C.Chat.useChatNavigateAppend()
+  const styles = useStyles()
+  const theme = Kb.Styles.useTheme()
+  const conversationIDKey = useConversationThreadID()
   const onShowNewTeamDialog = () =>
-    navigateAppend(conversationIDKey => ({props: {conversationIDKey}, selected: 'chatShowNewTeamDialog'}))
+    C.Router2.navigateAppend({name: 'chatShowNewTeamDialog', params: {conversationIDKey}})
   return (
     <Kb.Box2 direction="horizontal" style={styles.container} alignItems="flex-start">
-      <Kb.Box2 direction="vertical" gap="xtiny" fullHeight={true} style={styles.textContainer}>
+      <Kb.Box2 direction="vertical" gap="xtiny" fullHeight={true} padding="medium">
         <Kb.Text type="BodySmallSemibold" style={styles.header} negative={true}>
-          Make it a team? You’ll be able to add and delete members as you wish.
+          {"Make it a team? You'll be able to add and delete members as you wish."}
         </Kb.Text>
-        <Kb.ClickableBox onClick={onShowNewTeamDialog}>
-          <Kb.Box2
-            direction="horizontal"
-            alignItems="center"
-            fullWidth={true}
-            className="hover_container"
-            gap="xtiny"
+        <Kb.ClickableBox onClick={onShowNewTeamDialog} direction="horizontal" alignItems="center" fullWidth={true} className="hover_container" gap="xtiny">
+          <Kb.Text
+            type="BodySmallSemiboldPrimaryLink"
+            style={styles.link}
+            className="color_greenLightOrWhite hover_contained_color_white"
           >
-            <Kb.Text
-              type="BodySmallSemiboldPrimaryLink"
-              style={styles.link}
-              className="color_greenLightOrWhite hover_contained_color_white"
-            >
-              Enter a team name
-            </Kb.Text>
-            <Kb.Icon
-              color={Kb.Styles.globalColors.greenLight}
-              sizeType="Tiny"
-              type="iconfont-arrow-right"
-              className="hover_contained_color_white"
-              style={styles.icon}
-            />
-          </Kb.Box2>
+            Enter a team name
+          </Kb.Text>
+          <Kb.Icon
+            color={theme.greenLight}
+            sizeType="Tiny"
+            type="iconfont-arrow-right"
+            className="hover_contained_color_white"
+            style={styles.icon}
+          />
         </Kb.ClickableBox>
       </Kb.Box2>
-      <Kb.Icon type="icon-illustration-teams-80" style={styles.image} />
+      <Kb.ImageIcon type="icon-illustration-teams-80" style={styles.image} />
     </Kb.Box2>
   )
 }
 
-const styles = Kb.Styles.styleSheetCreate(
-  () =>
+const useStyles = Kb.Styles.createStyleHook(
+  theme =>
     ({
       container: Kb.Styles.platformStyles({
         common: {
-          backgroundColor: Kb.Styles.globalColors.green,
+          backgroundColor: theme.green,
           borderRadius: Kb.Styles.borderRadius,
         },
         isElectron: {
@@ -62,7 +57,7 @@ const styles = Kb.Styles.styleSheetCreate(
         },
       }),
       header: {
-        maxWidth: Kb.Styles.isMobile ? 126 : undefined,
+        maxWidth: isMobile ? 126 : undefined,
       },
       icon: Kb.Styles.platformStyles({
         isElectron: {
@@ -74,8 +69,7 @@ const styles = Kb.Styles.styleSheetCreate(
         alignSelf: 'center',
         paddingRight: Kb.Styles.globalMargins.small,
       },
-      link: {color: Kb.Styles.isMobile ? Kb.Styles.globalColors.greenLight : undefined},
-      textContainer: {padding: Kb.Styles.globalMargins.medium},
+      link: {color: isMobile ? theme.greenLight : undefined},
     }) as const
 )
 

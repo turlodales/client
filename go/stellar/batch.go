@@ -1,7 +1,6 @@
 package stellar
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"sort"
@@ -18,8 +17,10 @@ import (
 	"github.com/stellar/go/build"
 )
 
-const minAmountRelayXLM = "2.01"
-const minAmountCreateAccountXLM = "1"
+const (
+	minAmountRelayXLM         = "2.01"
+	minAmountCreateAccountXLM = "1"
+)
 
 // Batch sends a batch of payments from the user to multiple recipients in
 // a time-efficient manner.
@@ -65,7 +66,7 @@ func Batch(mctx libkb.MetaContext, walletState *WalletState, arg stellar1.BatchL
 
 	// submit the payments
 	// need to submit tx one at a time, in order
-	for i := 0; i < len(prepared); i++ {
+	for i := range prepared {
 		if prepared[i] == nil {
 			unlock()
 			// this should never happen
@@ -130,7 +131,7 @@ func Batch(mctx libkb.MetaContext, walletState *WalletState, arg stellar1.BatchL
 						}
 
 						chatWaitGroup.Done()
-					}(mctx.WithCtx(context.Background()), resultList[index].Username, update.TxID)
+					}(mctx.BackgroundWithLogTags(), resultList[index].Username, update.TxID)
 				}
 			}
 		}
@@ -169,7 +170,7 @@ func PrepareBatchPayments(mctx libkb.MetaContext, walletState *WalletState, send
 
 	// prepared chan could be out of order, so sort by seqno
 	preparedList := make([]*MiniPrepared, len(payments))
-	for i := 0; i < len(payments); i++ {
+	for i := range payments {
 		preparedList[i] = <-prepared
 	}
 	sort.Slice(preparedList, func(a, b int) bool { return preparedList[a].Seqno < preparedList[b].Seqno })
@@ -206,7 +207,6 @@ func prepareBatchPaymentDirect(mctx libkb.MetaContext, remoter remote.Remoter, s
 			result.Error = fmt.Errorf("you must send at least %s XLM to fund the account for %s", minAmountCreateAccountXLM, payment.Recipient)
 			return result
 		}
-
 	}
 
 	result.Direct = &stellar1.PaymentDirectPost{

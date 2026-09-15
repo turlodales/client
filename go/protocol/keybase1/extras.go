@@ -18,6 +18,7 @@ import (
 	"math"
 	"reflect"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -99,7 +100,6 @@ func (b BinaryKID) Equal(c BinaryKID) bool {
 }
 
 func KIDFromStringChecked(s string) (KID, error) {
-
 	// It's OK to have a 0-length KID. That means, no such key
 	// (or NULL kid).
 	if len(s) == 0 {
@@ -652,7 +652,8 @@ func (s SigID) ToDisplayString(verbose bool) string {
 	if verbose {
 		return string(s)
 	}
-	return fmt.Sprintf("%s...", s[0:SigIDQueryMin])
+	prefixLen := min(len(s), SigIDQueryMin)
+	return fmt.Sprintf("%s...", s[:prefixLen])
 }
 
 func (s SigID) PrefixMatch(q string, exact bool) bool {
@@ -688,7 +689,7 @@ func SigIDFromString(s string) (SigID, error) {
 
 func (s SigID) ToBytes() []byte {
 	b, err := hex.DecodeString(string(s))
-	if err != nil {
+	if err != nil || len(b) < SIG_ID_LEN {
 		return nil
 	}
 	return b[0:SIG_ID_LEN]
@@ -696,7 +697,7 @@ func (s SigID) ToBytes() []byte {
 
 func (s SigID) StripSuffix() SigIDBase {
 	l := hex.EncodedLen(SIG_ID_LEN)
-	if len(s) == l {
+	if len(s) <= l {
 		return SigIDBase(string(s))
 	}
 	return SigIDBase(string(s[0:l]))
@@ -724,7 +725,11 @@ func (s SigID) ToMediumID() string {
 }
 
 func (s SigID) ToShortID() string {
-	return encode(s.ToBytes()[0:SIG_SHORT_ID_BYTES])
+	b := s.ToBytes()
+	if len(b) < SIG_SHORT_ID_BYTES {
+		return ""
+	}
+	return encode(b[0:SIG_SHORT_ID_BYTES])
 }
 
 // SigIDBase is a 64-character long hex encoding of the SHA256 of a signature, without
@@ -942,7 +947,7 @@ func (s Status) GoError() error {
 	if s.Code == int(StatusCode_SCOk) {
 		return nil
 	}
-	return fmt.Errorf(s.Error())
+	return errors.New(s.Error())
 }
 
 func (s InstallStatus) String() string {
@@ -1270,8 +1275,7 @@ type ToStatusAble interface {
 // status object. If it is something that can be made into a Status object via the
 // ToStatusAble interface, then we'll try that. Otherwise, we'll just make a generic
 // Error type.
-func WrapError(e error) interface{} {
-
+func WrapError(e error) any {
 	if e == nil {
 		return nil
 	}
@@ -1311,13 +1315,13 @@ type ErrorUnwrapper struct {
 
 // MakeArg just makes a dummy object that we can unmarshal into, as needed by the
 // underlying RPC library.
-func (eu ErrorUnwrapper) MakeArg() interface{} {
+func (eu ErrorUnwrapper) MakeArg() any {
 	return &Status{}
 }
 
 // UnwrapError takes an incoming RPC object, attempts to coerce it into a Status
 // object, and then Upcasts via the Upcaster or just returns if not was provided.
-func (eu ErrorUnwrapper) UnwrapError(arg interface{}) (appError, dispatchError error) {
+func (eu ErrorUnwrapper) UnwrapError(arg any) (appError, dispatchError error) {
 	targ, ok := arg.(*Status)
 	if !ok {
 		dispatchError = errors.New("Error converting status to keybase1.Status object")
@@ -1678,8 +1682,8 @@ func (u UserPlusKeysV2AllIncarnations) FindKID(kid KID) (*UserPlusKeysV2, *Publi
 	if ok {
 		return &u.Current, &ret
 	}
-	for i := len(u.PastIncarnations) - 1; i >= 0; i-- {
-		prev := u.PastIncarnations[i]
+	for _, prev := range slices.Backward(u.PastIncarnations) {
+
 		ret, ok = prev.DeviceKeys[kid]
 		if ok {
 			return &prev, &ret
@@ -2223,12 +2227,16 @@ func (t TeamName) IsNil() bool {
 }
 
 // underscores allowed, just not first or doubled
-var namePartRxx = regexp.MustCompile(`^([a-zA-Z0-9][a-zA-Z0-9_]?)+$`)
-var implicitRxxString = fmt.Sprintf("^%s[0-9a-f]{%d}$", ImplicitTeamPrefix, ImplicitSuffixLengthBytes*2)
-var implicitNameRxx = regexp.MustCompile(implicitRxxString)
+var (
+	namePartRxx       = regexp.MustCompile(`^([a-zA-Z0-9][a-zA-Z0-9_]?)+$`)
+	implicitRxxString = fmt.Sprintf("^%s[0-9a-f]{%d}$", ImplicitTeamPrefix, ImplicitSuffixLengthBytes*2)
+	implicitNameRxx   = regexp.MustCompile(implicitRxxString)
+)
 
-const ImplicitTeamPrefix = "__keybase_implicit_team__"
-const ImplicitSuffixLengthBytes = 16
+const (
+	ImplicitTeamPrefix        = "__keybase_implicit_team__"
+	ImplicitSuffixLengthBytes = 16
+)
 
 func stringToTeamNamePart(s string) TeamNamePart {
 	return TeamNamePart(strings.ToLower(s))
@@ -2400,7 +2408,7 @@ func (t TeamName) IsAncestorOf(other TeamName) bool {
 		return false
 	}
 
-	for i := 0; i < depth; i++ {
+	for i := range depth {
 		if !other.Parts[i].Eq(t.Parts[i]) {
 			return false
 		}
@@ -2683,13 +2691,6 @@ func (e *TeamInviteMaxUses) IsNotNilAndValid() bool {
 	return e != nil && (*e > 0 || *e == TeamMaxUsesInfinite)
 }
 
-func max(a, b int) int {
-	if a >= b {
-		return a
-	}
-	return b
-}
-
 func (ti TeamInvite) UsesLeftString(alreadyUsed int) string {
 	if ti.IsInfiniteUses() {
 		return "unlimited uses left"
@@ -2738,8 +2739,8 @@ func formatItems(singular string, plural string, count int) string {
 // and a short description of when it was invalidated or under what conditions it can
 // be later invalidated.
 func (md TeamInviteMetadata) ComputeValidity(now time.Time,
-	userLog map[UserVersion][]UserLogPoint) (isValid bool, validityDescription string) {
-
+	userLog map[UserVersion][]UserLogPoint,
+) (isValid bool, validityDescription string) {
 	isInvalid := false
 	invalidationAction := ""
 	var invalidationTime *time.Time
@@ -2942,7 +2943,7 @@ func (r *GitRepoResult) GetIfOk() (res GitRepoInfo, err error) {
 	}
 	switch state {
 	case GitRepoResultState_ERR:
-		return res, fmt.Errorf(r.Err())
+		return res, errors.New(r.Err())
 	case GitRepoResultState_OK:
 		return r.Ok(), nil
 	}
@@ -2961,7 +2962,8 @@ func (r GitRepoInfo) FullName() string {
 }
 
 func (req *TeamChangeReq) AddUVWithRole(uv UserVersion, role TeamRole,
-	botSettings *TeamBotSettings) error {
+	botSettings *TeamBotSettings,
+) error {
 	if !role.IsRestrictedBot() && botSettings != nil {
 		return fmt.Errorf("Unexpected botSettings for role %v", role)
 	}
@@ -3259,7 +3261,7 @@ func (fct FolderConflictType) MarshalText() ([]byte, error) {
 	case FolderConflictType_IN_CONFLICT_AND_STUCK:
 		return []byte("in conflict and stuck"), nil
 	default:
-		return []byte(fmt.Sprintf("unknown conflict type: %d", fct)), nil
+		return fmt.Appendf(nil, "unknown conflict type: %d", fct), nil
 	}
 }
 
@@ -3466,7 +3468,6 @@ func (d *HiddenTeamChain) LastFullPopulateIfUnset() Seqno {
 }
 
 func (d *HiddenTeamChain) Merge(newData HiddenTeamChain) (updated bool, err error) {
-
 	for seqno, link := range newData.Outer {
 		existing, ok := d.Outer[seqno]
 		if ok && !existing.Eq(link) {
@@ -3983,10 +3984,8 @@ func (s *TeamBotSettings) ConvIDAllowed(strCID string) bool {
 	if s == nil {
 		return true
 	}
-	for _, strConvID := range s.Convs {
-		if strCID == strConvID {
-			return true
-		}
+	if slices.Contains(s.Convs, strCID) {
+		return true
 	}
 	return len(s.Convs) == 0
 }
@@ -4061,6 +4060,7 @@ func (a SearchArg) String() string {
 	// Don't leak user's query string
 	return fmt.Sprintf("Limit: %d, Offset: %d", a.Limit, a.Offset)
 }
+
 func (a SearchLocalArg) String() string {
 	// Don't leak user's query string
 	return fmt.Sprintf("Limit: %d, SkipCache: %v", a.Limit, a.SkipCache)
@@ -4138,37 +4138,12 @@ func (e TeamSearchExport) Hash() string {
 		rounder := int(math.Pow(10, log))
 		value := (team.MemberCount / rounder) * rounder
 		hasher.Write(team.Id.ToBytes())
-		hasher.Write([]byte(fmt.Sprintf("%d", value)))
+		hasher.Write(fmt.Appendf(nil, "%d", value))
 	}
 	for _, id := range e.Suggested {
 		hasher.Write(id.ToBytes())
 	}
 	return hex.EncodeToString(hasher.Sum(nil))
-}
-
-// web-of-trust
-// In order of descending quality.
-// Keep in sync with:
-// - server helpers/wot.ts
-// - gui WebOfTrustVerificationType
-const (
-	UsernameVerificationType_IN_PERSON  = "in_person"
-	UsernameVerificationType_VIDEO      = "video"
-	UsernameVerificationType_AUDIO      = "audio"
-	UsernameVerificationType_PROOFS     = "proofs"
-	UsernameVerificationType_OTHER_CHAT = "other_chat"
-	UsernameVerificationType_FAMILIAR   = "familiar"
-	UsernameVerificationType_OTHER      = "other"
-)
-
-var UsernameVerificationTypeMap = map[string]UsernameVerificationType{
-	"in_person":  UsernameVerificationType_IN_PERSON,
-	"proofs":     UsernameVerificationType_PROOFS,
-	"video":      UsernameVerificationType_VIDEO,
-	"audio":      UsernameVerificationType_AUDIO,
-	"other_chat": UsernameVerificationType_OTHER_CHAT,
-	"familiar":   UsernameVerificationType_FAMILIAR,
-	"other":      UsernameVerificationType_OTHER,
 }
 
 func (fsc FolderSyncConfig) Equal(other FolderSyncConfig) bool {

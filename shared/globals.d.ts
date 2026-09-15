@@ -1,4 +1,5 @@
-/* eslint-disable no-var,vars-on-top */
+/// <reference types="jest" />
+
 export {}
 
 export type RequestIdleCallbackHandle = unknown
@@ -25,17 +26,31 @@ declare global {
   var DEBUGEngine: unknown
   var DEBUGLoaded: boolean | undefined
   var KBCONSTANTS: unknown
+  var KBINBOX: unknown
   var DEBUGLog: (s: unknown) => void
   var DEBUGWarn: (s: unknown) => void
   var DEBUGInfo: (s: unknown) => void
   var DEBUGError: (s: unknown) => void
   var _fromPreload: unknown
   var __HOT__: boolean
+  var __DEV__: boolean
   var __VERSION__: string
   var __FILE_SUFFIX__: string
   var __PROFILE__: boolean
-  var rpcOnGo: undefined | ((b: unknown) => void)
-  var rpcOnJs: undefined | ((b: unknown) => void)
-  // RN
-  var __turboModuleProxy: unknown
+  // Returns false if the native write to Go failed
+  var rpcOnGo: undefined | ((msg: unknown) => boolean)
+  var rpcOnJs: undefined | ((objs: unknown, count: number) => void)
+  // Platform globals — injected by webpack DefinePlugin / Metro Babel plugin.
+  // No import needed; use these identifiers directly.
+  var isMobile: boolean
+  var isElectron: boolean
+  var isAndroid: boolean
+  var isIOS: boolean
+  // Metro's HMR runtime exposes webpack-compatible `module.hot` (mobile only).
+  // Augments @types/node's NodeJS.Module so we don't depend on @types/webpack-env.
+  namespace NodeJS {
+    interface Module {
+      hot?: {accept: (cb?: () => void) => void}
+    }
+  }
 }

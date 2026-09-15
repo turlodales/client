@@ -27,16 +27,15 @@ trusted by the client. In order to disable SSL pinning and allow TLS MITMing pro
 possible to switch the client to trust the public CA system. This can be done in one of three ways:
 
 ``` bash
-keybase config set disable-ssl-pinning true
+keybase config set -b disable-cert-pinning true
 # OR
 export DISABLE_SSL_PINNING="true"
-# OR
-keybase --disable-ssl-pinning
 ```
 
 Note that enabling this option is NOT recommended. Enabling this option allows the proxy to view all traffic between
 the client and the Keybase servers.
 
+NOTE: The config option is "disable-cert-pinning" but the environment variable is "DISABLE_SSL_PINNING".
 */
 
 package libkb
@@ -69,8 +68,10 @@ const (
 
 // Maps a string to an enum. Used to list the different types of supported proxies and to convert
 // config options into the enum
-var ProxyTypeStrToEnum = map[string]ProxyType{"socks": Socks, "http_connect": HTTPConnect}
-var ProxyTypeEnumToStr = map[ProxyType]string{Socks: "socks", HTTPConnect: "http_connect", NoProxy: "no_proxy"}
+var (
+	ProxyTypeStrToEnum = map[string]ProxyType{"socks": Socks, "http_connect": HTTPConnect}
+	ProxyTypeEnumToStr = map[ProxyType]string{Socks: "socks", HTTPConnect: "http_connect", NoProxy: "no_proxy"}
+)
 
 func GetCommaSeparatedListOfProxyTypes() string {
 	var proxyTypes []string
@@ -125,7 +126,7 @@ func (d httpsDialer) Dial(network string, addr string) (net.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	return tls.Client(conn, &tls.Config{}), err
+	return tls.Client(conn, &tls.Config{MinVersion: tls.VersionTLS12}), err
 }
 
 // A net.Dialer that dials via just the standard net.Dial
@@ -221,8 +222,10 @@ func (s *httpConnectProxy) Dial(network string, addr string) (net.Conn, error) {
 	return proxyConn, nil
 }
 
-var registerLock = sync.Mutex{}
-var hasBeenRegistered = false
+var (
+	registerLock      = sync.Mutex{}
+	hasBeenRegistered = false
+)
 
 // Must be called in order for the proxy library to support HTTP connect proxies. The proxy library uses a map to store
 // this information which can lead to a `fatal error: concurrent map writes` so we use a lock to serialize it and a

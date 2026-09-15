@@ -47,7 +47,7 @@ type GameStateUpdateMessage struct {
 	Result             *Result
 }
 
-// Dealer is a peristent process that runs in the chat client that deals out a game. It can have multiple
+// Dealer is a persistent process that runs in the chat client that deals out a game. It can have multiple
 // games running at once.
 type Dealer struct {
 	sync.Mutex
@@ -63,7 +63,7 @@ type Dealer struct {
 
 // ReplayHelper contains hooks needed to replay a flip.
 type ReplayHelper interface {
-	CLogf(ctx context.Context, fmt string, args ...interface{})
+	CLogf(ctx context.Context, fmt string, args ...any)
 }
 
 // DealersHelper is an interface that calling chat clients need to implement.
@@ -142,7 +142,8 @@ func (d *Dealer) StartFlip(ctx context.Context, start Start, conversationID chat
 // StartFlipWithGameID starts a new flip. Pass it some start parameters as well as a chat conversationID
 // that it will take place in. Also takes a GameID
 func (d *Dealer) StartFlipWithGameID(ctx context.Context, start Start, conversationID chat1.ConversationID,
-	gameID chat1.FlipGameID) (err error) {
+	gameID chat1.FlipGameID,
+) (err error) {
 	_, err = d.startFlipWithGameID(ctx, start, conversationID, gameID)
 	return err
 }
@@ -155,7 +156,8 @@ func (d *Dealer) StartFlipWithGameID(ctx context.Context, start Start, conversat
 // a gameID, so it might be changed in the future.
 func (d *Dealer) InjectIncomingChat(ctx context.Context, sender UserDevice,
 	conversationID chat1.ConversationID, gameID chat1.FlipGameID, body GameMessageEncoded,
-	firstInConversation bool) error {
+	firstInConversation bool,
+) error {
 	gmwe := GameMessageWrappedEncoded{
 		Sender:              sender,
 		GameID:              gameID,

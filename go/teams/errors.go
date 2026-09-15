@@ -1,9 +1,9 @@
 package teams
 
 import (
+	"context"
+	"errors"
 	"fmt"
-
-	"golang.org/x/net/context"
 
 	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/protocol/keybase1"
@@ -39,7 +39,7 @@ func (e InvalidLink) Error() string {
 	return fmt.Sprintf("invalid link (seqno %d): %s", e.l.Seqno(), e.note)
 }
 
-func NewInvalidLink(l *ChainLinkUnpacked, format string, args ...interface{}) InvalidLink {
+func NewInvalidLink(l *ChainLinkUnpacked, format string, args ...any) InvalidLink {
 	return InvalidLink{l, fmt.Sprintf(format, args...)}
 }
 
@@ -152,7 +152,7 @@ type PrevError struct {
 	Msg string
 }
 
-func NewPrevError(format string, args ...interface{}) error {
+func NewPrevError(format string, args ...any) error {
 	return PrevError{fmt.Sprintf(format, args...)}
 }
 
@@ -214,7 +214,7 @@ func (e TeamDoesNotExistError) Error() string {
 	return fmt.Sprintf("Team %q does not exist", e.descriptor)
 }
 
-func NewTeamDoesNotExistError(public bool, format string, args ...interface{}) error {
+func NewTeamDoesNotExistError(public bool, format string, args ...any) error {
 	return TeamDoesNotExistError{
 		descriptor: fmt.Sprintf(format, args...),
 		public:     public,
@@ -237,7 +237,7 @@ func (e ExplicitTeamOperationError) Error() string {
 	return fmt.Sprintf("Operation only allowed on implicit teams: %s", e.msg)
 }
 
-func NewImplicitTeamOperationError(format string, args ...interface{}) error {
+func NewImplicitTeamOperationError(format string, args ...any) error {
 	return &ImplicitTeamOperationError{msg: fmt.Sprintf(format, args...)}
 }
 
@@ -246,8 +246,8 @@ func NewExplicitTeamOperationError(m string) error {
 }
 
 func IsTeamReadError(err error) bool {
-	aerr, ok := err.(libkb.AppStatusError)
-	return ok && keybase1.StatusCode(aerr.Code) == keybase1.StatusCode_SCTeamReadError
+	var aerr libkb.AppStatusError
+	return errors.As(err, &aerr) && keybase1.StatusCode(aerr.Code) == keybase1.StatusCode_SCTeamReadError
 }
 
 func FixupTeamGetError(ctx context.Context, g *libkb.GlobalContext, e error, teamDescriptor string, publicTeam bool) error {
@@ -267,7 +267,7 @@ func fixupTeamGetError(ctx context.Context, g *libkb.GlobalContext, e error, tea
 			return e
 		case keybase1.StatusCode_SCTeamNotFound:
 			g.Log.CDebugf(ctx, "replacing error: %v", e)
-			return NewTeamDoesNotExistError(publicTeam, teamDescriptor)
+			return NewTeamDoesNotExistError(publicTeam, "%s", teamDescriptor)
 		}
 	case TeamDoesNotExistError:
 		// Replace the not found error so that it has a name instead of team ID.
@@ -275,7 +275,7 @@ func fixupTeamGetError(ctx context.Context, g *libkb.GlobalContext, e error, tea
 		// but it's better to have this understandable error message that's accurate
 		// most of the time than one with an ID that's always accurate.
 		g.Log.CDebugf(ctx, "replacing error: %v", e)
-		return NewTeamDoesNotExistError(publicTeam, teamDescriptor)
+		return NewTeamDoesNotExistError(publicTeam, "%s", teamDescriptor)
 	}
 	return e
 }
@@ -398,6 +398,10 @@ func (e PrecheckStructuralError) Error() string {
 	return e.Msg
 }
 
+func (e PrecheckStructuralError) Unwrap() error {
+	return e.Inner
+}
+
 type AttemptedInviteSocialOwnerError struct{ Msg string }
 
 func NewAttemptedInviteSocialOwnerError(assertion string) error {
@@ -413,7 +417,7 @@ func (e AttemptedInviteSocialOwnerError) Error() string { return e.Msg }
 
 type UserHasNotResetError struct{ Msg string }
 
-func NewUserHasNotResetError(format string, args ...interface{}) error {
+func NewUserHasNotResetError(format string, args ...any) error {
 	return UserHasNotResetError{Msg: fmt.Sprintf(format, args...)}
 }
 
@@ -439,6 +443,10 @@ func (a AddMembersError) Error() string {
 	return fmt.Sprintf("Error adding %q: %v", a.Assertion.String(), a.Err)
 }
 
+func (a AddMembersError) Unwrap() error {
+	return a.Err
+}
+
 type BadNameError struct {
 	Msg string
 }
@@ -459,7 +467,7 @@ func (f FastLoadError) Error() string {
 	return fmt.Sprintf("fast load error: %s", f.Msg)
 }
 
-func NewFastLoadError(format string, args ...interface{}) error {
+func NewFastLoadError(format string, args ...any) error {
 	return FastLoadError{Msg: fmt.Sprintf(format, args...)}
 }
 
@@ -480,7 +488,7 @@ type AuditError struct {
 	Msg string
 }
 
-func NewAuditError(format string, args ...interface{}) error {
+func NewAuditError(format string, args ...any) error {
 	return AuditError{Msg: fmt.Sprintf(format, args...)}
 }
 
@@ -549,14 +557,18 @@ func (e BoxRaceError) Error() string {
 	return e.inner.Error()
 }
 
+func (e BoxRaceError) Unwrap() error {
+	return e.inner
+}
+
 func (e BoxRaceError) IsStaleBoxError() {}
 
 func isStaleBoxError(err error) bool {
 	if err == nil {
 		return false
 	}
-	_, ok := err.(StaleBoxError)
-	return ok
+	var sbe StaleBoxError
+	return errors.As(err, &sbe)
 }
 
 type NeedHiddenChainRotationError struct{}
@@ -628,6 +640,10 @@ func (e InviteLinkAcceptanceError) Error() string {
 	return fmt.Sprintf("InviteLinkAcceptanceError: %s", e.Cause)
 }
 
-func NewInviteLinkAcceptanceError(format string, args ...interface{}) InviteLinkAcceptanceError {
+func (e InviteLinkAcceptanceError) Unwrap() error {
+	return e.Cause
+}
+
+func NewInviteLinkAcceptanceError(format string, args ...any) InviteLinkAcceptanceError {
 	return InviteLinkAcceptanceError{fmt.Errorf(format, args...)}
 }

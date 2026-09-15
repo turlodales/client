@@ -4,6 +4,7 @@
 package systests
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
@@ -18,7 +19,6 @@ import (
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 	"github.com/keybase/client/go/service"
 	"github.com/keybase/go-framed-msgpack-rpc/rpc"
-	context "golang.org/x/net/context"
 )
 
 type signupInfo struct {
@@ -128,13 +128,16 @@ func (n *signupTerminalUI) Prompt(pd libkb.PromptDescriptor, s string) (ret stri
 func (n *signupTerminalUI) PromptPassword(pd libkb.PromptDescriptor, _ string) (string, error) {
 	return "", nil
 }
+
 func (n *signupTerminalUI) PromptPasswordMaybeScripted(pd libkb.PromptDescriptor, _ string) (string, error) {
 	return "", nil
 }
+
 func (n *signupTerminalUI) Output(s string) error {
 	n.G().Log.Debug("Terminal Output: %s", s)
 	return nil
 }
+
 func (n *signupTerminalUI) OutputDesc(od libkb.OutputDescriptor, s string) error {
 	if od == client.OutputDescriptorPrimaryPaperKey {
 		n.info.displayedPaperKey = s
@@ -142,12 +145,14 @@ func (n *signupTerminalUI) OutputDesc(od libkb.OutputDescriptor, s string) error
 	n.G().Log.Debug("Terminal Output %d: %s", od, s)
 	return nil
 }
-func (n *signupTerminalUI) Printf(f string, args ...interface{}) (int, error) {
+
+func (n *signupTerminalUI) Printf(f string, args ...any) (int, error) {
 	s := fmt.Sprintf(f, args...)
 	n.G().Log.Debug("Terminal Printf: %s", s)
 	return len(s), nil
 }
-func (n *signupTerminalUI) PrintfUnescaped(f string, args ...interface{}) (int, error) {
+
+func (n *signupTerminalUI) PrintfUnescaped(f string, args ...any) (int, error) {
 	s := fmt.Sprintf(f, args...)
 	n.G().Log.Debug("Terminal PrintfUnescaped: %s", s)
 	return len(s), nil
@@ -161,9 +166,11 @@ func (n *signupTerminalUI) Write(b []byte) (int, error) {
 func (n *signupTerminalUI) OutputWriter() io.Writer {
 	return n
 }
+
 func (n *signupTerminalUI) UnescapedOutputWriter() io.Writer {
 	return n
 }
+
 func (n *signupTerminalUI) ErrorWriter() io.Writer {
 	return n
 }
@@ -179,7 +186,7 @@ func (n *signupTerminalUI) PromptYesNo(pd libkb.PromptDescriptor, s string, def 
 	default:
 		err = fmt.Errorf("unknown prompt %v", pd)
 	}
-	n.G().Log.Debug("Terminal PromptYesNo %d: %s -> %s (%v)\n", pd, s, ret, libkb.ErrToOk(err))
+	n.G().Log.Debug("Terminal PromptYesNo %d: %s -> %t (%v)\n", pd, s, ret, libkb.ErrToOk(err))
 	return ret, err
 }
 
@@ -268,10 +275,6 @@ func (h *notifyHandler) IdentifyUpdate(_ context.Context, _ keybase1.IdentifyUpd
 	return nil
 }
 
-func (h *notifyHandler) WebOfTrustChanged(_ context.Context, username string) error {
-	return nil
-}
-
 func TestSignupLogout(t *testing.T) {
 	tc := setupTest(t, "signup")
 	defer tc.Cleanup()
@@ -347,21 +350,19 @@ func TestSignupLogout(t *testing.T) {
 	case <-nh.startCh:
 		t.Logf("notify handler server started")
 	case err := <-nh.errCh:
-		t.Fatalf("Error starting notify handler server: %v", err)
+		require.FailNow(t, fmt.Sprintf("Error starting notify handler server: %v", err))
 	case <-time.After(20 * time.Second):
-		t.Fatalf("timed out waiting for notify handler server to start")
+		require.FailNow(t, "timed out waiting for notify handler server to start")
 	}
 
 	if err := signup.Run(); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 	select {
 	case err := <-nh.errCh:
-		t.Fatalf("Error before notify: %v", err)
+		require.FailNow(t, fmt.Sprintf("Error before notify: %v", err))
 	case u := <-nh.loginCh:
-		if u.Username != userInfo.username {
-			t.Fatalf("bad username in login notification: %q != %q", u.Username, userInfo.username)
-		}
+		require.Equal(t, userInfo.username, u.Username, "bad username in login notification: %q != %q", u.Username, userInfo.username)
 		tc.G.Log.Debug("Got notification of login for %q", u.Username)
 	}
 
@@ -379,35 +380,36 @@ func TestSignupLogout(t *testing.T) {
 	select {
 	case <-nh.logoutCh:
 	case <-time.After(20 * time.Second):
-		t.Fatal("timed out waiting for signup's logout notification")
+		require.FailNow(t, "timed out waiting for signup's logout notification")
 	}
 
 	btc := client.NewCmdCurrencyAddRunner(tc2.G)
 	btc.SetAddress("1HUCBSJeHnkhzrVKVjaVmWg2QtZS1mdfaz")
 	if err := btc.Run(); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 
 	// Now let's be sure that we get a notification back as we expect.
 	select {
 	case err := <-nh.errCh:
-		t.Fatalf("Error before notify: %v", err)
+		require.FailNow(t, fmt.Sprintf("Error before notify: %v", err))
 	case uid := <-nh.userCh:
 		tc.G.Log.Debug("Got notification from user changed handled (%s)", uid)
 		if e := libkb.CheckUIDAgainstUsername(uid, userInfo.username); e != nil {
-			t.Fatalf("Bad UID back: %s != %s (%s)", uid, userInfo.username, e)
+			require.NoError(t, e,
+				"Bad UID back: %s != %s (%s)", uid, userInfo.username, e)
 		}
 	}
 
 	// Fire a logout
 	if err := logout.Run(); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 
 	// Now let's be sure that we get a notification back as we expect.
 	select {
 	case err := <-nh.errCh:
-		t.Fatalf("Error before notify: %v", err)
+		require.FailNow(t, fmt.Sprintf("Error before notify: %v", err))
 	case <-nh.logoutCh:
 		tc.G.Log.Debug("Got notification from logout handler")
 	}
@@ -415,14 +417,14 @@ func TestSignupLogout(t *testing.T) {
 	tc.G.Log.Debug("Waiting for tc2 Ctl service stop")
 
 	if err := CtlStop(tc2.G); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 
 	tc.G.Log.Debug("Waiting for msg on stopCh")
 
 	// If the server failed, it's also an error
 	if err := <-stopCh; err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 
 	tc.G.Log.Debug("Waiting for msg on logoutCh")
@@ -430,12 +432,10 @@ func TestSignupLogout(t *testing.T) {
 	// Check that we only get one notification, not two
 	select {
 	case _, ok := <-nh.logoutCh:
-		if ok {
-			t.Fatal("Received an extra logout notification!")
-		}
+		require.False(t, ok,
+			"Received an extra logout notification!")
 	default:
 	}
-
 }
 
 // Try to elicit a race between Logout and Shutdown.
@@ -484,7 +484,7 @@ func TestNoPasswordCliSignup(t *testing.T) {
 
 	// Still same prompts for e-mail, username, and device name, but no
 	// password prompt.
-	require.Len(t, sui.passphrasePrompts, 0)
+	require.Empty(t, sui.passphrasePrompts)
 	expectedPrompts := []libkb.PromptDescriptor{
 		client.PromptDescriptorSignupEmail,
 		client.PromptDescriptorSignupCode,
@@ -496,7 +496,7 @@ func TestNoPasswordCliSignup(t *testing.T) {
 	ucli := keybase1.UserClient{Cli: user.primaryDevice().rpcClient()}
 	res, err := ucli.LoadPassphraseState(context.Background(), 0)
 	require.NoError(t, err)
-	require.Equal(t, res, keybase1.PassphraseState_RANDOM)
+	require.Equal(t, keybase1.PassphraseState_RANDOM, res)
 
 	err = G.ConfigureConfig()
 	require.NoError(t, err)

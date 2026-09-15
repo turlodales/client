@@ -1,7 +1,9 @@
 package main
 
 import (
+	"crypto/ed25519"
 	"encoding/hex"
+	"errors"
 	"io"
 	"log"
 	"os"
@@ -10,10 +12,9 @@ import (
 	docopt "github.com/docopt/docopt-go"
 	"github.com/keybase/client/go/chat/signencrypt"
 	"github.com/keybase/client/go/kbcrypto"
-	"github.com/keybase/go-crypto/ed25519"
 )
 
-func failf(format string, args ...interface{}) {
+func failf(format string, args ...any) {
 	log.Printf(format, args...)
 	os.Exit(1)
 }
@@ -58,7 +59,7 @@ func seal(enckey signencrypt.SecretboxKey, signkey signencrypt.SignKey, signatur
 	var buf [4096]byte
 	for {
 		num, err := os.Stdin.Read(buf[:])
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		} else if err != nil {
 			return err
@@ -85,7 +86,7 @@ func open(enckey signencrypt.SecretboxKey, verifykey signencrypt.VerifyKey, sign
 	var buf [4096]byte
 	for {
 		num, err := os.Stdin.Read(buf[:])
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		} else if err != nil {
 			return err

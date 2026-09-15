@@ -175,7 +175,8 @@ func Post(mctx libkb.MetaContext, clearBundle stellar1.Bundle) (err error) {
 }
 
 func fetchBundleForAccount(mctx libkb.MetaContext, accountID *stellar1.AccountID) (
-	b *stellar1.Bundle, bv stellar1.BundleVersion, pukGen keybase1.PerUserKeyGeneration, accountGens bundle.AccountPukGens, err error) {
+	b *stellar1.Bundle, bv stellar1.BundleVersion, pukGen keybase1.PerUserKeyGeneration, accountGens bundle.AccountPukGens, err error,
+) {
 	defer mctx.Trace("Stellar.fetchBundleForAccount", &err)()
 
 	fetchArgs := libkb.HTTPArgs{}
@@ -662,7 +663,8 @@ func GetAccountDisplayCurrency(ctx context.Context, g *libkb.GlobalContext, acco
 }
 
 func SetAccountDefaultCurrency(ctx context.Context, g *libkb.GlobalContext, accountID stellar1.AccountID,
-	currency string) error {
+	currency string,
+) error {
 	mctx := libkb.NewMetaContext(ctx, g)
 
 	conf, err := mctx.G().GetStellar().GetServerDefinitions(ctx)
@@ -815,7 +817,7 @@ func SetAccountMobileOnly(ctx context.Context, g *libkb.GlobalContext, accountID
 		return err
 	}
 	err = bundle.MakeMobileOnly(b, accountID)
-	if err == bundle.ErrNoChangeNecessary {
+	if errors.Is(err, bundle.ErrNoChangeNecessary) {
 		g.Log.CDebugf(ctx, "SetAccountMobileOnly account %s is already mobile-only", accountID)
 		return nil
 	}
@@ -841,7 +843,7 @@ func MakeAccountAllDevices(ctx context.Context, g *libkb.GlobalContext, accountI
 		return err
 	}
 	err = bundle.MakeAllDevices(b, accountID)
-	if err == bundle.ErrNoChangeNecessary {
+	if errors.Is(err, bundle.ErrNoChangeNecessary) {
 		g.Log.CDebugf(ctx, "MakeAccountAllDevices account %s is already in all-device mode", accountID)
 		return nil
 	}
@@ -905,12 +907,9 @@ type serverTimeboundsRes struct {
 
 func ServerTimeboundsRecommendation(ctx context.Context, g *libkb.GlobalContext) (ret stellar1.TimeboundsRecommendation, err error) {
 	mctx := libkb.NewMetaContext(ctx, g)
-	apiArg := libkb.APIArg{
-		Endpoint:    "stellar/timebounds",
-		SessionType: libkb.APISessionTypeREQUIRED,
-		Args:        libkb.HTTPArgs{},
-		RetryCount:  3,
-	}
+	apiArg := libkb.NewRetryAPIArg("stellar/timebounds")
+	apiArg.SessionType = libkb.APISessionTypeREQUIRED
+	apiArg.Args = libkb.HTTPArgs{}
 	var res serverTimeboundsRes
 	if err := mctx.G().API.GetDecode(mctx, apiArg, &res); err != nil {
 		return ret, err

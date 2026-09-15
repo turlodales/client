@@ -1,78 +1,96 @@
 import * as C from '@/constants'
-import * as React from 'react'
-import type * as T from '@/constants/types'
-import {type Position, fileUIName, type StylesCrossPlatform} from '@/styles'
-import {useItems, useHeader} from './hooks'
+import * as Chat from '@/constants/chat'
 import * as Kb from '@/common-adapters'
+import type * as React from 'react'
+import type * as T from '@/constants/types'
+import {
+  attachmentDownloadMessage,
+  messageAttachmentNativeSaveMessage,
+  messageAttachmentNativeShareMessage,
+  useConversationAttachmentActions,
+} from '../../attachment-actions'
+import {openLocalPathInSystemFileManagerDesktop} from '@/util/fs-storeless-actions'
+import {
+  showConversationInfoPanel,
+  useConversationThreadID,
+  useConversationThreadMessage,
+  useThreadMeta,
+} from '../../thread-context'
+import {useConversationMetadata, useConversationParticipants} from '../../data-hooks'
+import {useRoute} from '@react-navigation/native'
+import type {MessagePopupItems} from './hooks'
+import {useHeader, useHeaderForMessage, useItems, useModeration, useStorelessItems} from './hooks'
 
 type OwnProps = {
-  attachTo?: React.RefObject<Kb.MeasureRef>
+  attachTo?: React.RefObject<Kb.MeasureRef | null>
+  conversationIDKey?: T.Chat.ConversationIDKey
+  message?: T.Chat.Message
+  mode?: 'modal' | 'bottomsheet'
   ordinal: T.Chat.Ordinal
   onHidden: () => void
-  position: Position
-  style?: StylesCrossPlatform
+  position: Kb.Styles.Position
+  style?: Kb.Styles.StylesCrossPlatform
   visible: boolean
 }
 
-const emptyMessage = C.Chat.makeMessageAttachment({})
+const emptyMessage = Chat.makeMessageAttachment({})
 
-const PopAttach = (ownProps: OwnProps) => {
-  const {ordinal, attachTo, onHidden, position, style, visible} = ownProps
-  const m = C.useChatContext(s => s.messageMap.get(ordinal))
-  const message = m?.type === 'attachment' ? m : emptyMessage
-  const {downloadPath, attachmentType} = message
+type AttachmentActions = {
+  download: () => void
+  save: () => void
+  share: () => void
+}
+
+const PopAttachLoaded = (ownProps: OwnProps & {
+  actions: AttachmentActions
+  conversationIDKey: T.Chat.ConversationIDKey
+  header: React.ReactNode
+  infoPanelShowing: boolean
+  isTeam: boolean
+  itemsData: MessagePopupItems
+  message: T.Chat.MessageAttachment
+  numPart: number
+}) => {
+  const {actions, attachTo, conversationIDKey, header, itemsData: i, message, mode} = ownProps
+  const {infoPanelShowing, isTeam, numPart, onHidden, position, style, visible} = ownProps
+  const {author, downloadPath, attachmentType, id} = message
   const pending = !!message.transferState
-  const clearModals = C.useRouterState(s => s.dispatch.clearModals)
-  const showInfoPanel = C.useChatContext(s => s.dispatch.showInfoPanel)
+  const clearModals = C.Router2.clearModals
 
-  const loadMessagesCentered = C.useChatContext(s => s.dispatch.loadMessagesCentered)
-
-  const onJump = React.useCallback(() => {
-    m && loadMessagesCentered(m.id, 'always')
-    showInfoPanel(false, 'attachments')
+  const onJump = () => {
+    showConversationInfoPanel(conversationIDKey, false, 'attachments')
     clearModals()
-  }, [m, loadMessagesCentered, showInfoPanel, clearModals])
+    C.Router2.navigateToThread(conversationIDKey, 'misc', {intent: {messageID: id, type: 'highlight'}})
+  }
 
   const onAllMedia = () => {
     clearModals()
-    showInfoPanel(true, 'attachments')
+    showConversationInfoPanel(conversationIDKey, true, 'attachments')
   }
-  const attachmentDownload = C.useChatContext(s => s.dispatch.attachmentDownload)
-  const _onDownload = React.useCallback(() => {
-    attachmentDownload(ordinal)
-  }, [attachmentDownload, ordinal])
-  const onDownload = !C.isMobile && !message.downloadPath ? _onDownload : undefined
-
-  const messageAttachmentNativeSave = C.useChatContext(s => s.dispatch.messageAttachmentNativeSave)
-  const messageAttachmentNativeShare = C.useChatContext(s => s.dispatch.messageAttachmentNativeShare)
-  const _onSaveAttachment = React.useCallback(() => {
-    messageAttachmentNativeSave(ordinal)
-  }, [messageAttachmentNativeSave, ordinal])
-
+  const onDownload = !isMobile && !message.downloadPath ? actions.download : undefined
   const onSaveAttachment =
-    C.isMobile && (attachmentType === 'image' || C.Chat.isImageViewable(message))
-      ? _onSaveAttachment
-      : undefined
+    isMobile && (attachmentType === 'image' || Chat.isImageViewable(message)) ? actions.save : undefined
+  const onShareAttachment = isMobile ? actions.share : undefined
 
-  const _onShareAttachment = React.useCallback(() => {
-    messageAttachmentNativeShare(ordinal)
-  }, [messageAttachmentNativeShare, ordinal])
-  const onShareAttachment = C.isIOS ? _onShareAttachment : undefined
+  const _onShowInFinder = () => {
+    if (downloadPath) {
+      openLocalPathInSystemFileManagerDesktop(downloadPath)
+    }
+  }
+  const onShowInFinder = !isMobile && message.downloadPath ? _onShowInFinder : undefined
 
-  const openLocalPathInSystemFileManagerDesktop = C.useFSState(
-    s => s.dispatch.dynamic.openLocalPathInSystemFileManagerDesktop
-  )
-  const _onShowInFinder = React.useCallback(() => {
-    downloadPath && openLocalPathInSystemFileManagerDesktop?.(downloadPath)
-  }, [downloadPath, openLocalPathInSystemFileManagerDesktop])
-  const onShowInFinder = !C.isMobile && message.downloadPath ? _onShowInFinder : undefined
-
-  const i = useItems(ordinal, onHidden)
   const {itemBot, itemReaction, itemCopyLink, itemReply, itemEdit, itemForward, itemPin, itemUnread} = i
   const {itemExplode, itemDelete, itemKick, itemProfile} = i
 
+  const {itemBlock, itemFilter, itemFlag, itemReport} = useModeration(
+    author,
+    conversationIDKey,
+    isTeam,
+    numPart
+  )
+
   const itemFinder = onShowInFinder
-    ? ([{icon: 'iconfont-finder', onClick: onShowInFinder, title: `Show in ${fileUIName}`}] as const)
+    ? ([{icon: 'iconfont-finder', onClick: onShowInFinder, title: `Show in ${Kb.Styles.fileUIName}`}] as const)
     : []
   const itemSave = onSaveAttachment
     ? ([
@@ -91,8 +109,9 @@ const PopAttach = (ownProps: OwnProps) => {
     ? ([{disabled: pending, icon: 'iconfont-share', onClick: onShareAttachment, title: 'Share'}] as const)
     : []
   const itemMedia = [{icon: 'iconfont-camera', onClick: onAllMedia, title: 'All media'}] as const
-
-  const itemJump = [{icon: 'iconfont-search', onClick: onJump, title: 'Jump to message'}] as const
+  const itemJump = infoPanelShowing
+    ? ([{icon: 'iconfont-search', onClick: onJump, title: 'Jump to message'}] as const)
+    : []
 
   const topSection = [...itemSave, ...itemShare, ...itemDelete, ...itemExplode]
 
@@ -113,16 +132,20 @@ const PopAttach = (ownProps: OwnProps) => {
     ...itemProfile,
     ...itemKick,
     ...itemPin,
+    ...itemBlock,
+    ...itemFilter,
+    ...itemReport,
+    ...itemFlag,
   ]
 
-  const header = useHeader(ordinal)
-  const snapPoints = React.useMemo(() => [8 * 40 + 25], [])
+  const snapPoints = [8 * 40 + 25]
 
   return (
     <Kb.FloatingMenu
       attachTo={attachTo}
       header={header}
       items={items}
+      mode={mode}
       onHidden={onHidden}
       closeOnSelect={true}
       position={position}
@@ -132,4 +155,72 @@ const PopAttach = (ownProps: OwnProps) => {
     />
   )
 }
+
+const PopAttachThread = (ownProps: OwnProps) => {
+  const {ordinal, onHidden} = ownProps
+  const conversationIDKey = useConversationThreadID()
+  const loadedMessage = useConversationThreadMessage(ordinal)
+  const message = loadedMessage?.type === 'attachment' ? loadedMessage : emptyMessage
+  const {attachmentDownload, messageAttachmentNativeSave, messageAttachmentNativeShare} =
+    useConversationAttachmentActions()
+  const itemsData = useItems(ordinal, onHidden)
+  const header = useHeader(ordinal, onHidden)
+  const route = useRoute()
+  // infoPanel only exists on the desktop/tablet split-view chatRoot route
+  const infoPanelShowing =
+    route.name === 'chatRoot' && 'infoPanel' in route.params && !!route.params.infoPanel
+  const meta = useThreadMeta(m => m)
+  const participantInfo = useConversationParticipants(conversationIDKey)
+  return (
+    <PopAttachLoaded
+      {...ownProps}
+      actions={{
+        download: () => attachmentDownload(ordinal),
+        save: () => messageAttachmentNativeSave(ordinal),
+        share: () => messageAttachmentNativeShare(ordinal),
+      }}
+      conversationIDKey={message.conversationIDKey}
+      header={header}
+      infoPanelShowing={infoPanelShowing}
+      isTeam={!!meta.teamname}
+      itemsData={itemsData}
+      message={message}
+      numPart={participantInfo.all.length}
+    />
+  )
+}
+
+const PopAttachStoreless = (ownProps: OwnProps & {
+  conversationIDKey: T.Chat.ConversationIDKey
+  message: T.Chat.MessageAttachment
+}) => {
+  const {conversationIDKey, message, onHidden} = ownProps
+  const {meta, participants: participantInfo} = useConversationMetadata(conversationIDKey)
+  const itemsData = useStorelessItems({conversationIDKey, message, meta, onHidden, participantInfo})
+  const header = useHeaderForMessage(message, onHidden)
+  return (
+    <PopAttachLoaded
+      {...ownProps}
+      actions={{
+        download: () => attachmentDownloadMessage(conversationIDKey, message),
+        save: () => messageAttachmentNativeSaveMessage(conversationIDKey, message),
+        share: () => messageAttachmentNativeShareMessage(conversationIDKey, message),
+      }}
+      header={header}
+      infoPanelShowing={false}
+      isTeam={!!meta.teamname}
+      itemsData={itemsData}
+      numPart={participantInfo.all.length}
+    />
+  )
+}
+
+const PopAttach = (ownProps: OwnProps) => {
+  const {conversationIDKey, message} = ownProps
+  if (conversationIDKey && message?.type === 'attachment') {
+    return <PopAttachStoreless {...ownProps} conversationIDKey={conversationIDKey} message={message} />
+  }
+  return <PopAttachThread {...ownProps} />
+}
+
 export default PopAttach

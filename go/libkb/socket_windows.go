@@ -2,7 +2,6 @@
 // this source code is governed by the included BSD license.
 
 //go:build windows
-// +build windows
 
 package libkb
 
@@ -43,7 +42,8 @@ func NewSocket(g *GlobalContext) (ret Socket, err error) {
 }
 
 func NewSocketWithFiles(
-	log logger.Logger, bindFile string, _ []string) Socket {
+	log logger.Logger, bindFile string, _ []string,
+) Socket {
 	s := `\\.\pipe\kbservice` +
 		strings.TrimPrefix(bindFile, filepath.VolumeName(bindFile))
 	return SocketInfo{
@@ -88,5 +88,5 @@ func (s SocketInfo) DialSocket() (ret net.Conn, err error) {
 }
 
 func IsSocketClosedError(e error) bool {
-	return e == mspipe.ErrPipeListenerClosed
+	return errors.Is(e, mspipe.ErrPipeListenerClosed)
 }

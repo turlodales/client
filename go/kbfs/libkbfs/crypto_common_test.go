@@ -142,7 +142,7 @@ func TestCryptoCommonEncryptDecryptBlock(t *testing.T) {
 func checkSecretboxOpenPrivateMetadata(t *testing.T, encryptedPrivateMetadata kbfscrypto.EncryptedPrivateMetadata, key kbfscrypto.TLFCryptKey) (encodedData []byte) {
 	require.Equal(
 		t, kbfscrypto.EncryptionSecretbox, encryptedPrivateMetadata.Version)
-	require.Equal(t, 24, len(encryptedPrivateMetadata.Nonce))
+	require.Len(t, encryptedPrivateMetadata.Nonce, 24)
 
 	var nonce [24]byte
 	copy(nonce[:], encryptedPrivateMetadata.Nonce)
@@ -205,7 +205,8 @@ func TestDecryptPrivateMetadata(t *testing.T) {
 
 func makeFakeBlockCryptKey(t *testing.T) (
 	kbfscrypto.TLFCryptKey, kbfscrypto.BlockCryptKeyServerHalf,
-	kbfscrypto.BlockCryptKey) {
+	kbfscrypto.BlockCryptKey,
+) {
 	tlfCryptKey, err := kbfscrypto.MakeRandomTLFCryptKey()
 	require.NoError(t, err)
 	blockServerHalf, err := kbfscrypto.MakeRandomBlockCryptKeyServerHalf()
@@ -217,7 +218,7 @@ func makeFakeBlockCryptKey(t *testing.T) (
 func checkSecretboxOpenBlock(t *testing.T, encryptedBlock kbfscrypto.EncryptedBlock, key kbfscrypto.BlockCryptKey) (encodedData []byte) {
 	require.Equal(
 		t, kbfscrypto.EncryptionSecretbox, encryptedBlock.Version)
-	require.Equal(t, 24, len(encryptedBlock.Nonce))
+	require.Len(t, encryptedBlock.Nonce, 24)
 
 	var nonce [24]byte
 	copy(nonce[:], encryptedBlock.Nonce)
@@ -299,13 +300,13 @@ func TestSecretboxEncryptedLen(t *testing.T) {
 
 	cryptKeys := make([]kbfscrypto.TLFCryptKey, iterations)
 	serverHalfs := make([]kbfscrypto.BlockCryptKeyServerHalf, iterations)
-	for j := 0; j < iterations; j++ {
+	for j := range iterations {
 		cryptKeys[j], serverHalfs[j], _ = makeFakeBlockCryptKey(t)
 	}
 
 	for i := startSize; i < endSize; i += 1000 {
 		var enclen int
-		for j := 0; j < iterations; j++ {
+		for j := range iterations {
 			data := randomData[j : j+i]
 			enc, err := kbfscrypto.EncryptPaddedEncodedBlock(
 				data, cryptKeys[j], serverHalfs[j],
@@ -392,7 +393,7 @@ func TestBlockEncryptedLen(t *testing.T) {
 			expectedLen = len(encBlock.EncryptedData)
 			continue
 		}
-		require.Equal(t, expectedLen, len(encBlock.EncryptedData))
+		require.Len(t, encBlock.EncryptedData, expectedLen)
 	}
 }
 
@@ -402,7 +403,7 @@ func benchmarkEncryptBlock(b *testing.B, blockSize int) {
 	// Fill in the block with varying data to make sure not to
 	// trigger any encoding optimizations.
 	buf := make([]byte, 512<<10)
-	for i := 0; i < len(buf); i++ {
+	for i := range buf {
 		buf[i] = byte(i)
 	}
 	block := data.FileBlock{
@@ -427,7 +428,6 @@ func BenchmarkEncryptBlock(b *testing.B) {
 	}
 	for _, blockSize := range blockSizes {
 		// Capture range variable.
-		blockSize := blockSize
 		b.Run(fmt.Sprintf("blockSize=%d", blockSize),
 			func(b *testing.B) {
 				benchmarkEncryptBlock(b, blockSize)

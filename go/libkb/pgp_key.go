@@ -93,9 +93,8 @@ func PGPFingerprintFromHexNoError(s string) *PGPFingerprint {
 		return nil
 	} else if f, e := PGPFingerprintFromHex(s); e == nil {
 		return f
-	} else {
-		return nil
 	}
+	return nil
 }
 
 func (p PGPFingerprint) String() string {
@@ -255,11 +254,11 @@ func GetPGPFingerprintFromGenericKey(k GenericKey) *PGPFingerprint {
 	}
 }
 
-func (k PGPKeyBundle) KeysById(id uint64, fp []byte) []openpgp.Key {
+func (k PGPKeyBundle) KeysById(id uint64, fp []byte) []openpgp.Key { //nolint
 	return k.toList().KeysById(id, fp)
 }
 
-func (k PGPKeyBundle) KeysByIdUsage(id uint64, fp []byte, usage byte) []openpgp.Key {
+func (k PGPKeyBundle) KeysByIdUsage(id uint64, fp []byte, usage byte) []openpgp.Key { //nolint
 	return k.toList().KeysByIdUsage(id, fp, usage)
 }
 
@@ -290,7 +289,6 @@ func (k *PGPKeyBundle) Encode() (ret string, err error) {
 }
 
 func PGPKeyRawToArmored(raw []byte, priv bool) (ret string, err error) {
-
 	var writer io.WriteCloser
 	var out bytes.Buffer
 	var which string
@@ -303,7 +301,6 @@ func PGPKeyRawToArmored(raw []byte, priv bool) (ret string, err error) {
 	hdr := fmt.Sprintf("PGP %s KEY BLOCK", which)
 
 	writer, err = armor.Encode(&out, hdr, PGPArmorHeaders)
-
 	if err != nil {
 		return
 	}
@@ -333,7 +330,7 @@ func (k *PGPKeyBundle) EncodeToStream(wc io.WriteCloser, private bool) error {
 	if private {
 		err = k.SerializePrivate(writer)
 	} else {
-		err = k.Entity.Serialize(writer)
+		err = k.Serialize(writer)
 	}
 	if err != nil {
 		return err
@@ -342,8 +339,10 @@ func (k *PGPKeyBundle) EncodeToStream(wc io.WriteCloser, private bool) error {
 	return writer.Close()
 }
 
-var cleanPGPInputRxx = regexp.MustCompile(`[ \t\r]*\n[ \t\r]*`)
-var bug8612PrepassRxx = regexp.MustCompile(`^(?P<header>-{5}BEGIN PGP (.*?)-{5})(\s*(?P<junk>.+?))$`)
+var (
+	cleanPGPInputRxx  = regexp.MustCompile(`[ \t\r]*\n[ \t\r]*`)
+	bug8612PrepassRxx = regexp.MustCompile(`^(?P<header>-{5}BEGIN PGP (.*?)-{5})(\s*(?P<junk>.+?))$`)
+)
 
 func cleanPGPInput(s string) string {
 	s = strings.TrimSpace(s)
@@ -408,7 +407,6 @@ func firstPrivateKey(s string) (string, error) {
 		line := scanner.Text()
 		if looking && strings.HasPrefix(line, "-----BEGIN PGP PRIVATE KEY BLOCK-----") {
 			looking = false
-
 		}
 		if looking {
 			continue
@@ -478,11 +476,11 @@ func finishReadOne(lst []*openpgp.Entity, armored string, err error) (*PGPKeyBun
 		}
 	}
 
-	for _, bs := range first.Entity.BadSubkeys {
+	for _, bs := range first.BadSubkeys {
 		w.Push(Warningf("Bad subkey: %s", bs.Err))
 	}
 
-	if first.Entity.PrivateKey == nil {
+	if first.PrivateKey == nil {
 		first.ArmoredPublicKey = armored
 	}
 	return first, w, nil
@@ -505,7 +503,6 @@ func GetOneKey(jw *jsonw.Wrapper) (*PGPKeyBundle, *Warnings, error) {
 // XXX for now this is OK but probably we need a PGP uid parser
 // as in pgp-utils
 func (k *PGPKeyBundle) FindKeybaseUsername(un string) bool {
-
 	rxx := regexp.MustCompile("(?i)< " + un + "@keybase.io>$")
 
 	for _, id := range k.Identities {
@@ -539,7 +536,6 @@ func (k PGPKeyBundle) UsersDescription() []string {
 // GetPrimaryUID gets the primary UID in the given key bundle, returned
 // in the 'Max K (foo) <bar@baz.com>' convention.
 func (k PGPKeyBundle) GetPrimaryUID() string {
-
 	var pri *openpgp.Identity
 	var s string
 	if len(k.Identities) == 0 {
@@ -606,7 +602,6 @@ func (k *PGPKeyBundle) CanSign() bool {
 }
 
 func (k *PGPKeyBundle) GetBinaryKID() keybase1.BinaryKID {
-
 	prefix := []byte{
 		byte(kbcrypto.KeybaseKIDV1),
 		byte(k.PrimaryKey.PubKeyAlgo),
@@ -680,7 +675,7 @@ func (k PGPKeyBundle) KeyInfo() (algorithm, kid, creation string) {
 // Generates hash security warnings given a CKF
 func (k PGPKeyBundle) SecurityWarnings(kind HashSecurityWarningType) (warnings HashSecurityWarnings) {
 	fingerprint := k.GetFingerprint()
-	for _, identity := range k.Entity.Identities {
+	for _, identity := range k.Identities {
 		if identity.SelfSignature == nil ||
 			IsHashSecure(identity.SelfSignature.Hash) {
 			continue
@@ -883,7 +878,7 @@ func (k *PGPKeyBundle) CanDecrypt() bool { return false }
 func (k *PGPKeyBundle) ExportPublicAndPrivate() (public RawPublicKey, private RawPrivateKey, err error) {
 	var publicKey, privateKey bytes.Buffer
 
-	serializePublic := func() error { return k.Entity.Serialize(&publicKey) }
+	serializePublic := func() error { return k.Serialize(&publicKey) }
 	serializePrivate := func() error { return k.SerializePrivate(&privateKey) }
 
 	// NOTE(maxtaco): For imported keys, it is crucial to serialize the public key

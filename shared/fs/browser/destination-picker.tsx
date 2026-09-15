@@ -1,0 +1,257 @@
+import * as C from '@/constants'
+import {useSafeNavigation} from '@/util/safe-navigation'
+import * as FsCommon from '@/fs/common'
+import * as Kb from '@/common-adapters'
+import * as RowCommon from './rows/common'
+import * as T from '@/constants/types'
+import NavHeaderTitle from '@/fs/nav-header/title'
+import Root from './root'
+import {FsBrowserEditProvider, useFsBrowserEdits} from './edit-state'
+import {FsBrowserSortProvider} from './sort-state'
+import Rows from './rows/rows-container'
+import * as FS from '@/constants/fs'
+import {makeUUID} from '@/util/uuid'
+
+type OwnProps = {
+  parentPath: T.FS.Path
+  source: T.FS.MoveOrCopySource | T.FS.IncomingShareSource
+}
+
+const canBackUp = isMobile
+  ? (parentPath: T.FS.Path) => T.FS.getPathLevel(parentPath) > 1
+  : () => false
+
+const doMoveOrCopy = async (
+  type: 'move' | 'copy',
+  source: T.FS.MoveOrCopySource | T.FS.IncomingShareSource,
+  parentPath: T.FS.Path,
+  errorToActionOrThrow: (error: unknown, path?: T.FS.Path) => void
+) => {
+  const params =
+    source.type === T.FS.DestinationPickerSource.MoveOrCopy
+      ? [
+          {
+            dest: FS.pathToRPCPath(T.FS.pathConcat(parentPath, T.FS.getPathName(source.path))),
+            opID: makeUUID(),
+            overwriteExistingFiles: false,
+            src: FS.pathToRPCPath(source.path),
+          },
+        ]
+      : source.source
+          .map(item => item.originalPath ?? '')
+          .filter(originalPath => !!originalPath)
+          .map(originalPath => ({
+            dest: FS.pathToRPCPath(
+              T.FS.pathConcat(
+                parentPath,
+                T.FS.getLocalPathName(originalPath)
+                // We use the local path name here since we only care about file name.
+              )
+            ),
+            opID: makeUUID(),
+            overwriteExistingFiles: false,
+            src: {
+              PathType: T.RPCGen.PathType.local,
+              local: T.FS.getNormalizedLocalPath(originalPath),
+            } as T.RPCGen.Path,
+          }))
+
+  try {
+    const rpc =
+      type === 'move'
+        ? T.RPCGen.SimpleFSSimpleFSMoveRpcPromise
+        : T.RPCGen.SimpleFSSimpleFSCopyRecursiveRpcPromise
+    await Promise.all(params.map(async param => rpc(param)))
+    await Promise.all(params.map(async ({opID}) => T.RPCGen.SimpleFSSimpleFSWaitRpcPromise({opID})))
+  } catch (error) {
+    errorToActionOrThrow(error, parentPath)
+  }
+}
+
+const ConnectedDestinationPicker = (ownProps: OwnProps) => {
+  const styles = useStyles()
+  const rowStyles = RowCommon.useRowStyles()
+  const theme = Kb.Styles.useTheme()
+  const {parentPath, source} = ownProps
+  const parentPathItem = FsCommon.useFsPathMetadata(parentPath)
+  const browserEdits = useFsBrowserEdits()
+  const errorToActionOrThrow = FsCommon.useFsErrorActionOrThrow()
+  const isWritable = T.FS.getPathLevel(parentPath) > 2 && parentPathItem.writable
+  const isShare = source.type === T.FS.DestinationPickerSource.IncomingShare
+  const isMoveOrCopy = source.type === T.FS.DestinationPickerSource.MoveOrCopy
+  const isCopyable =
+    isWritable && (isShare || (isMoveOrCopy && parentPath !== T.FS.getPathParent(source.path)))
+  const isMovable = isCopyable && isMoveOrCopy && FS.pathsInSameTlf(source.path, parentPath)
+
+  const nav = useSafeNavigation()
+  const clearModals = C.Router2.clearModals
+  const moveOrCopy = (type: 'move' | 'copy') => {
+    C.ignorePromise(doMoveOrCopy(type, source, parentPath, errorToActionOrThrow))
+  }
+  const onBackUp =
+    isShare || !canBackUp(parentPath)
+      ? undefined
+      : () =>
+          nav.safeNavigateAppend({
+            name: 'destinationPicker',
+            params: {parentPath: T.FS.getPathParent(parentPath), source},
+          })
+  const onCancel = isShare ? undefined : () => clearModals()
+  const onCopyHere = isCopyable
+    ? () => {
+        moveOrCopy('copy')
+        clearModals()
+        if (isShare) {
+          // Share flow parks the chat tab beneath its modal (see router-v2/linking.tsx);
+          // saving into Files should land on the Files tab instead.
+          C.Router2.switchTab(C.Tabs.fsTab)
+        }
+        nav.safeNavigateAppend({name: 'fsBrowse', params: {path: parentPath}})
+      }
+    : undefined
+  const onMoveHere = isMovable
+    ? () => {
+        moveOrCopy('move')
+        clearModals()
+        nav.safeNavigateAppend({name: 'fsBrowse', params: {path: parentPath}})
+      }
+    : undefined
+  const onNewFolder =
+    isWritable && !isShare && browserEdits?.newFolderRow
+      ? () => browserEdits.newFolderRow(parentPath)
+      : undefined
+
+  FsCommon.useFsScreenCoordinator(parentPath)
+  FsCommon.useFsOnlineStatus()
+
+  return (
+    <Kb.Box2 direction="vertical" flex={1} fullWidth={true} fullHeight={true}>
+      {!isMobile && (
+        <Kb.Box2 direction="horizontal" fullWidth={true} centerChildren={true} style={styles.anotherHeader} justifyContent="space-between">
+          <NavHeaderTitle destinationPickerSource={source} inDestinationPicker={true} path={parentPath} />
+          {!!onNewFolder && <NewFolder onNewFolder={onNewFolder} />}
+        </Kb.Box2>
+      )}
+      <Kb.Divider key="dheader" />
+      <FsCommon.Errs />
+      {!!onBackUp && (
+        <Kb.ClickableBox key="up" direction="horizontal" alignItems="center" fullWidth={true} style={styles.actionRowContainer} onClick={onBackUp}>
+          <Kb.Icon
+            type="iconfont-folder-up"
+            color={theme.black_50}
+            fontSize={32}
+            style={rowStyles.pathItemIcon}
+          />
+          <Kb.Text type="BodySemibold">..</Kb.Text>
+        </Kb.ClickableBox>
+      )}
+      {!!onCopyHere && (
+        <Kb.ClickableBox key="copy" direction="horizontal" alignItems="center" fullWidth={true} style={styles.actionRowContainer} onClick={onCopyHere}>
+          <Kb.ImageIcon
+            type="icon-folder-copy-32"
+            style={rowStyles.pathItemIcon}
+          />
+          <Kb.Text type="BodySemibold" style={styles.actionText}>
+            {isShare ? 'Save here' : 'Copy here'}
+          </Kb.Text>
+        </Kb.ClickableBox>
+      )}
+      {!!onMoveHere && (
+        <Kb.ClickableBox key="move" direction="horizontal" alignItems="center" fullWidth={true} style={styles.actionRowContainer} onClick={onMoveHere}>
+          <Kb.ImageIcon
+            type="icon-folder-move-32"
+            style={rowStyles.pathItemIcon}
+          />
+          <Kb.Text type="BodySemibold" style={styles.actionText}>
+            Move here
+          </Kb.Text>
+        </Kb.ClickableBox>
+      )}
+      {parentPath === FS.defaultPath ? (
+        <Root destinationPickerSource={source} />
+      ) : (
+        <Rows path={parentPath} destinationPickerSource={source} />
+      )}
+      {isMobile && <Kb.Divider key="dfooter" />}
+      {(!isMobile || onNewFolder) && (
+        <Kb.Box2
+          key="footer"
+          direction="horizontal"
+          centerChildren={true}
+          fullWidth={true}
+          style={styles.footer}
+        >
+          {isMobile ? (
+            <NewFolder onNewFolder={onNewFolder} />
+          ) : (
+            <Kb.Button type="Dim" label="Cancel" onClick={onCancel} />
+          )}
+        </Kb.Box2>
+      )}
+    </Kb.Box2>
+  )
+}
+
+const Screen = (props: OwnProps) => (
+  <FsCommon.FsErrorProvider>
+    <FsCommon.FsDataProvider>
+      <FsBrowserEditProvider>
+        <FsBrowserSortProvider>
+          <ConnectedDestinationPicker {...props} />
+        </FsBrowserSortProvider>
+      </FsBrowserEditProvider>
+    </FsCommon.FsDataProvider>
+  </FsCommon.FsErrorProvider>
+)
+
+const NewFolder = (p: {onNewFolder?: () => void}) => {
+  const styles = useStyles()
+  const theme = Kb.Styles.useTheme()
+  const {onNewFolder} = p
+  return (
+    <Kb.ClickableBox direction="horizontal" alignItems="center" fullWidth={true} style={styles.newFolderBox} onClick={onNewFolder}>
+      <Kb.Icon type="iconfont-folder-new" color={theme.blue} />
+      <Kb.Text type="BodyBig" style={styles.newFolderText}>
+        Create new folder
+      </Kb.Text>
+    </Kb.ClickableBox>
+  )
+}
+
+const useStyles = Kb.Styles.createStyleHook(
+  theme =>
+    ({
+      actionRowContainer: {
+        backgroundColor: theme.blueLighter3,
+        flexShrink: 0,
+        height: RowCommon.normalRowHeight,
+        ...Kb.Styles.paddingH(Kb.Styles.globalMargins.small),
+      },
+      actionText: {
+        color: theme.blueDark,
+      },
+      anotherHeader: {
+        height: 48,
+        paddingRight: Kb.Styles.globalMargins.tiny,
+      },
+      footer: Kb.Styles.platformStyles({
+        common: {
+          height: 64,
+        },
+        isElectron: {
+          backgroundColor: theme.white_90,
+          bottom: 0,
+          position: 'absolute',
+        },
+      }),
+      newFolderBox: {
+        padding: Kb.Styles.globalMargins.tiny,
+      },
+      newFolderText: {
+        color: theme.blueDark,
+        marginLeft: Kb.Styles.globalMargins.tiny,
+      },
+    }) as const
+)
+
+export default Screen

@@ -3,10 +3,11 @@ package teams
 import (
 	"errors"
 	"fmt"
-	"github.com/keybase/client/go/libkb"
-	"github.com/keybase/client/go/protocol/keybase1"
 	"sync"
 	"time"
+
+	"github.com/keybase/client/go/libkb"
+	"github.com/keybase/client/go/protocol/keybase1"
 )
 
 type TeamRoleMapManager struct {
@@ -109,9 +110,9 @@ func backoffInitial(doBackoff bool) time.Duration {
 
 func backoffIncrease(d time.Duration) time.Duration {
 	d = time.Duration(float64(d) * 1.25)
-	max := 10 * time.Minute
-	if d > max {
-		d = max
+	maxT := 10 * time.Minute
+	if d > maxT {
+		d = maxT
 	}
 	return d
 }
@@ -193,7 +194,6 @@ func (t *TeamRoleMapManager) load(mctx libkb.MetaContext, retryOnFailBackoff tim
 	}
 
 	err = mctx.G().API.GetDecode(mctx, arg, &apiRes)
-
 	if err != nil {
 		mctx.Debug("failed to TeamRoleMap from server: %s", err)
 		go t.loadDelayedRetry(mctx.BackgroundWithLogTags(), retryOnFailBackoff)

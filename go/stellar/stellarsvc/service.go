@@ -648,7 +648,7 @@ func (s *Server) BatchLocal(ctx context.Context, arg stellar1.BatchLocalArg) (re
 			return res, nil
 		}
 
-		if err == stellar.ErrRelayinMultiBatch {
+		if errors.Is(err, stellar.ErrRelayinMultiBatch) {
 			mctx.Debug("found relay recipient in BatchMulti, using standard Batch instead")
 			return stellar.Batch(mctx, s.walletState, arg)
 		}
@@ -957,7 +957,7 @@ func (s *Server) GetPartnerUrlsLocal(ctx context.Context, sessionID int) (res []
 	if err != nil {
 		return nil, err
 	}
-	var externalURLs map[string]map[string][]interface{}
+	var externalURLs map[string]map[string][]any
 	if err := json.Unmarshal([]byte(entry.Entry), &externalURLs); err != nil {
 		return nil, err
 	}
@@ -1114,8 +1114,12 @@ func postXDRToCallback(signed, callbackURL string) error {
 	values.Set("xdr", signed)
 
 	// POST it
-	_, err = http.PostForm(callbackURL, values)
-	return err
+	resp, err := http.PostForm(callbackURL, values) //nolint:gosec // G107: callbackURL is Stellar Horizon API endpoint from SEP-0007 URI
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	return nil
 }
 
 func percentageAmountChange(a, b int64) float64 {

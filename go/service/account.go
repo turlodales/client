@@ -4,6 +4,7 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -12,7 +13,6 @@ import (
 	"github.com/keybase/client/go/libkb"
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 	"github.com/keybase/go-framed-msgpack-rpc/rpc"
-	"golang.org/x/net/context"
 )
 
 type AccountHandler struct {
@@ -78,7 +78,6 @@ func (h *AccountHandler) HasServerKeys(ctx context.Context, sessionID int) (res 
 }
 
 func (h *AccountHandler) ResetAccount(ctx context.Context, arg keybase1.ResetAccountArg) (err error) {
-
 	if h.G().Env.GetRunMode() != libkb.DevelRunMode {
 		return errors.New("ResetAccount only supported in devel run mode")
 	}

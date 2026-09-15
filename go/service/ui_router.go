@@ -4,7 +4,9 @@
 package service
 
 import (
+	"context"
 	"fmt"
+	"maps"
 	"sync"
 	"time"
 
@@ -12,7 +14,6 @@ import (
 	libkb "github.com/keybase/client/go/libkb"
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 	"github.com/keybase/go-framed-msgpack-rpc/rpc"
-	context "golang.org/x/net/context"
 )
 
 type UIRouter struct {
@@ -59,9 +60,7 @@ func (u *UIRouter) DumpUIs() map[libkb.UIKind]libkb.ConnectionID {
 
 	// Copy the map
 	res := map[libkb.UIKind]libkb.ConnectionID{}
-	for k, v := range u.uis {
-		res[k] = v
-	}
+	maps.Copy(res, u.uis)
 	return res
 }
 

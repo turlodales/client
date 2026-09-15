@@ -2,7 +2,6 @@
 // this source code is governed by the included BSD license.
 
 //go:build darwin || dragonfly || freebsd || linux || nacl || netbsd || openbsd || solaris
-// +build darwin dragonfly freebsd linux nacl netbsd openbsd solaris
 
 package libkb
 
@@ -33,7 +32,7 @@ func canExec(s string) error {
 		return DirExecError{Path: s}
 	}
 
-	if mode&0111 == 0 {
+	if mode&0o111 == 0 {
 		return FileExecError{Path: s}
 	}
 

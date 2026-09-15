@@ -6,23 +6,24 @@ package engine
 import (
 	"fmt"
 	"runtime/debug"
+	"slices"
 
 	"github.com/keybase/client/go/libkb"
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 )
 
-type Prereqs = libkb.EnginePrereqs
-type Engine2 = libkb.Engine2
+type (
+	Prereqs = libkb.EnginePrereqs
+	Engine2 = libkb.Engine2
+)
 
 type UIDelegateWanter interface {
 	WantDelegate(libkb.UIKind) bool
 }
 
 func requiresUI(c libkb.UIConsumer, kind libkb.UIKind) bool {
-	for _, ui := range c.RequiredUIs() {
-		if ui == kind {
-			return true
-		}
+	if slices.Contains(c.RequiredUIs(), kind) {
+		return true
 	}
 	for _, sub := range c.SubConsumers() {
 		if requiresUI(sub, kind) {
@@ -101,7 +102,6 @@ func runPrereqs(m libkb.MetaContext, e Engine2) error {
 	}
 
 	return nil
-
 }
 
 func RunEngine2(m libkb.MetaContext, e Engine2) (err error) {

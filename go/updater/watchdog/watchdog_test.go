@@ -1,5 +1,4 @@
 //go:build !windows
-// +build !windows
 
 // Copyright 2015 Keybase, Inc. All rights reserved. Use of
 // this source code is governed by the included BSD license.
@@ -9,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -37,12 +35,12 @@ func TestWatchMultiple(t *testing.T) {
 	matcher1 := process.NewMatcher(procProgram1.Path, process.PathEqual, testLog)
 	procs1, err := process.FindProcesses(matcher1, time.Second, 200*time.Millisecond, testLog)
 	require.NoError(t, err)
-	assert.Equal(t, 1, len(procs1))
+	assert.Len(t, procs1, 1)
 
 	matcher2 := process.NewMatcher(procProgram2.Path, process.PathEqual, testLog)
 	procs2, err := process.FindProcesses(matcher2, time.Second, 200*time.Millisecond, testLog)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(procs2))
+	require.Len(t, procs2, 1)
 	proc2 := procs2[0]
 
 	err = process.TerminatePID(proc2.Pid(), time.Millisecond, testLog)
@@ -53,7 +51,7 @@ func TestWatchMultiple(t *testing.T) {
 	// Check for restart
 	procs2After, err := process.FindProcesses(matcher2, time.Second, time.Millisecond, testLog)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(procs2After))
+	require.Len(t, procs2After, 1)
 }
 
 // TestTerminateBeforeWatch checks to make sure any existing processes are
@@ -65,12 +63,12 @@ func TestTerminateBeforeWatch(t *testing.T) {
 	matcher := process.NewMatcher(procProgram.Path, process.PathEqual, testLog)
 
 	// Launch program (so we can test it gets terminated on watch)
-	err := exec.Command(procProgram.Path, procProgram.Args...).Start()
+	err := exec.Command(procProgram.Path, procProgram.Args...).Start() //nolint:gosec // G204: Test code launching test program
 	require.NoError(t, err)
 
 	procsBefore, err := process.FindProcesses(matcher, time.Second, time.Millisecond, testLog)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(procsBefore))
+	require.Len(t, procsBefore, 1)
 	pidBefore := procsBefore[0].Pid()
 	t.Logf("Pid before: %d", pidBefore)
 
@@ -81,7 +79,7 @@ func TestTerminateBeforeWatch(t *testing.T) {
 	// Check again, and make sure it's a new process
 	procsAfter, err := process.FindProcesses(matcher, time.Second, time.Millisecond, testLog)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(procsAfter))
+	require.Len(t, procsAfter, 1)
 	pidAfter := procsAfter[0].Pid()
 	t.Logf("Pid after: %d", pidAfter)
 
@@ -110,7 +108,7 @@ func TestTerminateBeforeWatchRace(t *testing.T) {
 	// set up a bunch of iterations of the same program
 	programName := "TestTerminateBeforeWatchRace"
 	otherIterations := make([]Program, 6)
-	for i := 0; i < 6; i++ {
+	for i := range 6 {
 		otherIterations[i] = procProgram(t, programName, "sleep")
 	}
 	mainProgram := procProgram(t, programName, "sleep")
@@ -118,11 +116,11 @@ func TestTerminateBeforeWatchRace(t *testing.T) {
 	blocker := make(chan struct{})
 	go func() {
 		for _, p := range otherIterations[:3] {
-			_ = exec.Command(p.Path, p.Args...).Start()
+			_ = exec.Command(p.Path, p.Args...).Start() //nolint:gosec // G204: Test code launching test programs
 		}
 		blocker <- struct{}{}
 		for _, p := range otherIterations[3:] {
-			_ = exec.Command(p.Path, p.Args...).Start()
+			_ = exec.Command(p.Path, p.Args...).Start() //nolint:gosec // G204: Test code launching test programs
 		}
 	}()
 
@@ -135,7 +133,7 @@ func TestTerminateBeforeWatchRace(t *testing.T) {
 	matcher := process.NewMatcher(mainProgram.Path, process.PathEqual, testLog)
 	procsAfter, err := process.FindProcesses(matcher, time.Second, time.Millisecond, testLog)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(procsAfter))
+	require.Len(t, procsAfter, 1)
 }
 
 func TestExitOnSuccess(t *testing.T) {
@@ -151,14 +149,14 @@ func TestExitOnSuccess(t *testing.T) {
 	matcher := process.NewMatcher(procProgram.Path, process.PathEqual, testLog)
 	procsAfter, err := process.WaitForExit(matcher, 500*time.Millisecond, 50*time.Millisecond, testLog)
 	require.NoError(t, err)
-	assert.Equal(t, 0, len(procsAfter))
+	assert.Empty(t, procsAfter)
 }
 
 func procTestPath(name string) (string, string) {
 	// Copy test executable to tmp
-	if runtime.GOOS == "windows" {
-		return filepath.Join(os.Getenv("GOPATH"), "bin", "test.exe"), filepath.Join(os.TempDir(), name+".exe")
-	}
+	// if runtime.GOOS == "windows" {
+	//	return filepath.Join(os.Getenv("GOPATH"), "bin", "test.exe"), filepath.Join(os.TempDir(), name+".exe")
+	//}
 	return filepath.Join(os.Getenv("GOPATH"), "bin", "test"), filepath.Join(os.TempDir(), name)
 }
 
@@ -167,7 +165,7 @@ func procProgram(t *testing.T, name string, testCommand string) Program {
 	path, procPath := procTestPath(name)
 	err := util.CopyFile(path, procPath, testLog)
 	require.NoError(t, err)
-	err = os.Chmod(procPath, 0777)
+	err = os.Chmod(procPath, 0o777)
 	require.NoError(t, err)
 	// Temp dir might have symlinks in which case we need the eval'ed path
 	procPath, err = filepath.EvalSymlinks(procPath)
@@ -195,7 +193,7 @@ func TestExitAllOnSuccess(t *testing.T) {
 		matcher := process.NewMatcher(program.Path, process.PathEqual, testLog)
 		procs, err := process.FindProcesses(matcher, time.Second, 100*time.Millisecond, testLog)
 		require.NoError(t, err)
-		require.Equal(t, 1, len(procs))
+		require.Len(t, procs, 1)
 		proc := procs[0]
 		return proc.Pid()
 	}
@@ -224,7 +222,7 @@ func TestExitAllOnSuccess(t *testing.T) {
 		matcher := process.NewMatcher(program.Path, process.PathEqual, testLog)
 		procs, err := process.FindProcesses(matcher, time.Second, 100*time.Millisecond, testLog)
 		require.NoError(t, err)
-		require.Equal(t, 0, len(procs))
+		require.Empty(t, procs)
 	}
 
 	assertProgramEnded(exiter)
@@ -245,7 +243,7 @@ func TestWatchdogExitAllRace(t *testing.T) {
 		matcher := process.NewMatcher(p.Path, process.PathEqual, testLog)
 		procs, err := process.FindProcesses(matcher, time.Second, 200*time.Millisecond, testLog)
 		require.NoError(t, err)
-		assert.Equal(t, 1, len(procs))
+		assert.Len(t, procs, 1)
 	}
 	assertOneProcessOfEachProgramIsRunning := func() {
 		assertOneProcessIsRunning(exiter)
@@ -255,13 +253,11 @@ func TestWatchdogExitAllRace(t *testing.T) {
 
 	// spin up three watchdogs at the same time with the same three programs
 	var wg sync.WaitGroup
-	for i := 0; i < 3; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 3 {
+		wg.Go(func() {
 			err := Watch([]Program{exiter, procProgram1, procProgram2}, 0, testLog)
-			require.NoError(t, err)
-		}()
+			assert.NoError(t, err)
+		})
 	}
 	wg.Wait()
 	assertOneProcessOfEachProgramIsRunning()

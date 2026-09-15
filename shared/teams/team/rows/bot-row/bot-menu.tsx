@@ -1,8 +1,8 @@
-import * as React from 'react'
+import type * as React from 'react'
 import * as Kb from '@/common-adapters'
 
 type Props = {
-  attachTo?: React.RefObject<Kb.MeasureRef>
+  attachTo?: React.RefObject<Kb.MeasureRef | null>
   canManageBots: boolean
   onEdit: () => void
   onRemove: () => void
@@ -26,6 +26,7 @@ const BotMenu = (props: Props) => {
       attachTo={props.attachTo}
       closeOnSelect={true}
       items={items}
+      mode="bottomsheet"
       onHidden={props.onHidden}
       visible={props.visible}
     />

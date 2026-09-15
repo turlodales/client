@@ -2,15 +2,14 @@
 // this source code is governed by the included BSD license.
 //
 //go:build production
-// +build production
 
 package service
 
 import (
+	"context"
 	"fmt"
 
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
-	"golang.org/x/net/context"
 )
 
 func (t *DebuggingHandler) scriptExtras(ctx context.Context, arg keybase1.ScriptArg) (_ string, err error) {

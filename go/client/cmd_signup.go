@@ -4,10 +4,9 @@
 package client
 
 import (
+	"context"
 	"fmt"
 	"os"
-
-	"golang.org/x/net/context"
 
 	"github.com/keybase/cli"
 	"github.com/keybase/client/go/libcmdline"
@@ -243,7 +242,6 @@ func (s *CmdSignup) Run() (err error) {
 }
 
 func (s *CmdSignup) checkRegistered() (err error) {
-
 	s.G().Log.Debug("+ clientModeSignupEngine::CheckRegistered")
 	defer s.G().Log.Debug("- clientModeSignupEngine::CheckRegistered -> %s", libkb.ErrToOk(err))
 
@@ -366,7 +364,6 @@ func (s *CmdSignup) requestInvitePromptForOk() (err error) {
 }
 
 func (s *CmdSignup) requestInvitePromptForData() error {
-
 	fullname := &Field{
 		Name:             "fullname",
 		Prompt:           "Your name",
@@ -516,7 +513,6 @@ func (s *CmdSignup) postInviteRequest() (err error) {
 }
 
 func (s *CmdSignup) requestInvitationCode() error {
-
 	code, err := s.scli.GetInvitationCode(context.TODO(), 0)
 	if err != nil {
 		s.G().Log.Debug("Error getting new code: %v", err)

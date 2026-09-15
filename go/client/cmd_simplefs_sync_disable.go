@@ -4,6 +4,7 @@
 package client
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -11,7 +12,6 @@ import (
 	"github.com/keybase/client/go/libcmdline"
 	"github.com/keybase/client/go/libkb"
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
-	"golang.org/x/net/context"
 )
 
 // CmdSimpleFSSyncDisable is the 'fs sync disable' command.
@@ -22,14 +22,16 @@ type CmdSimpleFSSyncDisable struct {
 
 // NewCmdSimpleFSSyncDisable creates a new cli.Command.
 func NewCmdSimpleFSSyncDisable(
-	cl *libcmdline.CommandLine, g *libkb.GlobalContext) cli.Command {
+	cl *libcmdline.CommandLine, g *libkb.GlobalContext,
+) cli.Command {
 	return cli.Command{
 		Name:         "disable",
 		ArgumentHelp: "[path-to-folder]",
 		Usage:        "Stops syncing the given folder to local storage",
 		Action: func(c *cli.Context) {
 			cl.ChooseCommand(&CmdSimpleFSSyncDisable{
-				Contextified: libkb.NewContextified(g)}, "disable", c)
+				Contextified: libkb.NewContextified(g),
+			}, "disable", c)
 			cl.SetNoStandalone()
 		},
 	}
@@ -61,9 +63,10 @@ func (c *CmdSimpleFSSyncDisable) Run() error {
 			return err
 		}
 
-		if res.Config.Mode == keybase1.FolderSyncMode_DISABLED {
+		switch res.Config.Mode {
+		case keybase1.FolderSyncMode_DISABLED:
 			return fmt.Errorf("No syncing enabled on %s", arg.Path)
-		} else if res.Config.Mode == keybase1.FolderSyncMode_ENABLED {
+		case keybase1.FolderSyncMode_ENABLED:
 			return fmt.Errorf(
 				"Cannot disable single path on fully-synced TLF %s", arg.Path)
 		}

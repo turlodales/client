@@ -1,8 +1,8 @@
-import * as C from '@/constants'
-import * as Constants from '@/constants/fs'
 import * as T from '@/constants/types'
 import {useFsPathInfo} from './hooks'
 import * as Kb from '@/common-adapters'
+import * as FS from '@/constants/fs'
+import {useSystemFileManagerIntegration} from './sfmi'
 
 type PathInfoProps = {
   containerStyle?: Kb.Styles.StylesCrossPlatform
@@ -11,7 +11,7 @@ type PathInfoProps = {
 }
 
 const useMountPointPath = (platformAfterMountPath: string) => {
-  const sfmi = C.useFSState(s => s.sfmi)
+  const sfmi = useSystemFileManagerIntegration()
   const mount =
     sfmi.driverStatus.type === T.FS.DriverStatusType.Enabled
       ? sfmi.preferredMountDirs[0] || sfmi.directMountDir
@@ -19,10 +19,9 @@ const useMountPointPath = (platformAfterMountPath: string) => {
   return mount && platformAfterMountPath && `${mount}${platformAfterMountPath}`
 }
 
-// name it different because of a bug in eslint that warns above in Props:
-//   11:25  error  'PathInfo' was used before it was defined  no-use-before-define
-const PathInfo_ = (props: PathInfoProps) => {
-  const pathInfo = useFsPathInfo(props.path, props.knownPathInfo || Constants.emptyPathInfo)
+const PathInfo = (props: PathInfoProps) => {
+  const styles = useStyles()
+  const pathInfo = useFsPathInfo(props.path, props.knownPathInfo || FS.emptyPathInfo)
   const mountPointPath = useMountPointPath(pathInfo.platformAfterMountPath)
   return (
     <Kb.Box2 direction="vertical" style={props.containerStyle} fullWidth={true}>
@@ -44,9 +43,9 @@ const PathInfo_ = (props: PathInfoProps) => {
   )
 }
 
-export default PathInfo_
+export default PathInfo
 
-const styles = Kb.Styles.styleSheetCreate(
+const useStyles = Kb.Styles.createStyleHook(
   () =>
     ({
       copyPath: {

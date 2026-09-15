@@ -3,11 +3,11 @@
 // license that can be found in the LICENSE file.
 //
 //go:build !windows
-// +build !windows
 
 package libfuse
 
 import (
+	"context"
 	"io"
 	"os"
 	"strings"
@@ -17,8 +17,6 @@ import (
 	"bazil.org/fuse/fs"
 	"github.com/keybase/client/go/kbfs/libfs"
 	"github.com/keybase/client/go/kbfs/libkbfs"
-
-	"golang.org/x/net/context"
 )
 
 // timedProfileFile represents a file whose contents are determined by
@@ -38,14 +36,15 @@ func (tpf timedProfileFile) Attr(ctx context.Context, a *fuse.Attr) error {
 	a.Size = 0
 	a.Mtime = now
 	a.Ctime = now
-	a.Mode = 0444
+	a.Mode = 0o444
 	return nil
 }
 
 var _ fs.NodeOpener = timedProfileFile{}
 
 func (tpf timedProfileFile) Open(ctx context.Context,
-	req *fuse.OpenRequest, resp *fuse.OpenResponse) (fs.Handle, error) {
+	req *fuse.OpenRequest, resp *fuse.OpenResponse,
+) (fs.Handle, error) {
 	f, err := tpf.pfs.OpenWithContext(ctx, tpf.name)
 	if err != nil {
 		return nil, err
@@ -69,7 +68,7 @@ var _ fs.Node = ProfileList{}
 
 // Attr implements the fs.Node interface.
 func (ProfileList) Attr(_ context.Context, a *fuse.Attr) error {
-	a.Mode = os.ModeDir | 0755
+	a.Mode = os.ModeDir | 0o755
 	return nil
 }
 

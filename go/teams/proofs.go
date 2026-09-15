@@ -1,10 +1,10 @@
 package teams
 
 import (
+	"context"
 	"fmt"
 	"sort"
 
-	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/davecgh/go-spew/spew"
@@ -28,7 +28,6 @@ type proofTerm struct {
 
 func (t *proofTerm) shortForm() string {
 	return fmt.Sprintf("%v@%v", t.sigMeta.SigChainLocation.Seqno, t.leafID)
-
 }
 
 type proofTermBookends struct {
@@ -110,7 +109,6 @@ func newProofSet(g *libkb.GlobalContext) *proofSetT {
 // proof set with the new proofs needed, but the original argument p will
 // be mutated.
 func (p *proofSetT) AddNeededHappensBeforeProof(ctx context.Context, a proofTerm, b proofTerm, reason string) {
-
 	var action string
 	defer func() {
 		if action != "discard-easy" && !ShouldSuppressLogging(ctx) {
@@ -307,7 +305,6 @@ func (p *proofSetT) check(ctx context.Context, world LoaderContext, parallel boo
 
 // check the entire proof set, failing if any one proof fails. (parallel version)
 func (p *proofSetT) checkParallel(ctx context.Context, world LoaderContext) (err error) {
-
 	var total int
 	for _, v := range p.proofs {
 		total += len(v)
@@ -326,7 +323,7 @@ func (p *proofSetT) checkParallel(ctx context.Context, world LoaderContext) (err
 
 	group, ctx := errgroup.WithContext(libkb.CopyTagsToBackground(ctx))
 	const pipeline = 20
-	for i := 0; i < pipeline; i++ {
+	for range pipeline {
 		group.Go(func() error {
 			for {
 				select {

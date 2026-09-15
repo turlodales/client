@@ -1,7 +1,6 @@
 import * as T from '@/constants/types'
-import * as C from '@/constants'
 import * as Kb from '@/common-adapters'
-import * as Container from '@/util/container'
+import {useSafeNavigation} from '@/util/safe-navigation'
 
 type OwnProps = {
   path: T.FS.Path
@@ -13,6 +12,7 @@ type Props = OwnProps & {
 }
 
 const Explain = (props: Props) => {
+  const styles = useStyles()
   const elems = T.FS.getPathElements(props.path)
   if (elems.length < 3) {
     return null
@@ -47,60 +47,52 @@ const Explain = (props: Props) => {
   }
 }
 
-const NoAccess = (props: Props) => (
-  <Kb.Box2 direction="vertical" style={styles.container} fullWidth={true} fullHeight={true}>
-    <Kb.Box2 direction="vertical" style={styles.main} fullWidth={true} centerChildren={true}>
-      <Kb.Icon
-        type={C.isMobile ? 'icon-fancy-no-access-mobile-128-125' : 'icon-fancy-no-access-desktop-96-94'}
-      />
-      <Kb.Text type="Header" style={styles.textYouDontHave}>
-        You don't have access to this folder or file.
-      </Kb.Text>
-      <Explain {...props} />
-      <Kb.Button
-        type="Default"
-        mode="Secondary"
-        label="Go to parent folder"
-        onClick={props.openParent}
-        style={styles.button}
-      />
+const NoAccess = (props: Props) => {
+  const styles = useStyles()
+  return (
+    <Kb.Box2 direction="vertical" style={styles.container} fullWidth={true} fullHeight={true}>
+      <Kb.EmptyState
+        illustration={isMobile ? 'icon-fancy-no-access-mobile-128-125' : 'icon-fancy-no-access-desktop-96-94'}
+        action={{label: 'Go to parent folder', onClick: props.openParent}}
+      >
+        <Kb.Text type="Header" style={styles.textYouDontHave}>
+          {"You don't have access to this folder or file."}
+        </Kb.Text>
+        <Explain {...props} />
+      </Kb.EmptyState>
     </Kb.Box2>
-  </Kb.Box2>
-)
+  )
+}
 
-const NonExistent = (props: Props) => (
-  <Kb.Box2 direction="vertical" style={styles.container} fullWidth={true} fullHeight={true}>
-    <Kb.Box2 direction="vertical" style={styles.main} fullWidth={true} centerChildren={true}>
-      <Kb.Icon
-        type={
-          C.isMobile
+const NonExistent = (props: Props) => {
+  const styles = useStyles()
+  return (
+    <Kb.Box2 direction="vertical" style={styles.container} fullWidth={true} fullHeight={true}>
+      <Kb.EmptyState
+        illustration={
+          isMobile
             ? 'icon-fancy-folder-file-inexistant-mobile-188-120'
             : 'icon-fancy-folder-file-inexistant-desktop-153-94'
         }
-      />
-      <Kb.Text type="Header" style={styles.textYouDontHave}>
-        This file or folder doesn't exist.
-      </Kb.Text>
-      <Kb.Box2 direction="horizontal" style={styles.explainBox}>
-        <Kb.Text center={true} type="Body">
-          Either it was deleted, or the path is incorrect.
+        action={{label: 'Go to parent folder', onClick: props.openParent}}
+      >
+        <Kb.Text type="Header" style={styles.textYouDontHave}>
+          {"This file or folder doesn't exist."}
         </Kb.Text>
-      </Kb.Box2>
-      <Kb.Button
-        type="Default"
-        mode="Secondary"
-        label="Go to parent folder"
-        onClick={props.openParent}
-        style={styles.button}
-      />
+        <Kb.Box2 direction="horizontal" style={styles.explainBox}>
+          <Kb.Text center={true} type="Body">
+            Either it was deleted, or the path is incorrect.
+          </Kb.Text>
+        </Kb.Box2>
+      </Kb.EmptyState>
     </Kb.Box2>
-  </Kb.Box2>
-)
+  )
+}
 
 const Oops = (props: OwnProps) => {
-  const nav = Container.useSafeNavigation()
+  const nav = useSafeNavigation()
   const openParent = () =>
-    nav.safeNavigateAppend({props: {path: T.FS.getPathParent(props.path)}, selected: 'fsRoot'})
+    nav.safeNavigateAppend({name: 'fsBrowse', params: {path: T.FS.getPathParent(props.path)}})
   switch (props.reason) {
     case T.FS.SoftError.NoAccess:
       return <NoAccess {...props} openParent={openParent} />
@@ -113,32 +105,22 @@ const Oops = (props: OwnProps) => {
 
 export default Oops
 
-const styles = Kb.Styles.styleSheetCreate(
-  () =>
+const useStyles = Kb.Styles.createStyleHook(
+  theme =>
     ({
-      button: {marginTop: Kb.Styles.globalMargins.small},
       container: Kb.Styles.platformStyles({
-        common: {backgroundColor: Kb.Styles.globalColors.white},
+        common: {backgroundColor: theme.white},
         isMobile: {padding: Kb.Styles.globalMargins.large},
       }),
+      // these margins stack with EmptyState's "small" gap
       explainBox: Kb.Styles.platformStyles({
-        isElectron: {marginTop: Kb.Styles.globalMargins.small},
-        isMobile: {marginTop: Kb.Styles.globalMargins.medium},
+        isMobile: {marginTop: Kb.Styles.globalMargins.tiny},
       }),
-      explainTextTeam: {
-        marginLeft: Kb.Styles.globalMargins.xtiny,
-        marginRight: Kb.Styles.globalMargins.xtiny,
-      },
-      footer: {paddingBottom: Kb.Styles.globalMargins.large},
-      header: {
-        backgroundColor: Kb.Styles.globalColors.red,
-        height: 40,
-      },
-      main: {...Kb.Styles.globalStyles.flexGrow},
+      explainTextTeam: Kb.Styles.marginH(Kb.Styles.globalMargins.xtiny),
       textYouDontHave: Kb.Styles.platformStyles({
-        isElectron: {marginTop: Kb.Styles.globalMargins.medium},
+        isElectron: {marginTop: Kb.Styles.globalMargins.tiny},
         isMobile: {
-          marginTop: Kb.Styles.globalMargins.xlarge,
+          marginTop: Kb.Styles.globalMargins.xlarge - Kb.Styles.globalMargins.small,
           textAlign: 'center',
         },
       }),

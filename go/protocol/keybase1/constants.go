@@ -1,10 +1,11 @@
-// Auto-generated to Go types and interfaces using avdl-compiler v1.4.10 (https://github.com/keybase/node-avdl-compiler)
+// Code generated to Go types and interfaces using avdl-compiler v1.4.10 (https://github.com/keybase/node-avdl-compiler). DO NOT EDIT.
 //   Input file: avdl/keybase1/constants.avdl
 
 package keybase1
 
 import (
 	"fmt"
+
 	"github.com/keybase/go-framed-msgpack-rpc/rpc"
 )
 
@@ -759,11 +760,11 @@ var StatusCodeRevMap = map[StatusCode]string{
 	5104: "SCSimpleFSNoAccess",
 }
 
-func (e StatusCode) String() string {
-	if v, ok := StatusCodeRevMap[e]; ok {
+func (o StatusCode) String() string {
+	if v, ok := StatusCodeRevMap[o]; ok {
 		return v
 	}
-	return fmt.Sprintf("%v", int(e))
+	return fmt.Sprintf("%v", int(o))
 }
 
 type ConstantsInterface interface {

@@ -1,13 +1,14 @@
-// Auto-generated to Go types and interfaces using avdl-compiler v1.4.10 (https://github.com/keybase/node-avdl-compiler)
+// Code generated to Go types and interfaces using avdl-compiler v1.4.10 (https://github.com/keybase/node-avdl-compiler). DO NOT EDIT.
 //   Input file: avdl/keybase1/block.avdl
 
 package keybase1
 
 import (
+	"context"
 	"fmt"
-	"github.com/keybase/go-framed-msgpack-rpc/rpc"
-	context "golang.org/x/net/context"
 	"time"
+
+	"github.com/keybase/go-framed-msgpack-rpc/rpc"
 )
 
 type BlockStatus int
@@ -32,11 +33,11 @@ var BlockStatusRevMap = map[BlockStatus]string{
 	2: "ARCHIVED",
 }
 
-func (e BlockStatus) String() string {
-	if v, ok := BlockStatusRevMap[e]; ok {
+func (o BlockStatus) String() string {
+	if v, ok := BlockStatusRevMap[o]; ok {
 		return v
 	}
-	return fmt.Sprintf("%v", int(e))
+	return fmt.Sprintf("%v", int(o))
 }
 
 type GetBlockRes struct {
@@ -366,21 +367,21 @@ func BlockProtocol(i BlockInterface) rpc.Protocol {
 		Name: "keybase.1.block",
 		Methods: map[string]rpc.ServeHandlerDescription{
 			"getSessionChallenge": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]GetSessionChallengeArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					ret, err = i.GetSessionChallenge(ctx)
 					return
 				},
 			},
 			"authenticateSession": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]AuthenticateSessionArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]AuthenticateSessionArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]AuthenticateSessionArg)(nil), args)
@@ -391,11 +392,11 @@ func BlockProtocol(i BlockInterface) rpc.Protocol {
 				},
 			},
 			"putBlock": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]PutBlockArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]PutBlockArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]PutBlockArg)(nil), args)
@@ -406,11 +407,11 @@ func BlockProtocol(i BlockInterface) rpc.Protocol {
 				},
 			},
 			"putBlockAgain": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]PutBlockAgainArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]PutBlockAgainArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]PutBlockAgainArg)(nil), args)
@@ -421,11 +422,11 @@ func BlockProtocol(i BlockInterface) rpc.Protocol {
 				},
 			},
 			"getBlock": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]GetBlockArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]GetBlockArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]GetBlockArg)(nil), args)
@@ -436,11 +437,11 @@ func BlockProtocol(i BlockInterface) rpc.Protocol {
 				},
 			},
 			"getBlockSizes": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]GetBlockSizesArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]GetBlockSizesArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]GetBlockSizesArg)(nil), args)
@@ -451,11 +452,11 @@ func BlockProtocol(i BlockInterface) rpc.Protocol {
 				},
 			},
 			"addReference": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]AddReferenceArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]AddReferenceArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]AddReferenceArg)(nil), args)
@@ -466,11 +467,11 @@ func BlockProtocol(i BlockInterface) rpc.Protocol {
 				},
 			},
 			"delReference": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]DelReferenceArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]DelReferenceArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]DelReferenceArg)(nil), args)
@@ -481,11 +482,11 @@ func BlockProtocol(i BlockInterface) rpc.Protocol {
 				},
 			},
 			"archiveReference": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]ArchiveReferenceArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]ArchiveReferenceArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]ArchiveReferenceArg)(nil), args)
@@ -496,11 +497,11 @@ func BlockProtocol(i BlockInterface) rpc.Protocol {
 				},
 			},
 			"delReferenceWithCount": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]DelReferenceWithCountArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]DelReferenceWithCountArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]DelReferenceWithCountArg)(nil), args)
@@ -511,11 +512,11 @@ func BlockProtocol(i BlockInterface) rpc.Protocol {
 				},
 			},
 			"archiveReferenceWithCount": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]ArchiveReferenceWithCountArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]ArchiveReferenceWithCountArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]ArchiveReferenceWithCountArg)(nil), args)
@@ -526,11 +527,11 @@ func BlockProtocol(i BlockInterface) rpc.Protocol {
 				},
 			},
 			"getReferenceCount": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]GetReferenceCountArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]GetReferenceCountArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]GetReferenceCountArg)(nil), args)
@@ -541,21 +542,21 @@ func BlockProtocol(i BlockInterface) rpc.Protocol {
 				},
 			},
 			"getUserQuotaInfo": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]GetUserQuotaInfoArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					ret, err = i.GetUserQuotaInfo(ctx)
 					return
 				},
 			},
 			"getTeamQuotaInfo": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]GetTeamQuotaInfoArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]GetTeamQuotaInfoArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]GetTeamQuotaInfoArg)(nil), args)
@@ -566,11 +567,11 @@ func BlockProtocol(i BlockInterface) rpc.Protocol {
 				},
 			},
 			"getUserQuotaInfo2": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]GetUserQuotaInfo2Arg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]GetUserQuotaInfo2Arg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]GetUserQuotaInfo2Arg)(nil), args)
@@ -581,11 +582,11 @@ func BlockProtocol(i BlockInterface) rpc.Protocol {
 				},
 			},
 			"getTeamQuotaInfo2": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]GetTeamQuotaInfo2Arg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]GetTeamQuotaInfo2Arg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]GetTeamQuotaInfo2Arg)(nil), args)
@@ -596,11 +597,11 @@ func BlockProtocol(i BlockInterface) rpc.Protocol {
 				},
 			},
 			"blockPing": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]BlockPingArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					ret, err = i.BlockPing(ctx)
 					return
 				},
@@ -614,89 +615,89 @@ type BlockClient struct {
 }
 
 func (c BlockClient) GetSessionChallenge(ctx context.Context) (res ChallengeInfo, err error) {
-	err = c.Cli.CallCompressed(ctx, "keybase.1.block.getSessionChallenge", []interface{}{GetSessionChallengeArg{}}, &res, rpc.CompressionGzip, 0*time.Millisecond)
+	err = c.Cli.CallCompressed(ctx, "keybase.1.block.getSessionChallenge", []any{GetSessionChallengeArg{}}, &res, rpc.CompressionGzip, 0*time.Millisecond)
 	return
 }
 
 func (c BlockClient) AuthenticateSession(ctx context.Context, signature string) (err error) {
 	__arg := AuthenticateSessionArg{Signature: signature}
-	err = c.Cli.CallCompressed(ctx, "keybase.1.block.authenticateSession", []interface{}{__arg}, nil, rpc.CompressionGzip, 0*time.Millisecond)
+	err = c.Cli.CallCompressed(ctx, "keybase.1.block.authenticateSession", []any{__arg}, nil, rpc.CompressionGzip, 0*time.Millisecond)
 	return
 }
 
 func (c BlockClient) PutBlock(ctx context.Context, __arg PutBlockArg) (err error) {
-	err = c.Cli.Call(ctx, "keybase.1.block.putBlock", []interface{}{__arg}, nil, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "keybase.1.block.putBlock", []any{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c BlockClient) PutBlockAgain(ctx context.Context, __arg PutBlockAgainArg) (err error) {
-	err = c.Cli.Call(ctx, "keybase.1.block.putBlockAgain", []interface{}{__arg}, nil, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "keybase.1.block.putBlockAgain", []any{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c BlockClient) GetBlock(ctx context.Context, __arg GetBlockArg) (res GetBlockRes, err error) {
-	err = c.Cli.Call(ctx, "keybase.1.block.getBlock", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "keybase.1.block.getBlock", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c BlockClient) GetBlockSizes(ctx context.Context, __arg GetBlockSizesArg) (res GetBlockSizesRes, err error) {
-	err = c.Cli.CallCompressed(ctx, "keybase.1.block.getBlockSizes", []interface{}{__arg}, &res, rpc.CompressionGzip, 0*time.Millisecond)
+	err = c.Cli.CallCompressed(ctx, "keybase.1.block.getBlockSizes", []any{__arg}, &res, rpc.CompressionGzip, 0*time.Millisecond)
 	return
 }
 
 func (c BlockClient) AddReference(ctx context.Context, __arg AddReferenceArg) (err error) {
-	err = c.Cli.CallCompressed(ctx, "keybase.1.block.addReference", []interface{}{__arg}, nil, rpc.CompressionGzip, 0*time.Millisecond)
+	err = c.Cli.CallCompressed(ctx, "keybase.1.block.addReference", []any{__arg}, nil, rpc.CompressionGzip, 0*time.Millisecond)
 	return
 }
 
 func (c BlockClient) DelReference(ctx context.Context, __arg DelReferenceArg) (err error) {
-	err = c.Cli.CallCompressed(ctx, "keybase.1.block.delReference", []interface{}{__arg}, nil, rpc.CompressionGzip, 0*time.Millisecond)
+	err = c.Cli.CallCompressed(ctx, "keybase.1.block.delReference", []any{__arg}, nil, rpc.CompressionGzip, 0*time.Millisecond)
 	return
 }
 
 func (c BlockClient) ArchiveReference(ctx context.Context, __arg ArchiveReferenceArg) (res []BlockReference, err error) {
-	err = c.Cli.CallCompressed(ctx, "keybase.1.block.archiveReference", []interface{}{__arg}, &res, rpc.CompressionGzip, 0*time.Millisecond)
+	err = c.Cli.CallCompressed(ctx, "keybase.1.block.archiveReference", []any{__arg}, &res, rpc.CompressionGzip, 0*time.Millisecond)
 	return
 }
 
 func (c BlockClient) DelReferenceWithCount(ctx context.Context, __arg DelReferenceWithCountArg) (res DowngradeReferenceRes, err error) {
-	err = c.Cli.CallCompressed(ctx, "keybase.1.block.delReferenceWithCount", []interface{}{__arg}, &res, rpc.CompressionGzip, 0*time.Millisecond)
+	err = c.Cli.CallCompressed(ctx, "keybase.1.block.delReferenceWithCount", []any{__arg}, &res, rpc.CompressionGzip, 0*time.Millisecond)
 	return
 }
 
 func (c BlockClient) ArchiveReferenceWithCount(ctx context.Context, __arg ArchiveReferenceWithCountArg) (res DowngradeReferenceRes, err error) {
-	err = c.Cli.CallCompressed(ctx, "keybase.1.block.archiveReferenceWithCount", []interface{}{__arg}, &res, rpc.CompressionGzip, 0*time.Millisecond)
+	err = c.Cli.CallCompressed(ctx, "keybase.1.block.archiveReferenceWithCount", []any{__arg}, &res, rpc.CompressionGzip, 0*time.Millisecond)
 	return
 }
 
 func (c BlockClient) GetReferenceCount(ctx context.Context, __arg GetReferenceCountArg) (res ReferenceCountRes, err error) {
-	err = c.Cli.CallCompressed(ctx, "keybase.1.block.getReferenceCount", []interface{}{__arg}, &res, rpc.CompressionGzip, 0*time.Millisecond)
+	err = c.Cli.CallCompressed(ctx, "keybase.1.block.getReferenceCount", []any{__arg}, &res, rpc.CompressionGzip, 0*time.Millisecond)
 	return
 }
 
 func (c BlockClient) GetUserQuotaInfo(ctx context.Context) (res []byte, err error) {
-	err = c.Cli.CallCompressed(ctx, "keybase.1.block.getUserQuotaInfo", []interface{}{GetUserQuotaInfoArg{}}, &res, rpc.CompressionGzip, 0*time.Millisecond)
+	err = c.Cli.CallCompressed(ctx, "keybase.1.block.getUserQuotaInfo", []any{GetUserQuotaInfoArg{}}, &res, rpc.CompressionGzip, 0*time.Millisecond)
 	return
 }
 
 func (c BlockClient) GetTeamQuotaInfo(ctx context.Context, tid TeamID) (res []byte, err error) {
 	__arg := GetTeamQuotaInfoArg{Tid: tid}
-	err = c.Cli.CallCompressed(ctx, "keybase.1.block.getTeamQuotaInfo", []interface{}{__arg}, &res, rpc.CompressionGzip, 0*time.Millisecond)
+	err = c.Cli.CallCompressed(ctx, "keybase.1.block.getTeamQuotaInfo", []any{__arg}, &res, rpc.CompressionGzip, 0*time.Millisecond)
 	return
 }
 
 func (c BlockClient) GetUserQuotaInfo2(ctx context.Context, includeFolders bool) (res BlockQuotaInfo, err error) {
 	__arg := GetUserQuotaInfo2Arg{IncludeFolders: includeFolders}
-	err = c.Cli.CallCompressed(ctx, "keybase.1.block.getUserQuotaInfo2", []interface{}{__arg}, &res, rpc.CompressionGzip, 0*time.Millisecond)
+	err = c.Cli.CallCompressed(ctx, "keybase.1.block.getUserQuotaInfo2", []any{__arg}, &res, rpc.CompressionGzip, 0*time.Millisecond)
 	return
 }
 
 func (c BlockClient) GetTeamQuotaInfo2(ctx context.Context, __arg GetTeamQuotaInfo2Arg) (res BlockQuotaInfo, err error) {
-	err = c.Cli.CallCompressed(ctx, "keybase.1.block.getTeamQuotaInfo2", []interface{}{__arg}, &res, rpc.CompressionGzip, 0*time.Millisecond)
+	err = c.Cli.CallCompressed(ctx, "keybase.1.block.getTeamQuotaInfo2", []any{__arg}, &res, rpc.CompressionGzip, 0*time.Millisecond)
 	return
 }
 
 func (c BlockClient) BlockPing(ctx context.Context) (res BlockPingResponse, err error) {
-	err = c.Cli.CallCompressed(ctx, "keybase.1.block.blockPing", []interface{}{BlockPingArg{}}, &res, rpc.CompressionGzip, 0*time.Millisecond)
+	err = c.Cli.CallCompressed(ctx, "keybase.1.block.blockPing", []any{BlockPingArg{}}, &res, rpc.CompressionGzip, 0*time.Millisecond)
 	return
 }

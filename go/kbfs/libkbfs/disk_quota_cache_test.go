@@ -5,6 +5,7 @@
 package libkbfs
 
 import (
+	"context"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -14,7 +15,6 @@ import (
 	"github.com/keybase/client/go/protocol/keybase1"
 	"github.com/stretchr/testify/require"
 	"github.com/syndtr/goleveldb/leveldb/storage"
-	"golang.org/x/net/context"
 )
 
 type testDiskQuotaCacheConfig struct {
@@ -23,7 +23,8 @@ type testDiskQuotaCacheConfig struct {
 }
 
 func newDiskQuotaCacheLocalForTestWithStorage(
-	t *testing.T, s storage.Storage) *DiskQuotaCacheLocal {
+	t *testing.T, s storage.Storage,
+) *DiskQuotaCacheLocal {
 	cache, err := newDiskQuotaCacheLocalFromStorage(&testDiskQuotaCacheConfig{
 		newTestCodecGetter(),
 		newTestLogMaker(t),
@@ -35,7 +36,8 @@ func newDiskQuotaCacheLocalForTestWithStorage(
 }
 
 func newDiskQuotaCacheLocalForTest(t *testing.T) (
-	*DiskQuotaCacheLocal, string) {
+	*DiskQuotaCacheLocal, string,
+) {
 	// Use a disk-based level, instead of memory storage, because we
 	// want to simulate a restart and memory storages can't be reused.
 	tempdir, err := os.MkdirTemp(os.TempDir(), "disk_quota_cache")
@@ -49,12 +51,12 @@ func newDiskQuotaCacheLocalForTest(t *testing.T) (
 
 func shutdownDiskQuotaCacheTest(cache DiskQuotaCache, tempdir string) {
 	cache.Shutdown(context.Background())
-	os.RemoveAll(tempdir)
+	_ = os.RemoveAll(tempdir)
 }
 
 func makeRandomQuotaWithUsageWrite(t *testing.T) kbfsblock.QuotaInfo {
 	qi := kbfsblock.NewQuotaInfo()
-	qi.Total.Bytes[kbfsblock.UsageWrite] = rand.Int63()
+	qi.Total.Bytes[kbfsblock.UsageWrite] = rand.Int63() //nolint:gosec // G404: Test data generation, not security-sensitive
 	return *qi
 }
 

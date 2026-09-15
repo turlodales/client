@@ -1,6 +1,7 @@
 package identify3
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"sync"
@@ -13,7 +14,6 @@ import (
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 	insecureTriplesec "github.com/keybase/go-triplesec-insecure"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/context"
 )
 
 func SetupTest(tb libkb.TestingTB, name string) libkb.TestContext {
@@ -63,30 +63,35 @@ type fakeUI3 struct {
 func (f *fakeUI3) Identify3ShowTracker(context.Context, keybase1.Identify3ShowTrackerArg) error {
 	return nil
 }
+
 func (f *fakeUI3) Identify3UpdateRow(_ context.Context, row keybase1.Identify3Row) error {
 	f.Lock()
 	defer f.Unlock()
 	f.id3results.pushRow(row)
 	return nil
 }
+
 func (f *fakeUI3) Identify3UserReset(context.Context, keybase1.Identify3GUIID) error {
 	f.Lock()
 	defer f.Unlock()
 	f.id3results.hitUserReset()
 	return nil
 }
+
 func (f *fakeUI3) Identify3UpdateUserCard(_ context.Context, card keybase1.Identify3UpdateUserCardArg) error {
 	f.Lock()
 	defer f.Unlock()
 	f.id3results.pushUserCard(card.Card)
 	return nil
 }
+
 func (f *fakeUI3) Identify3TrackerTimedOut(context.Context, keybase1.Identify3GUIID) error {
 	f.Lock()
 	defer f.Unlock()
 	f.id3results.hitTimeout()
 	return nil
 }
+
 func (f *fakeUI3) Identify3Result(_ context.Context, res keybase1.Identify3ResultArg) error {
 	f.Lock()
 	f.id3results.resultType = res.Result
@@ -94,6 +99,7 @@ func (f *fakeUI3) Identify3Result(_ context.Context, res keybase1.Identify3Resul
 	f.resultCh <- res.Result
 	return nil
 }
+
 func (f *fakeUI3) Identify3Summary(_ context.Context, arg keybase1.Identify3Summary) error {
 	f.Lock()
 	f.id3results.numProofsToCheck = arg.NumProofsToCheck
@@ -165,7 +171,7 @@ func TestCryptocurrency(t *testing.T) {
 		require.False(t, res.userWasReset)
 
 		// We get one row of results, just the cryptocurrency row.
-		require.Equal(t, 1, len(res.rows))
+		require.Len(t, res.rows, 1)
 		require.Equal(t, "btc", res.rows[0].Key)
 		require.Equal(t, addr, res.rows[0].Value)
 		if green {
@@ -186,7 +192,7 @@ func TestCryptocurrency(t *testing.T) {
 
 	res = runID3(t, mctx, alice.Username, true)
 	assertTrackResult(res, true /* green */)
-	require.Equal(t, res.numProofsToCheck, 0)
+	require.Equal(t, 0, res.numProofsToCheck)
 }
 
 func TestFollowUnfollowTracy(t *testing.T) {
@@ -197,10 +203,10 @@ func TestFollowUnfollowTracy(t *testing.T) {
 
 	mctx := libkb.NewMetaContextForTest(tc)
 	res := runID3(t, mctx, "t_tracy", true /* follow */)
-	require.Equal(t, res.resultType, keybase1.Identify3ResultType_OK)
-	require.Equal(t, len(res.rows), 9)
-	require.Equal(t, len(res.cards), 1)
-	require.Equal(t, res.numProofsToCheck, 4)
+	require.Equal(t, keybase1.Identify3ResultType_OK, res.resultType)
+	require.Len(t, res.rows, 9)
+	require.Len(t, res.cards, 1)
+	require.Equal(t, 4, res.numProofsToCheck)
 
 	findRows(t, res.rows, []keybase1.Identify3Row{
 		{
@@ -233,9 +239,9 @@ func TestFollowUnfollowTracy(t *testing.T) {
 	})
 
 	res = runID3(t, mctx, "t_tracy", false /* follow */)
-	require.Equal(t, res.resultType, keybase1.Identify3ResultType_OK)
-	require.Equal(t, len(res.rows), 9)
-	require.Equal(t, len(res.cards), 1)
+	require.Equal(t, keybase1.Identify3ResultType_OK, res.resultType)
+	require.Len(t, res.rows, 9)
+	require.Len(t, res.cards, 1)
 
 	findRows(t, res.rows, []keybase1.Identify3Row{
 		{
@@ -290,15 +296,13 @@ func runID3(t *testing.T, mctx libkb.MetaContext, user string, follow bool) id3r
 		checkIcon(t, row.Key, row.SiteIconDarkmode)
 		checkIcon(t, row.Key, row.SiteIconFull)
 		checkIcon(t, row.Key, row.SiteIconFullDarkmode)
-		if row.Priority == 0 || row.Priority == 9999999 {
-			t.Fatalf("unexpected priority %v %v", row.Key, row.Priority)
-		}
+		require.False(t, row.Priority == 0 || row.Priority == 9999999,
+			"unexpected priority %v %v", row.Key, row.Priority)
 	}
 	return res
 }
 
 func TestFollowResetFollow(t *testing.T) {
-
 	tc := SetupTest(t, "id3")
 	defer tc.Cleanup()
 	alice, err := kbtest.CreateAndSignupFakeUser("id3a", tc.G)
@@ -330,22 +334,21 @@ func checkIcon(t testing.TB, service string, icon []keybase1.SizedImage) {
 	}
 	require.Len(t, icon, 2, "%v", service)
 	for _, icon := range icon {
-		if icon.Width < 2 {
-			t.Fatalf("unreasonable icon size")
-		}
+		require.GreaterOrEqual(t, icon.Width, 2,
+			"unreasonable icon size")
 		if kbtest.SkipIconRemoteTest() {
 			t.Logf("Skipping icon remote test")
-			require.True(t, len(icon.Path) > 8)
+			require.Greater(t, len(icon.Path), 8)
 		} else {
 			resp, err := http.Get(icon.Path)
 			require.NoError(t, err, "%v", service)
+			defer resp.Body.Close()
 			require.Equal(t, 200, resp.StatusCode, "icon file should be reachable")
 			require.NoError(t, err)
 			body, err := io.ReadAll(resp.Body)
 			require.NoError(t, err)
-			if len(body) < 150 {
-				t.Fatalf("unreasonable icon payload size")
-			}
+			require.GreaterOrEqual(t, len(body), 150,
+				"unreasonable icon payload size")
 		}
 	}
 }

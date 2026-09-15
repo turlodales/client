@@ -3,216 +3,133 @@ import * as React from 'react'
 import * as Kb from '@/common-adapters'
 
 type OwnProps = {
+  isSearching: boolean
+  onCancelSearch: () => void
   onEnsureSelection: () => void
   onSelectDown: () => void
   onSelectUp: () => void
   onQueryChanged: (arg0: string) => void
   query: string
-  showNewChat: boolean
   showSearch: boolean
+  startSearch: () => void
 }
 
-const hotKeys = ['mod+n']
+function ConversationFilterInput(ownProps: OwnProps) {
+  const styles = useStyles()
+  const theme = Kb.Styles.useTheme()
+  const {isSearching, onCancelSearch, onEnsureSelection, onSelectDown, onSelectUp, showSearch} = ownProps
+  const {onQueryChanged: onSetFilter, query: filter} = ownProps
 
-const ConversationFilterInput = React.memo(function ConversationFilterInput(ownProps: OwnProps) {
-  const {
-    onEnsureSelection,
-    onSelectDown,
-    onSelectUp,
-    onQueryChanged: onSetFilter,
-    query: filter,
-    showSearch,
-  } = ownProps
+  const appendNewChatBuilder = C.Router2.appendNewChatBuilder
+  const {startSearch} = ownProps
 
-  const isSearching = C.useChatState(s => !!s.inboxSearch)
+  const inputRef = React.useRef<Kb.SearchFilterRef>(null)
 
-  const appendNewChatBuilder = C.useRouterState(s => s.appendNewChatBuilder)
-  const toggleInboxSearch = C.useChatState(s => s.dispatch.toggleInboxSearch)
-  const onStartSearch = React.useCallback(() => {
-    toggleInboxSearch(true)
-  }, [toggleInboxSearch])
-  const onStopSearch = React.useCallback(() => {
-    toggleInboxSearch(false)
-  }, [toggleInboxSearch])
-
-  const inputRef = React.useRef<Kb.SearchFilter>(null)
-
-  const onKeyDown = React.useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onStopSearch()
-      } else if (e.key === 'ArrowDown') {
-        e.preventDefault()
-        e.stopPropagation()
-        onSelectDown()
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault()
-        e.stopPropagation()
-        onSelectUp()
-      }
-    },
-    [onStopSearch, onSelectDown, onSelectUp]
-  )
-
-  const onEnterKeyDown = React.useCallback(
-    (e?: React.BaseSyntheticEvent) => {
-      if (!Kb.Styles.isMobile) {
-        if (e) {
-          e.preventDefault()
-          e.stopPropagation()
-        }
-        onEnsureSelection()
-        inputRef.current?.blur()
-      }
-    },
-    [onEnsureSelection]
-  )
-
-  const onChange = React.useCallback(
-    (q: string) => {
-      if (q !== filter) {
-        onSetFilter(q)
-      }
-    },
-    [onSetFilter, filter]
-  )
-
-  const onHotKeys = React.useCallback(() => {
-    appendNewChatBuilder()
-  }, [appendNewChatBuilder])
-
-  const [lastSearching, setLastSearching] = React.useState(isSearching)
-  if (lastSearching !== isSearching) {
-    setLastSearching(isSearching)
-    if (isSearching) {
-      inputRef.current?.focus()
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      onCancelSearch()
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      e.stopPropagation()
+      onSelectDown()
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      e.stopPropagation()
+      onSelectUp()
     }
   }
 
-  const searchInput = (
+  const onEnterKeyDown = (e?: React.BaseSyntheticEvent) => {
+    if (!isMobile) {
+      if (e) {
+        e.preventDefault()
+        e.stopPropagation()
+      }
+      onEnsureSelection()
+      inputRef.current?.blur()
+    }
+  }
+
+  const onChange = (q: string) => {
+    if (q !== filter) {
+      onSetFilter(q)
+    }
+  }
+
+  Kb.useHotKey('mod+n', appendNewChatBuilder)
+  Kb.useHotKey('mod+k', startSearch)
+
+  React.useEffect(() => {
+    if (isSearching) {
+      inputRef.current?.focus()
+    }
+  }, [isSearching])
+
+  const searchInput = isSearching ? (
     <Kb.SearchFilter
       ref={inputRef}
       size="full-width"
       style={styles.searchBox}
       icon="iconfont-search"
       placeholderText="Search"
-      hotkey="k"
-      showXOverride={isSearching ? true : undefined}
+      showXOverride={true}
       value={filter}
       valueControlled={true}
-      // On mobile SearchFilter is re-mounted when toggling isSearching. (See chat/inbox/index.native.tsx:render's use of isSearching)
-      // Simple props would cause the keyboard to appear and then disappear on dismount.
-      // Take care instead to only launch the keyboard from the isSearching=true mountpoint.
-      dummyInput={Kb.Styles.isMobile && !isSearching}
-      focusOnMount={Kb.Styles.isMobile && isSearching}
+      focusOnMount={isMobile}
       onChange={onChange}
-      onCancel={onStopSearch}
-      onFocus={onStartSearch}
+      onCancel={onCancelSearch}
       onKeyDown={onKeyDown}
       onEnterKeyDown={onEnterKeyDown}
     />
+  ) : (
+    <Kb.Box2 direction="horizontal" style={styles.searchPlaceholderOuter} alignItems="center">
+      <Kb.ClickableBox direction="horizontal" alignItems="center" flex={1} onClick={startSearch} style={styles.searchPlaceholder}>
+        <Kb.Icon
+          type="iconfont-search"
+          sizeType={isMobile ? 'Small' : 'Default'}
+          color={theme.black_50}
+          style={styles.searchPlaceholderIcon}
+        />
+        <Kb.Text type="BodySemibold" style={styles.searchPlaceholderText}>
+          {isMobile ? 'Search' : 'Search (\u2318K)'}
+        </Kb.Text>
+      </Kb.ClickableBox>
+    </Kb.Box2>
   )
   return (
     <Kb.Box2
       direction="horizontal"
       centerChildren={!Kb.Styles.isTablet}
-      gap={Kb.Styles.isMobile ? 'small' : 'xtiny'}
+      gap={isMobile ? 'small' : showSearch ? 'xtiny' : undefined}
+      fullWidth={true}
+      relative={true}
       style={Kb.Styles.collapseStyles([
         styles.containerNotFiltering,
-        Kb.Styles.isPhone ? null : Kb.Styles.isTablet && showSearch ? null : styles.whiteBg,
-        !Kb.Styles.isMobile && styles.whiteBg,
+        !Kb.Styles.isPhone && styles.whiteBg,
       ])}
       gapStart={showSearch}
-      gapEnd={true}
+      gapEnd={showSearch}
     >
-      {!Kb.Styles.isMobile && <Kb.HotKey hotKeys={hotKeys} onHotKey={onHotKeys} />}
       {showSearch && searchInput}
     </Kb.Box2>
   )
-})
+}
 
-const styles = Kb.Styles.styleSheetCreate(
-  () =>
+const useStyles = Kb.Styles.createStyleHook(
+  theme =>
     ({
-      containerFiltering: Kb.Styles.platformStyles({
-        common: {
-          backgroundColor: Kb.Styles.globalColors.blueGrey,
-          position: 'relative',
-        },
-        isElectron: {
-          ...Kb.Styles.desktopStyles.windowDraggingClickable,
-          ...Kb.Styles.padding(0, Kb.Styles.globalMargins.small),
-          height: 39,
-        },
-        isMobile: {
-          ...Kb.Styles.padding(0, Kb.Styles.globalMargins.small, 0, Kb.Styles.globalMargins.xsmall),
-          height: 48,
-        },
-        isPhone: {backgroundColor: Kb.Styles.globalColors.fastBlank},
-      }),
       containerNotFiltering: Kb.Styles.platformStyles({
         common: {
-          backgroundColor: Kb.Styles.globalColors.blueGrey,
+          backgroundColor: theme.blueGrey,
           height: undefined,
-          position: 'relative',
-          width: '100%',
         },
         isElectron: {
           alignSelf: 'stretch',
           flexGrow: 1,
-          marginLeft: Kb.Styles.globalMargins.tiny,
-          marginRight: Kb.Styles.globalMargins.tiny,
+          ...Kb.Styles.marginH(Kb.Styles.globalMargins.tiny),
           width: undefined,
         },
-        isPhone: {backgroundColor: Kb.Styles.globalColors.white},
-      }),
-      filterContainer: Kb.Styles.platformStyles({
-        common: {
-          ...Kb.Styles.globalStyles.flexBoxRow,
-          alignItems: 'center',
-          backgroundColor: Kb.Styles.globalColors.black_10,
-          borderRadius: Kb.Styles.borderRadius,
-          flexGrow: 1,
-          justifyContent: 'flex-start',
-        },
-        isElectron: {
-          ...Kb.Styles.desktopStyles.editable,
-          height: 28,
-          paddingLeft: 8,
-        },
-        isMobile: {
-          height: 32,
-          paddingLeft: 10,
-        },
-      }),
-      flexOne: {flex: 1},
-      icon: Kb.Styles.platformStyles({
-        common: {position: 'relative'},
-        isElectron: {top: 1},
-        isMobile: {top: 0},
-      }),
-      input: {
-        color: Kb.Styles.globalColors.black_50,
-        position: 'relative',
-        top: 1,
-      },
-      newChatButtonText: {
-        color: Kb.Styles.globalColors.white,
-        marginRight: Kb.Styles.globalMargins.xtiny,
-      },
-      newIcon: {
-        position: 'relative',
-        top: 1,
-      },
-      rainbowBorder: Kb.Styles.platformStyles({
-        common: {padding: 2},
-        isElectron: {
-          background: Kb.Styles.isDarkMode()
-            ? 'linear-gradient(rgba(255, 93, 93, 0.75), rgba(255, 247, 90, 0.75) 50%, rgba(58, 255, 172, 0.75))'
-            : 'linear-gradient(180deg, #ff5d5d, #fff75a 50%, #3AFFAC)',
-          borderRadius: 6,
-        },
-        isMobile: {borderRadius: 8},
+        isPhone: {backgroundColor: theme.white},
       }),
       searchBox: Kb.Styles.platformStyles({
         common: {flex: 1},
@@ -220,26 +137,27 @@ const styles = Kb.Styles.styleSheetCreate(
         // hacky, redo the layout of this component later
         isTablet: {maxWidth: 270 - 16 * 2},
       }),
-      text: Kb.Styles.platformStyles({
-        common: {
-          color: Kb.Styles.globalColors.black_50,
-          marginRight: Kb.Styles.globalMargins.xtiny,
-          position: 'relative',
-        },
-        isElectron: {
-          marginLeft: Kb.Styles.globalMargins.xtiny,
-          top: 0,
-        },
-        isMobile: {
-          marginLeft: Kb.Styles.globalMargins.tiny,
-          top: 1,
-        },
-      }),
-      textFaint: {
-        color: Kb.Styles.globalColors.black_35,
-        position: 'relative',
+      searchPlaceholder: {
+        backgroundColor: theme.black_10,
+        borderRadius: Kb.Styles.borderRadius,
+        flexShrink: 1,
+        height: 32,
+        ...Kb.Styles.paddingH(Kb.Styles.globalMargins.xsmall),
       },
-      whiteBg: {backgroundColor: Kb.Styles.globalColors.white},
+      searchPlaceholderIcon: Kb.Styles.platformStyles({
+        isElectron: {marginRight: Kb.Styles.globalMargins.tiny, marginTop: 2},
+        isMobile: {marginRight: Kb.Styles.globalMargins.tiny},
+      }),
+      searchPlaceholderOuter: Kb.Styles.platformStyles({
+        common: {flex: 1},
+        isElectron: Kb.Styles.desktopStyles.windowDraggingClickable,
+        isMobile: {
+          ...Kb.Styles.padding(Kb.Styles.globalMargins.tiny, Kb.Styles.globalMargins.small),
+        },
+        isTablet: {...Kb.Styles.paddingH(0)},
+      }),
+      searchPlaceholderText: {color: theme.black_50},
+      whiteBg: {backgroundColor: theme.white},
     }) as const
 )
 

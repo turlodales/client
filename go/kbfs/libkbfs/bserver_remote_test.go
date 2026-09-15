@@ -5,6 +5,7 @@
 package libkbfs
 
 import (
+	"context"
 	"testing"
 
 	"github.com/keybase/client/go/kbfs/env"
@@ -16,7 +17,6 @@ import (
 	"github.com/keybase/client/go/protocol/keybase1"
 	"github.com/keybase/go-framed-msgpack-rpc/rpc"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/context"
 )
 
 type fakeBlockEntry struct {
@@ -32,7 +32,8 @@ type fakeBServerClient struct {
 }
 
 func (fc *fakeBServerClient) PutBlock(
-	ctx context.Context, arg keybase1.PutBlockArg) error {
+	ctx context.Context, arg keybase1.PutBlockArg,
+) error {
 	var refs map[keybase1.BlockRefNonce]keybase1.BlockReference
 	if e, ok := fc.entries[arg.Bid]; ok {
 		refs = e.refs
@@ -104,8 +105,10 @@ func TestBServerRemotePutAndGet(t *testing.T) {
 	fc := fakeBServerClient{
 		entries: make(map[keybase1.BlockIdCombo]fakeBlockEntry),
 	}
-	config := testBlockServerRemoteConfig{newTestCodecGetter(),
-		newTestLogMaker(t), nil, nil, nil}
+	config := testBlockServerRemoteConfig{
+		newTestCodecGetter(),
+		newTestLogMaker(t), nil, nil, nil,
+	}
 	b := newBlockServerRemoteWithClient(&env.KBFSContext{}, config, &fc)
 
 	tlfID := tlf.FakeID(2, tlf.Private)
@@ -148,8 +151,10 @@ func TestBServerRemotePutAndGet(t *testing.T) {
 func TestBServerRemotePutCanceled(t *testing.T) {
 	currentUID := keybase1.MakeTestUID(1)
 	serverConn, conn := rpc.MakeConnectionForTest(t)
-	config := testBlockServerRemoteConfig{newTestCodecGetter(),
-		newTestLogMaker(t), nil, nil, nil}
+	config := testBlockServerRemoteConfig{
+		newTestCodecGetter(),
+		newTestLogMaker(t), nil, nil, nil,
+	}
 	b := newBlockServerRemoteWithClient(&env.KBFSContext{}, config,
 		keybase1.BlockClient{Cli: conn.GetClient()})
 

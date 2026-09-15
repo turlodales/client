@@ -5,12 +5,13 @@
 package libgit
 
 import (
+	gogitcfg "github.com/go-git/go-git/v5/config"
+	"github.com/go-git/go-git/v5/plumbing/cache"
+	format "github.com/go-git/go-git/v5/plumbing/format/config"
+	"github.com/go-git/go-git/v5/plumbing/storer"
+	"github.com/go-git/go-git/v5/storage"
+	"github.com/go-git/go-git/v5/storage/filesystem"
 	"github.com/keybase/client/go/kbfs/libfs"
-	gogitcfg "gopkg.in/src-d/go-git.v4/config"
-	format "gopkg.in/src-d/go-git.v4/plumbing/format/config"
-	"gopkg.in/src-d/go-git.v4/plumbing/storer"
-	"gopkg.in/src-d/go-git.v4/storage"
-	"gopkg.in/src-d/go-git.v4/storage/filesystem"
 )
 
 // GitConfigWithoutRemotesStorer strips remotes from the config before
@@ -27,11 +28,9 @@ type GitConfigWithoutRemotesStorer struct {
 // implementation that strips remotes from the config before writing
 // them to disk.
 func NewGitConfigWithoutRemotesStorer(fs *libfs.FS) (
-	*GitConfigWithoutRemotesStorer, error) {
-	fsStorer, err := filesystem.NewStorage(fs)
-	if err != nil {
-		return nil, err
-	}
+	*GitConfigWithoutRemotesStorer, error,
+) {
+	fsStorer := filesystem.NewStorage(fs, cache.NewObjectLRUDefault())
 	cfg, err := fsStorer.Config()
 	if err != nil {
 		return nil, err
@@ -58,7 +57,8 @@ func (cwrs *GitConfigWithoutRemotesStorer) Config() (*gogitcfg.Config, error) {
 
 // SetConfig implements the `storer.Storer` interface.
 func (cwrs *GitConfigWithoutRemotesStorer) SetConfig(c *gogitcfg.Config) (
-	err error) {
+	err error,
+) {
 	if cwrs.stored && c.Core == cwrs.cfg.Core {
 		// Ignore any change that doesn't change the core we know
 		// about, to avoid attempting to write config files with
@@ -101,5 +101,7 @@ func (cwrs *GitConfigWithoutRemotesStorer) SetConfig(c *gogitcfg.Config) (
 	return cwrs.Storage.SetConfig(c)
 }
 
-var _ storage.Storer = (*GitConfigWithoutRemotesStorer)(nil)
-var _ storer.Initializer = (*GitConfigWithoutRemotesStorer)(nil)
+var (
+	_ storage.Storer     = (*GitConfigWithoutRemotesStorer)(nil)
+	_ storer.Initializer = (*GitConfigWithoutRemotesStorer)(nil)
+)

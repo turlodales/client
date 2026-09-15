@@ -1,10 +1,5 @@
-import type * as RPCTypes from './rpc-gen'
+import type * as RPCTypes from '@/constants/rpc/rpc-gen'
 import type {IconType} from '@/common-adapters/icon.constants-gen'
-
-export type ItemTypeEnum = RPCTypes.HomeScreenItemType
-export type ItemType = keyof typeof RPCTypes.HomeScreenItemType
-
-export type ItemID = string
 
 export type TodoTypeEnum = RPCTypes.HomeScreenTodoType
 export type TodoType = keyof typeof RPCTypes.HomeScreenTodoType
@@ -52,12 +47,6 @@ export type Announcement = {
   text: string
   type: 'announcement'
   url?: string
-}
-
-export type WotUpdate = {
-  voucher: string
-  vouchee: string
-  status: RPCTypes.WotStatusType
 }
 
 export type PeopleScreenItem = Todo | FollowedNotificationItem | Announcement

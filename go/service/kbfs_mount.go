@@ -4,11 +4,10 @@
 package service
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/keybase/client/go/libkb"
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
@@ -31,8 +30,10 @@ func (h *KBFSMountHandler) GetCurrentMountDir(ctx context.Context) (res string, 
 	return h.G().Env.GetMountDir()
 }
 
-const waitForDirectMountTimeout = 10 * time.Second
-const waitForDirectMountPollInterval = time.Second
+const (
+	waitForDirectMountTimeout      = 10 * time.Second
+	waitForDirectMountPollInterval = time.Second
+)
 
 func (h *KBFSMountHandler) WaitForMounts(ctx context.Context) (active bool, err error) {
 	ctx, cancel := context.WithTimeout(ctx, waitForDirectMountTimeout)

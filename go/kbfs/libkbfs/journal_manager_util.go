@@ -5,13 +5,13 @@
 package libkbfs
 
 import (
+	"context"
 	"errors"
 	"time"
 
 	"github.com/keybase/client/go/kbfs/data"
 	"github.com/keybase/client/go/kbfs/tlf"
 	"github.com/keybase/client/go/logger"
-	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -38,7 +38,8 @@ func TLFJournalEnabled(getter blockServerGetter, tlfID tlf.ID) bool {
 // WaitForTLFJournal waits for the corresponding journal to flush, if
 // one exists.
 func WaitForTLFJournal(ctx context.Context, config Config, tlfID tlf.ID,
-	log logger.Logger) error {
+	log logger.Logger,
+) error {
 	if jManager, err := GetJournalManager(config); err == nil {
 		log.CDebugf(ctx, "Waiting for journal to flush")
 		if err := jManager.Wait(ctx, tlfID); err != nil {
@@ -51,7 +52,8 @@ func WaitForTLFJournal(ctx context.Context, config Config, tlfID tlf.ID,
 // FillInJournalStatusUnflushedPaths adds the unflushed paths to the
 // given journal status.
 func FillInJournalStatusUnflushedPaths(ctx context.Context, config Config,
-	jStatus *JournalManagerStatus, tlfIDs []tlf.ID) error {
+	jStatus *JournalManagerStatus, tlfIDs []tlf.ID,
+) error {
 	if len(tlfIDs) == 0 {
 		// Nothing to do.
 		return nil
@@ -97,18 +99,15 @@ func FillInJournalStatusUnflushedPaths(ctx context.Context, config Config,
 	}
 
 	// Do up to 10 statuses at a time.
-	numWorkers := len(tlfIDs)
-	if numWorkers > 10 {
-		numWorkers = 10
-	}
-	for i := 0; i < numWorkers; i++ {
+	numWorkers := min(len(tlfIDs), 10)
+	for range numWorkers {
 		eg.Go(statusFn)
 	}
 	for _, tlfID := range tlfIDs {
 		statusesToFetch <- tlfID
 	}
 	close(statusesToFetch)
-	if err := eg.Wait(); err != nil && err != errIncomplete {
+	if err := eg.Wait(); err != nil && !errors.Is(err, errIncomplete) {
 		return err
 	}
 	close(unflushedPaths)

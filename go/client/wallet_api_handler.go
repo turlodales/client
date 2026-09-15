@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -12,7 +13,6 @@ import (
 	"github.com/keybase/go-framed-msgpack-rpc/rpc"
 	"github.com/keybase/stellarnet"
 	"github.com/stellar/go/strkey"
-	"golang.org/x/net/context"
 )
 
 // ErrInvalidAccountID is for invalid account IDs.
@@ -432,7 +432,7 @@ func (w *walletAPIHandler) sendPathPayment(ctx context.Context, c Call, wr io.Wr
 }
 
 // encodeResult JSON encodes a successful result to the wr writer.
-func (w *walletAPIHandler) encodeResult(call Call, result interface{}, wr io.Writer) error {
+func (w *walletAPIHandler) encodeResult(call Call, result any, wr io.Writer) error {
 	return encodeResult(call, result, wr, w.indent)
 }
 

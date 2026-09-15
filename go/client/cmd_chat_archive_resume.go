@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/keybase/cli"
@@ -9,7 +10,6 @@ import (
 	"github.com/keybase/client/go/protocol/chat1"
 	"github.com/keybase/client/go/protocol/keybase1"
 	"github.com/keybase/go-framed-msgpack-rpc/rpc"
-	"golang.org/x/net/context"
 )
 
 type CmdChatArchiveResume struct {
@@ -55,14 +55,16 @@ func (n *ArchiveCompleteWaiter) Done() chan struct{} {
 }
 
 func (n *ArchiveCompleteWaiter) ChatArchiveComplete(ctx context.Context,
-	arg chat1.ArchiveJobID) error {
+	arg chat1.ArchiveJobID,
+) error {
 	err := n.cli.ChatArchiveComplete(ctx, arg)
 	close(n.ch)
 	return err
 }
 
 func (n *ArchiveCompleteWaiter) ChatArchiveProgress(ctx context.Context,
-	arg chat1.ChatArchiveProgressArg) error {
+	arg chat1.ChatArchiveProgressArg,
+) error {
 	return n.cli.ChatArchiveProgress(ctx, arg)
 }
 

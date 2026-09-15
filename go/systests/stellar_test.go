@@ -2,12 +2,12 @@ package systests
 
 import (
 	"bytes"
+	"context"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/keybase/client/go/client"
 	"github.com/keybase/client/go/kbtest"
@@ -18,13 +18,16 @@ import (
 	"github.com/keybase/client/go/teams"
 	"github.com/keybase/stellarnet"
 	"github.com/stellar/go/build"
+
 	// nolint
 	"github.com/stellar/go/clients/horizon"
 	"github.com/stretchr/testify/require"
 )
 
-const disable = true
-const disableMsg = "new protocol version on testnet incompatible with stellard"
+const (
+	disable    = true
+	disableMsg = "new protocol version on testnet incompatible with stellard"
+)
 
 func TestStellarNoteRoundtripAndResets(t *testing.T) {
 	if disable {
@@ -126,7 +129,7 @@ func testStellarRelayAutoClaims(t *testing.T, startWithPUK, skipPart2 bool) {
 	t.Logf("alice gets funded")
 	acceptDisclaimer(alice)
 
-	baseFeeStroops := int64(alice.tc.G.GetStellar().(*stellar.Stellar).WalletStateForTest().BaseFee(alice.tc.MetaContext()))
+	baseFeeStroops := int64(alice.tc.G.GetStellar().(*stellar.Stellar).WalletStateForTest().BaseFee(alice.tc.MetaContext())) //nolint:gosec // G115: Stellar base fee is a small bounded value, safe to convert
 
 	res, err := alice.stellarClient.GetWalletAccountsLocal(context.Background(), 0)
 	require.NoError(t, err)
@@ -139,7 +142,7 @@ func testStellarRelayAutoClaims(t *testing.T, startWithPUK, skipPart2 bool) {
 		Recipient:    bob.username,
 		Amount:       "50",
 	}
-	for i := 0; i < retryCount; i++ {
+	for range retryCount {
 		err = cmd.Run()
 		if err == nil {
 			break
@@ -153,7 +156,7 @@ func testStellarRelayAutoClaims(t *testing.T, startWithPUK, skipPart2 bool) {
 		Recipient:    bob.username,
 		Amount:       "30",
 	}
-	for i := 0; i < retryCount; i++ {
+	for range retryCount {
 		err = cmd.Run()
 		if err == nil {
 			break
@@ -218,7 +221,7 @@ func testStellarRelayAutoClaims(t *testing.T, startWithPUK, skipPart2 bool) {
 		Amount:       "10",
 		ForceRelay:   true,
 	}
-	for i := 0; i < retryCount; i++ {
+	for range retryCount {
 		err = cmd.Run()
 		if err == nil {
 			break
@@ -237,7 +240,6 @@ func testStellarRelayAutoClaims(t *testing.T, startWithPUK, skipPart2 bool) {
 		assertWithinFeeBounds(t, res[0].BalanceDescription, "90", baseFeeStroops*4)
 		return true
 	})
-
 }
 
 // XLM is sent to a rooter assertion that does not resolve.
@@ -274,14 +276,14 @@ func TestStellarRelayAutoClaimsSBS(t *testing.T) {
 		Recipient:    rooterAssertion,
 		Amount:       "50",
 	}
-	for i := 0; i < retryCount; i++ {
+	for range retryCount {
 		err = cmd.Run()
 		if err == nil {
 			break
 		}
 	}
 	require.NoError(t, err)
-	baseFeeStroops := int64(alice.tc.G.GetStellar().(*stellar.Stellar).WalletStateForTest().BaseFee(alice.tc.MetaContext()))
+	baseFeeStroops := int64(alice.tc.G.GetStellar().(*stellar.Stellar).WalletStateForTest().BaseFee(alice.tc.MetaContext())) //nolint:gosec // G115: Stellar base fee is small bounded value, safe to convert
 	t.Logf("baseFeeStroops %v", baseFeeStroops)
 
 	t.Logf("get the impteam seqno to wait on later")
@@ -354,9 +356,9 @@ func sampleNote() stellar1.NoteContents {
 func gift(t testing.TB, accountID stellar1.AccountID) {
 	t.Logf("gift -> %v", accountID)
 	url := "https://friendbot.stellar.org/?addr=" + accountID.String()
-	for i := 0; i < retryCount; i++ {
+	for range retryCount {
 		t.Logf("gift url: %v", url)
-		res, err := http.Get(url)
+		res, err := http.Get(url) //nolint:gosec // G107: Test code calling Stellar testnet friendbot with account ID parameter
 		if err != nil {
 			t.Logf("http get %s error: %s", url, err)
 			continue
@@ -371,7 +373,7 @@ func gift(t testing.TB, accountID stellar1.AccountID) {
 		}
 		t.Logf("gift status not ok: %d", res.StatusCode)
 	}
-	t.Fatalf("gift to %s failed after multiple attempts", accountID)
+	require.FailNow(t, fmt.Sprintf("gift to %s failed after multiple attempts", accountID))
 }
 
 func useStellarTestNet(t testing.TB) {
@@ -432,7 +434,7 @@ func TestAccountMerge(t *testing.T) {
 		Recipient:    secondAccountID.String(),
 		Amount:       "50",
 	}
-	for i := 0; i < retryCount; i++ {
+	for range retryCount {
 		err = sendCmd.Run()
 		if err == nil {
 			break
@@ -478,6 +480,6 @@ func TestAccountMerge(t *testing.T) {
 	t.Logf("merged the second into the first")
 	afterMergeBalance := stroopsInAcct(firstAccountID)
 	lowerBoundFinalExpectedAmount := int64(stellarnet.StroopsPerLumen * 9999.99)
-	require.True(t, afterMergeBalance > lowerBoundFinalExpectedAmount)
+	require.Greater(t, afterMergeBalance, lowerBoundFinalExpectedAmount)
 	t.Logf("value of the second account was merged into the first account")
 }

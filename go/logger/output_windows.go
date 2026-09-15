@@ -2,7 +2,6 @@
 // this source code is governed by the included BSD license.
 
 //go:build windows
-// +build windows
 
 // Windows 10 has a new terminal that can do ANSI codes by itself, so all this
 // other stuff is legacy - EXCEPT that the colors are not right! If they ever
@@ -19,7 +18,6 @@ import (
 	"os"
 	"sync"
 	"syscall"
-
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -88,7 +86,7 @@ const (
 
 var codesWin = map[byte]WORD{
 	0:   fgWhite | bgBlack,       //	"reset":
-	1:   fgIntensity,             //CpBold          = CodePair{1, 22}
+	1:   fgIntensity,             // CpBold          = CodePair{1, 22}
 	22:  fgWhite,                 //	UnBold:        // Just assume this means reset to white fg
 	39:  fgWhite,                 //	"resetfg":
 	49:  fgWhite,                 //	"resetbg":        // Just assume this means reset to white fg
@@ -171,7 +169,7 @@ func (cw *ColorWriter) Write(p []byte) (n int, err error) {
 	cw.mutex.Lock()
 	defer cw.mutex.Unlock()
 
-	var totalWritten = len(p)
+	totalWritten := len(p)
 	ctlStart := []byte{0x1b, '['}
 
 	for nextIndex := 0; len(p) > 0; {
@@ -206,7 +204,6 @@ func (cw *ColorWriter) Write(p []byte) (n int, err error) {
 }
 
 func (cw *ColorWriter) parseColorControl(p []byte) []byte {
-
 	var controlIndex int
 	controlCode := p[controlIndex] - '0'
 	controlIndex++

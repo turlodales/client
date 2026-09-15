@@ -14,8 +14,10 @@ import (
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 )
 
-var errNoConfig = errors.New("No user config available")
-var errNoDevice = errors.New("No device provisioned locally for this user")
+var (
+	errNoConfig = errors.New("No user config available")
+	errNoDevice = errors.New("No device provisioned locally for this user")
+)
 
 // Login is an engine.
 type Login struct {
@@ -211,10 +213,10 @@ func (e *Login) loginProvision(m libkb.MetaContext) (bool, error) {
 // notProvisionedErr will return true if err signifies that login
 // failed because this device has not yet been provisioned.
 func (e *Login) notProvisionedErr(m libkb.MetaContext, err error) bool {
-	if err == errNoDevice {
+	if errors.Is(err, errNoDevice) {
 		return true
 	}
-	if err == errNoConfig {
+	if errors.Is(err, errNoConfig) {
 		return true
 	}
 

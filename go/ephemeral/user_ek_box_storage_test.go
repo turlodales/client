@@ -22,12 +22,12 @@ func TestUserEKBoxStorage(t *testing.T) {
 	// Login hooks should have run
 	deviceEKStorage := tc.G.GetDeviceEKStorage()
 	deviceEKMaxGen, err := deviceEKStorage.MaxGeneration(mctx, false)
-	require.True(t, deviceEKMaxGen > 0)
+	require.Positive(t, deviceEKMaxGen)
 	require.NoError(t, err)
 
 	s := tc.G.GetUserEKBoxStorage()
 	userEKMaxGen, err := s.MaxGeneration(mctx, false)
-	require.True(t, userEKMaxGen > 0)
+	require.Positive(t, userEKMaxGen)
 	require.NoError(t, err)
 
 	userEKMetadata, err := publishNewUserEK(mctx, merkleRoot)
@@ -42,8 +42,8 @@ func TestUserEKBoxStorage(t *testing.T) {
 	// Test Get nonexistent
 	nonexistent, err := s.Get(mctx, userEKMetadata.Generation+1, nil)
 	require.Error(t, err)
-	require.IsType(t, EphemeralKeyError{}, err)
-	ekErr := err.(EphemeralKeyError)
+	var ekErr EphemeralKeyError
+	require.ErrorAs(t, err, &ekErr)
 	require.Equal(t, DefaultHumanErrMsg, ekErr.HumanError())
 	require.Equal(t, keybase1.UserEk{}, nonexistent)
 
@@ -55,7 +55,7 @@ func TestUserEKBoxStorage(t *testing.T) {
 	// Test MaxGeneration
 	maxGeneration, err = s.MaxGeneration(mctx, false)
 	require.NoError(t, err)
-	require.True(t, maxGeneration > 0)
+	require.Positive(t, maxGeneration)
 
 	//	NOTE: We don't expose Delete on the interface put on the GlobalContext
 	//	since they should never be called, only DeleteExpired should be used.
@@ -63,7 +63,7 @@ func TestUserEKBoxStorage(t *testing.T) {
 	rawUserEKBoxStorage := NewUserEKBoxStorage()
 	userEKs, err := rawUserEKBoxStorage.GetAll(mctx)
 	require.NoError(t, err)
-	require.EqualValues(t, maxGeneration, len(userEKs))
+	require.Len(t, userEKs, int(maxGeneration))
 
 	userEK, ok := userEKs[userEKMetadata.Generation]
 	require.True(t, ok)
@@ -78,13 +78,12 @@ func TestUserEKBoxStorage(t *testing.T) {
 	deviceEKStorage.ClearCache()
 	deviceEK, err := deviceEKStorage.Get(mctx, deviceEKMaxGen)
 	require.Error(t, err)
-	require.IsType(t, libkb.UnboxError{}, err)
+	require.ErrorAs(t, err, new(libkb.UnboxError))
 	require.Equal(t, keybase1.DeviceEk{}, deviceEK)
 
 	bad, err := s.Get(mctx, userEKMetadata.Generation, nil)
 	require.Error(t, err)
-	require.IsType(t, EphemeralKeyError{}, err)
-	ekErr = err.(EphemeralKeyError)
+	require.ErrorAs(t, err, &ekErr)
 	require.Equal(t, DefaultHumanErrMsg, ekErr.HumanError())
 	require.Equal(t, keybase1.UserEk{}, bad)
 
@@ -94,8 +93,7 @@ func TestUserEKBoxStorage(t *testing.T) {
 
 	userEK, err = rawUserEKBoxStorage.Get(mctx, userEKMetadata.Generation, nil)
 	require.Error(t, err)
-	require.IsType(t, EphemeralKeyError{}, err)
-	ekErr = err.(EphemeralKeyError)
+	require.ErrorAs(t, err, &ekErr)
 	require.Equal(t, DefaultHumanErrMsg, ekErr.HumanError())
 	require.Equal(t, keybase1.UserEk{}, userEK)
 
@@ -103,7 +101,7 @@ func TestUserEKBoxStorage(t *testing.T) {
 
 	maxGeneration, err = s.MaxGeneration(mctx, false)
 	require.NoError(t, err)
-	require.EqualValues(t, userEKMaxGen, maxGeneration)
+	require.Equal(t, userEKMaxGen, maxGeneration)
 
 	expired, err := s.DeleteExpired(mctx, merkleRoot)
 	expected := []keybase1.EkGeneration(nil)
@@ -114,8 +112,7 @@ func TestUserEKBoxStorage(t *testing.T) {
 	t.Logf("cache failures")
 	nonexistent, err = rawUserEKBoxStorage.Get(mctx, userEKMetadata.Generation+1, nil)
 	require.Error(t, err)
-	require.IsType(t, EphemeralKeyError{}, err)
-	ekErr = err.(EphemeralKeyError)
+	require.ErrorAs(t, err, &ekErr)
 	require.Equal(t, DefaultHumanErrMsg, ekErr.HumanError())
 	require.Equal(t, keybase1.UserEk{}, nonexistent)
 
@@ -185,7 +182,7 @@ func TestUserEKBoxStorageDeleteExpiredKeys(t *testing.T) {
 	// Test with an expired and a stale key
 	keyMap = keyExpiryMap{
 		0: keybase1.ToTime(now.Add(-(libkb.MaxEphemeralKeyStaleness + libkb.MinEphemeralKeyLifetime))),
-		1: keybase1.ToTime(now.Add(-(libkb.MinEphemeralKeyLifetime))),
+		1: keybase1.ToTime(now.Add(-libkb.MinEphemeralKeyLifetime)),
 	}
 	expired = s.getExpiredGenerations(mctx, keyMap, now)
 	expected = []keybase1.EkGeneration{0}
@@ -199,7 +196,7 @@ func TestUserEKBoxStorageDeleteExpiredKeys(t *testing.T) {
 	// Test multiple gaps, only the last key is valid though.
 	keyMap = make(keyExpiryMap)
 	numKeys := 5
-	for i := 0; i < numKeys; i++ {
+	for i := range numKeys {
 		keyMap[keybase1.EkGeneration((numKeys - i - 1))] = keybase1.ToTime(now.Add(-libkb.MaxEphemeralKeyStaleness * time.Duration(i)))
 	}
 	expired = s.getExpiredGenerations(mctx, keyMap, now)

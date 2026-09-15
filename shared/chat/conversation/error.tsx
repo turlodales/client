@@ -1,35 +1,23 @@
-import * as C from '@/constants'
 import * as Kb from '@/common-adapters'
-import * as Styles from '@/styles'
+import {useThreadMeta} from './thread-context'
 
 const ConversationError = () => {
-  const text = C.useChatContext(s => s.meta.snippet ?? '')
+  const styles = useStyles()
+  const text = useThreadMeta(m => m.snippet) ?? ''
   return (
-    <Kb.Box style={styles.container}>
+    <Kb.Box2 direction="vertical" fullWidth={true} padding="medium" gap="small">
       <Kb.Text type="Header">There was an error loading this conversation.</Kb.Text>
-      <Kb.Text style={styles.body} type="Body">
-        The error is:
-      </Kb.Text>
-      <Kb.Box style={styles.errorBox}>
+      <Kb.Text type="Body">The error is:</Kb.Text>
+      <Kb.Box2 direction="horizontal" fullWidth={true}>
         <Kb.CopyableText style={styles.errorText} value={text} />
-      </Kb.Box>
-    </Kb.Box>
+      </Kb.Box2>
+    </Kb.Box2>
   )
 }
 
-const styles = Styles.styleSheetCreate(
+const useStyles = Kb.Styles.createStyleHook(
   () =>
     ({
-      body: {marginTop: Styles.globalMargins.small},
-      container: {
-        ...Styles.globalStyles.flexBoxColumn,
-        padding: Styles.globalMargins.medium,
-        width: '100%',
-      },
-      errorBox: {
-        ...Styles.globalStyles.flexBoxRow,
-        marginTop: Styles.globalMargins.small,
-      },
       errorText: {flexGrow: 1},
     }) as const
 )

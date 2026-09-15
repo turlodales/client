@@ -64,12 +64,12 @@ func TestBlockDepadding(t *testing.T) {
 
 // Test padding of blocks results in blocks at least 2^8.
 func TestBlockPadMinimum(t *testing.T) {
-	for i := 0; i < 256; i++ {
+	for i := range 256 {
 		b := make([]byte, i)
 		err := RandRead(b)
 		require.NoError(t, err)
 		padded, err := PadBlock(b)
 		require.NoError(t, err)
-		require.Equal(t, 260, len(padded))
+		require.Len(t, padded, 260)
 	}
 }

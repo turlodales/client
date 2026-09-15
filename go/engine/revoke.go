@@ -76,7 +76,8 @@ func (e *RevokeEngine) SubConsumers() []libkb.UIConsumer {
 }
 
 func (e *RevokeEngine) getKIDsToRevoke(me *libkb.User) ([]keybase1.KID, error) {
-	if e.mode == RevokeDevice {
+	switch e.mode {
+	case RevokeDevice:
 		deviceKeys, err := me.GetComputedKeyFamily().GetAllActiveKeysForDevice(e.deviceID)
 		if err != nil {
 			return nil, err
@@ -85,7 +86,7 @@ func (e *RevokeEngine) getKIDsToRevoke(me *libkb.User) ([]keybase1.KID, error) {
 			return nil, fmt.Errorf("No active keys to revoke for device %s.", e.deviceID)
 		}
 		return deviceKeys, nil
-	} else if e.mode == RevokeKey {
+	case RevokeKey:
 		kid := e.kid
 		key, err := me.GetComputedKeyFamily().FindKeyWithKIDUnsafe(kid)
 		if err != nil {
@@ -100,9 +101,8 @@ func (e *RevokeEngine) getKIDsToRevoke(me *libkb.User) ([]keybase1.KID, error) {
 			}
 		}
 		return nil, fmt.Errorf("PGP key %s is not active", e.kid)
-	} else {
-		return nil, fmt.Errorf("Unknown revoke mode: %d", e.mode)
 	}
+	return nil, fmt.Errorf("Unknown revoke mode: %d", e.mode)
 }
 
 func (e *RevokeEngine) explicitOrImplicitDeviceID(me *libkb.User) keybase1.DeviceID {
@@ -158,7 +158,7 @@ func (e *RevokeEngine) run(m libkb.MetaContext) error {
 			}
 		}
 
-		if e.deviceID == currentDevice && !(e.forceSelf || e.forceLast) {
+		if e.deviceID == currentDevice && (!e.forceSelf && !e.forceLast) {
 			return libkb.RevokeCurrentDeviceError{}
 		}
 
@@ -373,7 +373,8 @@ func (e *RevokeEngine) getDeviceSecretKeys(m libkb.MetaContext, me *libkb.User) 
 
 func (e *RevokeEngine) makeRevokeSig(m libkb.MetaContext, me *libkb.User, sigKey libkb.GenericKey,
 	kidsToRevoke []keybase1.KID, deviceID keybase1.DeviceID,
-	merkleRoot *libkb.MerkleRoot) (libkb.JSONPayload, keybase1.Seqno, libkb.LinkID, error) {
+	merkleRoot *libkb.MerkleRoot,
+) (libkb.JSONPayload, keybase1.Seqno, libkb.LinkID, error) {
 	proof, err := me.RevokeKeysProof(m, sigKey, kidsToRevoke, deviceID, merkleRoot)
 	if err != nil {
 		return nil, 0, nil, err

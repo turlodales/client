@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"testing"
@@ -13,22 +14,23 @@ import (
 	"github.com/keybase/client/go/protocol/chat1"
 	"github.com/keybase/go-framed-msgpack-rpc/rpc"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/context"
 )
 
 type errorClient struct{}
 
-func (e errorClient) Call(ctx context.Context, method string, arg interface{},
-	res interface{}, timeout time.Duration) error {
+func (e errorClient) Call(_ context.Context, method string, _ any,
+	_ any, _ time.Duration,
+) error {
 	return fmt.Errorf("errorClient: Call %s", method)
 }
 
-func (e errorClient) CallCompressed(ctx context.Context, method string, arg interface{},
-	res interface{}, ctype rpc.CompressionType, timeout time.Duration) error {
+func (e errorClient) CallCompressed(_ context.Context, method string, _ any,
+	_ any, _ rpc.CompressionType, _ time.Duration,
+) error {
 	return fmt.Errorf("errorClient: Call %s", method)
 }
 
-func (e errorClient) Notify(ctx context.Context, method string, arg interface{}, timeout time.Duration) error {
+func (e errorClient) Notify(_ context.Context, method string, _ any, _ time.Duration) error {
 	return fmt.Errorf("errorClient: Notify %s", method)
 }
 
@@ -88,7 +90,7 @@ func TestFetchRetry(t *testing.T) {
 	world.Fc.Advance(time.Hour)
 	select {
 	case updates := <-list.threadsStale:
-		require.Equal(t, 1, len(updates))
+		require.Len(t, updates, 1)
 		require.Equal(t, chat1.StaleUpdateType_NEWACTIVITY, updates[0].UpdateType)
 	case <-time.After(20 * time.Second):
 		require.Fail(t, "timeout on inbox stale")
@@ -106,7 +108,7 @@ func TestFetchRetry(t *testing.T) {
 	tc.ChatG.FetchRetrier.Force(ctx)
 	select {
 	case cids := <-list.threadsStale:
-		require.Equal(t, 1, len(cids))
+		require.Len(t, cids, 1)
 	case <-time.After(20 * time.Second):
 		require.Fail(t, "timeout on inbox stale")
 	}
@@ -123,5 +125,4 @@ func TestFetchRetry(t *testing.T) {
 	case <-time.After(20 * time.Second):
 		require.Fail(t, "no inbox full stale received")
 	}
-
 }

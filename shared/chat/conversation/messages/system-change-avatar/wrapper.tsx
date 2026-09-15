@@ -1,21 +1,6 @@
-import * as C from '@/constants'
-import * as React from 'react'
-import {WrapperMessage, useCommon, type Props} from '../wrapper/wrapper'
-import type SystemChangeAvatarType from '.'
+import {makeMessageWrapper} from '../wrapper/wrapper'
+import SystemChangeAvatar from '.'
 
-const SystemChangeAvatar = React.memo(function SystemChangeAvatar(p: Props) {
-  const {ordinal} = p
-  const common = useCommon(ordinal)
-  const message = C.useChatContext(s => s.messageMap.get(ordinal))
-
-  if (message?.type !== 'systemChangeAvatar') return null
-
-  const {default: SystemChangeAvatar} = require('.') as {default: typeof SystemChangeAvatarType}
-  return (
-    <WrapperMessage {...p} {...common}>
-      <SystemChangeAvatar message={message} />
-    </WrapperMessage>
-  )
+export default makeMessageWrapper('systemChangeAvatar', message => {
+  return <SystemChangeAvatar message={message} />
 })
-
-export default SystemChangeAvatar

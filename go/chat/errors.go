@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -14,12 +15,13 @@ import (
 	"github.com/keybase/client/go/protocol/keybase1"
 	"github.com/keybase/client/go/teams"
 	"github.com/keybase/go-framed-msgpack-rpc/rpc"
-	"golang.org/x/net/context"
 )
 
-var ErrChatServerTimeout = errors.New("timeout calling chat server")
-var ErrDuplicateConnection = errors.New("error calling chat server")
-var ErrKeyServerTimeout = errors.New("timeout calling into key server")
+var (
+	ErrChatServerTimeout   = errors.New("timeout calling chat server")
+	ErrDuplicateConnection = errors.New("error calling chat server")
+	ErrKeyServerTimeout    = errors.New("timeout calling into key server")
+)
 
 func NewPermanentUnboxingError(inner error) types.UnboxingError {
 	return PermanentUnboxingError{inner}
@@ -209,7 +211,8 @@ func (e PublicTeamEphemeralKeyError) Error() string {
 type NotAuthenticatedForThisDeviceError struct{ inner ephemeral.EphemeralKeyError }
 
 func NewNotAuthenticatedForThisDeviceError(mctx libkb.MetaContext, memberCtime *keybase1.Time,
-	contentCtime gregor1.Time) NotAuthenticatedForThisDeviceError {
+	contentCtime gregor1.Time,
+) NotAuthenticatedForThisDeviceError {
 	inner := ephemeral.NewNotAuthenticatedForThisDeviceError(mctx, memberCtime, contentCtime)
 	return NotAuthenticatedForThisDeviceError{inner: inner}
 }
@@ -263,7 +266,7 @@ func (e chatThreadConsistencyErrorImpl) Code() ConsistencyErrorCode {
 	return e.code
 }
 
-func NewChatThreadConsistencyError(code ConsistencyErrorCode, msg string, formatArgs ...interface{}) ChatThreadConsistencyError {
+func NewChatThreadConsistencyError(code ConsistencyErrorCode, msg string, formatArgs ...any) ChatThreadConsistencyError {
 	return &chatThreadConsistencyErrorImpl{
 		code: code,
 		msg:  fmt.Sprintf(msg, formatArgs...),
@@ -321,6 +324,11 @@ type BoxingCryptKeysError struct {
 // so that we know which error to show to the human being using keybase (rather than
 // for our own internal uses).
 func (e BoxingCryptKeysError) Cause() error {
+	return e.Err
+}
+
+// Unwrap makes it work with errors.Is and errors.As.
+func (e BoxingCryptKeysError) Unwrap() error {
 	return e.Err
 }
 
@@ -391,7 +399,8 @@ func NewMessageBoxedVersionError(version chat1.MessageBoxedVersion) VersionError
 }
 
 func NewHeaderVersionError(version chat1.HeaderPlaintextVersion,
-	defaultHeader chat1.HeaderPlaintextUnsupported) VersionError {
+	defaultHeader chat1.HeaderPlaintextUnsupported,
+) VersionError {
 	return VersionError{
 		Kind:     string(chat1.VersionErrorHeader),
 		Version:  int(version),
@@ -425,27 +434,27 @@ func NewHeaderMismatchError(field string) HeaderMismatchError {
 
 // =============================================================================
 
-type OfflineError struct {
-}
+type OfflineError struct{}
 
 func (e OfflineError) Error() string {
 	return "operation failed: no connection to chat server"
 }
 
-type OfflineClient struct {
-}
+type OfflineClient struct{}
 
-func (e OfflineClient) Call(ctx context.Context, method string, arg interface{},
-	res interface{}, timeout time.Duration) error {
+func (e OfflineClient) Call(ctx context.Context, method string, arg any,
+	res any, timeout time.Duration,
+) error {
 	return OfflineError{}
 }
 
-func (e OfflineClient) CallCompressed(ctx context.Context, method string, arg interface{},
-	res interface{}, ctype rpc.CompressionType, timeout time.Duration) error {
+func (e OfflineClient) CallCompressed(ctx context.Context, method string, arg any,
+	res any, ctype rpc.CompressionType, timeout time.Duration,
+) error {
 	return OfflineError{}
 }
 
-func (e OfflineClient) Notify(ctx context.Context, method string, arg interface{}, timeout time.Duration) error {
+func (e OfflineClient) Notify(ctx context.Context, method string, arg any, timeout time.Duration) error {
 	return OfflineError{}
 }
 
@@ -510,8 +519,7 @@ func (e AttachmentUploadError) IsImmediateFail() (chat1.OutboxErrorType, bool) {
 
 // =============================================================================
 
-type SenderTestImmediateFailError struct {
-}
+type SenderTestImmediateFailError struct{}
 
 func (e SenderTestImmediateFailError) Error() string {
 	return "sender test immediate fail error"
@@ -564,12 +572,10 @@ func IsOfflineError(err error) OfflineErrorKind {
 		return IsOfflineError(terr.Inner())
 	}
 	// Check error itself
-	switch err {
-	case context.DeadlineExceeded:
-		fallthrough
-	case ErrChatServerTimeout:
+	switch {
+	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, ErrChatServerTimeout):
 		return OfflineErrorKindOfflineReconnect
-	case ErrDuplicateConnection:
+	case errors.Is(err, ErrDuplicateConnection):
 		return OfflineErrorKindOfflineBasic
 	}
 

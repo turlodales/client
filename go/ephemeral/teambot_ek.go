@@ -69,7 +69,8 @@ func postNewTeambotEK(mctx libkb.MetaContext, teamID keybase1.TeamID, sig, box s
 
 func prepareNewTeambotEK(mctx libkb.MetaContext, team *teams.Team, botUID keybase1.UID,
 	seed TeambotEKSeed, metadata *keybase1.TeambotEkMetadata,
-	merkleRoot libkb.MerkleRoot) (sig string, box *keybase1.TeambotEkBoxed, err error) {
+	merkleRoot libkb.MerkleRoot,
+) (sig string, box *keybase1.TeambotEkBoxed, err error) {
 	defer mctx.Trace("prepareNewTeambotEK", &err)()
 
 	statement, _, _, err := fetchUserEKStatement(mctx, botUID)
@@ -123,7 +124,7 @@ func fetchLatestTeambotEK(mctx libkb.MetaContext, teamID keybase1.TeamID) (metad
 
 	var parsedResponse teambot.TeambotKeyResponse
 	gotResult := false
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		apiArg := libkb.APIArg{
 			Endpoint:    "teambot/key",
 			SessionType: libkb.APISessionTypeREQUIRED,
@@ -171,7 +172,8 @@ func extractTeambotEKMetadataFromSig(sig string) (*kbcrypto.NaclSigningKeyPublic
 // Verify that the blob is validly signed, and that the signing key is the
 // given team's latest PTK, then parse its contents.
 func verifyTeambotSigWithLatestPTK(mctx libkb.MetaContext, teamID keybase1.TeamID, sig string) (
-	metadata *keybase1.TeambotEkMetadata, wrongKID bool, err error) {
+	metadata *keybase1.TeambotEkMetadata, wrongKID bool, err error,
+) {
 	defer mctx.Trace("verifyTeambotSigWithLatestPTK", &err)()
 
 	signerKey, metadata, err := extractTeambotEKMetadataFromSig(sig)
@@ -219,7 +221,8 @@ func verifyTeambotSigWithLatestPTK(mctx libkb.MetaContext, teamID keybase1.TeamI
 }
 
 func (k *TeambotEphemeralKeyer) Unbox(mctx libkb.MetaContext, boxed keybase1.TeamEphemeralKeyBoxed,
-	contentCtime *gregor1.Time) (ek keybase1.TeamEphemeralKey, err error) {
+	contentCtime *gregor1.Time,
+) (ek keybase1.TeamEphemeralKey, err error) {
 	defer mctx.Trace(fmt.Sprintf("TeambotEphemeralKeyer#Unbox: teambotEKGeneration: %v", boxed.Generation()), &err)()
 
 	typ, err := boxed.KeyType()
@@ -271,13 +274,14 @@ func (k *TeambotEphemeralKeyer) Unbox(mctx libkb.MetaContext, boxed keybase1.Tea
 }
 
 func (k *TeambotEphemeralKeyer) Fetch(mctx libkb.MetaContext, teamID keybase1.TeamID, generation keybase1.EkGeneration,
-	contentCtime *gregor1.Time) (teambotEK keybase1.TeamEphemeralKeyBoxed, err error) {
+	contentCtime *gregor1.Time,
+) (teambotEK keybase1.TeamEphemeralKeyBoxed, err error) {
 	apiArg := libkb.APIArg{
 		Endpoint:    "teambot/box",
 		SessionType: libkb.APISessionTypeREQUIRED,
 		Args: libkb.HTTPArgs{
 			"team_id":      libkb.S{Val: string(teamID)},
-			"generation":   libkb.U{Val: uint64(generation)},
+			"generation":   libkb.U{Val: uint64(generation)}, //nolint:gosec // G115: Generation is positive sequential counter, safe to convert
 			"is_ephemeral": libkb.B{Val: true},
 			"application":  libkb.I{Val: int(keybase1.TeamApplication_CHAT)},
 		},

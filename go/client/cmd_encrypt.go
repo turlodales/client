@@ -4,11 +4,10 @@
 package client
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
-
-	"golang.org/x/net/context"
 
 	"github.com/keybase/cli"
 	"github.com/keybase/client/go/libcmdline"
@@ -66,7 +65,8 @@ func NewCmdEncrypt(cl *libcmdline.CommandLine, g *libkb.GlobalContext) cli.Comma
 		cli.BoolFlag{
 			Name: "no-self-encrypt",
 			Usage: `Don't encrypt for yourself. This flag is ignored if encrypting
-	for teams, where we don't encrypt for self by default.`},
+	for teams, where we don't encrypt for self by default.`,
+		},
 		cli.BoolFlag{
 			Name: "include-device-keys",
 			Usage: `Use the device keys of all the user recipients and members of
@@ -83,7 +83,8 @@ func NewCmdEncrypt(cl *libcmdline.CommandLine, g *libkb.GlobalContext) cli.Comma
 		cli.BoolFlag{
 			Name: "include-self-encrypt",
 			Usage: `Do encrypt for yourself. This flag is accepted if encrypting for
-	teams, where we don't encrypt for self by default.`},
+	teams, where we don't encrypt for self by default.`,
+		},
 		cli.StringFlag{
 			Name:  "auth-type",
 			Value: "signed",
@@ -238,7 +239,7 @@ func (c *CmdEncrypt) ParseArgv(ctx *cli.Context) error {
 	}
 	c.opts.UseKBFSKeysOnlyForTesting = ctx.Bool("use-kbfs-keys-only")
 
-	if !(c.opts.UseEntityKeys || c.opts.UseDeviceKeys || c.opts.UsePaperKeys) {
+	if !c.opts.UseEntityKeys && !c.opts.UseDeviceKeys && !c.opts.UsePaperKeys {
 		if forRecipients {
 			// legal arg combos if not encrypting for team: any subset (including empty set) of at most 2 of (--no-device-keys, --no-paper-keys or --no-entity-keys)
 			return errors.New("please remove at least one of --no-device-keys, --no-paper-keys or --no-entity-keys")

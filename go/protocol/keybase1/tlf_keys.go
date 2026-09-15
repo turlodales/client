@@ -1,13 +1,14 @@
-// Auto-generated to Go types and interfaces using avdl-compiler v1.4.10 (https://github.com/keybase/node-avdl-compiler)
+// Code generated to Go types and interfaces using avdl-compiler v1.4.10 (https://github.com/keybase/node-avdl-compiler). DO NOT EDIT.
 //   Input file: avdl/keybase1/tlf_keys.avdl
 
 package keybase1
 
 import (
+	"context"
 	"fmt"
-	"github.com/keybase/go-framed-msgpack-rpc/rpc"
-	context "golang.org/x/net/context"
 	"time"
+
+	"github.com/keybase/go-framed-msgpack-rpc/rpc"
 )
 
 type TLFIdentifyBehavior int
@@ -71,11 +72,11 @@ var TLFIdentifyBehaviorRevMap = map[TLFIdentifyBehavior]string{
 	15: "FS_GUI",
 }
 
-func (e TLFIdentifyBehavior) String() string {
-	if v, ok := TLFIdentifyBehaviorRevMap[e]; ok {
+func (o TLFIdentifyBehavior) String() string {
+	if v, ok := TLFIdentifyBehaviorRevMap[o]; ok {
 		return v
 	}
-	return fmt.Sprintf("%v", int(e))
+	return fmt.Sprintf("%v", int(o))
 }
 
 type CanonicalTlfName string
@@ -128,7 +129,7 @@ func (o TLFIdentifyFailure) DeepCopy() TLFIdentifyFailure {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Breaks),
 	}
@@ -204,11 +205,11 @@ func TlfKeysProtocol(i TlfKeysInterface) rpc.Protocol {
 		Name: "keybase.1.tlfKeys",
 		Methods: map[string]rpc.ServeHandlerDescription{
 			"getTLFCryptKeys": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]GetTLFCryptKeysArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]GetTLFCryptKeysArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]GetTLFCryptKeysArg)(nil), args)
@@ -219,11 +220,11 @@ func TlfKeysProtocol(i TlfKeysInterface) rpc.Protocol {
 				},
 			},
 			"getPublicCanonicalTLFNameAndID": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]GetPublicCanonicalTLFNameAndIDArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]GetPublicCanonicalTLFNameAndIDArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]GetPublicCanonicalTLFNameAndIDArg)(nil), args)
@@ -245,7 +246,7 @@ type TlfKeysClient struct {
 // TLF ID should not be cached or stored persistently.
 func (c TlfKeysClient) GetTLFCryptKeys(ctx context.Context, query TLFQuery) (res GetTLFCryptKeysRes, err error) {
 	__arg := GetTLFCryptKeysArg{Query: query}
-	err = c.Cli.Call(ctx, "keybase.1.tlfKeys.getTLFCryptKeys", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "keybase.1.tlfKeys.getTLFCryptKeys", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
@@ -253,6 +254,6 @@ func (c TlfKeysClient) GetTLFCryptKeys(ctx context.Context, query TLFQuery) (res
 // TLF ID should not be cached or stored persistently.
 func (c TlfKeysClient) GetPublicCanonicalTLFNameAndID(ctx context.Context, query TLFQuery) (res CanonicalTLFNameAndIDWithBreaks, err error) {
 	__arg := GetPublicCanonicalTLFNameAndIDArg{Query: query}
-	err = c.Cli.Call(ctx, "keybase.1.tlfKeys.getPublicCanonicalTLFNameAndID", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "keybase.1.tlfKeys.getPublicCanonicalTLFNameAndID", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }

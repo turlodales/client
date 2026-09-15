@@ -58,8 +58,9 @@ type joinLeaveGrouper struct {
 
 var _ msgGrouper = (*joinLeaveGrouper)(nil)
 
-func newJoinLeaveGrouper(g *globals.Context, uid gregor1.UID, convID chat1.ConversationID,
-	dataSource types.InboxSourceDataSourceTyp) *joinLeaveGrouper {
+func newJoinLeaveGrouper(_ *globals.Context, uid gregor1.UID, _ chat1.ConversationID,
+	_ types.InboxSourceDataSourceTyp,
+) *joinLeaveGrouper {
 	return &joinLeaveGrouper{
 		uid: uid,
 	}
@@ -70,7 +71,7 @@ func (gr *joinLeaveGrouper) matches(ctx context.Context, msg chat1.MessageUnboxe
 		return false
 	}
 	body := msg.Valid().MessageBody
-	if !(body.IsType(chat1.MessageType_JOIN) || body.IsType(chat1.MessageType_LEAVE)) {
+	if !body.IsType(chat1.MessageType_JOIN) && !body.IsType(chat1.MessageType_LEAVE) {
 		return false
 	}
 	for _, g := range grouped {
@@ -113,7 +114,8 @@ type bulkAddGrouper struct {
 var _ msgGrouper = (*bulkAddGrouper)(nil)
 
 func newBulkAddGrouper(g *globals.Context, uid gregor1.UID, convID chat1.ConversationID,
-	dataSource types.InboxSourceDataSourceTyp) *bulkAddGrouper {
+	dataSource types.InboxSourceDataSourceTyp,
+) *bulkAddGrouper {
 	return &bulkAddGrouper{
 		Contextified: globals.NewContextified(g),
 		uid:          uid,
@@ -190,7 +192,8 @@ type channelGrouper struct {
 var _ msgGrouper = (*channelGrouper)(nil)
 
 func newChannelGrouper(g *globals.Context, uid gregor1.UID, convID chat1.ConversationID,
-	dataSource types.InboxSourceDataSourceTyp) *channelGrouper {
+	dataSource types.InboxSourceDataSourceTyp,
+) *channelGrouper {
 	return &channelGrouper{
 		uid: uid,
 	}
@@ -243,7 +246,8 @@ type addedToTeamGrouper struct {
 var _ msgGrouper = (*addedToTeamGrouper)(nil)
 
 func newAddedToTeamGrouper(g *globals.Context, uid gregor1.UID, convID chat1.ConversationID,
-	dataSource types.InboxSourceDataSourceTyp) *addedToTeamGrouper {
+	dataSource types.InboxSourceDataSourceTyp,
+) *addedToTeamGrouper {
 	return &addedToTeamGrouper{
 		Contextified: globals.NewContextified(g),
 		uid:          uid,
@@ -251,7 +255,7 @@ func newAddedToTeamGrouper(g *globals.Context, uid gregor1.UID, convID chat1.Con
 }
 
 func (gr *addedToTeamGrouper) matches(ctx context.Context, msg chat1.MessageUnboxed, grouped []chat1.MessageUnboxed) bool {
-	if !(msg.IsValid() && msg.Valid().ClientHeader.Sender.Eq(gr.uid)) {
+	if !msg.IsValid() || !msg.Valid().ClientHeader.Sender.Eq(gr.uid) {
 		return false
 	}
 	if len(grouped) > 0 && !grouped[0].SenderEq(msg) {
@@ -263,7 +267,7 @@ func (gr *addedToTeamGrouper) matches(ctx context.Context, msg chat1.MessageUnbo
 	}
 	sysBod := msg.Valid().MessageBody.System()
 	typ, err := sysBod.SystemType()
-	if !(err == nil && typ == chat1.MessageSystemType_ADDEDTOTEAM) {
+	if err != nil || typ != chat1.MessageSystemType_ADDEDTOTEAM {
 		return false
 	}
 	// We want to show a link to the bot settings
@@ -319,7 +323,8 @@ type errGrouper struct{}
 var _ msgGrouper = (*errGrouper)(nil)
 
 func newErrGrouper(*globals.Context, gregor1.UID, chat1.ConversationID,
-	types.InboxSourceDataSourceTyp) *errGrouper {
+	types.InboxSourceDataSourceTyp,
+) *errGrouper {
 	return &errGrouper{}
 }
 

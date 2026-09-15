@@ -6,6 +6,7 @@ package data
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"math"
 	"reflect"
@@ -19,11 +20,11 @@ import (
 	"github.com/keybase/client/go/logger"
 	"github.com/keybase/client/go/protocol/keybase1"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/context"
 )
 
 func setupFileDataTest(t *testing.T, maxBlockSize int64,
-	maxPtrsPerBlock int) (*FileData, BlockCache, DirtyBlockCache, *DirtyFile) {
+	maxPtrsPerBlock int,
+) (*FileData, BlockCache, DirtyBlockCache, *DirtyFile) {
 	// Make a fake file.
 	ptr := BlockPointer{
 		ID:         kbfsblock.FakeID(42),
@@ -42,7 +43,8 @@ func setupFileDataTest(t *testing.T, maxBlockSize int64,
 	cleanCache := NewBlockCacheStandard(1<<10, 1<<20)
 	dirtyBcache := SimpleDirtyBlockCacheStandard()
 	getter := func(ctx context.Context, _ libkey.KeyMetadata, ptr BlockPointer,
-		_ Path, _ BlockReqType) (*FileBlock, bool, error) {
+		_ Path, _ BlockReqType,
+	) (*FileBlock, bool, error) {
 		isDirty := true
 		block, err := dirtyBcache.Get(ctx, id, ptr, MasterBranch)
 		if err != nil {
@@ -67,7 +69,8 @@ func setupFileDataTest(t *testing.T, maxBlockSize int64,
 	log := logger.NewTestLogger(t)
 	fd := NewFileData(
 		file, chargedTo, bsplit, kmd, getter, cacher, log,
-		libkb.NewVDebugLog(log))
+		libkb.NewVDebugLog(log),
+	)
 	df := NewDirtyFile(file, dirtyBcache)
 	return fd, cleanCache, dirtyBcache, df
 }
@@ -87,7 +90,8 @@ type testFileDataHole struct {
 func testFileDataLevelFromData(t *testing.T, maxBlockSize Int64Offset,
 	maxPtrsPerBlock int, existingLevels int, fullDataLen Int64Offset,
 	holes []testFileDataHole, startWrite, endWrite,
-	holeShiftAfter Int64Offset, truncateExtend bool) testFileDataLevel {
+	holeShiftAfter Int64Offset, truncateExtend bool,
+) testFileDataLevel {
 	// First fill in the leaf level.
 	var prevChildren []testFileDataLevel
 	var off Int64Offset
@@ -145,15 +149,12 @@ func testFileDataLevelFromData(t *testing.T, maxBlockSize Int64Offset,
 
 		numAtLevel := int(math.Ceil(float64(len(prevChildren)) /
 			float64(maxPtrsPerBlock)))
-		for i := 0; i < numAtLevel; i++ {
+		for range numAtLevel {
 			// Split the previous children up (if any) into
 			// maxPtrsPerBlock chunks.
 			var children []testFileDataLevel
 			var off Int64Offset
-			newIndex := prevChildIndex + maxPtrsPerBlock
-			if newIndex > len(prevChildren) {
-				newIndex = len(prevChildren)
-			}
+			newIndex := min(prevChildIndex+maxPtrsPerBlock, len(prevChildren))
 			off = prevChildren[prevChildIndex].off
 			children = prevChildren[prevChildIndex:newIndex]
 			prevChildIndex = newIndex
@@ -185,7 +186,7 @@ func testFileDataLevelFromData(t *testing.T, maxBlockSize Int64Offset,
 	}
 
 	// Even in a shrink, the top block is always dirty.
-	currNode := &(prevChildren[0])
+	currNode := &prevChildren[0]
 	if endWrite < 0 {
 		currNode.dirty = true
 	}
@@ -198,7 +199,7 @@ func testFileDataLevelFromData(t *testing.T, maxBlockSize Int64Offset,
 		if len(currNode.children) == 0 {
 			break
 		}
-		currNode = &(currNode.children[0])
+		currNode = &currNode.children[0]
 	}
 
 	return prevChildren[0]
@@ -206,7 +207,8 @@ func testFileDataLevelFromData(t *testing.T, maxBlockSize Int64Offset,
 
 func (tfdl testFileDataLevel) check(t *testing.T, fd *FileData,
 	ptr BlockPointer, off Int64Offset, dirtyBcache DirtyBlockCache) (
-	dirtyPtrs map[BlockPointer]bool) {
+	dirtyPtrs map[BlockPointer]bool,
+) {
 	dirtyPtrs = make(map[BlockPointer]bool)
 	levelString := fmt.Sprintf("ptr=%s, off=%d", ptr, off)
 	t.Logf("Checking %s", levelString)
@@ -216,7 +218,8 @@ func (tfdl testFileDataLevel) check(t *testing.T, fd *FileData,
 		dirtyPtrs[ptr] = true
 		require.True(
 			t, dirtyBcache.IsDirty(fd.tree.file.Tlf, ptr, MasterBranch),
-			levelString)
+			levelString,
+		)
 	}
 
 	fblock, isDirty, err := fd.getter(nil, nil, ptr, Path{}, BlockRead)
@@ -227,7 +230,7 @@ func (tfdl testFileDataLevel) check(t *testing.T, fd *FileData,
 	// We expect this to be a leaf block.
 	if len(tfdl.children) == 0 {
 		require.False(t, fblock.IsInd, levelString)
-		require.Len(t, fblock.IPtrs, 0, levelString)
+		require.Empty(t, fblock.IPtrs, levelString)
 		require.Len(t, fblock.Contents, tfdl.size, levelString)
 		return dirtyPtrs
 	}
@@ -235,10 +238,11 @@ func (tfdl testFileDataLevel) check(t *testing.T, fd *FileData,
 	// Otherwise it's indirect, so check all the children.
 	require.True(t, fblock.IsInd, levelString)
 	require.Len(t, fblock.IPtrs, len(tfdl.children), levelString)
-	require.Len(t, fblock.Contents, 0, levelString)
+	require.Empty(t, fblock.Contents, levelString)
 	for i, iptr := range fblock.IPtrs {
 		childDirtyPtrs := tfdl.children[i].check(
-			t, fd, iptr.BlockPointer, iptr.Off, dirtyBcache)
+			t, fd, iptr.BlockPointer, iptr.Off, dirtyBcache,
+		)
 		for ptr := range childDirtyPtrs {
 			dirtyPtrs[ptr] = true
 		}
@@ -250,11 +254,11 @@ func testFileDataCheckWrite(t *testing.T, fd *FileData,
 	dirtyBcache DirtyBlockCache, df *DirtyFile, data []byte, off Int64Offset,
 	topBlock *FileBlock, oldDe DirEntry, expectedSize uint64,
 	expectedUnrefs []BlockInfo, expectedDirtiedBytes int64,
-	expectedBytesExtended int64, expectedTopLevel testFileDataLevel) {
+	expectedBytesExtended int64, expectedTopLevel testFileDataLevel,
+) {
 	// Do the write.
 	ctx := context.Background()
-	newDe, dirtyPtrs, unrefs, newlyDirtiedChildBytes, bytesExtended, err :=
-		fd.Write(ctx, data, off, topBlock, oldDe, df)
+	newDe, dirtyPtrs, unrefs, newlyDirtiedChildBytes, bytesExtended, err := fd.Write(ctx, data, off, topBlock, oldDe, df)
 	require.NoError(t, err)
 
 	// Check the basics.
@@ -265,27 +269,31 @@ func testFileDataCheckWrite(t *testing.T, fd *FileData,
 	// Go through each expected level and make sure we have the right
 	// set of dirty pointers and children.
 	expectedDirtyPtrs := expectedTopLevel.check(
-		t, fd, fd.rootBlockPointer(), 0, dirtyBcache)
+		t, fd, fd.rootBlockPointer(), 0, dirtyBcache,
+	)
 	dirtyPtrsMap := make(map[BlockPointer]bool)
 	for _, ptr := range dirtyPtrs {
 		dirtyPtrsMap[ptr] = true
 	}
 	require.True(t, reflect.DeepEqual(expectedDirtyPtrs, dirtyPtrsMap),
-		fmt.Sprintf("expected %v; got %v", expectedDirtyPtrs, dirtyPtrsMap))
+		"expected %v; got %v", expectedDirtyPtrs, dirtyPtrsMap)
 
 	// TODO: set the EncodedSize of the existing blocks to something
 	// non-zero so that we get some unrefs.
-	require.Len(t, unrefs, 0)
+	require.Empty(t, unrefs)
 }
 
 func testFileDataWriteExtendEmptyFile(t *testing.T, maxBlockSize Int64Offset,
-	maxPtrsPerBlock int, fullDataLen Int64Offset) {
+	maxPtrsPerBlock int, fullDataLen Int64Offset,
+) {
 	fd, cleanBcache, dirtyBcache, df := setupFileDataTest(
-		t, int64(maxBlockSize), maxPtrsPerBlock)
+		t, int64(maxBlockSize), maxPtrsPerBlock,
+	)
 	topBlock := NewFileBlock().(*FileBlock)
 	err := cleanBcache.Put(
 		fd.rootBlockPointer(), fd.tree.file.Tlf, topBlock, TransientEntry,
-		SkipCacheHash)
+		SkipCacheHash,
+	)
 	require.NoError(t, err)
 	de := DirEntry{}
 	data := make([]byte, fullDataLen)
@@ -294,11 +302,13 @@ func testFileDataWriteExtendEmptyFile(t *testing.T, maxBlockSize Int64Offset,
 	}
 	expectedTopLevel := testFileDataLevelFromData(
 		t, maxBlockSize, maxPtrsPerBlock, 0, fullDataLen, nil, 0,
-		fullDataLen, 0, false)
+		fullDataLen, 0, false,
+	)
 
 	testFileDataCheckWrite(
-		t, fd, dirtyBcache, df, data, 0, topBlock, de, uint64(fullDataLen),
-		nil, int64(fullDataLen), int64(fullDataLen), expectedTopLevel)
+		t, fd, dirtyBcache, df, data, 0, topBlock, de, uint64(fullDataLen), //nolint:gosec // G115: Test data with bounded values
+		nil, int64(fullDataLen), int64(fullDataLen), expectedTopLevel,
+	)
 
 	// Make sure we can read back the complete data.
 	gotData := make([]byte, fullDataLen)
@@ -318,13 +328,10 @@ func testFileDataWriteNewLevel(t *testing.T, levels float64) {
 	testFileDataWriteExtendEmptyFile(t, 2, 2, Int64Offset(halfCapacity))
 	// Fills whole leaf level.
 	testFileDataWriteExtendEmptyFile(t, 2, 2, Int64Offset(capacity))
-
 }
 
 func TestFileDataWriteNewLevel(t *testing.T) {
 	for _, level := range []float64{1, 2, 3, 10} {
-		// capture range variable.
-		level := level
 		t.Run(fmt.Sprintf("%dLevels", int(level)), func(t *testing.T) {
 			testFileDataWriteNewLevel(t, level)
 		})
@@ -333,7 +340,8 @@ func TestFileDataWriteNewLevel(t *testing.T) {
 
 func testFileDataLevelExistingBlocks(t *testing.T, fd *FileData,
 	maxBlockSize Int64Offset, maxPtrsPerBlock int, existingData []byte,
-	holes []testFileDataHole, cleanBcache BlockCache) (*FileBlock, int) {
+	holes []testFileDataHole, cleanBcache BlockCache,
+) (*FileBlock, int) {
 	// First fill in the leaf blocks.
 	var off Int64Offset
 	existingDataLen := Int64Offset(len(existingData))
@@ -381,14 +389,11 @@ func testFileDataLevelExistingBlocks(t *testing.T, fd *FileData,
 		var level []*FileBlock
 		numAtLevel := int(math.Ceil(float64(len(prevChildren)) /
 			float64(maxPtrsPerBlock)))
-		for i := 0; i < numAtLevel; i++ {
+		for range numAtLevel {
 			// Split the previous children up (if any) into maxPtrsPerBlock
 			// chunks.
 			var children []*FileBlock
-			newIndex := prevChildIndex + maxPtrsPerBlock
-			if newIndex > len(prevChildren) {
-				newIndex = len(prevChildren)
-			}
+			newIndex := min(prevChildIndex+maxPtrsPerBlock, len(prevChildren))
 			children = prevChildren[prevChildIndex:newIndex]
 			fblock := NewFileBlock().(*FileBlock)
 			fblock.IsInd = true
@@ -415,7 +420,8 @@ func testFileDataLevelExistingBlocks(t *testing.T, fd *FileData,
 					Off:       off,
 				})
 				err = cleanBcache.Put(
-					ptr, fd.tree.file.Tlf, child, TransientEntry, SkipCacheHash)
+					ptr, fd.tree.file.Tlf, child, TransientEntry, SkipCacheHash,
+				)
 				require.NoError(t, err)
 			}
 			prevChildIndex = newIndex
@@ -431,30 +437,35 @@ func testFileDataLevelExistingBlocks(t *testing.T, fd *FileData,
 
 	err := cleanBcache.Put(
 		fd.rootBlockPointer(), fd.tree.file.Tlf, prevChildren[0],
-		TransientEntry, SkipCacheHash)
+		TransientEntry, SkipCacheHash,
+	)
 	require.NoError(t, err)
 	return prevChildren[0], numLevels
 }
 
 func testFileDataWriteExtendExistingFile(t *testing.T, maxBlockSize Int64Offset,
-	maxPtrsPerBlock int, existingLen, fullDataLen Int64Offset) {
+	maxPtrsPerBlock int, existingLen, fullDataLen Int64Offset,
+) {
 	fd, cleanBcache, dirtyBcache, df := setupFileDataTest(
-		t, int64(maxBlockSize), maxPtrsPerBlock)
+		t, int64(maxBlockSize), maxPtrsPerBlock,
+	)
 	data := make([]byte, fullDataLen)
 	for i := 0; i < int(fullDataLen); i++ {
 		data[i] = byte(i)
 	}
 	topBlock, levels := testFileDataLevelExistingBlocks(
 		t, fd, maxBlockSize, maxPtrsPerBlock, data[:existingLen], nil,
-		cleanBcache)
+		cleanBcache,
+	)
 	de := DirEntry{
 		EntryInfo: EntryInfo{
-			Size: uint64(existingLen),
+			Size: uint64(existingLen), //nolint:gosec // G115: Test data with bounded values
 		},
 	}
 	expectedTopLevel := testFileDataLevelFromData(
 		t, maxBlockSize, maxPtrsPerBlock, levels, fullDataLen, nil, existingLen,
-		fullDataLen, 0, false)
+		fullDataLen, 0, false,
+	)
 
 	extendedBytes := fullDataLen - existingLen
 	// Round up to find out the number of dirty bytes.
@@ -471,8 +482,9 @@ func testFileDataWriteExtendExistingFile(t *testing.T, maxBlockSize Int64Offset,
 	}
 	testFileDataCheckWrite(
 		t, fd, dirtyBcache, df, data[existingLen:], existingLen,
-		topBlock, de, uint64(fullDataLen),
-		nil, int64(dirtiedBytes), int64(extendedBytes), expectedTopLevel)
+		topBlock, de, uint64(fullDataLen), //nolint:gosec // G115: Test data with bounded values
+		nil, int64(dirtiedBytes), int64(extendedBytes), expectedTopLevel,
+	)
 
 	// Make sure we can read back the complete data.
 	gotData := make([]byte, fullDataLen)
@@ -487,13 +499,12 @@ func testFileDataExtendExistingLevels(t *testing.T, levels float64) {
 	halfCapacity := capacity / 2
 	// Starts with one lower level and adds a level.
 	testFileDataWriteExtendExistingFile(
-		t, 2, 2, Int64Offset(halfCapacity), Int64Offset(capacity))
+		t, 2, 2, Int64Offset(halfCapacity), Int64Offset(capacity),
+	)
 }
 
 func TestFileDataExtendExistingLevels(t *testing.T) {
 	for _, level := range []float64{1, 2, 3, 10} {
-		// capture range variable.
-		level := level
 		t.Run(fmt.Sprintf("%dLevels", int(level)), func(t *testing.T) {
 			testFileDataExtendExistingLevels(t, level)
 		})
@@ -502,9 +513,11 @@ func TestFileDataExtendExistingLevels(t *testing.T) {
 
 func testFileDataOverwriteExistingFile(t *testing.T, maxBlockSize Int64Offset,
 	maxPtrsPerBlock int, fullDataLen Int64Offset, holes []testFileDataHole,
-	startWrite, endWrite Int64Offset, finalHoles []testFileDataHole) {
+	startWrite, endWrite Int64Offset, finalHoles []testFileDataHole,
+) {
 	fd, cleanBcache, dirtyBcache, df := setupFileDataTest(
-		t, int64(maxBlockSize), maxPtrsPerBlock)
+		t, int64(maxBlockSize), maxPtrsPerBlock,
+	)
 	data := make([]byte, fullDataLen)
 	for i := 0; i < int(fullDataLen); i++ {
 		data[i] = byte(i)
@@ -525,17 +538,19 @@ func testFileDataOverwriteExistingFile(t *testing.T, maxBlockSize Int64Offset,
 		}
 	}
 	topBlock, levels := testFileDataLevelExistingBlocks(
-		t, fd, maxBlockSize, maxPtrsPerBlock, data, holes, cleanBcache)
+		t, fd, maxBlockSize, maxPtrsPerBlock, data, holes, cleanBcache,
+	)
 	de := DirEntry{
 		EntryInfo: EntryInfo{
-			Size: uint64(fullDataLen),
+			Size: uint64(fullDataLen), //nolint:gosec // G115: Test data with bounded values
 		},
 	}
 
 	t.Logf("holeShiftAfter=%d", holeShiftAfter)
 	expectedTopLevel := testFileDataLevelFromData(
 		t, maxBlockSize, maxPtrsPerBlock, levels, fullDataLen, finalHoles,
-		effectiveStartWrite, endWrite, holeShiftAfter, false)
+		effectiveStartWrite, endWrite, holeShiftAfter, false,
+	)
 
 	// Round up to find out the number of dirty bytes.
 	writtenBytes := endWrite - startWrite
@@ -571,12 +586,17 @@ func testFileDataOverwriteExistingFile(t *testing.T, maxBlockSize Int64Offset,
 	newData := make([]byte, writtenBytes)
 	for i := startWrite; i < endWrite; i++ {
 		// The new data shifts each byte over by 1.
-		newData[i-startWrite] = byte(i + 1)
+		v := i + 1
+		if v < 0 || v > 255 {
+			t.Fatalf("test byte overflow: %d", v)
+		}
+		newData[i-startWrite] = byte(v)
 	}
 	testFileDataCheckWrite(
 		t, fd, dirtyBcache, df, newData, startWrite,
-		topBlock, de, uint64(fullDataLen),
-		nil, int64(dirtiedBytes), int64(extendedBytes), expectedTopLevel)
+		topBlock, de, uint64(fullDataLen), //nolint:gosec // G115: Test data with bounded values
+		nil, int64(dirtiedBytes), int64(extendedBytes), expectedTopLevel,
+	)
 
 	copy(data[startWrite:endWrite], newData)
 
@@ -607,8 +627,6 @@ func TestFileDataWriteHole(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		// capture range variable.
-		test := test
 		t.Run(test.name, func(t *testing.T) {
 			testFileDataOverwriteExistingFile(t, 2, 2, 10,
 				[]testFileDataHole{{5, 10}}, test.start, test.end, test.final)
@@ -618,16 +636,17 @@ func TestFileDataWriteHole(t *testing.T) {
 
 func testFileDataCheckTruncateExtend(t *testing.T, fd *FileData,
 	dirtyBcache DirtyBlockCache, df *DirtyFile, size uint64,
-	topBlock *FileBlock, oldDe DirEntry, expectedTopLevel testFileDataLevel) {
+	topBlock *FileBlock, oldDe DirEntry, expectedTopLevel testFileDataLevel,
+) {
 	// Do the extending truncate.
 	ctx := context.Background()
 
-	_, parentBlocks, _, _, _, _, err :=
-		fd.GetFileBlockAtOffset(ctx, topBlock, Int64Offset(size), BlockWrite)
+	_, parentBlocks, _, _, _, _, err := fd.GetFileBlockAtOffset(ctx, topBlock, Int64Offset(size), BlockWrite) //nolint:gosec // G115: Test data with bounded values
 	require.NoError(t, err)
 
 	newDe, dirtyPtrs, err := fd.TruncateExtend(
-		ctx, size, topBlock, parentBlocks, oldDe, df)
+		ctx, size, topBlock, parentBlocks, oldDe, df,
+	)
 	require.NoError(t, err)
 
 	// Check the basics.
@@ -636,20 +655,23 @@ func testFileDataCheckTruncateExtend(t *testing.T, fd *FileData,
 	// Go through each expected level and make sure we have the right
 	// set of dirty pointers and children.
 	expectedDirtyPtrs := expectedTopLevel.check(
-		t, fd, fd.rootBlockPointer(), 0, dirtyBcache)
+		t, fd, fd.rootBlockPointer(), 0, dirtyBcache,
+	)
 	dirtyPtrsMap := make(map[BlockPointer]bool)
 	for _, ptr := range dirtyPtrs {
 		dirtyPtrsMap[ptr] = true
 	}
 	require.True(t, reflect.DeepEqual(expectedDirtyPtrs, dirtyPtrsMap),
-		fmt.Sprintf("expected %v; got %v", expectedDirtyPtrs, dirtyPtrsMap))
+		"expected %v; got %v", expectedDirtyPtrs, dirtyPtrsMap)
 }
 
 func testFileDataTruncateExtendFile(t *testing.T, maxBlockSize Int64Offset,
 	maxPtrsPerBlock int, currDataLen Int64Offset, newSize uint64,
-	holes []testFileDataHole) {
+	holes []testFileDataHole,
+) {
 	fd, cleanBcache, dirtyBcache, df := setupFileDataTest(
-		t, int64(maxBlockSize), maxPtrsPerBlock)
+		t, int64(maxBlockSize), maxPtrsPerBlock,
+	)
 	data := make([]byte, currDataLen)
 	for i := 0; i < int(currDataLen); i++ {
 		data[i] = byte(i)
@@ -660,29 +682,32 @@ func testFileDataTruncateExtendFile(t *testing.T, maxBlockSize Int64Offset,
 		}
 	}
 	topBlock, levels := testFileDataLevelExistingBlocks(
-		t, fd, maxBlockSize, maxPtrsPerBlock, data, holes, cleanBcache)
+		t, fd, maxBlockSize, maxPtrsPerBlock, data, holes, cleanBcache,
+	)
 	de := DirEntry{
 		EntryInfo: EntryInfo{
-			Size: uint64(currDataLen),
+			Size: uint64(currDataLen), //nolint:gosec // G115: Test data with bounded values
 		},
 	}
 
 	expectedTopLevel := testFileDataLevelFromData(
 		t, maxBlockSize, maxPtrsPerBlock, levels, currDataLen,
-		append(holes, testFileDataHole{currDataLen, Int64Offset(newSize)}),
-		currDataLen, Int64Offset(newSize), 0, true)
+		append(holes, testFileDataHole{currDataLen, Int64Offset(newSize)}), //nolint:gosec // G115: Test data with bounded values
+		currDataLen, Int64Offset(newSize), 0, true,
+	) //nolint:gosec // G115: Test data with bounded values
 
 	testFileDataCheckTruncateExtend(
-		t, fd, dirtyBcache, df, newSize, topBlock, de, expectedTopLevel)
+		t, fd, dirtyBcache, df, newSize, topBlock, de, expectedTopLevel,
+	)
 
-	newZeroes := make([]byte, Int64Offset(newSize)-currDataLen)
+	newZeroes := make([]byte, Int64Offset(newSize)-currDataLen) //nolint:gosec // G115: Test data with bounded values
 	data = append(data, newZeroes...)
 
 	// Make sure we can read back the complete data.
 	gotData := make([]byte, newSize)
 	nRead, err := fd.Read(context.Background(), gotData, 0)
 	require.NoError(t, err)
-	require.Equal(t, nRead, int64(newSize))
+	require.Equal(t, nRead, int64(newSize)) //nolint:gosec // G115: Test data with bounded values
 	require.True(t, bytes.Equal(data, gotData))
 }
 
@@ -699,11 +724,10 @@ func TestFileDataTruncateExtendLevel(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		// capture range variable.
-		test := test
 		t.Run(test.name, func(t *testing.T) {
 			testFileDataTruncateExtendFile(
-				t, 2, 2, test.currLen, test.newSize, nil)
+				t, 2, 2, test.currLen, test.newSize, nil,
+			)
 		})
 	}
 }
@@ -711,12 +735,14 @@ func TestFileDataTruncateExtendLevel(t *testing.T) {
 func testFileDataCheckTruncateShrink(t *testing.T, fd *FileData,
 	dirtyBcache DirtyBlockCache, size uint64,
 	topBlock *FileBlock, oldDe DirEntry, expectedUnrefs []BlockInfo,
-	expectedDirtiedBytes int64, expectedTopLevel testFileDataLevel) {
+	expectedDirtiedBytes int64, expectedTopLevel testFileDataLevel,
+) {
 	// Do the extending truncate.
 	ctx := context.Background()
 
 	newDe, dirtyPtrs, unrefs, newlyDirtiedChildBytes, err := fd.TruncateShrink(
-		ctx, size, topBlock, oldDe)
+		ctx, size, topBlock, oldDe,
+	)
 	require.NoError(t, err)
 
 	// Check the basics.
@@ -726,51 +752,57 @@ func testFileDataCheckTruncateShrink(t *testing.T, fd *FileData,
 	// Go through each expected level and make sure we have the right
 	// set of dirty pointers and children.
 	expectedDirtyPtrs := expectedTopLevel.check(
-		t, fd, fd.rootBlockPointer(), 0, dirtyBcache)
+		t, fd, fd.rootBlockPointer(), 0, dirtyBcache,
+	)
 	dirtyPtrsMap := make(map[BlockPointer]bool)
 	for _, ptr := range dirtyPtrs {
 		dirtyPtrsMap[ptr] = true
 	}
 	require.True(t, reflect.DeepEqual(expectedDirtyPtrs, dirtyPtrsMap),
-		fmt.Sprintf("expected %v; got %v", expectedDirtyPtrs, dirtyPtrsMap))
+		"expected %v; got %v", expectedDirtyPtrs, dirtyPtrsMap)
 
 	// TODO: set the EncodedSize of the existing blocks to something
 	// non-zero so that we get some unrefs.
-	require.Len(t, unrefs, 0)
+	require.Empty(t, unrefs)
 }
 
 func testFileDataShrinkExistingFile(t *testing.T, maxBlockSize Int64Offset,
-	maxPtrsPerBlock int, existingLen int64, newSize uint64) {
+	maxPtrsPerBlock int, existingLen int64, newSize uint64,
+) {
 	fd, cleanBcache, dirtyBcache, _ := setupFileDataTest(
-		t, int64(maxBlockSize), maxPtrsPerBlock)
+		t, int64(maxBlockSize), maxPtrsPerBlock,
+	)
 	data := make([]byte, existingLen)
 	for i := 0; i < int(existingLen); i++ {
 		data[i] = byte(i)
 	}
 	topBlock, levels := testFileDataLevelExistingBlocks(
-		t, fd, maxBlockSize, maxPtrsPerBlock, data, nil, cleanBcache)
+		t, fd, maxBlockSize, maxPtrsPerBlock, data, nil, cleanBcache,
+	)
 	de := DirEntry{
 		EntryInfo: EntryInfo{
-			Size: uint64(existingLen),
+			Size: uint64(existingLen), //nolint:gosec // G115: Test data with bounded values
 		},
 	}
 	expectedTopLevel := testFileDataLevelFromData(
-		t, maxBlockSize, maxPtrsPerBlock, levels, Int64Offset(newSize), nil,
-		Int64Offset(newSize),
-		Int64Offset(int64(newSize)-existingLen), /*negative*/
-		0, false)
+		t, maxBlockSize, maxPtrsPerBlock, levels, Int64Offset(newSize), nil, //nolint:gosec // G115: Test data with bounded values
+		Int64Offset(newSize),                    //nolint:gosec // G115: Test data with bounded values
+		Int64Offset(int64(newSize)-existingLen), /*negative*/ //nolint:gosec // G115: Test data with bounded values
+		0, false,
+	)
 
 	// Round up to find out the number of dirty bytes.
-	dirtiedBytes := int64(newSize) % int64(maxBlockSize)
+	dirtiedBytes := int64(newSize) % int64(maxBlockSize) //nolint:gosec // G115: Test data with bounded values
 	testFileDataCheckTruncateShrink(
 		t, fd, dirtyBcache, newSize, topBlock, de, nil, dirtiedBytes,
-		expectedTopLevel)
+		expectedTopLevel,
+	)
 
 	// Make sure we can read back the complete data.
 	gotData := make([]byte, newSize)
 	nRead, err := fd.Read(context.Background(), gotData, 0)
 	require.NoError(t, err)
-	require.Equal(t, nRead, int64(newSize))
+	require.Equal(t, nRead, int64(newSize)) //nolint:gosec // G115: Test data with bounded values
 	require.True(t, bytes.Equal(data[:newSize], gotData))
 }
 
@@ -788,8 +820,6 @@ func TestFileDataTruncateShrink(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		// capture range variable.
-		test := test
 		t.Run(test.name, func(t *testing.T) {
 			testFileDataShrinkExistingFile(t, 2, 2, test.currLen, test.newSize)
 		})
@@ -798,21 +828,24 @@ func TestFileDataTruncateShrink(t *testing.T) {
 
 func testFileDataWriteExtendExistingFileWithGap(t *testing.T,
 	maxBlockSize Int64Offset, maxPtrsPerBlock int, existingLen,
-	fullDataLen, startWrite Int64Offset, finalHoles []testFileDataHole) {
+	fullDataLen, startWrite Int64Offset, finalHoles []testFileDataHole,
+) {
 	fd, cleanBcache, dirtyBcache, df := setupFileDataTest(
-		t, int64(maxBlockSize), maxPtrsPerBlock)
+		t, int64(maxBlockSize), maxPtrsPerBlock,
+	)
 	data := make([]byte, fullDataLen)
-	for i := Int64Offset(0); i < fullDataLen; i++ {
+	for i := range fullDataLen {
 		if i < existingLen || i >= startWrite {
 			data[i] = byte(i)
 		}
 	}
 	topBlock, levels := testFileDataLevelExistingBlocks(
 		t, fd, maxBlockSize, maxPtrsPerBlock, data[:existingLen], nil,
-		cleanBcache)
+		cleanBcache,
+	)
 	de := DirEntry{
 		EntryInfo: EntryInfo{
-			Size: uint64(existingLen),
+			Size: uint64(existingLen), //nolint:gosec // G115: Test data with bounded values
 		},
 	}
 	// The write starts at `existingLen`, instead of `startWrite`,
@@ -820,7 +853,8 @@ func testFileDataWriteExtendExistingFileWithGap(t *testing.T,
 	// the block to the left of the gap.
 	expectedTopLevel := testFileDataLevelFromData(
 		t, maxBlockSize, maxPtrsPerBlock, levels, fullDataLen,
-		finalHoles, existingLen, fullDataLen, 0, false)
+		finalHoles, existingLen, fullDataLen, 0, false,
+	)
 
 	extendedBytes := fullDataLen - existingLen
 	// Round up to find out the number of dirty bytes.
@@ -841,8 +875,9 @@ func testFileDataWriteExtendExistingFileWithGap(t *testing.T,
 	}
 	testFileDataCheckWrite(
 		t, fd, dirtyBcache, df, data[startWrite:], startWrite,
-		topBlock, de, uint64(fullDataLen),
-		nil, int64(dirtiedBytes), int64(extendedBytes), expectedTopLevel)
+		topBlock, de, uint64(fullDataLen), //nolint:gosec // G115: Test data with bounded values
+		nil, int64(dirtiedBytes), int64(extendedBytes), expectedTopLevel,
+	)
 
 	// Make sure we can read back the complete data.
 	gotData := make([]byte, fullDataLen)
@@ -870,12 +905,11 @@ func TestFileDataWriteExtendExistingFileWithGap(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		// capture range variable.
-		test := test
 		t.Run(test.name, func(t *testing.T) {
 			testFileDataWriteExtendExistingFileWithGap(
 				t, 2, 2, test.currLen, test.newSize, test.startWrite,
-				test.finalHoles)
+				test.finalHoles,
+			)
 		})
 	}
 }

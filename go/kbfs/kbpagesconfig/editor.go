@@ -15,20 +15,22 @@ import (
 )
 
 func newKBPConfigEditorWithPrompter(kbpConfigDir string, p prompter) (
-	*kbpConfigEditor, error) {
+	*kbpConfigEditor, error,
+) {
 	kbpConfigPath, err := kbpConfigPath(kbpConfigDir)
 	if err != nil {
 		return nil, err
 	}
 	editor := &kbpConfigEditor{kbpConfigPath: kbpConfigPath, prompter: p}
-	f, err := os.Open(kbpConfigPath)
+	f, err := os.Open(kbpConfigPath) //nolint:gosec // G304: kbpConfigPath from trusted config directory
 	switch {
 	case err == nil:
 		var cfg config.Config
 		cfg, editor.originalConfigStr, err = readConfigAndClose(f)
 		if err != nil {
 			return nil, fmt.Errorf(
-				"reading config file %s error: %v", kbpConfigPath, err)
+				"reading config file %s error: %v", kbpConfigPath, err,
+			)
 		}
 		switch cfg.Version() {
 		case config.Version1:
@@ -40,17 +42,20 @@ func newKBPConfigEditorWithPrompter(kbpConfigDir string, p prompter) (
 			if needsUpgrade {
 				return nil, errors.New(
 					"config has bcrypt password hashes. Please run " +
-						"`kbpagesconfig upgrade` to migrate to sha256")
+						"`kbpagesconfig upgrade` to migrate to sha256",
+				)
 			}
 		default:
 			return nil, fmt.Errorf(
-				"unsupported config version %s", cfg.Version())
+				"unsupported config version %s", cfg.Version(),
+			)
 		}
 	case os.IsNotExist(err):
 		editor.kbpConfig = config.DefaultV1()
 	default:
 		return nil, fmt.Errorf(
-			"open file %s error: %v", kbpConfigPath, err)
+			"open file %s error: %v", kbpConfigPath, err,
+		)
 	}
 	return editor, nil
 }
@@ -68,7 +73,8 @@ func (e *kbpConfigEditor) confirmAndWrite() error {
 		return fmt.Errorf("new config would not be valid: %v", err)
 	}
 	return confirmAndWrite(
-		e.originalConfigStr, e.kbpConfig, e.kbpConfigPath, e.prompter)
+		e.originalConfigStr, e.kbpConfig, e.kbpConfigPath, e.prompter,
+	)
 }
 
 func (e *kbpConfigEditor) setUser(username string, isAdd bool) error {
@@ -84,7 +90,8 @@ func (e *kbpConfigEditor) setUser(username string, isAdd bool) error {
 			"a password. Since we use a fast hash function for password "+
 			"hashing, we recommend generating random passwords with enough "+
 			"entropy. Would you like to generate a random password now "+
-			"(recommended)?", username), true)
+			"(recommended)?", username,
+	), true)
 	if err != nil {
 		return fmt.Errorf("getting confirmation error: %v", err)
 	}
@@ -98,7 +105,8 @@ func (e *kbpConfigEditor) setUser(username string, isAdd bool) error {
 			"Here's the password for %s:\n\n\t%s\n\n"+
 				"This is the only time you'll see it, so please write it "+
 				"down or give it to %s. Continue?",
-			username, password, username), false)
+			username, password, username,
+		), false)
 		if err != nil {
 			return fmt.Errorf("getting confirmation error: %v", err)
 		}
@@ -107,7 +115,8 @@ func (e *kbpConfigEditor) setUser(username string, isAdd bool) error {
 		}
 	} else {
 		input, err := e.prompter.PromptPassword(fmt.Sprintf(
-			"enter a password for %s: ", username))
+			"enter a password for %s: ", username,
+		))
 		if err != nil {
 			return fmt.Errorf("getting password error: %v", err)
 		}
@@ -123,13 +132,12 @@ func (e *kbpConfigEditor) setUser(username string, isAdd bool) error {
 	if e.kbpConfig.Users == nil {
 		e.kbpConfig.Users = make(map[string]string)
 	}
-	e.kbpConfig.Users[username] = (hashed)
+	e.kbpConfig.Users[username] = hashed
 	return nil
 }
 
 func (e *kbpConfigEditor) removeUser(username string) {
 	delete(e.kbpConfig.Users, username)
-
 }
 
 func (e *kbpConfigEditor) setFieldSimple(pathStr string, setter func(c *config.PerPathConfigV1)) error {
@@ -143,7 +151,8 @@ func (e *kbpConfigEditor) setFieldSimple(pathStr string, setter func(c *config.P
 }
 
 func (e *kbpConfigEditor) setAnonymousPermission(
-	permsStr string, pathStr string) error {
+	permsStr string, pathStr string,
+) error {
 	return e.setFieldSimple(pathStr, func(c *config.PerPathConfigV1) {
 		c.AnonymousPermissions = permsStr
 	})
@@ -154,7 +163,8 @@ func (e *kbpConfigEditor) clearPerPathConfig(pathStr string) {
 }
 
 func (e *kbpConfigEditor) setAdditionalPermission(
-	username string, permsStr string, pathStr string) error {
+	username string, permsStr string, pathStr string,
+) error {
 	if e.kbpConfig.PerPathConfigs == nil {
 		e.kbpConfig.PerPathConfigs = make(map[string]config.PerPathConfigV1)
 	}
@@ -172,7 +182,8 @@ func (e *kbpConfigEditor) setAdditionalPermission(
 }
 
 func (e *kbpConfigEditor) removeUserPermissionsFromPerPathConfig(
-	username string, pathStr string) {
+	username string, pathStr string,
+) {
 	if e.kbpConfig.PerPathConfigs == nil {
 		return
 	}
@@ -183,28 +194,33 @@ func (e *kbpConfigEditor) removeUserPermissionsFromPerPathConfig(
 }
 
 func (e *kbpConfigEditor) getUserPermissionsOnPath(
-	username string, pathStr string) (read, list bool, err error) {
+	username string, pathStr string,
+) (read, list bool, err error) {
 	read, list, _, _, _, err = e.kbpConfig.GetPermissions(
-		pathStr, &username)
+		pathStr, &username,
+	)
 	return read, list, err
 }
 
 func (e *kbpConfigEditor) setAccessControlAllowOrigin(
-	pathStr string, acao string) error {
+	pathStr string, acao string,
+) error {
 	return e.setFieldSimple(pathStr, func(c *config.PerPathConfigV1) {
 		c.AccessControlAllowOrigin = acao
 	})
 }
 
 func (e *kbpConfigEditor) set403(
-	pathStr string, p string) error {
+	pathStr string, p string,
+) error {
 	return e.setFieldSimple(pathStr, func(c *config.PerPathConfigV1) {
 		c.Custom403Forbidden = p
 	})
 }
 
 func (e *kbpConfigEditor) set404(
-	pathStr string, p string) error {
+	pathStr string, p string,
+) error {
 	return e.setFieldSimple(pathStr, func(c *config.PerPathConfigV1) {
 		c.Custom404NotFound = p
 	})

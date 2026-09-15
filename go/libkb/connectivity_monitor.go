@@ -1,14 +1,18 @@
 package libkb
 
 import (
-	context "golang.org/x/net/context"
+	"context"
+	"time"
 )
 
-type NullConnectivityMonitor struct {
-}
+type NullConnectivityMonitor struct{}
 
 func (s NullConnectivityMonitor) IsConnected(ctx context.Context) ConnectivityMonitorResult {
 	return ConnectivityMonitorYes
+}
+
+func (s NullConnectivityMonitor) ConnectedSince(ctx context.Context) time.Time {
+	return time.Time{}
 }
 
 func (s NullConnectivityMonitor) CheckReachability(ctx context.Context) error {

@@ -1,16 +1,16 @@
-import * as C from '@/constants'
 import * as Kb from '@/common-adapters'
-import * as React from 'react'
+import type * as React from 'react'
 import DeviceList from './device-list.desktop'
 import DragHeader from '../desktop/remote/drag-header.desktop'
 import PaperKeyInput from './paper-key-input.desktop'
 import Success from './success.desktop'
-import type * as Constants from '@/constants/unlock-folders'
+import type {UnlockFolderDevice} from './store'
+
+type Phase = 'dead' | 'promptOtherDevice' | 'paperKeyInput' | 'success'
 
 export type Props = {
-  darkMode: boolean
-  phase: Constants.State['phase']
-  devices: C.ConfigStore['unlockFoldersDevices']
+  phase: Phase
+  devices: ReadonlyArray<UnlockFolderDevice>
   onClose: () => void
   toPaperKeyInput: () => void
   onBackFromPaperKey: () => void
@@ -21,11 +21,7 @@ export type Props = {
 }
 
 const UnlockFolders = (props: Props) => {
-  const {darkMode} = props
-  React.useEffect(() => {
-    C.useDarkModeState.getState().dispatch.setDarkModePreference(darkMode ? 'alwaysDark' : 'alwaysLight')
-  }, [darkMode])
-
+  const styles = useStyles()
   let innerComponent: React.ReactNode
 
   switch (props.phase) {
@@ -49,31 +45,25 @@ const UnlockFolders = (props: Props) => {
   }
 
   return (
-    <div
-      style={styles.container}
-      className={props.darkMode ? 'darkMode' : 'lightMode'}
-      key={props.darkMode ? 'darkMode' : 'light'}
-    >
-      <div style={styles.header}>
-        <DragHeader icon={true} type="Default" title="" onClose={props.onClose} />
-      </div>
+    <Kb.Box2 direction="vertical" relative={true} style={styles.container}>
+      <DragHeader icon={true} type="Default" title="" onClose={props.onClose} style={styles.header} />
       {innerComponent}
-    </div>
+    </Kb.Box2>
   )
 }
 
-const styles = Kb.Styles.styleSheetCreate(
+const useStyles = Kb.Styles.createStyleHook(
   () =>
     ({
       container: {
         height: 300,
-        position: 'relative',
         width: 500,
       },
-
       header: {
+        left: 0,
         position: 'absolute',
-        width: '100%',
+        right: 0,
+        top: 0,
       },
     }) as const
 )

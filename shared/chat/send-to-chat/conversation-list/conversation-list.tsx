@@ -14,48 +14,48 @@ type Props = {
   onSelect: (conversationIDKey: T.Chat.ConversationIDKey, convName: string) => void
 }
 
-type Row = {
+type RowProps = {
   isSelected: boolean
   item: T.RPCChat.SimpleSearchInboxConvNamesHit
-  onSelect: () => void
+  onSelectItem: (item: T.RPCChat.SimpleSearchInboxConvNamesHit) => void
 }
 
-const _itemRenderer = (index: number, row: Row) => {
-  const item = row.item
+// React.memo, not just compiler memo: the list calls renderItem outside the
+// compiler's memo graph, so the shallow prop bail is what lets rows skip when
+// only the selection or result batch changes
+const Row = React.memo(function Row(p: RowProps) {
+  const styles = useStyles()
+  const theme = Kb.Styles.useTheme()
+  const {isSelected, item, onSelectItem} = p
   return (
-    <Kb.ClickableBox key={index} onClick={row.onSelect}>
-      <Kb.Box2
-        direction="horizontal"
-        fullWidth={true}
-        gap="tiny"
-        style={Kb.Styles.collapseStyles([
-          styles.results,
-          {
-            backgroundColor:
-              !Kb.Styles.isMobile && row.isSelected
-                ? Kb.Styles.globalColors.blue
-                : Kb.Styles.globalColors.white,
-          },
-        ])}
-      >
-        {item.isTeam ? (
-          <TeamAvatar isHovered={false} isMuted={false} isSelected={row.isSelected} teamname={item.tlfName} />
-        ) : (
-          <Avatars
-            isSelected={row.isSelected}
-            participantOne={item.parts?.[0]}
-            participantTwo={item.parts?.[1]}
-          />
-        )}
-        <Kb.Text type="Body" style={{alignSelf: 'center'}} lineClamp={1}>
-          {item.name}
-        </Kb.Text>
-      </Kb.Box2>
+    <Kb.ClickableBox
+      onClick={() => onSelectItem(item)}
+      direction="horizontal"
+      fullWidth={true}
+      gap="tiny"
+      style={Kb.Styles.collapseStyles([
+        styles.results,
+        {
+          backgroundColor:
+            !isMobile && isSelected ? theme.blue : theme.white,
+        },
+      ])}
+    >
+      {item.isTeam ? (
+        <TeamAvatar isHovered={false} isMuted={false} isSelected={isSelected} teamname={item.tlfName} />
+      ) : (
+        <Avatars isSelected={isSelected} participantOne={item.parts?.[0]} participantTwo={item.parts?.[1]} />
+      )}
+      <Kb.Text type="Body" style={{alignSelf: 'center'}} lineClamp={1}>
+        {item.name}
+      </Kb.Text>
     </Kb.ClickableBox>
   )
-}
+})
 
 const ConversationList = (props: Props) => {
+  const {onDone, onSelect: _onSelect} = props
+
   const [query, setQuery] = React.useState('')
   const [waiting, setWaiting] = React.useState(false)
   const [selected, setSelected] = React.useState(0)
@@ -79,8 +79,8 @@ const ConversationList = (props: Props) => {
     )
   }
   const onSelect = (convID: T.Chat.ConversationIDKey, convName: string) => {
-    props.onSelect(convID, convName)
-    props.onDone?.()
+    _onSelect(convID, convName)
+    onDone?.()
   }
   return (
     <ConversationListRender
@@ -104,8 +104,16 @@ type ConversationListRenderProps = {
 }
 
 const ConversationListRender = (props: ConversationListRenderProps) => {
+  const styles = useStyles()
+  const {selected, setSelected, results, onSelect} = props
+  const onSelectItem = React.useEffectEvent((item: T.RPCChat.SimpleSearchInboxConvNamesHit) =>
+    onSelect(T.Chat.conversationIDToKey(item.convID), item.tlfName)
+  )
+  const renderItem = (index: number, item: T.RPCChat.SimpleSearchInboxConvNamesHit) => (
+    <Row key={index} item={item} isSelected={index === selected} onSelectItem={onSelectItem} />
+  )
   return (
-    <Kb.Box2 direction="vertical" fullWidth={true} fullHeight={true} style={{flex: 1}}>
+    <Kb.Box2 direction="vertical" fullWidth={true} fullHeight={true} flex={1}>
       <Kb.Box2 direction="horizontal" fullWidth={true} centerChildren={true} style={styles.filterContainer}>
         <Kb.SearchFilter
           placeholderText="Search chats..."
@@ -113,25 +121,26 @@ const ConversationListRender = (props: ConversationListRenderProps) => {
           size="small"
           icon="iconfont-search"
           waiting={props.waiting}
-          focusOnMount={true}
+          focusOnMount={false}
           onKeyDown={(e: React.KeyboardEvent) => {
             switch (e.key) {
               case 'ArrowDown':
-                if (props.selected < props.results.length - 1) {
-                  props.setSelected(props.selected + 1)
+                if (selected < results.length - 1) {
+                  setSelected(selected + 1)
                 }
                 break
               case 'ArrowUp':
-                if (props.selected > 0) {
-                  props.setSelected(props.selected - 1)
+                if (selected > 0) {
+                  setSelected(selected - 1)
                 }
                 break
               case 'Enter':
-                if (props.results.length > 0) {
-                  const result = props.results[props.selected]
-                  props.onSelect(
+                if (results.length > 0) {
+                  const result = results[selected]
+                  // consumers use this as the tlf name (upload tlfName), not the display name
+                  onSelect(
                     result?.convID ? T.Chat.conversationIDToKey(result.convID) : '',
-                    result?.name ?? ''
+                    result?.tlfName ?? ''
                   )
                 }
                 break
@@ -139,23 +148,17 @@ const ConversationListRender = (props: ConversationListRenderProps) => {
           }}
         />
       </Kb.Box2>
-      <Kb.Box2 direction="vertical" fullWidth={true} fullHeight={true} style={{flex: 1}}>
-        <Kb.List2
-          itemHeight={{height: 65, type: 'fixed'}}
-          items={props.results.map((r, index) => ({
-            isSelected: index === props.selected,
-            item: r,
-            onSelect: () => props.onSelect(T.Chat.conversationIDToKey(r.convID), r.tlfName),
-          }))}
-          renderItem={_itemRenderer}
-          indexAsKey={true}
-        />
-      </Kb.Box2>
+      <Kb.List
+        itemHeight={{height: 65, type: 'fixed'}}
+        items={results as Array<T.RPCChat.SimpleSearchInboxConvNamesHit>}
+        renderItem={renderItem}
+        indexAsKey={true}
+      />
     </Kb.Box2>
   )
 }
 
-const styles = Kb.Styles.styleSheetCreate(
+const useStyles = Kb.Styles.createStyleHook(
   () =>
     ({
       filterContainer: Kb.Styles.platformStyles({

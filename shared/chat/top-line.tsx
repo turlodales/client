@@ -1,4 +1,3 @@
-import * as React from 'react'
 import * as Kb from '@/common-adapters'
 import {pluralize} from '@/util/string'
 
@@ -11,51 +10,43 @@ type Props = {
   usernameColor?: string
 }
 
-class FilteredTopLine extends React.PureComponent<Props> {
-  _getSearchHits = () => {
-    if (!this.props.numSearchHits) {
+const FilteredTopLine = (props: Props) => {
+  const styles = useStyles()
+  const _getSearchHits = () => {
+    if (!props.numSearchHits) {
       return ''
     }
-    if (this.props.maxSearchHits) {
-      return this.props.numSearchHits >= this.props.maxSearchHits
-        ? `${this.props.numSearchHits}+`
-        : `${this.props.numSearchHits}`
+    if (props.maxSearchHits) {
+      return props.numSearchHits >= props.maxSearchHits ? `${props.numSearchHits}+` : `${props.numSearchHits}`
     }
-    return `${this.props.numSearchHits}`
+    return `${props.numSearchHits}`
   }
-  render() {
-    return (
-      <Kb.Box2 direction="vertical" fullWidth={true}>
-        <Kb.Text
-          type="BodySemibold"
-          lineClamp={1}
-          style={Kb.Styles.collapseStyles([
-            this.props.showBold && styles.boldOverride,
-            styles.usernames,
-            {color: this.props.usernameColor} as any,
-          ])}
-        >
-          {this.props.participants.join(', ')}
+  return (
+    <Kb.Box2 direction="vertical" fullWidth={true}>
+      <Kb.Text
+        type="BodySemibold"
+        lineClamp={1}
+        style={Kb.Styles.collapseStyles([
+          props.showBold && styles.boldOverride,
+          styles.usernames,
+          {color: props.usernameColor} as Kb.Styles.StylesCrossPlatform,
+        ])}
+      >
+        {props.participants.join(', ')}
+      </Kb.Text>
+      {!!props.numSearchHits && (
+        <Kb.Text type="BodySmall" style={Kb.Styles.collapseStyles([props.isSelected && styles.selectedText])}>
+          {_getSearchHits()} {pluralize('result', props.numSearchHits)}
         </Kb.Text>
-        {!!this.props.numSearchHits && (
-          <Kb.Text
-            type="BodySmall"
-            style={Kb.Styles.collapseStyles([this.props.isSelected && styles.selectedText])}
-          >
-            {this._getSearchHits()} {pluralize('result', this.props.numSearchHits)}
-          </Kb.Text>
-        )}
-      </Kb.Box2>
-    )
-  }
+      )}
+    </Kb.Box2>
+  )
 }
 
-const styles = Kb.Styles.styleSheetCreate(() => ({
-  boldOverride: {
-    ...Kb.Styles.globalStyles.fontBold,
-  },
+const useStyles = Kb.Styles.createStyleHook(theme => ({
+  boldOverride: Kb.Styles.globalStyles.fontBold,
   selectedText: {
-    color: Kb.Styles.globalColors.white,
+    color: theme.white,
   },
   usernames: {
     paddingRight: Kb.Styles.globalMargins.tiny,

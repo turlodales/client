@@ -5,6 +5,7 @@
 package libdokan
 
 import (
+	"context"
 	"errors"
 	"os"
 	"strconv"
@@ -24,7 +25,6 @@ import (
 	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/logger"
 	"github.com/keybase/client/go/protocol/keybase1"
-	"golang.org/x/net/context"
 )
 
 // FS implements the newfuse FS interface for KBFS.
@@ -48,8 +48,10 @@ const DefaultMountFlags = dokan.CurrentSession
 
 // currentUserSID stores the Windows identity of the user running
 // this process. This is the same process-wide.
-var currentUserSID, currentUserSIDErr = winacl.CurrentProcessUserSid()
-var currentGroupSID, _ = winacl.CurrentProcessPrimaryGroupSid()
+var (
+	currentUserSID, currentUserSIDErr = winacl.CurrentProcessUserSid()
+	currentGroupSID, _                = winacl.CurrentProcessPrimaryGroupSid()
+)
 
 // NewFS creates an FS
 func NewFS(ctx context.Context, config libkbfs.Config, log logger.Logger) (*FS, error) {
@@ -81,7 +83,8 @@ func NewFS(ctx context.Context, config libkbfs.Config, log logger.Logger) (*FS, 
 			tlfType:    tlf.SingleTeam,
 			folders:    make(map[string]fileOpener),
 			aliasCache: map[string]string{},
-		}}
+		},
+	}
 
 	ctx = wrapContext(ctx, f)
 
@@ -137,7 +140,7 @@ var vinfo = dokan.VolumeInformation{
 
 // GetVolumeInformation returns information about the whole filesystem for dokan.
 func (f *FS) GetVolumeInformation(ctx context.Context) (dokan.VolumeInformation, error) {
-	// TODO should this be explicitely refused to other users?
+	// TODO should this be explicitly refused to other users?
 	// As the mount is limited to current session there is little need.
 	return vinfo, nil
 }
@@ -234,6 +237,7 @@ func (oc *openContext) isCreation() bool {
 	}
 	return false
 }
+
 func (oc *openContext) isExistingError() bool {
 	return oc.CreateDisposition == dokan.FileCreate
 }
@@ -255,7 +259,8 @@ func (oc *openContext) isOpenReparsePoint() bool {
 // returnDirNoCleanup returns a dir or nothing depending on the open
 // flags and does not call .Cleanup on error.
 func (oc *openContext) returnDirNoCleanup(f dokan.File) (
-	dokan.File, dokan.CreateStatus, error) {
+	dokan.File, dokan.CreateStatus, error,
+) {
 	if err := oc.ReturningDirAllowed(); err != nil {
 		return nil, 0, err
 	}
@@ -265,7 +270,8 @@ func (oc *openContext) returnDirNoCleanup(f dokan.File) (
 // returnFileNoCleanup returns a file or nothing depending on the open
 // flags and does not call .Cleanup on error.
 func (oc *openContext) returnFileNoCleanup(f dokan.File) (
-	dokan.File, dokan.CreateStatus, error) {
+	dokan.File, dokan.CreateStatus, error,
+) {
 	if err := oc.ReturningFileAllowed(); err != nil {
 		return nil, 0, err
 	}
@@ -339,7 +345,8 @@ func (f *FS) open(ctx context.Context, oc *openContext, ps []string) (dokan.File
 	case libfs.HumanErrorFileName == ps[0], libfs.HumanNoLoginFileName == ps[0]:
 		return oc.returnFileNoCleanup(&SpecialReadFile{
 			read: f.remoteStatus.NewSpecialReadFunc,
-			fs:   f})
+			fs:   f,
+		})
 
 	case libfs.EnableAutoJournalsFileName == ps[0]:
 		return oc.returnFileNoCleanup(&JournalControlFile{
@@ -365,15 +372,15 @@ func (f *FS) open(ctx context.Context, oc *openContext, ps []string) (dokan.File
 	case libfs.EditHistoryName == ps[0]:
 		return oc.returnFileNoCleanup(NewUserEditHistoryFile(&Folder{fs: f}))
 
-	case ".kbfs_unmount" == ps[0]:
+	case ps[0] == ".kbfs_unmount":
 		f.log.CInfof(ctx, "Exiting due to .kbfs_unmount")
 		logger.Shutdown()
 		os.Exit(0)
-	case ".kbfs_restart" == ps[0]:
+	case ps[0] == ".kbfs_restart":
 		f.log.CInfof(ctx, "Exiting due to .kbfs_restart, should get restarted by watchdog process")
 		logger.Shutdown()
 		os.Exit(int(keybase1.ExitCode_RESTART))
-	case ".kbfs_number_of_handles" == ps[0]:
+	case ps[0] == ".kbfs_number_of_handles":
 		x := stringReadFile(strconv.Itoa(int(oc.fi.NumberOfFileHandles())))
 		return oc.returnFileNoCleanup(x)
 	// TODO
@@ -417,7 +424,7 @@ func (f *FS) ErrorPrint(err error) {
 }
 
 // Printf prints information from the Dokan library.
-func (f *FS) Printf(fmt string, args ...interface{}) {
+func (f *FS) Printf(fmt string, args ...any) {
 	f.log.Info("Dokan info: "+fmt, args...)
 }
 
@@ -644,7 +651,7 @@ func (f *FS) logEnter(ctx context.Context, s string) {
 	f.vlog.CLogf(ctx, libkb.VLog1, "=> %s", s)
 }
 
-func (f *FS) logEnterf(ctx context.Context, fmt string, args ...interface{}) {
+func (f *FS) logEnterf(ctx context.Context, fmt string, args ...any) {
 	f.vlog.CLogf(ctx, libkb.VLog1, "=> "+fmt, args...)
 }
 

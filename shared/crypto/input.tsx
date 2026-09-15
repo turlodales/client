@@ -1,113 +1,135 @@
 import * as C from '@/constants'
 import * as React from 'react'
-import * as Constants from '@/constants/crypto'
-import * as FsConstants from '@/constants/fs'
 import type * as T from '@/constants/types'
+import type {CommonState} from './helpers'
 import * as Kb from '@/common-adapters'
+import * as FS from '@/constants/fs'
 import type {IconType} from '@/common-adapters/icon.constants-gen'
-import capitalize from 'lodash/capitalize'
-import {pickFiles} from '@/util/pick-files'
+import {pickFiles} from '@/util/misc'
+import {KeyboardStickyView, useKeyboardState} from 'react-native-keyboard-controller'
+import {SafeAreaView as ScreensSafeAreaView} from 'react-native-screens/experimental'
+import {useNavigation} from '@react-navigation/native'
+import type {ParamListBase} from '@react-navigation/native'
+import type {NativeStackNavigationProp} from '@react-navigation/native-stack'
+import * as TestIDs from '@/tests/e2e/shared/test-ids'
 
 type CommonProps = {
-  operation: T.Crypto.Operations
+  state: CommonState
 }
 
 type TextProps = CommonProps & {
+  allowDirectories: boolean
+  emptyInputWidth: number
+  inputPlaceholder: string
   onChangeText: (text: string) => void
   onSetFile: (path: string) => void
-  value: string
+  setBlurCB?: (cb: () => void) => void
+  testID?: string
+  textInputType: 'cipher' | 'plain'
 }
 
 type FileProps = CommonProps & {
-  path: string
-  size?: number
+  fileIcon: IconType
   onClearFiles: () => void
 }
 
-type DragAndDropProps = CommonProps & {
-  prompt: string
+type DragAndDropProps = {
+  allowFolders: boolean
   children: React.ReactNode
+  inProgress: boolean
+  onAttach: (path: string) => void
+  prompt: string
+  testID?: string
 }
 
-type RunOperationProps = CommonProps & {
+// RNScreens' SafeAreaView hardcodes `flex: 1` (i.e. flexBasis 0%), which collapses the
+// bar to zero height inside the keyboard sticky view. A `flexBasis`/`flexGrow` override
+// loses to the `flex` shorthand in the style merge, so unset `flex` itself (plain object,
+// not a created sheet, so the undefined survives) and let the bar size to its content.
+const unsetLibFlex = {flex: undefined}
+
+type RunActionBarProps = {
+  blurCBRef?: React.RefObject<() => void>
   children?: React.ReactNode
+  onRun: () => void
+  runLabel: string
 }
 
-// Tese magic numbers set the width of the single line `textarea` such that the
-// placeholder text is visible and pushes the "browse" button far enough to the
-// right to be exactly one empty character with from the end of the placeholder text
-const operationToEmptyInputWidth = {
-  [Constants.Operations.Encrypt]: 207,
-  [Constants.Operations.Decrypt]: 320,
-  [Constants.Operations.Sign]: 207,
-  [Constants.Operations.Verify]: 342,
+type InputProps = CommonProps & {
+  allowDirectories: boolean
+  emptyInputWidth: number
+  fileIcon: IconType
+  inputPlaceholder: string
+  onClearInput: () => void
+  onSetInput: (type: T.Crypto.InputTypes, value: string) => void
+  setBlurCB?: (cb: () => void) => void
+  testID?: string
+  textInputType: 'cipher' | 'plain'
 }
 
-const inputTextType = new Map([
-  ['decrypt', 'cipher'],
-  ['encrypt', 'plain'],
-  ['sign', 'plain'],
-  ['verify', 'cipher'],
-] as const)
-const inputPlaceholder = new Map([
-  [
-    'decrypt',
-    C.isMobile ? 'Enter text to decrypt' : 'Enter ciphertext, drop an encrypted file or folder, or',
-  ],
-  ['encrypt', C.isMobile ? 'Enter text to encrypt' : 'Enter text, drop a file or folder, or'],
-  ['sign', C.isMobile ? 'Enter text to sign' : 'Enter text, drop a file or folder, or'],
-  [
-    'verify',
-    C.isMobile ? 'Enter text to verify' : 'Enter a signed message, drop a signed file or folder, or',
-  ],
-] as const)
+type BannerContent = React.ComponentProps<typeof Kb.BannerParagraph>['content']
 
-/*
- * Before user enters text:
- *  - Single line input
- *  - Browse file button
- *
- * Afte user enters text:
- *  - Multiline input
- *  - Clear button
- */
+export type CryptoBannerProps = {
+  infoMessage: BannerContent
+  state: CommonState
+}
+
 const TextInput = (props: TextProps) => {
-  const {value, operation, onChangeText, onSetFile} = props
-  const textType = inputTextType.get(operation)
-  const placeholder = inputPlaceholder.get(operation)
-  const emptyWidth = operationToEmptyInputWidth[operation]
+  const styles = useStyles()
+  const {allowDirectories, emptyInputWidth, inputPlaceholder, state, onChangeText, onSetFile, setBlurCB, testID, textInputType} =
+    props
+  const value = state.inputType === 'text' ? state.input : ''
 
-  // When 'browse file' is show, focus input by clicking anywhere in the input box
-  // (despite the input being one line tall)
-  const inputRef = React.useRef<Kb.PlainInput>(null)
+  const inputRef = React.useRef<Kb.Input3Ref>(null)
   const onFocusInput = () => {
     inputRef.current?.focus()
   }
 
+  React.useEffect(() => {
+    setBlurCB?.(() => {
+      inputRef.current?.blur()
+    })
+    return () => {
+      setBlurCB?.(() => {})
+    }
+  }, [setBlurCB])
+
+  // On mobile, autoFocus fires during the push transition, so the keyboard animates up
+  // while the screen is still sliding in — the content visibly thrashes. Instead wait for
+  // the native-stack transition to finish, then focus so the keyboard raises cleanly over
+  // a settled screen. Desktop has no keyboard, so it keeps instant autoFocus.
+  const navigation = useNavigation() as unknown as NativeStackNavigationProp<ParamListBase>
+  React.useEffect(() => {
+    if (!isMobile) return
+    return navigation.addListener('transitionEnd', e => {
+      if (!e.data.closing) {
+        inputRef.current?.focus()
+      }
+    })
+  }, [navigation])
+
   const onOpenFile = () => {
     const f = async () => {
-      // On Windows and Linux only files will be able to be selected. Their native pickers don't allow for selecting both directories and files at once.
-      // To set a directory as input, a user will need to drag the directory into Keybase.
       const filePaths = await pickFiles({
-        allowDirectories: C.isDarwin,
+        allowDirectories: allowDirectories && C.isDarwin,
         buttonLabel: 'Select',
       })
       if (!filePaths.length) return
-      const path = filePaths[0]!
-      onSetFile(path)
+      onSetFile(filePaths[0] ?? '')
     }
     C.ignorePromise(f())
   }
 
-  // Styling
-  const rowsMax = Kb.Styles.isMobile ? undefined : value ? undefined : 1
-  const growAndScroll = !Kb.Styles.isMobile
+  const rowsMax = isMobile ? undefined : value ? undefined : 1
+  const growAndScroll = !isMobile && !!value
   const inputStyle = Kb.Styles.collapseStyles([
     styles.input,
     value ? styles.inputFull : styles.inputEmpty,
-    !value && !Kb.Styles.isMobile && {width: emptyWidth},
+    !value && !isMobile && {width: emptyInputWidth},
   ])
-  const inputContainerStyle = value ? styles.inputContainer : styles.inputContainerEmpty
+  const inputContainerStyle = value
+    ? styles.inputContainer
+    : Kb.Styles.collapseStyles([styles.inputContainerEmpty, !isMobile && {width: emptyInputWidth}])
 
   const browseButton = value ? null : (
     <Kb.Text type="BodyPrimaryLink" style={styles.browseFile} onClick={onOpenFile}>
@@ -123,185 +145,122 @@ const TextInput = (props: TextProps) => {
   ) : null
 
   return (
-    <Kb.Box onClick={onFocusInput} style={styles.containerInputFocus}>
-      <Kb.Box2 direction="vertical" fullWidth={true} fullHeight={true} style={styles.commonContainer}>
-        <Kb.Box2
-          direction={Kb.Styles.isMobile ? 'vertical' : 'horizontal'}
-          alignItems="flex-start"
-          alignSelf="flex-start"
-          fullWidth={Kb.Styles.isMobile || !!value}
-          fullHeight={Kb.Styles.isMobile || !!value}
-          style={styles.inputAndFilePickerContainer}
-        >
-          <Kb.NewInput
-            value={value}
-            placeholder={placeholder}
-            multiline={true}
-            autoFocus={true}
-            allowKeyboardEvents={true}
-            hideBorder={true}
-            rowsMax={rowsMax}
-            growAndScroll={growAndScroll}
-            padding="tiny"
-            containerStyle={inputContainerStyle}
-            style={inputStyle}
-            textType={textType === 'cipher' ? 'Terminal' : 'Body'}
-            autoCorrect={textType !== 'cipher'}
-            spellCheck={textType !== 'cipher'}
-            onChangeText={onChangeText}
-            ref={inputRef}
-          />
-          {!Kb.Styles.isMobile && browseButton}
-        </Kb.Box2>
-      </Kb.Box2>
-      {!Kb.Styles.isMobile && clearButton}
-    </Kb.Box>
-  )
-}
-
-const inputFileIcon = new Map([
-  ['decrypt', 'icon-file-saltpack-64'],
-  ['encrypt', 'icon-file-64'],
-  ['sign', 'icon-file-64'],
-  ['verify', 'icon-file-saltpack-64'],
-] as const)
-
-const FileInput = (props: FileProps) => {
-  const {path, size, operation} = props
-  const fileIcon = inputFileIcon.get(operation) as IconType
-  const waiting = C.Waiting.useAnyWaiting(Constants.waitingKey)
-
-  return (
-    <Kb.Box2
+    <Kb.ClickableBox
       direction="vertical"
       fullWidth={true}
       fullHeight={true}
-      alignItems="stretch"
-      style={styles.commonContainer}
+      onClick={onFocusInput}
+      testID={testID}
+      style={Kb.Styles.collapseStyles([styles.containerInputFocus, styles.commonContainer])}
     >
-      <Kb.Box2 direction="horizontal" fullHeight={true} fullWidth={true}>
-        <Kb.Box2 direction="horizontal" fullWidth={true} alignItems="center" style={styles.fileContainer}>
-          <Kb.Icon type={fileIcon} sizeType="Huge" />
-          <Kb.Box2 direction="vertical">
-            <Kb.Text type="BodySemibold">{path}</Kb.Text>
-            {size ? (
-              <Kb.Text type="BodySmallSemibold">{FsConstants.humanReadableFileSize(size)}</Kb.Text>
-            ) : null}
-          </Kb.Box2>
-        </Kb.Box2>
-        {path && !waiting && (
-          <Kb.Box2 direction="vertical" style={styles.clearButtonInput}>
-            <Kb.Text
-              type="BodySmallPrimaryLink"
-              onClick={() => props.onClearFiles()}
-              style={styles.clearButtonInput}
-            >
-              Clear
-            </Kb.Text>
-          </Kb.Box2>
-        )}
+      <Kb.Box2
+        direction={isMobile ? 'vertical' : 'horizontal'}
+        alignItems="flex-start"
+        alignSelf="flex-start"
+        fullWidth={isMobile || !!value}
+        fullHeight={isMobile || !!value}
+        style={styles.inputAndFilePickerContainer}
+      >
+        <Kb.Input3
+          value={value}
+          placeholder={inputPlaceholder}
+          multiline={true}
+          autoFocus={!isMobile}
+          hideBorder={true}
+          rowsMax={rowsMax}
+          growAndScroll={growAndScroll}
+          containerStyle={inputContainerStyle}
+          inputStyle={inputStyle}
+          textType={textInputType === 'cipher' ? 'Terminal' : 'Body'}
+          autoCorrect={textInputType !== 'cipher'}
+          spellCheck={textInputType !== 'cipher'}
+          onChangeText={onChangeText}
+          ref={inputRef}
+        />
+        {!isMobile && browseButton}
       </Kb.Box2>
-    </Kb.Box2>
+      {!isMobile && clearButton}
+    </Kb.ClickableBox>
   )
 }
 
-export const Input = (props: CommonProps) => {
-  const {operation} = props
-
-  const {input: _input, inputType} = C.useCryptoState(
-    C.useShallow(s => {
-      const o = s[operation]
-      const {input, inputType} = o
-      return {input, inputType}
-    })
-  )
-  const input = _input.stringValue()
-
-  const [inputValue, setInputValue] = React.useState(input)
-
-  const setInput = C.useCryptoState(s => s.dispatch.setInput)
-  const clearInput = C.useCryptoState(s => s.dispatch.clearInput)
-
-  const onSetInput = (type: T.Crypto.InputTypes, newValue: string) => {
-    setInput(operation, type, newValue)
-  }
-  const onClearInput = () => {
-    clearInput(operation)
-  }
-
-  return inputType === 'file' ? (
-    <FileInput
-      operation={operation}
-      path={input}
-      onClearFiles={() => {
-        setInputValue('')
-        onClearInput()
-      }}
-    />
-  ) : (
-    <TextInput
-      operation={operation}
-      value={inputValue}
-      onSetFile={path => {
-        onSetInput('file', path)
-      }}
-      onChangeText={text => {
-        setInputValue(text)
-        onSetInput('text', text)
-      }}
-    />
-  )
-}
-
-const allowInputFolders = new Map([
-  ['decrypt', false],
-  ['encrypt', true],
-  ['sign', true],
-  ['verify', false],
-] as const)
-
-export const DragAndDrop = (props: DragAndDropProps) => {
-  const {prompt, children, operation} = props
-  const inProgress = C.useCryptoState(s => s[operation].inProgress)
-  const setInput = C.useCryptoState(s => s.dispatch.setInput)
-
-  const onAttach = (localPaths: Array<string>) => {
-    const path = localPaths[0]
-    setInput(operation, 'file', path ?? '')
-  }
-
-  const allowFolders = allowInputFolders.get(operation) as boolean
+const FileInput = ({fileIcon, onClearFiles, state}: FileProps) => {
+  const styles = useStyles()
+  const waiting = C.Waiting.useAnyWaiting(C.waitingKeyCrypto)
 
   return (
-    <Kb.Box2 direction="vertical" fullWidth={true} fullHeight={true}>
-      <Kb.DragAndDrop
-        disabled={inProgress}
-        allowFolders={allowFolders}
-        fullHeight={true}
+    <Kb.Box2 direction="horizontal" fullWidth={true} fullHeight={true} style={styles.commonContainer}>
+      <Kb.Box2
+        direction="horizontal"
         fullWidth={true}
-        onAttach={onAttach}
-        prompt={prompt}
+        alignItems="center"
+        alignSelf="flex-start"
+        padding="small"
       >
-        {children}
-      </Kb.DragAndDrop>
+        <Kb.ImageIcon type={fileIcon} />
+        <Kb.Box2 direction="vertical">
+          <Kb.Text type="BodySemibold">{state.input}</Kb.Text>
+          {state.bytesTotal ? (
+            <Kb.Text type="BodySmallSemibold">{FS.humanReadableFileSize(state.bytesTotal)}</Kb.Text>
+          ) : null}
+        </Kb.Box2>
+      </Kb.Box2>
+      {state.input && !waiting && (
+        <Kb.Box2 direction="vertical" style={styles.clearButtonInput}>
+          <Kb.Text type="BodySmallPrimaryLink" onClick={onClearFiles} style={styles.clearButtonInput}>
+            Clear
+          </Kb.Text>
+        </Kb.Box2>
+      )}
     </Kb.Box2>
   )
 }
 
-export const OperationBanner = (props: CommonProps) => {
-  const {operation} = props
-  const infoMessage = Constants.infoMessage[operation]
-
-  const {errorMessage: _errorMessage, warningMessage: _warningMessage} = C.useCryptoState(
-    C.useShallow(s => {
-      const {errorMessage, warningMessage} = s[operation]
-      return {errorMessage, warningMessage}
-    })
+export const Input = ({
+  allowDirectories,
+  emptyInputWidth,
+  fileIcon,
+  inputPlaceholder,
+  onClearInput,
+  onSetInput,
+  setBlurCB,
+  state,
+  testID,
+  textInputType,
+}: InputProps) =>
+  state.inputType === 'file' ? (
+    <FileInput fileIcon={fileIcon} state={state} onClearFiles={onClearInput} />
+  ) : (
+    <TextInput
+      allowDirectories={allowDirectories}
+      emptyInputWidth={emptyInputWidth}
+      inputPlaceholder={inputPlaceholder}
+      setBlurCB={setBlurCB}
+      state={state}
+      testID={testID}
+      textInputType={textInputType}
+      onSetFile={path => onSetInput('file', path)}
+      onChangeText={text => onSetInput('text', text)}
+    />
   )
-  const errorMessage = _errorMessage.stringValue()
-  const warningMessage = _warningMessage.stringValue()
 
-  if (!errorMessage && !warningMessage) {
+export const DragAndDrop = ({allowFolders, children, inProgress, onAttach, prompt, testID}: DragAndDropProps) => (
+  <Kb.Box2 direction="vertical" fullWidth={true} fullHeight={true} testID={testID}>
+    <Kb.DragAndDrop
+      disabled={inProgress}
+      allowFolders={allowFolders}
+      fullHeight={true}
+      fullWidth={true}
+      onAttach={localPaths => onAttach(localPaths[0] ?? '')}
+      prompt={prompt}
+    >
+      {children}
+    </Kb.DragAndDrop>
+  </Kb.Box2>
+)
+
+export const CryptoBanner = ({infoMessage, state}: CryptoBannerProps) => {
+  if (!state.errorMessage && !state.warningMessage) {
     return (
       <Kb.Banner color="grey">
         <Kb.BannerParagraph bannerColor="grey" content={infoMessage} />
@@ -311,51 +270,85 @@ export const OperationBanner = (props: CommonProps) => {
 
   return (
     <>
-      {errorMessage ? (
+      {state.errorMessage ? (
         <Kb.Banner color="red">
-          <Kb.BannerParagraph bannerColor="red" content={errorMessage} />
+          <Kb.BannerParagraph bannerColor="red" content={state.errorMessage} />
         </Kb.Banner>
       ) : null}
-      {warningMessage ? (
+      {state.warningMessage ? (
         <Kb.Banner color="yellow">
-          <Kb.BannerParagraph bannerColor="yellow" content={warningMessage} />
+          <Kb.BannerParagraph bannerColor="yellow" content={state.warningMessage} />
         </Kb.Banner>
       ) : null}
     </>
   )
 }
 
-// Mobile only
-export const InputActionsBar = (props: RunOperationProps) => {
-  const {operation, children} = props
-  const waitingKey = Constants.waitingKey
-  const operationTitle = capitalize(operation)
-  const runTextOperation = C.useCryptoState(s => s.dispatch.runTextOperation)
-  const onRunOperation = () => {
-    runTextOperation(operation)
+export const InputActionsBar = ({blurCBRef, children, onRun, runLabel}: RunActionBarProps) => {
+  const styles = useStyles()
+  const insets = Kb.useSafeAreaInsets()
+  const keyboardVisible = useKeyboardState(s => s.isVisible)
+  const androidOffset = React.useMemo(() => ({closed: -insets.bottom, opened: 0}), [insets.bottom])
+  const onClick = () => {
+    blurCBRef?.current()
+    setTimeout(() => {
+      onRun()
+    }, 100)
   }
 
-  return Kb.Styles.isMobile ? (
+  if (!isMobile) return null
+
+  const bar = (
     <Kb.Box2
       direction="vertical"
       fullWidth={true}
       gap={Kb.Styles.isTablet ? 'small' : 'tiny'}
+      alignItems="flex-start"
+      padding="small"
       style={styles.inputActionsBarContainer}
     >
       {children}
       <Kb.WaitingButton
         mode="Primary"
-        waitingKey={waitingKey}
-        label={operationTitle}
+        waitingKey={C.waitingKeyCrypto}
+        label={runLabel}
         fullWidth={true}
-        onClick={onRunOperation}
+        onClick={onClick}
+        testID={TestIDs.CRYPTO_RUN_BUTTON}
       />
     </Kb.Box2>
-  ) : null
+  )
+
+  // These screens draw edge-to-edge and the bar sticks to the keyboard. On phones it
+  // must clear the home indicator; on tablet the screen lives inside the tab navigator,
+  // so the real bottom inset also includes the native tab bar. useSafeAreaInsets only
+  // reports the home indicator, so on iOS read the true native inset via RNScreens'
+  // SafeAreaView (the tab controller adjusts it). Collapse the inset while the keyboard
+  // is up: it covers the home indicator and the sticky view already lifts the bar above
+  // it. Android already insets the whole tab/stack screen, so just offset for the home
+  // indicator as before.
+  if (isIOS) {
+    // RNScreens applies the bottom inset as margin (outside the SafeAreaView's box). Wrap it
+    // in a bar-colored Box2: a flex container includes its child's margin in its own height,
+    // so the bar color fills down to the screen edge instead of leaving a white strip below
+    // the bar (modern iPad has only a ~20pt home-indicator inset here; old iPad's inset also
+    // includes the native bottom tab bar, which sits over this colored area).
+    return (
+      <KeyboardStickyView>
+        <Kb.Box2 direction="vertical" fullWidth={true} style={styles.stickyBarSafeArea}>
+          <ScreensSafeAreaView edges={{bottom: !keyboardVisible}} style={[styles.stickyBarSafeArea, unsetLibFlex]}>
+            {bar}
+          </ScreensSafeAreaView>
+        </Kb.Box2>
+      </KeyboardStickyView>
+    )
+  }
+
+  return <KeyboardStickyView offset={androidOffset}>{bar}</KeyboardStickyView>
 }
 
-const styles = Kb.Styles.styleSheetCreate(
-  () =>
+const useStyles = Kb.Styles.createStyleHook(
+  theme =>
     ({
       browseFile: {
         flexShrink: 0,
@@ -377,43 +370,35 @@ const styles = Kb.Styles.styleSheetCreate(
         },
         isMobile: {
           flexShrink: 1,
-          // Give space on mobile for Recipients divider
           marginTop: 1,
         },
       }),
-      fileContainer: {
-        alignSelf: 'flex-start',
-        ...Kb.Styles.padding(Kb.Styles.globalMargins.small),
-      },
-      hidden: {
-        display: 'none',
-      },
       input: Kb.Styles.platformStyles({
         common: {
-          color: Kb.Styles.globalColors.black,
+          color: theme.black,
         },
         isMobile: {
           ...Kb.Styles.globalStyles.fullHeight,
         },
       }),
-      inputActionsBarContainer: Kb.Styles.platformStyles({
-        isMobile: {
-          ...Kb.Styles.padding(Kb.Styles.globalMargins.small),
-          alignItems: 'flex-start',
-          backgroundColor: Kb.Styles.globalColors.blueGrey,
-        },
-      }),
+      inputActionsBarContainer: {
+        backgroundColor: theme.blueGrey,
+      },
+      // RNScreens' SafeAreaView forces flex: 1; neutralize it so the bar wraps its
+      // content height instead of stretching inside the keyboard sticky view.
+      stickyBarSafeArea: {
+        backgroundColor: theme.blueGrey,
+        flexBasis: 'auto',
+        flexGrow: 0,
+        flexShrink: 0,
+      },
       inputAndFilePickerContainer: Kb.Styles.platformStyles({
         isElectron: {
-          paddingBottom: 0,
-          paddingLeft: Kb.Styles.globalMargins.tiny,
-          paddingRight: 0,
-          paddingTop: Kb.Styles.globalMargins.tiny,
+          ...Kb.Styles.padding(Kb.Styles.globalMargins.tiny, 0, 0, Kb.Styles.globalMargins.tiny),
         },
       }),
       inputContainer: Kb.Styles.platformStyles({
         isElectron: {
-          // We want the immediate container not to overflow, so we tell it be height: 100% to match the parent
           ...Kb.Styles.globalStyles.fullHeight,
           alignItems: 'stretch',
           padding: 0,
@@ -435,12 +420,10 @@ const styles = Kb.Styles.styleSheetCreate(
       inputEmpty: Kb.Styles.platformStyles({
         isElectron: {
           ...Kb.Styles.padding(0),
-          minHeight: 'initial',
           overflowY: 'hidden',
         },
         isMobile: {
-          paddingLeft: Kb.Styles.globalMargins.xsmall,
-          paddingRight: Kb.Styles.globalMargins.xsmall,
+          ...Kb.Styles.paddingH(Kb.Styles.globalMargins.xsmall),
           paddingTop: Kb.Styles.globalMargins.xsmall,
         },
       }),
@@ -452,10 +435,7 @@ const styles = Kb.Styles.styleSheetCreate(
           paddingRight: 46,
         },
         isMobile: {
-          paddingBottom: Kb.Styles.globalMargins.xsmall,
-          paddingLeft: Kb.Styles.globalMargins.xsmall,
-          paddingRight: Kb.Styles.globalMargins.xsmall,
-          paddingTop: Kb.Styles.globalMargins.xsmall,
+          ...Kb.Styles.padding(Kb.Styles.globalMargins.xsmall),
         },
       }),
     }) as const

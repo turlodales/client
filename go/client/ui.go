@@ -5,20 +5,19 @@ package client
 
 import (
 	"bufio"
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"text/tabwriter"
 	"time"
 
 	"github.com/keybase/client/go/terminalescaper"
 	isatty "github.com/mattn/go-isatty"
-
-	"golang.org/x/net/context"
-
-	"sync"
 
 	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/logger"
@@ -67,7 +66,7 @@ func (ui *BaseIdentifyUI) Start(_ libkb.MetaContext, username string, reason key
 	case keybase1.IdentifyReasonType_ENCRYPT:
 		msg = "Identifying recipient "
 	}
-	ui.G().Log.Info(msg + ColorString(ui.G(), "bold", username))
+	ui.G().Log.Info(msg + ColorString(ui.G(), "bold", "%s", username))
 	ui.username = username
 	return nil
 }
@@ -86,7 +85,7 @@ func (ui *BaseIdentifyUI) Cancel(_ libkb.MetaContext) error {
 
 func (ui *BaseIdentifyUI) Finish(_ libkb.MetaContext) error {
 	if !ui.displayedProofs {
-		ui.ReportHook(ColorString(ui.G(), "bold", ui.username) + " hasn't proven their identity yet.")
+		ui.ReportHook(ColorString(ui.G(), "bold", "%s", ui.username) + " hasn't proven their identity yet.")
 	}
 	return nil
 }
@@ -152,7 +151,6 @@ type IdentifyTrackUI struct {
 }
 
 func (ui *IdentifyTrackUI) confirmFailedTrackProofs(o *keybase1.IdentifyOutcome) (result keybase1.ConfirmResult, err error) {
-
 	ignorePrompt := ""
 	inputChecker := libkb.CheckMember{Set: []string{"A", "C"}}
 
@@ -241,7 +239,7 @@ func (ui *IdentifyTrackUI) Confirm(_ libkb.MetaContext, o *keybase1.IdentifyOutc
 		prompt = "Some proofs failed; still " + verb + " " + username + "?"
 		promptDefault = libkb.PromptDefaultNo
 	default:
-		prompt = "Is this the " + ColorString(ui.G(), "bold", username) + " you wanted?"
+		prompt = "Is this the " + ColorString(ui.G(), "bold", "%s", username) + " you wanted?"
 		promptDefault = libkb.PromptDefaultYes
 	}
 
@@ -399,7 +397,6 @@ func (w LinkCheckResultWrapper) GetCachedMsg() string {
 	}
 	if len(msg) > 0 {
 		msg = "[" + msg + "]"
-
 	}
 	return msg
 }
@@ -422,16 +419,16 @@ func (ui *BaseIdentifyUI) FinishSocialProofCheck(_ libkb.MetaContext, p keybase1
 			color = "yellow"
 		}
 		msg += (mark + " " + lcrs + `"` +
-			ColorString(ui.G(), color, run) + `" on ` + s.GetService() +
+			ColorString(ui.G(), color, "%s", run) + `" on ` + s.GetService() +
 			": " + lcr.GetHint().GetHumanURL())
 	} else {
 		msg += (mark + " " + lcrs +
-			ColorString(ui.G(), "red", `"`+run+`" on `+s.GetService()+" "+
+			ColorString(ui.G(), "red", "%s", `"`+run+`" on `+s.GetService()+" "+
 				ColorString(ui.G(), "bold", "failed")+": "+
 				err.Error()))
 	}
 	if cachedMsg := lcr.GetCachedMsg(); len(cachedMsg) > 0 {
-		msg += " " + ColorString(ui.G(), "magenta", cachedMsg)
+		msg += " " + ColorString(ui.G(), "magenta", "%s", cachedMsg)
 	}
 	ui.ReportHook(msg)
 	ui.displayedProofs = true
@@ -457,13 +454,13 @@ func trackDiffToColor(typ keybase1.TrackDiffType) string {
 func trackDiffToColoredString(g *libkb.GlobalContext, t keybase1.TrackDiff) string {
 	s := "<" + t.DisplayMarkup + ">"
 	if color := trackDiffToColor(t.Type); len(color) > 0 {
-		s = ColorString(g, color, s)
+		s = ColorString(g, color, "%s", s)
 	}
 	return s
 }
 
 func (ui *BaseIdentifyUI) TrackDiffUpgradedToString(t libkb.TrackDiffUpgraded) string {
-	return ColorString(ui.G(), "orange", "<Upgraded from "+t.GetPrev()+" to "+t.GetCurr()+">")
+	return ColorString(ui.G(), "orange", "%s", "<Upgraded from "+t.GetPrev()+" to "+t.GetCurr()+">")
 }
 
 func (ui *BaseIdentifyUI) FinishWebProofCheck(_ libkb.MetaContext, p keybase1.RemoteProof, l keybase1.LinkCheckResult) error {
@@ -491,7 +488,7 @@ func (ui *BaseIdentifyUI) FinishWebProofCheck(_ libkb.MetaContext, p keybase1.Re
 		if s.GetProtocol() == "dns" {
 			msg += (mark + " " + lcrs + "admin of " +
 				ColorString(ui.G(), okColor, "DNS") + " zone " +
-				ColorString(ui.G(), okColor, s.GetDomain()) + torWarning +
+				ColorString(ui.G(), okColor, "%s", s.GetDomain()) + torWarning +
 				": found TXT entry " + lcr.GetHint().GetCheckText())
 		} else {
 			var color string
@@ -501,19 +498,19 @@ func (ui *BaseIdentifyUI) FinishWebProofCheck(_ libkb.MetaContext, p keybase1.Re
 				color = okColor
 			}
 			msg += (mark + " " + lcrs + "admin of " +
-				ColorString(ui.G(), color, s.GetHostname()) + " via " +
-				ColorString(ui.G(), color, strings.ToUpper(s.GetProtocol())) + torWarning +
+				ColorString(ui.G(), color, "%s", s.GetHostname()) + " via " +
+				ColorString(ui.G(), color, "%s", strings.ToUpper(s.GetProtocol())) + torWarning +
 				": " + lcr.GetHint().GetHumanURL())
 		}
 	} else {
 		msg = (mark + " " + lcrs +
-			ColorString(ui.G(), "red", "Proof for "+s.ToDisplayString()+" "+
+			ColorString(ui.G(), "red", "%s", "Proof for "+s.ToDisplayString()+" "+
 				ColorString(ui.G(), "bold", "failed")+": "+
 				lcr.GetError().Error()))
 	}
 
 	if cachedMsg := lcr.GetCachedMsg(); len(cachedMsg) > 0 {
-		msg += " " + ColorString(ui.G(), "magenta", cachedMsg)
+		msg += " " + ColorString(ui.G(), "magenta", "%s", cachedMsg)
 	}
 	ui.ReportHook(msg)
 	ui.displayedProofs = true
@@ -521,13 +518,13 @@ func (ui *BaseIdentifyUI) FinishWebProofCheck(_ libkb.MetaContext, p keybase1.Re
 }
 
 func (ui *BaseIdentifyUI) DisplayCryptocurrency(_ libkb.MetaContext, l keybase1.Cryptocurrency) error {
-	msg := fmt.Sprintf("%s  %s %s", BTC, l.Family, ColorString(ui.G(), "green", l.Address))
+	msg := fmt.Sprintf("%s  %s %s", BTC, l.Family, ColorString(ui.G(), "green", "%s", l.Address))
 	ui.ReportHook(msg)
 	return nil
 }
 
 func (ui *BaseIdentifyUI) DisplayStellarAccount(_ libkb.MetaContext, l keybase1.StellarAccount) error {
-	msg := fmt.Sprintf("%s  Stellar %s (%s)", XLM, ColorString(ui.G(), "green", l.AccountID), l.FederationAddress)
+	msg := fmt.Sprintf("%s  Stellar %s (%s)", XLM, ColorString(ui.G(), "green", "%s", l.AccountID), l.FederationAddress)
 	ui.ReportHook(msg)
 	return nil
 }
@@ -544,11 +541,11 @@ func (ui *BaseIdentifyUI) DisplayKey(_ libkb.MetaContext, key keybase1.IdentifyK
 		}
 		msg := mark + " " + trackDiffToColoredString(ui.G(), *key.TrackDiff)
 		if len(fpq) > 0 {
-			msg += " " + ColorString(ui.G(), trackDiffToColor(key.TrackDiff.Type), "public key fingerprint: "+fpq)
+			msg += " " + ColorString(ui.G(), trackDiffToColor(key.TrackDiff.Type), "%s", "public key fingerprint: "+fpq)
 		}
 		ui.ReportHook(msg)
 	} else if len(fpq) > 0 {
-		msg := CHECK + " " + ColorString(ui.G(), "green", "public key fingerprint: "+fpq)
+		msg := CHECK + " " + ColorString(ui.G(), "green", "%s", "public key fingerprint: "+fpq)
 		ui.ReportHook(msg)
 	}
 
@@ -562,8 +559,8 @@ func (ui *BaseIdentifyUI) ReportLastTrack(_ libkb.MetaContext, tl *keybase1.Trac
 		if !t.IsRemote() {
 			locally += "locally "
 		}
-		msg := ColorString(ui.G(), "bold", fmt.Sprintf("You last %sfollowed %s on %s",
-			locally, t.Username(), libkb.FormatTime(t.GetCTime())))
+		msg := ColorString(ui.G(), "bold", "You last %sfollowed %s on %s",
+			locally, t.Username(), libkb.FormatTime(t.GetCTime()))
 		ui.ReportHook(msg)
 	}
 
@@ -653,9 +650,9 @@ func (p ProveUI) PromptOverwrite(_ context.Context, arg keybase1.PromptOverwrite
 	var prompt string
 	switch arg.Typ {
 	case keybase1.PromptOverwriteType_SOCIAL:
-		prompt = "You already have a proof for " + ColorString(p.G(), "bold", arg.Account) + "; overwrite?"
+		prompt = "You already have a proof for " + ColorString(p.G(), "bold", "%s", arg.Account) + "; overwrite?"
 	case keybase1.PromptOverwriteType_SITE:
-		prompt = "You already have claimed ownership of " + ColorString(p.G(), "bold", arg.Account) + "; overwrite?"
+		prompt = "You already have claimed ownership of " + ColorString(p.G(), "bold", "%s", arg.Account) + "; overwrite?"
 	default:
 		prompt = "Overwrite " + arg.Account + "?"
 	}
@@ -821,7 +818,8 @@ func (l LoginUI) DisplayPrimaryPaperKey(_ context.Context, arg keybase1.DisplayP
 }
 
 func (l LoginUI) PromptResetAccount(ctx context.Context,
-	arg keybase1.PromptResetAccountArg) (keybase1.ResetPromptResponse, error) {
+	arg keybase1.PromptResetAccountArg,
+) (keybase1.ResetPromptResponse, error) {
 	var msg string
 	kind, err := arg.Prompt.T()
 	if err != nil {
@@ -925,7 +923,7 @@ func (l LoginUI) ChooseDeviceToRecoverWith(ctx context.Context, arg keybase1.Cho
 
 	ret, err := PromptSelectionOrCancel(PromptDescriptorChooseDevice, l.parent, "Choose a device", 1, allowed)
 	if err != nil {
-		if err == ErrInputCanceled {
+		if errors.Is(err, ErrInputCanceled) {
 			return keybase1.DeviceID(""), libkb.InputCanceledError{}
 		}
 		return keybase1.DeviceID(""), err
@@ -994,7 +992,7 @@ func (ui *UI) PromptPasswordMaybeScripted(pd libkb.PromptDescriptor, prompt stri
 		return ui.PromptPassword(pd, prompt)
 	}
 	ret, err = bufio.NewReader(os.Stdin).ReadString('\n')
-	if err == io.EOF && len(ret) > 0 {
+	if errors.Is(err, io.EOF) && len(ret) > 0 {
 		err = nil
 	}
 	return ret, err
@@ -1025,7 +1023,6 @@ func (ui SecretUI) GetPassphrase(pin keybase1.GUIEntryArg, term *keybase1.Secret
 }
 
 func (ui SecretUI) passphrasePrompt(arg libkb.PromptArg) (text string, storeSecret bool, err error) {
-
 	first := true
 	var res *keybase1.SecretEntryRes
 
@@ -1127,7 +1124,6 @@ func PromptWithChecker(pd libkb.PromptDescriptor, ui libkb.TerminalUI, prompt st
 }
 
 func (ui *UI) PromptForConfirmation(prompt string) error {
-
 	if ui.Terminal == nil {
 		return NoTerminalError{}
 	}
@@ -1140,7 +1136,6 @@ func (ui *UI) PromptForConfirmation(prompt string) error {
 		return NotConfirmedError{}
 	}
 	return nil
-
 }
 
 func sentencePunctuate(s string) string {
@@ -1246,19 +1241,19 @@ func (ui *UI) ErrorWriter() io.Writer {
 	return logger.ErrorWriter()
 }
 
-func (ui *UI) Printf(format string, a ...interface{}) (n int, err error) {
+func (ui *UI) Printf(format string, a ...any) (n int, err error) {
 	return fmt.Fprintf(ui.OutputWriter(), format, a...)
 }
 
-func (ui *UI) PrintfUnescaped(format string, a ...interface{}) (n int, err error) {
+func (ui *UI) PrintfUnescaped(format string, a ...any) (n int, err error) {
 	return fmt.Fprintf(ui.UnescapedOutputWriter(), format, a...)
 }
 
-func (ui *UI) Println(a ...interface{}) (int, error) {
+func (ui *UI) Println(a ...any) (int, error) {
 	return fmt.Fprintln(ui.OutputWriter(), a...)
 }
 
-func (ui *UI) PrintfStderr(format string, a ...interface{}) (n int, err error) {
+func (ui *UI) PrintfStderr(format string, a ...any) (n int, err error) {
 	return fmt.Fprintf(os.Stderr, format, a...)
 }
 

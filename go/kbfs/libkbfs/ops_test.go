@@ -160,7 +160,7 @@ func TestWriteRangeUnknownFields(t *testing.T) {
 // of opPointerizer and RegisterOps. registerOpsFuture is used by
 // testStructUnknownFields.
 
-func opPointerizerFuture(iface interface{}) reflect.Value {
+func opPointerizerFuture(iface any) reflect.Value {
 	switch op := iface.(type) {
 	default:
 		return reflect.ValueOf(iface)
@@ -184,15 +184,15 @@ func opPointerizerFuture(iface interface{}) reflect.Value {
 }
 
 func registerOpsFuture(codec kbfscodec.Codec) {
-	codec.RegisterType(reflect.TypeOf(createOpFuture{}), createOpCode)
-	codec.RegisterType(reflect.TypeOf(rmOpFuture{}), rmOpCode)
-	codec.RegisterType(reflect.TypeOf(renameOpFuture{}), renameOpCode)
-	codec.RegisterType(reflect.TypeOf(syncOpFuture{}), syncOpCode)
-	codec.RegisterType(reflect.TypeOf(setAttrOpFuture{}), setAttrOpCode)
-	codec.RegisterType(reflect.TypeOf(resolutionOpFuture{}), resolutionOpCode)
-	codec.RegisterType(reflect.TypeOf(rekeyOpFuture{}), rekeyOpCode)
-	codec.RegisterType(reflect.TypeOf(gcOpFuture{}), gcOpCode)
-	codec.RegisterIfaceSliceType(reflect.TypeOf(opsList{}), opsListCode,
+	codec.RegisterType(reflect.TypeFor[createOpFuture](), createOpCode)
+	codec.RegisterType(reflect.TypeFor[rmOpFuture](), rmOpCode)
+	codec.RegisterType(reflect.TypeFor[renameOpFuture](), renameOpCode)
+	codec.RegisterType(reflect.TypeFor[syncOpFuture](), syncOpCode)
+	codec.RegisterType(reflect.TypeFor[setAttrOpFuture](), setAttrOpCode)
+	codec.RegisterType(reflect.TypeFor[resolutionOpFuture](), resolutionOpCode)
+	codec.RegisterType(reflect.TypeFor[rekeyOpFuture](), rekeyOpCode)
+	codec.RegisterType(reflect.TypeFor[gcOpFuture](), gcOpCode)
+	codec.RegisterIfaceSliceType(reflect.TypeFor[opsList](), opsListCode,
 		opPointerizerFuture)
 }
 
@@ -475,7 +475,7 @@ func TestGcOpUnknownFields(t *testing.T) {
 }
 
 type testOps struct {
-	Ops []interface{}
+	Ops []any
 }
 
 // Tests that ops can be serialized and deserialized as extensions.
@@ -492,29 +492,19 @@ func TestOpSerialization(t *testing.T) {
 	ops.Ops = append(ops.Ops, co, ro)
 
 	buf, err := c.Encode(ops)
-	if err != nil {
-		t.Errorf("Couldn't encode ops: %v", err)
-	}
+	require.NoError(t, err, "Couldn't encode ops: %v", err)
 
 	ops2 := testOps{}
 	err = c.Decode(buf, &ops2)
-	if err != nil {
-		t.Errorf("Couldn't decode ops: %v", err)
-	}
+	require.NoError(t, err, "Couldn't decode ops: %v", err)
 
 	op1, ok := ops2.Ops[0].(createOp)
-	if !ok {
-		t.Errorf("Couldn't decode createOp: %v", reflect.TypeOf(ops2.Ops[0]))
-	} else if op1.NewName != "test1" {
-		t.Errorf("Wrong name in createOp: %s", op1.NewName)
-	}
+	require.True(t, ok, "Couldn't decode createOp: %v", reflect.TypeOf(ops2.Ops[0]))
+	require.Equal(t, "test1", op1.NewName, "Wrong name in createOp: %s", op1.NewName)
 
 	op2, ok := ops2.Ops[1].(rmOp)
-	if !ok {
-		t.Errorf("Couldn't decode rmOp: %v", reflect.TypeOf(ops2.Ops[1]))
-	} else if op2.OldName != "test2" {
-		t.Errorf("Wrong name in rmOp: %s", op2.OldName)
-	}
+	require.True(t, ok, "Couldn't decode rmOp: %v", reflect.TypeOf(ops2.Ops[1]))
+	require.Equal(t, "test2", op2.OldName, "Wrong name in rmOp: %s", op2.OldName)
 }
 
 func TestOpInversion(t *testing.T) {
@@ -537,8 +527,7 @@ func TestOpInversion(t *testing.T) {
 	require.NoError(t, err)
 	ro, ok := iop1.(*rmOp)
 	if !ok || !reflect.DeepEqual(*ro, *expectedIOp) {
-		t.Errorf("createOp didn't invert properly, expected %v, got %v",
-			expectedIOp, iop1)
+		require.Failf(t, "", "createOp didn't invert properly, expected %v, got %v", expectedIOp, iop1)
 	}
 
 	// convert it back (works because the inversion picks File as the
@@ -547,8 +536,7 @@ func TestOpInversion(t *testing.T) {
 	require.NoError(t, err)
 	co, ok := iop2.(*createOp)
 	if !ok || !reflect.DeepEqual(*co, *cop) {
-		t.Errorf("rmOp didn't invert properly, expected %v, got %v",
-			expectedIOp, iop2)
+		require.Failf(t, "", "rmOp didn't invert properly, expected %v, got %v", expectedIOp, iop2)
 	}
 
 	// rename
@@ -565,8 +553,7 @@ func TestOpInversion(t *testing.T) {
 	require.NoError(t, err)
 	iRenameOp, ok := iop3.(*renameOp)
 	if !ok || !reflect.DeepEqual(*iRenameOp, *expectedIOp3) {
-		t.Errorf("renameOp didn't invert properly, expected %v, got %v",
-			expectedIOp3, iop3)
+		require.Failf(t, "", "renameOp didn't invert properly, expected %v, got %v", expectedIOp3, iop3)
 	}
 
 	// sync (writes should be the same as before)
@@ -584,8 +571,7 @@ func TestOpInversion(t *testing.T) {
 	require.NoError(t, err)
 	so, ok := iop4.(*syncOp)
 	if !ok || !reflect.DeepEqual(*so, *expectedIOp4) {
-		t.Errorf("syncOp didn't invert properly, expected %v, got %v",
-			expectedIOp4, iop4)
+		require.Failf(t, "", "syncOp didn't invert properly, expected %v, got %v", expectedIOp4, iop4)
 	}
 
 	// setAttr
@@ -599,8 +585,7 @@ func TestOpInversion(t *testing.T) {
 	require.NoError(t, err)
 	sao, ok := iop5.(*setAttrOp)
 	if !ok || !reflect.DeepEqual(*sao, *expectedIOp5) {
-		t.Errorf("setAttrOp didn't invert properly, expected %v, got %v",
-			expectedIOp5, iop5)
+		require.Failf(t, "", "setAttrOp didn't invert properly, expected %v, got %v", expectedIOp5, iop5)
 	}
 
 	// rename (same dir)
@@ -615,8 +600,7 @@ func TestOpInversion(t *testing.T) {
 	require.NoError(t, err)
 	iRenameOp, ok = iop6.(*renameOp)
 	if !ok || !reflect.DeepEqual(*iRenameOp, *expectedIOp6) {
-		t.Errorf("renameOp didn't invert properly, expected %v, got %v",
-			expectedIOp6, iop6)
+		require.Failf(t, "", "renameOp didn't invert properly, expected %v, got %v", expectedIOp6, iop6)
 	}
 }
 
@@ -625,34 +609,31 @@ func TestOpsCollapseWriteRange(t *testing.T) {
 	const fileSize = uint64(1000)
 	const numWrites = 25
 	const maxWriteSize = uint64(50)
-	for i := 0; i < numAttempts; i++ {
+	for range numAttempts {
 		// Make a "file" where dirty bytes are represented by trues.
 		var file [fileSize]bool
 		var lastByte uint64
 		var lastByteIsTruncate bool
 		var syncOps []*syncOp
-		for j := 0; j < numWrites; j++ {
+		for range numWrites {
 			// Start a new syncOp?
-			if len(syncOps) == 0 || rand.Int()%5 == 0 {
+			if len(syncOps) == 0 || rand.Int()%5 == 0 { //nolint:gosec // G404: Test data generation, not security-sensitive
 				syncOps = append(syncOps, &syncOp{})
 			}
 
 			op := syncOps[len(syncOps)-1]
 			// Generate either a random truncate or random write
-			off := uint64(rand.Int()) % fileSize
+			off := uint64(rand.Int()) % fileSize //nolint:gosec // G404: Test data generation, not security-sensitive
 			var length uint64
-			if rand.Int()%5 > 0 {
+			if rand.Int()%5 > 0 { //nolint:gosec // G404: Test data generation, not security-sensitive
 				// A write, not a truncate
-				maxLen := fileSize - off
-				if maxLen > maxWriteSize {
-					maxLen = maxWriteSize
-				}
+				maxLen := min(fileSize-off, maxWriteSize)
 				maxLen--
 				if maxLen == 0 {
 					maxLen = 1
 				}
 				// Writes must have at least one byte
-				length = uint64(rand.Int())%maxLen + uint64(1)
+				length = uint64(rand.Int())%maxLen + uint64(1) //nolint:gosec // G404: Test data generation, not security-sensitive
 				op.addWrite(off, length)
 				// Fill in dirty bytes
 				for k := off; k < off+length; k++ {
@@ -683,34 +664,29 @@ func TestOpsCollapseWriteRange(t *testing.T) {
 
 		var wrExpected []WriteRange
 		inWrite := false
-		for j := 0; j < int(lastByte); j++ {
+		for j := 0; j < int(lastByte); j++ { //nolint:gosec // G115: Test data with bounded values
 			if !inWrite && file[j] {
 				inWrite = true
-				wrExpected = append(wrExpected, WriteRange{Off: uint64(j)})
+				wrExpected = append(wrExpected, WriteRange{Off: uint64(j)}) //nolint:gosec // G115: Test data with bounded values
 			} else if inWrite && !file[j] {
 				inWrite = false
-				wrExpected[len(wrExpected)-1].Len =
-					uint64(j) - wrExpected[len(wrExpected)-1].Off
+				wrExpected[len(wrExpected)-1].Len = uint64(j) - wrExpected[len(wrExpected)-1].Off //nolint:gosec // G115: Test data with bounded values
 			}
 		}
 		if inWrite {
-			wrExpected[len(wrExpected)-1].Len =
-				lastByte - wrExpected[len(wrExpected)-1].Off
+			wrExpected[len(wrExpected)-1].Len = lastByte - wrExpected[len(wrExpected)-1].Off
 		}
 		if lastByteIsTruncate {
 			wrExpected = append(wrExpected, WriteRange{Off: lastByte})
 		}
 
 		// Verify that the write range represents what's in the file.
-		if g, e := len(wrComputed), len(wrExpected); g != e {
-			t.Errorf("Range lengths differ (%d vs %d)", g, e)
-			continue
-		}
+		g, e := len(wrComputed), len(wrExpected)
+		require.Equal(t, e, g, "Range lengths differ (%d vs %d)", g, e)
 		for j, wc := range wrComputed {
 			we := wrExpected[j]
-			if wc.Off != we.Off && wc.Len != we.Len {
-				t.Errorf("Writes differ at index %d (%v vs %v)", j, we, wc)
-			}
+			require.Equal(t, we.Off, wc.Off, "Writes differ at index %d (%v vs %v)", j, we, wc)
+			require.Equal(t, we.Len, wc.Len, "Writes differ at index %d (%v vs %v)", j, we, wc)
 		}
 	}
 }
@@ -726,14 +702,20 @@ func TestCollapseWriteRangeWithLaterTruncate(t *testing.T) {
 
 func ExamplecoalesceWrites() {
 	fmt.Println(coalesceWrites(
-		[]WriteRange{{Off: 7, Len: 5}, {Off: 18, Len: 10},
-			{Off: 98, Len: 10}}, WriteRange{Off: 5, Len: 100}))
+		[]WriteRange{
+			{Off: 7, Len: 5},
+			{Off: 18, Len: 10},
+			{Off: 98, Len: 10},
+		}, WriteRange{Off: 5, Len: 100}))
 	// Output: [{5 103 {{map[]}}}]
 }
 
 func ExamplecoalesceWrites_withOldTruncate() {
 	fmt.Println(coalesceWrites(
-		[]WriteRange{{Off: 7, Len: 5}, {Off: 18, Len: 10},
-			{Off: 98, Len: 0}}, WriteRange{Off: 5, Len: 100}))
+		[]WriteRange{
+			{Off: 7, Len: 5},
+			{Off: 18, Len: 10},
+			{Off: 98, Len: 0},
+		}, WriteRange{Off: 5, Len: 100}))
 	// Output: [{5 100 {{map[]}}} {105 0 {{map[]}}}]
 }

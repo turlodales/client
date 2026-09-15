@@ -39,7 +39,8 @@ func verifyUserEK(t *testing.T, metadata keybase1.UserEkMetadata, ek keybase1.Us
 }
 
 func verifyTeamEK(t *testing.T, teamEKMetadata keybase1.TeamEkMetadata,
-	ek keybase1.TeamEphemeralKey) {
+	ek keybase1.TeamEphemeralKey,
+) {
 	typ, err := ek.KeyType()
 	require.NoError(t, err)
 	require.Equal(t, keybase1.TeamEphemeralKeyType_TEAM, typ)
@@ -75,8 +76,8 @@ func TestEphemeralCloneError(t *testing.T) {
 	}
 	_, err = g.GetTeamEKBoxStorage().Get(mctx, teamID, teamEK1.Generation(), nil)
 	require.Error(t, err)
-	require.IsType(t, EphemeralKeyError{}, err)
-	ekErr := err.(EphemeralKeyError)
+	var ekErr EphemeralKeyError
+	require.ErrorAs(t, err, &ekErr)
 	require.Contains(t, ekErr.HumanError(), DeviceCloneErrMsg)
 }
 
@@ -104,8 +105,8 @@ func TestEphemeralDeviceProvisionedAfterContent(t *testing.T) {
 	creationCtime := gregor1.ToTime(time.Now().Add(time.Hour * -100))
 	_, err = g.GetTeamEKBoxStorage().Get(mctx, teamID, teamEK1.Generation(), &creationCtime)
 	require.Error(t, err)
-	require.IsType(t, EphemeralKeyError{}, err)
-	ekErr := err.(EphemeralKeyError)
+	var ekErr EphemeralKeyError
+	require.ErrorAs(t, err, &ekErr)
 	require.Contains(t, ekErr.HumanError(), DeviceAfterEKErrMsg)
 
 	// clear out cached error messages
@@ -116,8 +117,7 @@ func TestEphemeralDeviceProvisionedAfterContent(t *testing.T) {
 	// If no creation ctime is specified, we just get the default error message
 	_, err = g.GetTeamEKBoxStorage().Get(mctx, teamID, teamEK1.Generation(), nil)
 	require.Error(t, err)
-	require.IsType(t, EphemeralKeyError{}, err)
-	ekErr = err.(EphemeralKeyError)
+	require.ErrorAs(t, err, &ekErr)
 	require.Equal(t, DefaultHumanErrMsg, ekErr.HumanError())
 }
 
@@ -131,7 +131,10 @@ func TestEphemeralPluralization(t *testing.T) {
 	require.Equal(t, humanMsg, pluralized)
 
 	pluralized = PluralizeErrorMessage(humanMsg, 2)
-	require.Equal(t, "2 exploding messages are not available, because this device was created after it was sent", pluralized)
+	require.Equal(t, "2 exploding messages are not available because this device was created after the messages were sent", pluralized)
+
+	pluralized = PluralizeErrorMessage(humanMsgWithPrefix(MemberAfterEKErrMsg), 3)
+	require.Equal(t, "3 exploding messages are not available because you joined the team after the messages were sent", pluralized)
 
 	pluralized = PluralizeErrorMessage(DefaultHumanErrMsg, 2)
 	require.Equal(t, "2 exploding messages are not available", pluralized)

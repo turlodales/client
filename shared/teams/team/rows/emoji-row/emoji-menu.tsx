@@ -1,8 +1,8 @@
-import * as React from 'react'
+import type * as React from 'react'
 import * as Kb from '@/common-adapters'
 
 type Props = {
-  attachTo?: React.RefObject<Kb.MeasureRef>
+  attachTo?: React.RefObject<Kb.MeasureRef | null>
   onAddAlias?: () => void
   onRemove?: () => void
   onHidden: () => void

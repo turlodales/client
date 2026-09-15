@@ -25,8 +25,7 @@ func (e NoSuchNameError) Error() string {
 
 // HandleFinalizedError is returned when something attempts to modify
 // a finalized TLF handle.
-type HandleFinalizedError struct {
-}
+type HandleFinalizedError struct{}
 
 // Error implements the error interface for HandleFinalizedError.
 func (e HandleFinalizedError) Error() string {
@@ -46,6 +45,10 @@ type HandleMismatchError struct {
 func (e HandleMismatchError) Error() string {
 	return fmt.Sprintf("Could not verify metadata (revision=%d) for directory %s (id=%s): %s",
 		e.Revision, e.Dir, e.TlfID, e.Err)
+}
+
+func (e HandleMismatchError) Unwrap() error {
+	return e.Err
 }
 
 // ReadAccessError indicates that the user tried to read from a

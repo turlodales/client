@@ -4,9 +4,8 @@
 package engine
 
 import (
+	"context"
 	"fmt"
-
-	"golang.org/x/net/context"
 
 	"github.com/keybase/client/go/libkb"
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
@@ -78,7 +77,7 @@ type gpgTestUIBadSign struct {
 	gpgtestui
 }
 
-func (g *gpgTestUIBadSign) Sign(_ context.Context, arg keybase1.SignArg) (string, error) {
+func (g *gpgTestUIBadSign) Sign(_ context.Context, _ keybase1.SignArg) (string, error) {
 	return "", libkb.GpgError{M: "Artificial GPG failure for testing"}
 }
 

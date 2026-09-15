@@ -1,14 +1,15 @@
-// Auto-generated to Go types and interfaces using avdl-compiler v1.4.10 (https://github.com/keybase/node-avdl-compiler)
+// Code generated to Go types and interfaces using avdl-compiler v1.4.10 (https://github.com/keybase/node-avdl-compiler). DO NOT EDIT.
 //   Input file: avdl/keybase1/login_ui.avdl
 
 package keybase1
 
 import (
+	"context"
 	"errors"
 	"fmt"
-	"github.com/keybase/go-framed-msgpack-rpc/rpc"
-	context "golang.org/x/net/context"
 	"time"
+
+	"github.com/keybase/go-framed-msgpack-rpc/rpc"
 )
 
 type ResetPromptType int
@@ -36,11 +37,11 @@ var ResetPromptTypeRevMap = map[ResetPromptType]string{
 	3: "ENTER_RESET_PW",
 }
 
-func (e ResetPromptType) String() string {
-	if v, ok := ResetPromptTypeRevMap[e]; ok {
+func (o ResetPromptType) String() string {
+	if v, ok := ResetPromptTypeRevMap[o]; ok {
 		return v
 	}
-	return fmt.Sprintf("%v", int(e))
+	return fmt.Sprintf("%v", int(o))
 }
 
 type ResetPromptInfo struct {
@@ -99,7 +100,7 @@ func (o ResetPrompt) DeepCopy() ResetPrompt {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.Complete__),
 	}
@@ -127,11 +128,11 @@ var ResetPromptResponseRevMap = map[ResetPromptResponse]string{
 	2: "CONFIRM_RESET",
 }
 
-func (e ResetPromptResponse) String() string {
-	if v, ok := ResetPromptResponseRevMap[e]; ok {
+func (o ResetPromptResponse) String() string {
+	if v, ok := ResetPromptResponseRevMap[o]; ok {
 		return v
 	}
-	return fmt.Sprintf("%v", int(e))
+	return fmt.Sprintf("%v", int(o))
 }
 
 type PassphraseRecoveryPromptType int
@@ -150,11 +151,11 @@ var PassphraseRecoveryPromptTypeRevMap = map[PassphraseRecoveryPromptType]string
 	0: "ENCRYPTED_PGP_KEYS",
 }
 
-func (e PassphraseRecoveryPromptType) String() string {
-	if v, ok := PassphraseRecoveryPromptTypeRevMap[e]; ok {
+func (o PassphraseRecoveryPromptType) String() string {
+	if v, ok := PassphraseRecoveryPromptTypeRevMap[o]; ok {
 		return v
 	}
-	return fmt.Sprintf("%v", int(e))
+	return fmt.Sprintf("%v", int(o))
 }
 
 type ResetMessage int
@@ -191,11 +192,11 @@ var ResetMessageRevMap = map[ResetMessage]string{
 	6: "RESET_LINK_SENT",
 }
 
-func (e ResetMessage) String() string {
-	if v, ok := ResetMessageRevMap[e]; ok {
+func (o ResetMessage) String() string {
+	if v, ok := ResetMessageRevMap[o]; ok {
 		return v
 	}
-	return fmt.Sprintf("%v", int(e))
+	return fmt.Sprintf("%v", int(o))
 }
 
 type GetEmailOrUsernameArg struct {
@@ -277,11 +278,11 @@ func LoginUiProtocol(i LoginUiInterface) rpc.Protocol {
 		Name: "keybase.1.loginUi",
 		Methods: map[string]rpc.ServeHandlerDescription{
 			"getEmailOrUsername": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]GetEmailOrUsernameArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]GetEmailOrUsernameArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]GetEmailOrUsernameArg)(nil), args)
@@ -292,11 +293,11 @@ func LoginUiProtocol(i LoginUiInterface) rpc.Protocol {
 				},
 			},
 			"promptRevokePaperKeys": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]PromptRevokePaperKeysArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]PromptRevokePaperKeysArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]PromptRevokePaperKeysArg)(nil), args)
@@ -307,11 +308,11 @@ func LoginUiProtocol(i LoginUiInterface) rpc.Protocol {
 				},
 			},
 			"displayPaperKeyPhrase": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]DisplayPaperKeyPhraseArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]DisplayPaperKeyPhraseArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]DisplayPaperKeyPhraseArg)(nil), args)
@@ -322,11 +323,11 @@ func LoginUiProtocol(i LoginUiInterface) rpc.Protocol {
 				},
 			},
 			"displayPrimaryPaperKey": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]DisplayPrimaryPaperKeyArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]DisplayPrimaryPaperKeyArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]DisplayPrimaryPaperKeyArg)(nil), args)
@@ -337,11 +338,11 @@ func LoginUiProtocol(i LoginUiInterface) rpc.Protocol {
 				},
 			},
 			"promptResetAccount": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]PromptResetAccountArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]PromptResetAccountArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]PromptResetAccountArg)(nil), args)
@@ -352,11 +353,11 @@ func LoginUiProtocol(i LoginUiInterface) rpc.Protocol {
 				},
 			},
 			"displayResetProgress": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]DisplayResetProgressArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]DisplayResetProgressArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]DisplayResetProgressArg)(nil), args)
@@ -367,11 +368,11 @@ func LoginUiProtocol(i LoginUiInterface) rpc.Protocol {
 				},
 			},
 			"explainDeviceRecovery": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]ExplainDeviceRecoveryArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]ExplainDeviceRecoveryArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]ExplainDeviceRecoveryArg)(nil), args)
@@ -382,11 +383,11 @@ func LoginUiProtocol(i LoginUiInterface) rpc.Protocol {
 				},
 			},
 			"promptPassphraseRecovery": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]PromptPassphraseRecoveryArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]PromptPassphraseRecoveryArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]PromptPassphraseRecoveryArg)(nil), args)
@@ -397,11 +398,11 @@ func LoginUiProtocol(i LoginUiInterface) rpc.Protocol {
 				},
 			},
 			"chooseDeviceToRecoverWith": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]ChooseDeviceToRecoverWithArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]ChooseDeviceToRecoverWithArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]ChooseDeviceToRecoverWithArg)(nil), args)
@@ -412,11 +413,11 @@ func LoginUiProtocol(i LoginUiInterface) rpc.Protocol {
 				},
 			},
 			"displayResetMessage": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]DisplayResetMessageArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]DisplayResetMessageArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]DisplayResetMessageArg)(nil), args)
@@ -436,22 +437,22 @@ type LoginUiClient struct {
 
 func (c LoginUiClient) GetEmailOrUsername(ctx context.Context, sessionID int) (res string, err error) {
 	__arg := GetEmailOrUsernameArg{SessionID: sessionID}
-	err = c.Cli.Call(ctx, "keybase.1.loginUi.getEmailOrUsername", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "keybase.1.loginUi.getEmailOrUsername", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LoginUiClient) PromptRevokePaperKeys(ctx context.Context, __arg PromptRevokePaperKeysArg) (res bool, err error) {
-	err = c.Cli.Call(ctx, "keybase.1.loginUi.promptRevokePaperKeys", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "keybase.1.loginUi.promptRevokePaperKeys", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c LoginUiClient) DisplayPaperKeyPhrase(ctx context.Context, __arg DisplayPaperKeyPhraseArg) (err error) {
-	err = c.Cli.Call(ctx, "keybase.1.loginUi.displayPaperKeyPhrase", []interface{}{__arg}, nil, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "keybase.1.loginUi.displayPaperKeyPhrase", []any{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c LoginUiClient) DisplayPrimaryPaperKey(ctx context.Context, __arg DisplayPrimaryPaperKeyArg) (err error) {
-	err = c.Cli.Call(ctx, "keybase.1.loginUi.displayPrimaryPaperKey", []interface{}{__arg}, nil, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "keybase.1.loginUi.displayPrimaryPaperKey", []any{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
@@ -459,36 +460,36 @@ func (c LoginUiClient) DisplayPrimaryPaperKey(ctx context.Context, __arg Display
 // would like to either enter the autoreset pipeline and perform the reset
 // of the account.
 func (c LoginUiClient) PromptResetAccount(ctx context.Context, __arg PromptResetAccountArg) (res ResetPromptResponse, err error) {
-	err = c.Cli.Call(ctx, "keybase.1.loginUi.promptResetAccount", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "keybase.1.loginUi.promptResetAccount", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 // In some flows the user will get notified of the reset progress
 func (c LoginUiClient) DisplayResetProgress(ctx context.Context, __arg DisplayResetProgressArg) (err error) {
-	err = c.Cli.Call(ctx, "keybase.1.loginUi.displayResetProgress", []interface{}{__arg}, nil, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "keybase.1.loginUi.displayResetProgress", []any{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 // During recovery the service might want to explain to the user how they can change
 // their password by using the "change password" functionality on other devices.
 func (c LoginUiClient) ExplainDeviceRecovery(ctx context.Context, __arg ExplainDeviceRecoveryArg) (err error) {
-	err = c.Cli.Call(ctx, "keybase.1.loginUi.explainDeviceRecovery", []interface{}{__arg}, nil, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "keybase.1.loginUi.explainDeviceRecovery", []any{__arg}, nil, 0*time.Millisecond)
 	return
 }
 
 func (c LoginUiClient) PromptPassphraseRecovery(ctx context.Context, __arg PromptPassphraseRecoveryArg) (res bool, err error) {
-	err = c.Cli.Call(ctx, "keybase.1.loginUi.promptPassphraseRecovery", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "keybase.1.loginUi.promptPassphraseRecovery", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 // Different from ProvisionUI's chooseDevice due to phrasing in the UI.
 func (c LoginUiClient) ChooseDeviceToRecoverWith(ctx context.Context, __arg ChooseDeviceToRecoverWithArg) (res DeviceID, err error) {
-	err = c.Cli.Call(ctx, "keybase.1.loginUi.chooseDeviceToRecoverWith", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "keybase.1.loginUi.chooseDeviceToRecoverWith", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 // Simply displays a message in the recovery flow.
 func (c LoginUiClient) DisplayResetMessage(ctx context.Context, __arg DisplayResetMessageArg) (err error) {
-	err = c.Cli.Call(ctx, "keybase.1.loginUi.displayResetMessage", []interface{}{__arg}, nil, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "keybase.1.loginUi.displayResetMessage", []any{__arg}, nil, 0*time.Millisecond)
 	return
 }

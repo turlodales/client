@@ -1,66 +1,34 @@
-// This hook sends props to a remote window
-// Listens for requests from the main process (which proxies requests from other windows) to kick off an update
-// If asked we'll send all props, otherwise we do a shallow compare and send the different ones
+// This hook sends props to a remote window. The main process caches the last
+// value sent per window, so a window that (re)loads pulls the cached props
+// itself and no handshake back to this window is needed.
 import * as React from 'react'
 import * as C from '@/constants'
-import throttle from 'lodash/throttle'
-import KB2 from '@/util/electron.desktop'
-import isEqual from 'lodash/isEqual'
+import KB2 from '@/util/electron'
+import {useColorScheme} from 'react-native'
+import type {RemoteComponentName} from './remote-component.desktop'
 
 const {rendererNewProps} = KB2.functions
 
-// set this to true to see details of the serialization process
-const debugSerializer: boolean = __DEV__ && (false as boolean)
-if (debugSerializer) {
-  console.log('\n\n\n\n\n\nDEBUGGING REMOTE SERIALIZER')
-}
-
-export default function useSerializeProps<ProxyProps extends {}, SerializeProps extends {}>(
-  p: ProxyProps,
-  serializer: (p: ProxyProps) => Partial<SerializeProps>,
-  windowComponent: string,
+export default function useSerializeProps<P extends object>(
+  props: P,
+  windowComponent: RemoteComponentName,
   windowParam: string
 ) {
-  const lastSent = React.useRef<Partial<SerializeProps>>({})
-  const lastForceUpdate = React.useRef<number>(-1)
-  const currentForceUpdate = C.useConfigState(
-    s => s.remoteWindowNeedsProps.get(windowComponent)?.get(windowParam) ?? 0
-  )
-  const throttledSend = React.useRef(
-    throttle(
-      (p: ProxyProps, forceUpdate: boolean) => {
-        const lastToSend: {[key: string]: unknown} = forceUpdate ? {} : lastSent.current
-        const serialized = serializer(p)
-        const toSend = {...serialized} as {[key: string]: unknown}
-        // clear undefineds / exact dupes
-        Object.keys(toSend).forEach(k => {
-          if (toSend[k] === undefined || isEqual(toSend[k], lastToSend[k])) {
-            delete toSend[k] // eslint-disable-line
-          }
-        })
+  const lastSent = React.useRef('')
+  const darkMode = useColorScheme() === 'dark'
+  const propsStr = JSON.stringify({...props, darkMode})
 
-        if (Object.keys(toSend).length) {
-          const propsStr = JSON.stringify(toSend)
-          debugSerializer && console.log('[useSerializeProps]: throttled send', propsStr.length, toSend)
-          rendererNewProps?.({propsStr, windowComponent, windowParam})
-        }
-        lastSent.current = serialized
-        lastForceUpdate.current = currentForceUpdate
-      },
-      1000,
-      {leading: true}
-    )
-  )
-
-  React.useEffect(
-    () => {
-      if (!windowComponent) {
-        return
-      }
-      const forceUpdate = currentForceUpdate !== lastForceUpdate.current
-      throttledSend.current(p, forceUpdate)
+  const throttledSend = C.useThrottledCallback(
+    (nextPropsStr: string) => {
+      if (nextPropsStr === lastSent.current) return
+      rendererNewProps?.({propsStr: nextPropsStr, windowComponent, windowParam})
+      lastSent.current = nextPropsStr
     },
-    // eslint-disable-next-line
-    [...Object.values(p), currentForceUpdate]
+    1000,
+    {leading: true}
   )
+
+  React.useEffect(() => {
+    throttledSend(propsStr)
+  }, [propsStr, throttledSend])
 }

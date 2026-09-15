@@ -4,11 +4,10 @@
 package libkb
 
 import (
+	"context"
 	"fmt"
 	"runtime/debug"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/keybase/client/go/jsonhelpers"
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
@@ -311,6 +310,7 @@ func LoadMe(arg LoadUserArg) (*User, error) {
 func LoadMeByUID(ctx context.Context, g *GlobalContext, uid keybase1.UID) (*User, error) {
 	return LoadMe(NewLoadUserByUIDArg(ctx, g, uid))
 }
+
 func LoadMeByMetaContextAndUID(m MetaContext, uid keybase1.UID) (*User, error) {
 	return LoadMe(NewLoadUserArgWithMetaContext(m).WithUID(uid))
 }
@@ -576,7 +576,6 @@ func LoadUserFromServer(m MetaContext, uid keybase1.UID, body *jsonw.Wrapper) (u
 				"load_deleted": B{true},
 			},
 		})
-
 		if err != nil {
 			return nil, err
 		}

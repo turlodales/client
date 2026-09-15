@@ -1,7 +1,7 @@
-import * as RemoteGen from '@/actions/remote-gen'
+import * as RemoteGen from '@/constants/remote-actions'
 import * as R from '@/constants/remote'
 import * as Electron from 'electron'
-import * as RPCTypes from '@/constants/types/rpc-gen'
+import * as RPCTypes from '@/constants/rpc/rpc-gen'
 import flags from '@/util/feature-flags'
 import {closeWindows} from './main-window.desktop'
 import {isDarwin, isLinux} from '@/constants/platform'
@@ -164,7 +164,9 @@ function setupContextMenu(window: Electron.BrowserWindow) {
                 s =>
                   new Electron.MenuItem({
                     click(_, w) {
-                      w?.webContents.replaceMisspelling(s)
+                      if (w instanceof Electron.BrowserWindow) {
+                        w.webContents.replaceMisspelling(s)
+                      }
                     },
                     label: s,
                   })
@@ -172,7 +174,9 @@ function setupContextMenu(window: Electron.BrowserWindow) {
               ...(dictionarySuggestions.length ? [new Electron.MenuItem({type: 'separator'})] : []),
               new Electron.MenuItem({
                 click(_, w) {
-                  w?.webContents.session.addWordToSpellCheckerDictionary(props.misspelledWord)
+                  if (w instanceof Electron.BrowserWindow) {
+                    w.webContents.session.addWordToSpellCheckerDictionary(props.misspelledWord)
+                  }
                 },
                 label: 'Add to dictionary',
               }),

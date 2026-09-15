@@ -44,7 +44,7 @@ if [ -n "$kbfs_commit" ]; then
 	echo "Checking out $kbfs_commit on kbfs (will reset to $kbfs_branch)"
 	git fetch
 	git reset --hard "origin/$kbfs_commit"
-	# tell gobuild.sh (called via "yarn run rn-gobuild-ios" below) to use our local commit
+	# tell gobuild.sh (called via "yarn run ios:gobuild" below) to use our local commit
 	export LOCAL_KBFS=1
 fi
 
@@ -56,6 +56,10 @@ if [ -n "$client_commit" ]; then
 	cd "$client_dir"
 	echo "Checking out $client_commit on client (will reset to $client_branch)"
 	git fetch
+	# Builds dirty shared/ios/ (fastlane bumps build numbers, pod install rewrites
+	# Podfile.lock). If a previous run died before its reset trap, that dirt blocks
+	# the checkout below, so drop it first.
+	git checkout -- shared/ios/
 	git checkout "$client_commit"
 	git reset --hard "$client_commit"
 	git pull origin "$client_commit" --ff-only
@@ -63,6 +67,7 @@ else
 	echo "Checking out master on client"
 	cd "$client_dir"
 	git fetch
+	git checkout -- shared/ios/
 	git checkout "master"
 	git reset --hard "origin/master"
 	git pull origin master --ff-only
@@ -74,15 +79,18 @@ git log -n 3
 
 cd "$shared_dir"
 
+echo "Cleaning yarn cache to free up disk space"
+yarn cache clean
+
 echo "Cleaning up main node_modules from previous runs"
 rm -rf node_modules
 yarn modules
-yarn pod-clean
-yarn pod-install
+yarn ios:pod:clean
+yarn ios:pod:install
 
 if [ ! "$cache_go_lib" = "1" ]; then
 	echo "Building Go library"
-	CHECK_CI="$check_ci" yarn run rn-gobuild-ios
+	CHECK_CI="$check_ci" yarn run ios:gobuild
 fi
 
 "$client_dir/packaging/manage_react_native_packager.sh" &
@@ -94,6 +102,17 @@ cd "$ios_dir"
 if [ -n "$clean" ]; then
 	xcodebuild clean -workspace "Keybase.xcworkspace" -scheme "Keybase"
 fi
+
+# Stale cached profiles shadow the fresh ones sigh downloads when Xcode
+# matches profiles by name (e.g. after annual renewal); park them so only
+# freshly-downloaded profiles are visible.
+profile_backup="$HOME/old-provisioning-profiles/$(date +%Y%m%d-%H%M%S)"
+for profile_dir in "$HOME/Library/MobileDevice/Provisioning Profiles" "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"; do
+	if compgen -G "$profile_dir/*.mobileprovision" >/dev/null; then
+		mkdir -p "$profile_backup"
+		mv "$profile_dir"/*.mobileprovision "$profile_backup/"
+	fi
+done
 
 # fastlane wants these set
 export LC_ALL=en_US.UTF-8

@@ -6,13 +6,14 @@
 package teams
 
 import (
-	"golang.org/x/net/context"
+	"context"
 
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 )
 
 func (t *Team) ExportToTeamPlusApplicationKeys(ctx context.Context, idTime keybase1.Time,
-	application keybase1.TeamApplication, includeKBFSKeys bool) (ret keybase1.TeamPlusApplicationKeys, err error) {
+	application keybase1.TeamApplication, includeKBFSKeys bool,
+) (ret keybase1.TeamPlusApplicationKeys, err error) {
 	loadKeys := true
 	if t.IsPublic() {
 		// If it's a public team, only try to load application keys if

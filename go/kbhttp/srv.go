@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/keybase/client/go/logger"
 )
@@ -112,7 +113,7 @@ func (p *RandomPortRangeListenerSource) GetListener() (listener net.Listener, ad
 	p.Lock()
 	defer p.Unlock()
 	localhost := "127.0.0.1"
-	for i := 0; i < maxRandomTries; i++ {
+	for range maxRandomTries {
 		if p.pinnedPort > 0 {
 			address = fmt.Sprintf("%s:%d", localhost, p.pinnedPort)
 			if listener, err = net.Listen("tcp", address); err != nil {
@@ -174,8 +175,9 @@ func (h *Srv) Start() (err error) {
 		return err
 	}
 	h.server = &http.Server{
-		Addr:    address,
-		Handler: h.ServeMux,
+		Addr:              address,
+		Handler:           h.ServeMux,
+		ReadHeaderTimeout: 10 * time.Second, // Prevent Slowloris attacks
 	}
 	h.doneCh = make(chan struct{})
 	go func(server *http.Server, doneCh chan struct{}) {

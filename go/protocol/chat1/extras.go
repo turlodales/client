@@ -13,6 +13,7 @@ import (
 	"math"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -26,6 +27,10 @@ import (
 
 // we will show some representation of an exploded message in the UI for a week
 const ShowExplosionLifetime = time.Hour * 24 * 7
+
+// MaxMarkAsReadBatchItems is the maximum number of conversations accepted by a
+// mark-as-read batch RPC.
+const MaxMarkAsReadBatchItems = 1000
 
 // If a conversation is larger, only admins can @channel.
 const MaxChanMentionConvSize = 100
@@ -42,8 +47,10 @@ func (i ConvIDStr) String() string {
 	return string(i)
 }
 
-type ByUID []gregor1.UID
-type ConvIDShort = []byte
+type (
+	ByUID       []gregor1.UID
+	ConvIDShort = []byte
+)
 
 func (b ByUID) Len() int      { return len(b) }
 func (b ByUID) Swap(i, j int) { b[i], b[j] = b[j], b[i] }
@@ -126,10 +133,7 @@ const DbShortFormLen = 10
 // DbShortForm should only be used when interacting with the database, and should
 // never leave Gregor
 func (cid ConversationID) DbShortForm() ConvIDShort {
-	end := DbShortFormLen
-	if end > len(cid) {
-		end = len(cid)
-	}
+	end := min(DbShortFormLen, len(cid))
 	return cid[:end]
 }
 
@@ -335,28 +339,16 @@ func DeletableMessageTypesByDeleteHistory() (res []MessageType) {
 			res = append(res, mt)
 		}
 	}
-	sort.Slice(res, func(i, j int) bool {
-		return res[i] < res[j]
-	})
+	slices.Sort(res)
 	return res
 }
 
 func IsDeletableByDelete(typ MessageType) bool {
-	for _, typ2 := range deletableMessageTypesByDelete {
-		if typ == typ2 {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(deletableMessageTypesByDelete, typ)
 }
 
 func IsDeletableByDeleteHistory(typ MessageType) bool {
-	for _, typ2 := range nonDeletableMessageTypesByDeleteHistory {
-		if typ == typ2 {
-			return false
-		}
-	}
-	return true
+	return !slices.Contains(nonDeletableMessageTypesByDeleteHistory, typ)
 }
 
 // EphemeralAllowed flags if the given topic type is allowed to send ephemeral
@@ -633,12 +625,7 @@ func (m MessageUnboxed) IsValidDeleted() bool {
 
 func (m MessageUnboxed) IsVisible() bool {
 	typ := m.GetMessageType()
-	for _, visType := range VisibleChatMessageTypes() {
-		if typ == visType {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(VisibleChatMessageTypes(), typ)
 }
 
 func (m MessageUnboxed) HasReactions() bool {
@@ -775,9 +762,11 @@ const (
 // NOTE: these values correspond to the maximum accepted values in
 // chat/boxer.go. If these values are changed, they must also be accepted
 // there.
-var MaxMessageBoxedVersion MessageBoxedVersion = MessageBoxedVersion_V4
-var MaxHeaderVersion HeaderPlaintextVersion = HeaderPlaintextVersion_V1
-var MaxBodyVersion BodyPlaintextVersion = BodyPlaintextVersion_V2
+var (
+	MaxMessageBoxedVersion MessageBoxedVersion    = MessageBoxedVersion_V4
+	MaxHeaderVersion       HeaderPlaintextVersion = HeaderPlaintextVersion_V1
+	MaxBodyVersion         BodyPlaintextVersion   = BodyPlaintextVersion_V2
+)
 
 // ParseableVersion checks if this error has a version that is now able to be
 // understood by our client.
@@ -894,12 +883,7 @@ func (m MessagePlaintext) MessageType() MessageType {
 
 func (m MessagePlaintext) IsVisible() bool {
 	typ := m.MessageType()
-	for _, visType := range VisibleChatMessageTypes() {
-		if typ == visType {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(VisibleChatMessageTypes(), typ)
 }
 
 func (m MessagePlaintext) IsBadgableType() bool {
@@ -957,12 +941,10 @@ func (m MessageUnboxedValid) ExplodedBy() *string {
 func Etime(lifetime gregor1.DurationSec, ctime, rtime, now gregor1.Time) gregor1.Time {
 	originalLifetime := lifetime.ToDuration()
 	elapsedLifetime := now.Time().Sub(ctime.Time())
-	remainingLifetime := originalLifetime - elapsedLifetime
-	// If the server's view doesn't make sense, just use the signed lifetime
-	// from the message.
-	if remainingLifetime > originalLifetime {
-		remainingLifetime = originalLifetime
-	}
+	remainingLifetime := min(
+		// If the server's view doesn't make sense, just use the signed lifetime
+		// from the message.
+		originalLifetime-elapsedLifetime, originalLifetime)
 	etime := rtime.Time().Add(remainingLifetime)
 	return gregor1.ToTime(etime)
 }
@@ -1281,7 +1263,7 @@ var ConversationStatusGregorRevMap = map[string]ConversationStatus{
 }
 
 var sha256Pool = sync.Pool{
-	New: func() interface{} {
+	New: func() any {
 		return sha256.New()
 	},
 }
@@ -1667,12 +1649,7 @@ func (c Conversation) GetMaxMessage(typ MessageType) (MessageSummary, error) {
 }
 
 func (c Conversation) Includes(uid gregor1.UID) bool {
-	for _, auid := range c.Metadata.ActiveList {
-		if uid.Eq(auid) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(c.Metadata.ActiveList, uid.Eq)
 }
 
 func (c Conversation) GetMaxDeletedUpTo() MessageID {
@@ -2808,12 +2785,7 @@ func (o SearchOpts) Matches(msg MessageUnboxed) bool {
 				return true
 			}
 		}
-		for _, username := range msg.AtMentionUsernames() {
-			if o.SentTo == username {
-				return true
-			}
-		}
-		return false
+		return slices.Contains(msg.AtMentionUsernames(), o.SentTo)
 	}
 	return true
 }
@@ -2888,7 +2860,6 @@ func yieldStr(s *string) string {
 }
 
 func (g UnfurlGenericRaw) UnsafeDebugString() string {
-
 	publishTime := ""
 	if g.PublishTime != nil {
 		publishTime = fmt.Sprintf("%v", time.Unix(int64(*g.PublishTime), 0))
@@ -2905,7 +2876,6 @@ FaviconUrl: %s`, g.Title, g.Url, g.SiteName, publishTime, yieldStr(g.Description
 }
 
 func (g UnfurlGiphyRaw) UnsafeDebugString() string {
-
 	return fmt.Sprintf(`GIPHY SPECIAL
 FaviconUrl: %s
 ImageUrl: %s
@@ -2929,9 +2899,7 @@ func GlobalAppNotificationSettingsSorted() (res []GlobalAppNotificationSetting) 
 			res = append(res, setting)
 		}
 	}
-	sort.Slice(res, func(i, j int) bool {
-		return res[i] < res[j]
-	})
+	slices.Sort(res)
 	return res
 }
 

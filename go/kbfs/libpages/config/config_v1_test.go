@@ -7,7 +7,6 @@ package config
 import (
 	"bytes"
 	"context"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -40,7 +39,7 @@ func TestConfigV1Invalid(t *testing.T) {
 		},
 	}).EnsureInit()
 	require.Error(t, err)
-	require.IsType(t, ErrUndefinedUsername{}, err)
+	require.ErrorAs(t, err, new(ErrUndefinedUsername))
 
 	err = (&V1{
 		Common: Common{
@@ -56,7 +55,7 @@ func TestConfigV1Invalid(t *testing.T) {
 		},
 	}).EnsureInit()
 	require.Error(t, err)
-	require.IsType(t, ErrDuplicatePerPathConfigPath{}, err)
+	require.ErrorAs(t, err, new(ErrDuplicatePerPathConfigPath))
 
 	err = (&V1{
 		Common: Common{
@@ -72,7 +71,7 @@ func TestConfigV1Invalid(t *testing.T) {
 		},
 	}).EnsureInit()
 	require.Error(t, err)
-	require.IsType(t, ErrDuplicatePerPathConfigPath{}, err)
+	require.ErrorAs(t, err, new(ErrDuplicatePerPathConfigPath))
 
 	err = (&V1{
 		Common: Common{
@@ -85,7 +84,7 @@ func TestConfigV1Invalid(t *testing.T) {
 		},
 	}).EnsureInit()
 	require.Error(t, err)
-	require.IsType(t, ErrInvalidPermissions{}, err)
+	require.ErrorAs(t, err, new(ErrInvalidPermissions))
 }
 
 func TestConfigV1Full(t *testing.T) {
@@ -146,7 +145,7 @@ func TestConfigV1Full(t *testing.T) {
 	require.True(t, possibleList)
 	require.Equal(t, "/", realm)
 	read, list, possibleRead, possibleList,
-		realm, err = config.GetPermissions("/", stringPtr("alice"))
+		realm, err = config.GetPermissions("/", new("alice"))
 	require.NoError(t, err)
 	require.True(t, read)
 	require.True(t, list)
@@ -154,7 +153,7 @@ func TestConfigV1Full(t *testing.T) {
 	require.True(t, possibleList)
 	require.Equal(t, "/", realm)
 	read, list, possibleRead, possibleList,
-		realm, err = config.GetPermissions("/", stringPtr("bob"))
+		realm, err = config.GetPermissions("/", new("bob"))
 	require.NoError(t, err)
 	require.True(t, read)
 	require.True(t, list)
@@ -171,7 +170,7 @@ func TestConfigV1Full(t *testing.T) {
 	require.True(t, possibleList)
 	require.Equal(t, "/alice-and-bob", realm)
 	read, list, possibleRead, possibleList,
-		realm, err = config.GetPermissions("/alice-and-bob", stringPtr("alice"))
+		realm, err = config.GetPermissions("/alice-and-bob", new("alice"))
 	require.NoError(t, err)
 	require.True(t, read)
 	require.True(t, list)
@@ -179,7 +178,7 @@ func TestConfigV1Full(t *testing.T) {
 	require.True(t, possibleList)
 	require.Equal(t, "/alice-and-bob", realm)
 	read, list, possibleRead, possibleList,
-		realm, err = config.GetPermissions("/alice-and-bob", stringPtr("bob"))
+		realm, err = config.GetPermissions("/alice-and-bob", new("bob"))
 	require.NoError(t, err)
 	require.True(t, read)
 	require.False(t, list)
@@ -196,7 +195,7 @@ func TestConfigV1Full(t *testing.T) {
 	require.True(t, possibleList)
 	require.Equal(t, "/bob", realm)
 	read, list, possibleRead, possibleList,
-		realm, err = config.GetPermissions("/bob", stringPtr("alice"))
+		realm, err = config.GetPermissions("/bob", new("alice"))
 	require.NoError(t, err)
 	require.False(t, read)
 	require.False(t, list)
@@ -204,7 +203,7 @@ func TestConfigV1Full(t *testing.T) {
 	require.True(t, possibleList)
 	require.Equal(t, "/bob", realm)
 	read, list, possibleRead, possibleList,
-		realm, err = config.GetPermissions("/bob", stringPtr("bob"))
+		realm, err = config.GetPermissions("/bob", new("bob"))
 	require.NoError(t, err)
 	require.True(t, read)
 	require.True(t, list)
@@ -221,7 +220,7 @@ func TestConfigV1Full(t *testing.T) {
 	require.True(t, possibleList)
 	require.Equal(t, "/public", realm)
 	read, list, possibleRead, possibleList,
-		realm, err = config.GetPermissions("/public", stringPtr("alice"))
+		realm, err = config.GetPermissions("/public", new("alice"))
 	require.NoError(t, err)
 	require.True(t, read)
 	require.True(t, list)
@@ -229,7 +228,7 @@ func TestConfigV1Full(t *testing.T) {
 	require.True(t, possibleList)
 	require.Equal(t, "/public", realm)
 	read, list, possibleRead, possibleList,
-		realm, err = config.GetPermissions("/public", stringPtr("bob"))
+		realm, err = config.GetPermissions("/public", new("bob"))
 	require.NoError(t, err)
 	require.True(t, read)
 	require.True(t, list)
@@ -246,7 +245,7 @@ func TestConfigV1Full(t *testing.T) {
 	require.True(t, possibleList)
 	require.Equal(t, "/public/not-really", realm)
 	read, list, possibleRead, possibleList,
-		realm, err = config.GetPermissions("/public/not-really", stringPtr("alice"))
+		realm, err = config.GetPermissions("/public/not-really", new("alice"))
 	require.NoError(t, err)
 	require.True(t, read)
 	require.True(t, list)
@@ -254,7 +253,7 @@ func TestConfigV1Full(t *testing.T) {
 	require.True(t, possibleList)
 	require.Equal(t, "/public/not-really", realm)
 	read, list, possibleRead, possibleList,
-		realm, err = config.GetPermissions("/public/not-really", stringPtr("bob"))
+		realm, err = config.GetPermissions("/public/not-really", new("bob"))
 	require.NoError(t, err)
 	require.False(t, read)
 	require.False(t, list)
@@ -271,7 +270,7 @@ func TestConfigV1Full(t *testing.T) {
 	require.True(t, possibleList)
 	require.Equal(t, "/bob", realm)
 	read, list, possibleRead, possibleList,
-		realm, err = config.GetPermissions("/bob/dir", stringPtr("alice"))
+		realm, err = config.GetPermissions("/bob/dir", new("alice"))
 	require.NoError(t, err)
 	require.False(t, read)
 	require.False(t, list)
@@ -279,7 +278,7 @@ func TestConfigV1Full(t *testing.T) {
 	require.True(t, possibleList)
 	require.Equal(t, "/bob", realm)
 	read, list, possibleRead, possibleList,
-		realm, err = config.GetPermissions("/bob/dir", stringPtr("bob"))
+		realm, err = config.GetPermissions("/bob/dir", new("bob"))
 	require.NoError(t, err)
 	require.True(t, read)
 	require.True(t, list)
@@ -296,7 +295,7 @@ func TestConfigV1Full(t *testing.T) {
 	require.True(t, possibleList)
 	require.Equal(t, "/bob", realm)
 	read, list, possibleRead, possibleList,
-		realm, err = config.GetPermissions("/bob/dir/sub", stringPtr("alice"))
+		realm, err = config.GetPermissions("/bob/dir/sub", new("alice"))
 	require.NoError(t, err)
 	require.False(t, read)
 	require.False(t, list)
@@ -304,7 +303,7 @@ func TestConfigV1Full(t *testing.T) {
 	require.True(t, possibleList)
 	require.Equal(t, "/bob", realm)
 	read, list, possibleRead, possibleList,
-		realm, err = config.GetPermissions("/bob/dir/sub", stringPtr("bob"))
+		realm, err = config.GetPermissions("/bob/dir/sub", new("bob"))
 	require.NoError(t, err)
 	require.True(t, read)
 	require.True(t, list)
@@ -321,7 +320,7 @@ func TestConfigV1Full(t *testing.T) {
 	require.False(t, possibleList)
 	require.Equal(t, "/bob/dir/deep-dir/deep-deep-dir", realm)
 	read, list, possibleRead, possibleList,
-		realm, err = config.GetPermissions("/bob/dir/deep-dir/deep-deep-dir", stringPtr("alice"))
+		realm, err = config.GetPermissions("/bob/dir/deep-dir/deep-deep-dir", new("alice"))
 	require.NoError(t, err)
 	require.False(t, read)
 	require.False(t, list)
@@ -329,7 +328,7 @@ func TestConfigV1Full(t *testing.T) {
 	require.False(t, possibleList)
 	require.Equal(t, "/bob/dir/deep-dir/deep-deep-dir", realm)
 	read, list, possibleRead, possibleList,
-		realm, err = config.GetPermissions("/bob/dir/deep-dir/deep-deep-dir", stringPtr("bob"))
+		realm, err = config.GetPermissions("/bob/dir/deep-dir/deep-deep-dir", new("bob"))
 	require.NoError(t, err)
 	require.False(t, read)
 	require.False(t, list)
@@ -350,7 +349,7 @@ func TestV1EncodeObjectKeyOrder(t *testing.T) {
 	const expectedJSON = `{"version":"v1","users":null,` +
 		`"per_path_configs":{"/":{"whitelist_additional_permissions":null,` +
 		`"anonymous_permissions":"read"}}}`
-	require.Equal(t, expectedJSON, strings.TrimSpace(buf.String()))
+	require.JSONEq(t, expectedJSON, buf.String())
 }
 
 func TestV1DeprecatingACLsField(t *testing.T) {
@@ -371,7 +370,7 @@ func TestV1DeprecatingACLsField(t *testing.T) {
 		},
 		ACLs: perPathConfigs,
 	}
-	err := (configWithDeprecatedACLs).EnsureInit()
+	err := configWithDeprecatedACLs.EnsureInit()
 	require.NoError(t, err)
 	require.Nil(t, configWithDeprecatedACLs.ACLs)
 	require.Equal(t, perPathConfigs, configWithDeprecatedACLs.PerPathConfigs)
@@ -386,5 +385,5 @@ func TestV1DeprecatingACLsField(t *testing.T) {
 		ACLs:           perPathConfigs,
 		PerPathConfigs: perPathConfigs,
 	}).EnsureInit()
-	require.IsType(t, ErrACLsPerPathConfigsBothPresent{}, err)
+	require.ErrorAs(t, err, new(ErrACLsPerPathConfigsBothPresent))
 }

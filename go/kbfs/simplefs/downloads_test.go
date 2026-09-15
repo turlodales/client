@@ -5,8 +5,8 @@
 package simplefs
 
 import (
+	"context"
 	"fmt"
-
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,7 +17,6 @@ import (
 	"github.com/keybase/client/go/kbfs/libkbfs"
 	"github.com/keybase/client/go/protocol/keybase1"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/context"
 )
 
 func TestDownloadManager(t *testing.T) {
@@ -34,10 +33,10 @@ func TestDownloadManager(t *testing.T) {
 
 	cacheDir, err := os.MkdirTemp(TempDirBase, "simplefs-downloadtest-cache")
 	require.NoError(t, err)
-	defer os.RemoveAll(cacheDir)
+	defer func() { _ = os.RemoveAll(cacheDir) }()
 	downloadDir, err := os.MkdirTemp(TempDirBase, "simplefs-downloadtest-download")
 	require.NoError(t, err)
-	defer os.RemoveAll(downloadDir)
+	defer func() { _ = os.RemoveAll(downloadDir) }()
 
 	err = sfs.SimpleFSConfigureDownload(ctx, keybase1.SimpleFSConfigureDownloadArg{
 		CacheDirOverride:    cacheDir,
@@ -67,9 +66,8 @@ func TestDownloadManager(t *testing.T) {
 		require.Equal(t, "/private/jdoe/test.txt", info.Path.Path)
 		require.Equal(t, "test.txt", info.Filename)
 		for i := 0; !status.States[0].Done; i++ {
-			if i > 10 {
-				t.Fatalf("waiting on download to finish timeout")
-			}
+			require.LessOrEqual(t, i, 10,
+				"waiting on download to finish timeout")
 			status, err = sfs.SimpleFSGetDownloadStatus(ctx)
 			require.NoError(t, err)
 			time.Sleep(time.Second / 2)

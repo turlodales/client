@@ -80,8 +80,10 @@ type LogSendContext struct {
 
 var noncharacterRxx = regexp.MustCompile(`[^\w]`)
 
-const redactedReplacer = "[REDACTED]"
-const serialPaperKeyWordThreshold = 6
+const (
+	redactedReplacer            = "[REDACTED]"
+	serialPaperKeyWordThreshold = 6
+)
 
 func redactPotentialPaperKeys(s string) string {
 	doubleDelimited := noncharacterRxx.ReplaceAllFunc([]byte(s), func(x []byte) []byte {
@@ -91,7 +93,7 @@ func redactPotentialPaperKeys(s string) string {
 	var checkWords []string
 	var checkWordLocations []int // keep track of each checkWord's index in allWords
 	for idx, word := range allWords {
-		if !(len(word) == 1 && noncharacterRxx.MatchString(word)) {
+		if len(word) != 1 || !noncharacterRxx.MatchString(word) {
 			checkWords = append(checkWords, word)
 			checkWordLocations = append(checkWordLocations, idx)
 		}
@@ -234,7 +236,7 @@ func (l *LogSendContext) post(mctx libkb.MetaContext) (keybase1.LogSendID, error
 		return "", err
 	}
 
-	mctx.Debug("body size: %s", humanize.Bytes(uint64(body.Len())))
+	mctx.Debug("body size: %s", humanize.Bytes(uint64(body.Len()))) //nolint:gosec // G115: Buffer length is non-negative, safe to convert
 
 	arg := libkb.APIArg{
 		Endpoint:        "logdump/send",
@@ -268,7 +270,7 @@ func (l *LogSendContext) LogSend(sendLogs bool, numBytes int, mergeExtendedStatu
 	}
 	mctx := libkb.NewMetaContextBackground(l.G()).WithLogTag("LOGSEND")
 	defer mctx.Trace(fmt.Sprintf("LogSend sendLogs: %v numBytes: %s",
-		sendLogs, humanize.Bytes(uint64(numBytes))), &err)()
+		sendLogs, humanize.Bytes(uint64(numBytes))), &err)() //nolint:gosec // G115: numBytes is a validated positive value, safe to convert
 
 	logs := l.Logs
 	// So far, install logs are Windows only

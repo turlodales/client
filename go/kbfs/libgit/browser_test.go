@@ -11,6 +11,9 @@ import (
 	"testing"
 	"time"
 
+	gogit "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/keybase/client/go/kbfs/data"
 	"github.com/keybase/client/go/kbfs/libfs"
 	"github.com/keybase/client/go/kbfs/libkbfs"
@@ -18,14 +21,12 @@ import (
 	"github.com/keybase/client/go/kbfs/tlfhandle"
 	"github.com/keybase/client/go/protocol/keybase1"
 	"github.com/stretchr/testify/require"
-	gogit "gopkg.in/src-d/go-git.v4"
-	"gopkg.in/src-d/go-git.v4/plumbing/object"
 )
 
 func testBrowser(t *testing.T, sharedCache sharedInBrowserCache) {
 	ctx, config, cancel, tempdir := initConfigForAutogit(t)
 	defer cancel()
-	defer os.RemoveAll(tempdir)
+	defer func() { _ = os.RemoveAll(tempdir) }()
 	defer libkbfs.CheckConfigAndShutdown(ctx, t, config)
 
 	h, err := tlfhandle.ParseHandle(
@@ -44,9 +45,9 @@ func testBrowser(t *testing.T, sharedCache sharedInBrowserCache) {
 	require.NoError(t, err)
 	fis, err := b.ReadDir("")
 	require.NoError(t, err)
-	require.Len(t, fis, 0)
+	require.Empty(t, fis)
 
-	err = rootFS.MkdirAll("worktree", 0600)
+	err = rootFS.MkdirAll("worktree", 0o600)
 	require.NoError(t, err)
 	worktreeFS, err := rootFS.Chroot("worktree")
 	require.NoError(t, err)
@@ -60,7 +61,7 @@ func testBrowser(t *testing.T, sharedCache sharedInBrowserCache) {
 	require.NoError(t, err)
 	fis, err = b.ReadDir("")
 	require.NoError(t, err)
-	require.Len(t, fis, 0)
+	require.Empty(t, fis)
 
 	addFileToWorktreeAndCommit(
 		ctx, t, config, h, repo, worktreeFS, "foo", "hello")
@@ -92,7 +93,7 @@ func testBrowser(t *testing.T, sharedCache sharedInBrowserCache) {
 	t.Log("Verify the data in foo.")
 	f, err := b.Open("foo")
 	require.NoError(t, err)
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	data, err := io.ReadAll(f)
 	require.NoError(t, err)
 	require.Equal(t, "hello", string(data))
@@ -153,7 +154,7 @@ func testBrowser(t *testing.T, sharedCache sharedInBrowserCache) {
 		require.Zero(t, fi.Mode()&os.ModeSymlink)
 		f2, err := b.Open(link)
 		require.NoError(t, err)
-		defer f2.Close()
+		defer func() { _ = f2.Close() }()
 		data, err = io.ReadAll(f2)
 		require.NoError(t, err)
 		require.Equal(t, "hello", string(data))
@@ -162,7 +163,7 @@ func testBrowser(t *testing.T, sharedCache sharedInBrowserCache) {
 	addSymlink("foo", "symfoo")
 
 	t.Log("Add and read a second symlink in a chain.")
-	err = worktreeFS.MkdirAll("dir", 0700)
+	err = worktreeFS.MkdirAll("dir", 0o700)
 	require.NoError(t, err)
 	addSymlink("../symfoo", "dir/symfoo")
 }
@@ -175,4 +176,69 @@ func TestBrowserWithCache(t *testing.T) {
 	cache, err := newLRUSharedInBrowserCache()
 	require.NoError(t, err)
 	testBrowser(t, cache)
+}
+
+func TestBrowserHeadResolution(t *testing.T) {
+	ctx, config, cancel, tempdir := initConfigForAutogit(t)
+	defer cancel()
+	defer func() { _ = os.RemoveAll(tempdir) }()
+	defer libkbfs.CheckConfigAndShutdown(ctx, t, config)
+
+	h, err := tlfhandle.ParseHandle(
+		ctx, config.KBPKI(), config.MDOps(), nil, "user1", tlf.Private)
+	require.NoError(t, err)
+	rootFS, err := libfs.NewFS(
+		ctx, config, h, data.MasterBranch, "", "", keybase1.MDPriorityNormal)
+	require.NoError(t, err)
+
+	t.Log("Init a new repo directly into KBFS.")
+	dotgitFS, _, err := GetOrCreateRepoAndID(ctx, config, h, "test-head", "")
+	require.NoError(t, err)
+
+	err = rootFS.MkdirAll("worktree-head", 0o600)
+	require.NoError(t, err)
+	worktreeFS, err := rootFS.Chroot("worktree-head")
+	require.NoError(t, err)
+	dotgitStorage, err := NewGitConfigWithoutRemotesStorer(dotgitFS)
+	require.NoError(t, err)
+	repo, err := gogit.Init(dotgitStorage, worktreeFS)
+	require.NoError(t, err)
+
+	t.Log("Set HEAD to point to refs/heads/main instead of master.")
+	newHead := plumbing.NewSymbolicReference(
+		plumbing.HEAD, "refs/heads/main")
+	err = repo.Storer.SetReference(newHead)
+	require.NoError(t, err)
+
+	t.Log("Commit a file — go-git creates the main branch since HEAD points there.")
+	addFileToWorktreeAndCommit(
+		ctx, t, config, h, repo, worktreeFS, "hello.txt", "world")
+
+	t.Log("NewBrowser with empty branch should resolve HEAD to main.")
+	b, err := NewBrowser(dotgitFS, config.Clock(), "", noopSharedInBrowserCache{})
+	require.NoError(t, err)
+	require.NotNil(t, b.tree, "browser should have a non-nil tree")
+	fi, err := b.Stat("hello.txt")
+	require.NoError(t, err)
+	require.Equal(t, "hello.txt", fi.Name())
+
+	f, err := b.Open("hello.txt")
+	require.NoError(t, err)
+	defer func() { _ = f.Close() }()
+	fileData, err := io.ReadAll(f)
+	require.NoError(t, err)
+	require.Equal(t, "world", string(fileData))
+
+	t.Log("Test stale HEAD: point HEAD to a nonexistent ref.")
+	staleHead := plumbing.NewSymbolicReference(
+		plumbing.HEAD, "refs/heads/nonexistent")
+	err = repo.Storer.SetReference(staleHead)
+	require.NoError(t, err)
+
+	t.Log("NewBrowser should return an empty browser without error.")
+	b, err = NewBrowser(dotgitFS, config.Clock(), "", noopSharedInBrowserCache{})
+	require.NoError(t, err)
+	fis, err := b.ReadDir("")
+	require.NoError(t, err)
+	require.Empty(t, fis)
 }

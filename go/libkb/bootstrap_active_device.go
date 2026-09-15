@@ -1,6 +1,7 @@
 package libkb
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/keybase/client/go/protocol/keybase1"
@@ -61,10 +62,10 @@ func bootstrapActiveDeviceFromConfigReturnRawError(m MetaContext, online bool, a
 }
 
 func isBootstrapLoggedOutError(err error) bool {
-	if _, ok := err.(NoUIDError); ok {
+	if _, ok := errors.AsType[NoUIDError](err); ok {
 		return true
 	}
-	if err == ErrUnlockNotPossible {
+	if errors.Is(err, ErrUnlockNotPossible) {
 		return true
 	}
 	return false
@@ -106,9 +107,10 @@ func LoadUnlockedDeviceKeys(m MetaContext, uid keybase1.UID, deviceID keybase1.D
 	// use the UPAKLoader with StaleOK, CachedOnly in order to get cached upak
 	arg := NewLoadUserArgWithMetaContext(m).WithUID(uid).WithPublicKeyOptional()
 
-	if mode == LoadUnlockedDeviceKeysModeOffline {
+	switch mode {
+	case LoadUnlockedDeviceKeysModeOffline:
 		arg = arg.WithStaleOK(true).WithCachedOnly(true)
-	} else if mode == LoadUnlockedDeviceKeysModeStaleOK {
+	case LoadUnlockedDeviceKeysModeStaleOK:
 		arg = arg.WithStaleOK(true)
 	}
 	upak, _, err := m.G().GetUPAKLoader().LoadV2(arg)
@@ -206,7 +208,7 @@ func BootstrapActiveDeviceWithMetaContextAndAssertUID(m MetaContext, uid keybase
 	case NoUIDError:
 		return false, nil
 	default:
-		if err == ErrUnlockNotPossible {
+		if errors.Is(err, ErrUnlockNotPossible) {
 			return false, nil
 		}
 		return false, err

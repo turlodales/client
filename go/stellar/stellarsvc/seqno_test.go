@@ -64,7 +64,6 @@ func TestSeqno(t *testing.T) {
 
 	require.Equal(t, seqno0+1, seqno1, "seqno1")
 	require.Equal(t, seqno0+2, seqno2, "seqno2")
-
 }
 
 // TestSeqnoConcurrent will check that concurrent seqno attempts
@@ -88,23 +87,23 @@ func TestSeqnoConcurrent(t *testing.T) {
 
 	// fakePayment simulates getting a seqno and then "submitting" that
 	// seqno after a delay.
-	var fakePayment = func(t *testing.T) {
+	fakePayment := func(t *testing.T) {
 		mctx := libkb.NewMetaContextBackground(tcs[0].G)
 		sp, unlock := stellar.NewSeqnoProvider(mctx, ws)
 		defer unlock()
 		seqno, err := sp.SequenceForAccount(accountID1.String())
 		require.NoError(t, err)
-		time.Sleep(time.Duration(rand.Intn(50)) * time.Millisecond)
-		submits <- uint64(seqno)
+		time.Sleep(time.Duration(rand.Intn(50)) * time.Millisecond) //nolint:gosec // G404: Random sleep for concurrency testing, not security-critical
+		submits <- uint64(seqno)                                    //nolint:gosec // G115: Test code, Stellar sequence numbers are positive, safe to convert
 	}
 
 	numPayments := 10
-	for i := 0; i < numPayments; i++ {
+	for range numPayments {
 		go fakePayment(t)
 	}
 
 	seqnos := make([]uint64, numPayments)
-	for i := 0; i < numPayments; i++ {
+	for i := range numPayments {
 		seqnos[i] = <-submits
 	}
 

@@ -2,7 +2,6 @@
 // this source code is governed by the included BSD license.
 
 //go:build android
-// +build android
 
 package libkb
 
@@ -66,9 +65,11 @@ func (w TypeSafeExternalKeyStoreProxy) SetupKeyStore(serviceName string, key str
 }
 
 // externalKeyStore is the reference to some external key store
-var externalKeyStore ExternalKeyStore
-var externalKeyStoreInitialized bool
-var externalKeyStoreMu sync.Mutex
+var (
+	externalKeyStore            ExternalKeyStore
+	externalKeyStoreInitialized bool
+	externalKeyStoreMu          sync.Mutex
+)
 
 // SetGlobalExternalKeyStore is called by Android to register Android's KeyStore with Go
 func SetGlobalExternalKeyStore(s UnsafeExternalKeyStore) {
@@ -159,7 +160,7 @@ func (s *secretStoreAndroid) GetUsersWithStoredSecrets(m MetaContext) (users []s
 
 	ks, err := getGlobalExternalKeyStore(m)
 	if err != nil {
-		if err == errNoExternalKeyStore {
+		if errors.Is(err, errNoExternalKeyStore) {
 			// this is to match previous behavior of this function,
 			// but perhaps it should return the error instead
 			return nil, nil

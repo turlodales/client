@@ -2,6 +2,7 @@ package teams
 
 import (
 	"context"
+	"encoding/hex"
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
@@ -30,9 +31,8 @@ func TestMerkle(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, leaf)
 	t.Logf("team merkle leaf: %v", spew.Sdump(leaf))
-	if leaf.TeamID.IsNil() {
-		t.Fatalf("nil teamID; likely merkle hasn't yet published and polling is busted")
-	}
+	require.False(t, leaf.TeamID.IsNil(),
+		"nil teamID; likely merkle hasn't yet published and polling is busted")
 	require.Equal(t, team.ID, leaf.TeamID, "team id")
 	require.Equal(t, team.chain().GetLatestSeqno(), leaf.Private.Seqno)
 	require.Equal(t, team.chain().GetLatestLinkID(), leaf.Private.LinkID.Export())
@@ -55,11 +55,14 @@ func TestMerkleWithHidden(t *testing.T) {
 	leaf, hiddenResp, lastMerkleRoot, err := tc.G.MerkleClient.LookupTeamWithHidden(libkb.NewMetaContextForTest(tc), team.ID, hidden.ProcessHiddenResponseFunc)
 	require.NoError(t, err)
 	require.NotNil(t, lastMerkleRoot)
+	blindRootHash := lastMerkleRoot.BlindMerkleRootHash()
+	require.Len(t, blindRootHash, 64)
+	_, err = hex.DecodeString(blindRootHash)
+	require.NoError(t, err)
 	require.NotNil(t, leaf)
 	t.Logf("team merkle leaf: %v", spew.Sdump(leaf))
-	if leaf.TeamID.IsNil() {
-		t.Fatalf("nil teamID; likely merkle hasn't yet published and polling is busted")
-	}
+	require.False(t, leaf.TeamID.IsNil(),
+		"nil teamID; likely merkle hasn't yet published and polling is busted")
 	require.Equal(t, team.ID, leaf.TeamID, "team id")
 	require.Equal(t, team.chain().GetLatestSeqno(), leaf.Private.Seqno)
 	require.Equal(t, team.chain().GetLatestLinkID(), leaf.Private.LinkID.Export())
@@ -82,10 +85,10 @@ func TestMerkleWithHidden(t *testing.T) {
 	require.Equal(t, team.ID, leaf.TeamID, "team id mismatch")
 	require.Equal(t, team.chain().GetLatestSeqno(), leaf.Private.Seqno)
 	require.Equal(t, team.chain().GetLatestLinkID(), leaf.Private.LinkID.Export())
-	require.True(t, hiddenResp.RespType == libkb.MerkleHiddenResponseTypeOK)
+	require.Equal(t, libkb.MerkleHiddenResponseTypeOK, hiddenResp.RespType)
 	require.EqualValues(t, 1, hiddenResp.UncommittedSeqno)
 
-	requestNewBlindTreeFromArchitectAndWaitUntilDone(t, &tc)
+	publishNewMainMerkleRoot(t, &tc)
 
 	leaf, hiddenResp, lastMerkleRoot, err = tc.G.MerkleClient.LookupTeamWithHidden(libkb.NewMetaContextForTest(tc), team.ID, hidden.ProcessHiddenResponseFunc)
 	require.NoError(t, err)
@@ -94,7 +97,7 @@ func TestMerkleWithHidden(t *testing.T) {
 	require.Equal(t, team.ID, leaf.TeamID, "team id")
 	require.Equal(t, team.chain().GetLatestSeqno(), leaf.Private.Seqno)
 	require.Equal(t, team.chain().GetLatestLinkID(), leaf.Private.LinkID.Export())
-	require.True(t, hiddenResp.RespType == libkb.MerkleHiddenResponseTypeOK)
+	require.Equal(t, libkb.MerkleHiddenResponseTypeOK, hiddenResp.RespType)
 	require.EqualValues(t, 1, hiddenResp.UncommittedSeqno)
 	require.NotNil(t, team.HiddenChain(), "NIL hidden chain")
 }

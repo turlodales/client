@@ -8,29 +8,46 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/keybase/client/go/gregor"
 	"github.com/keybase/client/go/kbtest"
 
 	"github.com/keybase/client/go/chat/attachments"
+	"github.com/keybase/client/go/chat/storage"
 	"github.com/keybase/client/go/chat/types"
 	"github.com/keybase/client/go/chat/utils"
 	"github.com/keybase/client/go/kbhttp/manager"
+	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/protocol/chat1"
 	"github.com/keybase/client/go/protocol/gregor1"
 	"github.com/stretchr/testify/require"
 )
 
-var decorateBegin = "$>kb$"
-var decorateEnd = "$<kb$"
+var (
+	decorateBegin = "$>kb$"
+	decorateEnd   = "$<kb$"
+)
+
+type countingGregorState struct {
+	libkb.GregorState
+	stateCalls atomic.Int32
+}
+
+func (c *countingGregorState) State(ctx context.Context) (gregor.State, error) {
+	c.stateCalls.Add(1)
+	return c.GregorState.State(ctx)
+}
 
 func checkEmoji(ctx context.Context, t *testing.T, tc *kbtest.ChatTestContext,
-	uid gregor1.UID, conv chat1.ConversationInfoLocal, msgID chat1.MessageID, emoji string) {
+	uid gregor1.UID, conv chat1.ConversationInfoLocal, msgID chat1.MessageID, emoji string,
+) {
 	msg, err := tc.Context().ConvSource.GetMessage(ctx, conv.Id, uid, msgID, nil, nil, true)
 	require.NoError(t, err)
 	require.True(t, msg.IsValid())
-	require.Equal(t, 1, len(msg.Valid().Emojis))
+	require.Len(t, msg.Valid().Emojis, 1)
 	require.Equal(t, emoji, msg.Valid().Emojis[0].Alias)
 	uimsg := utils.PresentMessageUnboxed(ctx, tc.Context(), msg, uid, conv.Id)
 	require.True(t, uimsg.IsValid())
@@ -98,17 +115,17 @@ func TestEmojiSourceBasic(t *testing.T) {
 		GetAliases:      true,
 	})
 	require.NoError(t, err)
-	require.Equal(t, 2, len(res.Emojis))
+	require.Len(t, res.Emojis, 2)
 	for _, group := range res.Emojis {
 		require.True(t, group.Name == conv.TlfName || group.Name == teamConv.TlfName)
-		require.Equal(t, 2, len(group.Emojis))
+		require.Len(t, group.Emojis, 2)
 		for _, emoji := range group.Emojis {
 			require.True(t, emoji.Alias == "+1#2" || emoji.Alias == "party_parrot" ||
 				emoji.Alias == "mike2" || emoji.Alias == "party_parrot2", emoji.Alias)
 			styp, err := emoji.Source.Typ()
 			require.NoError(t, err)
 			require.Equal(t, chat1.EmojiLoadSourceTyp_HTTPSRV, styp)
-			require.NotZero(t, len(emoji.Source.Httpsrv()))
+			require.NotEmpty(t, emoji.Source.Httpsrv())
 		}
 	}
 
@@ -135,7 +152,7 @@ func TestEmojiSourceBasic(t *testing.T) {
 	checked := false
 	for _, group := range res.Emojis {
 		if group.Name == conv.TlfName {
-			require.Equal(t, 1, len(group.Emojis))
+			require.Len(t, group.Emojis, 1)
 			checked = true
 		}
 	}
@@ -152,7 +169,7 @@ func TestEmojiSourceBasic(t *testing.T) {
 	checked = false
 	for _, group := range res.Emojis {
 		if group.Name == conv.TlfName {
-			require.Equal(t, 2, len(group.Emojis))
+			require.Len(t, group.Emojis, 2)
 			checked = true
 		}
 	}
@@ -171,7 +188,7 @@ func TestEmojiSourceBasic(t *testing.T) {
 	for _, group := range res.Emojis {
 		if group.Name == conv.TlfName {
 			t.Logf("emojis: %+v", group.Emojis)
-			require.Equal(t, 1, len(group.Emojis))
+			require.Len(t, group.Emojis, 1)
 			checked = true
 		}
 	}
@@ -191,7 +208,7 @@ func TestEmojiSourceBasic(t *testing.T) {
 	checked = false
 	for _, group := range res.Emojis {
 		if group.Name == conv.TlfName {
-			require.Zero(t, len(group.Emojis))
+			require.Empty(t, group.Emojis)
 			checked = true
 		}
 	}
@@ -235,6 +252,44 @@ func TestEmojiSourceBasic(t *testing.T) {
 	require.True(t, checked)
 }
 
+func TestEmojiSourceUserReacjisReadsGregorStateOnce(t *testing.T) {
+	ctc := makeChatTestContext(t, "TestEmojiSourceUserReacjisReadsGregorStateOnce", 1)
+	defer ctc.cleanup()
+
+	user := ctc.users()[0]
+	uid := user.User.GetUID().ToBytes()
+	tc := ctc.world.Tcs[user.Username]
+	ctx := ctc.as(t, user).startCtx
+	emojiSource := tc.Context().EmojiSource.(*DevConvEmojiSource)
+	tc.ChatG.AttachmentURLSrv = types.DummyAttachmentHTTPSrv{}
+
+	emojiSource.aliasLookupLock.Lock()
+	emojiSource.aliasLookup = map[string]chat1.Emoji{
+		"custom-one": {
+			RemoteSource: chat1.NewEmojiRemoteSourceWithMessage(chat1.EmojiMessage{
+				ConvID: chat1.ConversationID{1},
+				MsgID:  1,
+			}),
+		},
+		"custom-two": {
+			RemoteSource: chat1.NewEmojiRemoteSourceWithMessage(chat1.EmojiMessage{
+				ConvID: chat1.ConversationID{2},
+				MsgID:  2,
+			}),
+		},
+	}
+	emojiSource.aliasLookupLock.Unlock()
+
+	reacjiStore := storage.NewReacjiStore(tc.Context())
+	require.NoError(t, reacjiStore.PutReacji(ctx, uid, ":custom-one:"))
+	require.NoError(t, reacjiStore.PutReacji(ctx, uid, ":custom-two:"))
+
+	gregorState := &countingGregorState{GregorState: tc.G.GregorState}
+	tc.G.GregorState = gregorState
+	reacjiStore.UserReacjis(ctx, uid)
+	require.Equal(t, int32(1), gregorState.stateCalls.Load())
+}
+
 type emojiAliasTestCase struct {
 	input, output string
 	emojis        []chat1.HarvestedEmoji
@@ -262,7 +317,8 @@ func TestEmojiSourceAliasDecorate(t *testing.T) {
 					Source: chat1.NewEmojiRemoteSourceWithStockalias(chat1.EmojiStockAlias{
 						Text: ":+1::skin-tone-0:",
 					}),
-				}},
+				},
+			},
 		},
 		{
 			input:  ":my+1: <- :nothing: dksjdksdj :: :alias:",

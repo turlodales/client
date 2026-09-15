@@ -5,10 +5,12 @@
 package kbfssync
 
 import (
+	"context"
 	"sync"
 	"testing"
 
-	"golang.org/x/net/context"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func testRepeatedWaitGroupSimpleWait(t *testing.T, rwg *RepeatedWaitGroup) {
@@ -18,13 +20,12 @@ func testRepeatedWaitGroupSimpleWait(t *testing.T, rwg *RepeatedWaitGroup) {
 	go func() {
 		errChan <- rwg.Wait(context.Background())
 	}()
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		rwg.Done()
 	}
 	err := <-errChan
-	if err != nil {
-		t.Fatalf("Error on wait: %v", err)
-	}
+	assert.NoError(t, err,
+		"Error on wait: %v", err)
 }
 
 func TestRepeatedWaitGroupSimpleWait(t *testing.T) {
@@ -42,31 +43,28 @@ func TestRepeatedWaitGroupCanceledWait(t *testing.T) {
 		errChan <- rwg.Wait(ctx)
 	}()
 	// Only finish half the tasks
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		rwg.Done()
 	}
 	cancel()
 	err := <-errChan
-	if err != context.Canceled {
-		t.Fatalf("Unexpected error on wait: %v", err)
-	}
+	require.ErrorIs(t, err, context.Canceled,
+		"Unexpected error on wait: %v", err)
 }
 
 func TestRepeatedWaitGroupMultiWait(t *testing.T) {
 	var rwg RepeatedWaitGroup
 	// Three in serial
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		testRepeatedWaitGroupSimpleWait(t, &rwg)
 	}
 
 	// Three in parallel!
 	var wg sync.WaitGroup
-	for i := 0; i < 3; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 3 {
+		wg.Go(func() {
 			testRepeatedWaitGroupSimpleWait(t, &rwg)
-		}()
+		})
 	}
 	wg.Wait()
 }

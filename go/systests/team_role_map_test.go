@@ -1,11 +1,12 @@
 package systests
 
 import (
+	"testing"
+	"time"
+
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 	"github.com/keybase/client/go/teams"
 	"github.com/stretchr/testify/require"
-	"testing"
-	"time"
 )
 
 func TestTeamRoleMap(t *testing.T) {
@@ -32,7 +33,7 @@ func TestTeamRoleMap(t *testing.T) {
 		t.Logf("got notification")
 		require.Equal(t, expected.Version, vers)
 	case <-time.After(10 * time.Second):
-		t.Fatal("failed to get notification after 10s wait")
+		require.FailNow(t, "failed to get notification after 10s wait")
 	}
 
 	pollForTrue(t, tt.users[1].tc.G, func(i int) bool {

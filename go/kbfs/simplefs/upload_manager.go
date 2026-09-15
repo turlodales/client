@@ -5,6 +5,7 @@
 package simplefs
 
 import (
+	"context"
 	"encoding/base64"
 	"fmt"
 	"os"
@@ -15,7 +16,6 @@ import (
 	"github.com/keybase/client/go/kbfs/libkbfs"
 	"github.com/keybase/client/go/protocol/keybase1"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 )
 
 const (
@@ -106,7 +106,6 @@ func (m *uploadManager) waitForCopy(uploadID string) {
 		if err := os.RemoveAll(*upload.dirToDelete); err != nil {
 			m.k.log.CDebugf(m.makeContext(), "remove temp dir error %s", err)
 		}
-
 	}()
 
 	err := m.k.SimpleFSWait(m.makeContext(), upload.opid)
@@ -116,7 +115,7 @@ func (m *uploadManager) waitForCopy(uploadID string) {
 			if !ok {
 				return
 			}
-			if errors.Cause(err) == context.Canceled {
+			if errors.Is(err, context.Canceled) {
 				upload.state.Canceled = true
 			} else {
 				errStr := err.Error()
@@ -134,7 +133,8 @@ func (m *uploadManager) waitForCopy(uploadID string) {
 const uploadSuffixMax = 1024
 
 func (m *uploadManager) doStart(ctx context.Context,
-	sourceLocalPath string, dstParentPath string) (opid keybase1.OpID, dstPath keybase1.KBFSPath, err error) {
+	sourceLocalPath string, dstParentPath string,
+) (opid keybase1.OpID, dstPath keybase1.KBFSPath, err error) {
 	opid, err = m.k.SimpleFSMakeOpid(ctx)
 	if err != nil {
 		return keybase1.OpID{}, keybase1.KBFSPath{}, err
@@ -142,7 +142,7 @@ func (m *uploadManager) doStart(ctx context.Context,
 	basename := filepath.Base(sourceLocalPath)
 
 renameLoop:
-	for i := 0; i < uploadSuffixMax; i++ {
+	for i := range uploadSuffixMax {
 		name := basename
 		if i > 0 {
 			name = fmt.Sprintf("%s (%d)", basename, i)
@@ -156,10 +156,10 @@ renameLoop:
 		_, err = m.k.SimpleFSStat(ctx, keybase1.SimpleFSStatArg{
 			Path: keybase1.NewPathWithKbfs(dstPath),
 		})
-		switch {
-		case err == nil:
+		switch err {
+		case nil:
 			continue renameLoop
-		case err == errNotExist:
+		case errNotExist:
 		default:
 			return keybase1.OpID{}, keybase1.KBFSPath{}, err
 		}
@@ -185,7 +185,8 @@ renameLoop:
 }
 
 func (m *uploadManager) start(ctx context.Context, sourceLocalPath string,
-	targetParentPath keybase1.KBFSPath) (uploadID string, err error) {
+	targetParentPath keybase1.KBFSPath,
+) (uploadID string, err error) {
 	opid, dstPath, err := m.doStart(ctx, sourceLocalPath, targetParentPath.Path)
 	if err != nil {
 		return "", err

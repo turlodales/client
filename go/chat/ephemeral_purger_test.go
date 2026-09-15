@@ -42,7 +42,8 @@ func newMockAssetDeleter() *mockAssetDeleter {
 }
 
 func (d mockAssetDeleter) DeleteAssets(ctx context.Context, convID chat1.ConversationID, assets []chat1.Asset,
-	ri func() chat1.RemoteInterface, signer s3.Signer) error {
+	ri func() chat1.RemoteInterface, signer s3.Signer,
+) error {
 	if len(assets) > 0 {
 		d.delCh <- struct{}{}
 	}
@@ -104,7 +105,8 @@ func TestBackgroundPurge(t *testing.T) {
 	}
 
 	sendEphemeral := func(convID chat1.ConversationID, trip chat1.ConversationIDTriple,
-		lifetime gregor1.DurationSec, body chat1.MessageBody) chat1.MessageUnboxed {
+		lifetime gregor1.DurationSec, body chat1.MessageBody,
+	) chat1.MessageUnboxed {
 		typ, err := body.MessageType()
 		require.NoError(t, err)
 		_, _, err = baseSender.Send(ctx, convID, chat1.MessagePlaintext{
@@ -125,7 +127,7 @@ func TestBackgroundPurge(t *testing.T) {
 				MessageTypes: []chat1.MessageType{chat1.MessageType_TEXT, chat1.MessageType_ATTACHMENT},
 			}, nil)
 		require.NoError(t, err)
-		require.True(t, len(thread.Messages) > 0)
+		require.NotEmpty(t, thread.Messages)
 		return thread.Messages[0]
 	}
 
@@ -133,7 +135,7 @@ func TestBackgroundPurge(t *testing.T) {
 		purgeInfo, err := g.EphemeralTracker.GetPurgeInfo(ctx, uid, convID)
 		if expectedPurgeInfo.IsNil() {
 			require.Error(t, err)
-			require.IsType(t, storage.MissError{}, err)
+			require.ErrorAs(t, err, new(storage.MissError))
 		} else {
 			require.NoError(t, err)
 			require.Equal(t, expectedPurgeInfo, purgeInfo)
@@ -312,7 +314,7 @@ func TestBackgroundPurge(t *testing.T) {
 	world.Fc.Advance(lifetimeDuration * 3)
 	// keep the fakeclock ticking
 	go func() {
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			world.Fc.Advance(lifetimeDuration)
 			time.Sleep(lifetimeDuration)
 		}
@@ -400,7 +402,7 @@ func TestQueueState(t *testing.T) {
 	require.Zero(t, queueItem.index)
 	require.Equal(t, purgeInfo, queueItem.purgeInfo)
 
-	// Insert an item with a shorter time and make sure it's updated appropiated
+	// Insert an item with a shorter time and make sure it's updated appropriately
 	purgeInfo2 := chat1.EphemeralPurgeInfo{
 		ConvID:          chat1.ConversationID("conv1"),
 		MinUnexplodedID: 5,
@@ -429,5 +431,4 @@ func TestQueueState(t *testing.T) {
 	require.NotNil(t, queueItem)
 	require.Zero(t, queueItem.index)
 	require.Equal(t, purgeInfo3, queueItem.purgeInfo)
-
 }

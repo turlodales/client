@@ -23,7 +23,6 @@ var avatarTransport = &http.Transport{
 	DialContext: (&net.Dialer{
 		Timeout:   30 * time.Second,
 		KeepAlive: 30 * time.Second,
-		DualStack: true,
 	}).DialContext,
 	MaxConnsPerHost:       10,
 	MaxIdleConns:          100,
@@ -64,12 +63,13 @@ func (s *Srv) GetUserAvatar(username string) (string, error) {
 	return fmt.Sprintf("http://%v/av?typ=user&name=%v&format=square_192&token=%v", addr, username, token), nil
 }
 
-func (s *Srv) debug(msg string, args ...interface{}) {
+func (s *Srv) debug(msg string, args ...any) {
 	s.G().GetLog().Debug("Avatars.Srv: %s", fmt.Sprintf(msg, args...))
 }
 
 func (s *Srv) makeError(w http.ResponseWriter, code int, msg string,
-	args ...interface{}) {
+	args ...any,
+) {
 	s.debug("serve: error code: %d msg %s", code, fmt.Sprintf(msg, args...))
 	w.WriteHeader(code)
 }

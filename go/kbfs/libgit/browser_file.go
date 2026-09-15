@@ -7,9 +7,9 @@ package libgit
 import (
 	"io"
 
+	billy "github.com/go-git/go-billy/v5"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/pkg/errors"
-	billy "gopkg.in/src-d/go-billy.v4"
-	"gopkg.in/src-d/go-git.v4/plumbing/object"
 )
 
 const (
@@ -61,18 +61,12 @@ func (bf *browserFile) ReadAt(p []byte, off int64) (n int, err error) {
 	}()
 
 	dataToSkip := off
-	bufSize := dataToSkip
-	if bufSize > bf.maxBufSize {
-		bufSize = bf.maxBufSize
-	}
+	bufSize := min(dataToSkip, bf.maxBufSize)
 	buf := make([]byte, bufSize)
 
 	// Skip past the data we don't care about, one chunk at a time.
 	for dataToSkip > 0 {
-		toRead := int64(len(buf))
-		if dataToSkip < toRead {
-			toRead = dataToSkip
-		}
+		toRead := min(dataToSkip, int64(len(buf)))
 
 		// Throwaway data.
 		n, err := r.Read(buf[:toRead])

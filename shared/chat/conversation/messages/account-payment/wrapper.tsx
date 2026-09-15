@@ -1,21 +1,18 @@
-import * as C from '@/constants'
-import * as React from 'react'
-import {WrapperMessage, useCommon, type Props} from '../wrapper/wrapper'
-import type PaymentMessageType from './container'
+import {WrapperMessage, useWrapperMessage, type Props} from '../wrapper/wrapper'
+import PaymentMessage from './container'
 
-const WrapperPayment = React.memo(function WrapperPayment(p: Props) {
-  const {ordinal} = p
-  const common = useCommon(ordinal)
-  const message = C.useChatContext(s => s.messageMap.get(ordinal))
+function WrapperPayment(p: Props) {
+  const {ordinal, isCenteredHighlight} = p
+  const wrapper = useWrapperMessage(ordinal, isCenteredHighlight)
+  const {message} = wrapper.messageData
 
-  if (message?.type !== 'requestPayment' && message?.type !== 'sendPayment') return null
+  if (message.type !== 'requestPayment' && message.type !== 'sendPayment') return null
 
-  const {default: PaymentMessage} = require('./container') as {default: typeof PaymentMessageType}
   return (
-    <WrapperMessage {...p} {...common}>
+    <WrapperMessage {...p} {...wrapper}>
       <PaymentMessage message={message} />
     </WrapperMessage>
   )
-})
+}
 
 export default WrapperPayment

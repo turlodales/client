@@ -1,7 +1,9 @@
 import * as React from 'react'
 import * as Kb from '@/common-adapters'
 import type * as T from '@/constants/types'
-import * as C from '@/constants'
+import * as FS from '@/constants/fs'
+import {FsDataProvider} from './hooks'
+import {FsErrorProvider} from './error-state'
 import PathInfo from './path-info'
 import PathItemInfo from './path-item-info'
 
@@ -12,30 +14,35 @@ type Props = {
 }
 
 type PopupProps = Props & {
-  attachRef: React.RefObject<Kb.MeasureRef>
+  attachRef: React.RefObject<Kb.MeasureRef | null>
   onHidden: () => void
   visible: boolean
 }
 
 const useOpenInFilesTab = (path: T.FS.Path) => {
-  return React.useCallback(() => C.FS.makeActionForOpenPathInFilesTab(path), [path])
+  return () => FS.navToPath(path)
 }
 
 const KbfsPathPopup = (props: PopupProps) => {
+  const styles = useStyles()
   const openInFilesTab = useOpenInFilesTab(props.standardPath)
   const header = (
-    <Kb.Box2 direction="vertical" style={styles.headerContainer} centerChildren={true} fullWidth={true}>
-      <PathItemInfo
-        path={props.standardPath}
-        containerStyle={Kb.Styles.collapseStyles([styles.sectionContainer, styles.noBottomPadding])}
-      />
-      <Kb.Divider />
-      <PathInfo
-        path={props.standardPath}
-        knownPathInfo={props.knownPathInfo}
-        containerStyle={styles.sectionContainer}
-      />
-    </Kb.Box2>
+    <FsErrorProvider>
+      <FsDataProvider>
+        <Kb.Box2 direction="vertical" style={styles.headerContainer} centerChildren={true} fullWidth={true}>
+          <PathItemInfo
+            path={props.standardPath}
+            containerStyle={Kb.Styles.collapseStyles([styles.sectionContainer, styles.noBottomPadding])}
+          />
+          <Kb.Divider />
+          <PathInfo
+            path={props.standardPath}
+            knownPathInfo={props.knownPathInfo}
+            containerStyle={styles.sectionContainer}
+          />
+        </Kb.Box2>
+      </FsDataProvider>
+    </FsErrorProvider>
   )
 
   return (
@@ -44,10 +51,10 @@ const KbfsPathPopup = (props: PopupProps) => {
       attachTo={props.attachRef}
       onHidden={props.onHidden}
       position="top center"
-      propagateOutsideClicks={!Kb.Styles.isMobile}
+      propagateOutsideClicks={!isMobile}
       header={header}
       items={
-        Kb.Styles.isMobile
+        isMobile
           ? [
               'Divider',
               {
@@ -64,8 +71,9 @@ const KbfsPathPopup = (props: PopupProps) => {
 }
 
 const KbfsPath = (props: Props) => {
+  const styles = useStyles()
   const [showing, setShowing] = React.useState(false)
-  const textRef = React.useRef<Kb.MeasureRef>(null)
+  const textRef = React.useRef<Kb.MeasureRef | null>(null)
   const openInFilesTab = useOpenInFilesTab(props.standardPath)
   const text = (
     <Kb.Text
@@ -81,24 +89,25 @@ const KbfsPath = (props: Props) => {
   const popup = showing ? (
     <KbfsPathPopup attachRef={textRef} visible={showing} onHidden={() => setShowing(false)} {...props} />
   ) : null
-  return Kb.Styles.isMobile ? (
+  return isMobile ? (
     <>
       {text}
       {popup}
     </>
   ) : (
-    <Kb.Box
+    <Kb.Box2
+      direction="vertical"
       style={styles.textContainer}
       onMouseOver={() => setShowing(true)}
       onMouseLeave={() => setShowing(false)}
     >
       {text}
       {popup}
-    </Kb.Box>
+    </Kb.Box2>
   )
 }
 
-const styles = Kb.Styles.styleSheetCreate(
+const useStyles = Kb.Styles.createStyleHook(
   () =>
     ({
       headerContainer: Kb.Styles.platformStyles({

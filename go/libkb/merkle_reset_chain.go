@@ -4,6 +4,7 @@ import (
 	sha512 "crypto/sha512"
 	json "encoding/json"
 	fmt "fmt"
+	"slices"
 
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 	jsonw "github.com/keybase/go-jsonw"
@@ -41,7 +42,7 @@ func importResetChainFromServer(m MetaContext, jw *jsonw.Wrapper) (urc unverifie
 	if err != nil {
 		return nil, err
 	}
-	for i := 0; i < chainLen; i++ {
+	for i := range chainLen {
 		s, err := jw.AtIndex(i).GetString()
 		if err != nil {
 			return nil, err
@@ -91,7 +92,6 @@ type MerkleResets struct {
 }
 
 func (mr *MerkleResets) verifyAndLoad(m MetaContext, urc unverifiedResetChain) (err error) {
-
 	// Don't even bother to do a CVTrace if the user hasn't reset at all
 	if mr == nil {
 		return nil
@@ -99,7 +99,7 @@ func (mr *MerkleResets) verifyAndLoad(m MetaContext, urc unverifiedResetChain) (
 
 	defer m.VTrace(VLog1, "MerkleResets#verifyAndLoad", &err)()
 
-	mkerr := func(f string, a ...interface{}) error {
+	mkerr := func(f string, a ...any) error {
 		return MerkleClientError{m: fmt.Sprintf(f, a...), t: merkleErrorBadResetChain}
 	}
 
@@ -121,10 +121,10 @@ func (mr *MerkleResets) verifyAndLoad(m MetaContext, urc unverifiedResetChain) (
 	foundDelete := false
 	lastWasDelete := false
 
-	for i := len(urc) - 1; i >= 0; i-- {
+	for i, u := range slices.Backward(urc) {
 		resetSeqno := i + 1
-		link := urc[i].link
-		hash := urc[i].hash
+		link := u.link
+		hash := u.hash
 		if !hashEq(curr, hash) {
 			err = mkerr("hash chain mismatch at seqno %d", resetSeqno)
 			return err

@@ -25,7 +25,7 @@ func (e MerkleStoreError) Error() string {
 	return fmt.Sprintf("MerkleStore: %s", e.msg)
 }
 
-func NewMerkleStoreError(msgf string, a ...interface{}) MerkleStoreError {
+func NewMerkleStoreError(msgf string, a ...any) MerkleStoreError {
 	return MerkleStoreError{msg: fmt.Sprintf(msgf, a...)}
 }
 
@@ -70,7 +70,8 @@ type MerkleStoreImpl struct {
 var _ libkb.MerkleStore = (*MerkleStoreImpl)(nil)
 
 func NewMerkleStore(g *libkb.GlobalContext, tag, endpoint, kitFilename string, supportedVersion keybase1.MerkleStoreSupportedVersion,
-	getHash func(root libkb.MerkleRoot) string) libkb.MerkleStore {
+	getHash func(root libkb.MerkleRoot) string,
+) libkb.MerkleStore {
 	return &MerkleStoreImpl{
 		Contextified:     libkb.NewContextified(g),
 		tag:              tag,
@@ -141,8 +142,8 @@ func (s *MerkleStoreImpl) GetLatestEntry(m libkb.MetaContext) (keybase1.MerkleSt
 // back to db falling back to server.
 // A special case: Returns ("", hash, nil) if hash == knownHash.
 func (s *MerkleStoreImpl) getKitString(m libkb.MetaContext, knownHash *keybase1.MerkleStoreKitHash, tracer profiling.TimeTracer) (
-	keybase1.MerkleStoreKit, keybase1.MerkleStoreKitHash, error) {
-
+	keybase1.MerkleStoreKit, keybase1.MerkleStoreKitHash, error,
+) {
 	// Use a file instead if specified.
 	if len(s.kitFilename) > 0 {
 		m.Debug("MerkleStore: using kit file: %s", s.kitFilename)
@@ -248,7 +249,7 @@ func (s *MerkleStoreImpl) fetch(m libkb.MetaContext, hash keybase1.MerkleStoreKi
 		},
 	}, &res)
 	if err != nil {
-		return "", NewMerkleStoreError(err.Error())
+		return "", NewMerkleStoreError("%s", err.Error())
 	}
 	if res.KitJSON == "" {
 		return "", NewMerkleStoreError("server returned empty kit for %s", s.tag)

@@ -88,7 +88,8 @@ var _ Chat = (*chatLocal)(nil)
 func (c *chatLocal) GetConversationID(
 	ctx context.Context, tlfName tlf.CanonicalName, tlfType tlf.Type,
 	channelName string, chatType chat1.TopicType) (
-	chat1.ConversationID, error) {
+	chat1.ConversationID, error,
+) {
 	if chatType != chat1.TopicType_KBFSFILEEDIT {
 		panic(fmt.Sprintf("Bad topic type: %d", chatType))
 	}
@@ -161,7 +162,8 @@ func (c *chatLocal) GetConversationID(
 // SendTextMessage implements the Chat interface.
 func (c *chatLocal) SendTextMessage(
 	ctx context.Context, tlfName tlf.CanonicalName, tlfType tlf.Type,
-	convID chat1.ConversationID, body string) error {
+	convID chat1.ConversationID, body string,
+) error {
 	c.data.lock.Lock()
 	defer c.data.lock.Unlock()
 	conv, ok := c.data.convs[tlfType][tlfName][convID.ConvIDStr()]
@@ -214,7 +216,8 @@ func (chatbm chatHandleAndTimeByMtime) Swap(i, j int) {
 // GetGroupedInbox implements the Chat interface.
 func (c *chatLocal) GetGroupedInbox(
 	ctx context.Context, chatType chat1.TopicType, maxChats int) (
-	results []*tlfhandle.Handle, err error) {
+	results []*tlfhandle.Handle, err error,
+) {
 	if chatType != chat1.TopicType_KBFSFILEEDIT {
 		panic(fmt.Sprintf("Bad topic type: %d", chatType))
 	}
@@ -272,8 +275,8 @@ func (c *chatLocal) GetGroupedInbox(
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	var selfHandles []*tlfhandle.Handle
-	max := numSelfTlfs
-	for i := len(c.selfConvInfos) - 1; i >= 0 && len(selfHandles) < max; i-- {
+	maxTlfs := numSelfTlfs
+	for i := len(c.selfConvInfos) - 1; i >= 0 && len(selfHandles) < maxTlfs; i-- {
 		info := c.selfConvInfos[i]
 		h, err := GetHandleFromFolderNameAndType(
 			ctx, c.config.KBPKI(), c.config.MDOps(), c.config,
@@ -290,10 +293,7 @@ func (c *chatLocal) GetGroupedInbox(
 		selfHandles = append(selfHandles, h)
 	}
 
-	numOver := len(results) + len(selfHandles) - maxChats
-	if numOver < 0 {
-		numOver = 0
-	}
+	numOver := max(len(results)+len(selfHandles)-maxChats, 0)
 	results = append(results[:len(results)-numOver], selfHandles...)
 	return results, nil
 }
@@ -302,7 +302,8 @@ func (c *chatLocal) GetGroupedInbox(
 func (c *chatLocal) GetChannels(
 	ctx context.Context, tlfName tlf.CanonicalName, tlfType tlf.Type,
 	chatType chat1.TopicType) (
-	convIDs []chat1.ConversationID, channelNames []string, err error) {
+	convIDs []chat1.ConversationID, channelNames []string, err error,
+) {
 	if chatType != chat1.TopicType_KBFSFILEEDIT {
 		panic(fmt.Sprintf("Bad topic type: %d", chatType))
 	}
@@ -320,7 +321,8 @@ func (c *chatLocal) GetChannels(
 // ReadChannel implements the Chat interface.
 func (c *chatLocal) ReadChannel(
 	ctx context.Context, convID chat1.ConversationID, startPage []byte) (
-	messages []string, nextPage []byte, err error) {
+	messages []string, nextPage []byte, err error,
+) {
 	c.data.lock.RLock()
 	defer c.data.lock.RUnlock()
 	conv, ok := c.data.convsByID[convID.ConvIDStr()]
@@ -334,7 +336,8 @@ func (c *chatLocal) ReadChannel(
 
 // RegisterForMessages implements the Chat interface.
 func (c *chatLocal) RegisterForMessages(
-	convID chat1.ConversationID, cb ChatChannelNewMessageCB) {
+	convID chat1.ConversationID, cb ChatChannelNewMessageCB,
+) {
 	c.data.lock.Lock()
 	defer c.data.lock.Unlock()
 	conv, ok := c.data.convsByID[convID.ConvIDStr()]
@@ -345,11 +348,11 @@ func (c *chatLocal) RegisterForMessages(
 }
 
 func (c *chatLocal) copy(config Config) *chatLocal {
-	copy := newChatLocalWithData(config, c.data)
+	copyChatLocal := newChatLocalWithData(config, c.data)
 	c.data.lock.Lock()
 	defer c.data.lock.Unlock()
 	c.data.newChannelCBs[config] = config.KBFSOps().NewNotificationChannel
-	return copy
+	return copyChatLocal
 }
 
 // ClearCache implements the Chat interface.

@@ -22,8 +22,8 @@ func Mount(cfg *Config) (*MountHandle, error) {
 	if err != nil {
 		return nil, err
 	}
-	var ec = make(chan error, 2)
-	var slot = fsTableStore(cfg.FileSystem, ec)
+	ec := make(chan error, 2)
+	slot := fsTableStore(cfg.FileSystem, ec)
 	flags := cfg.MountFlags
 	go func() {
 		ctx := allocCtx(slot)
@@ -36,7 +36,7 @@ func Mount(cfg *Config) (*MountHandle, error) {
 	// 2) After the filesystem is mounted from handling the Mounted callback.
 	// Thus either the filesystem was mounted ok or it was not mounted
 	// and an err is not nil. DokanMain does not return errors after the
-	// mount, but if such errors occured they can be catched by BlockTillDone.
+	// mount, but if such errors occurred they can be catched by BlockTillDone.
 	err = <-ec
 	if err != nil {
 		return nil, err

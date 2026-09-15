@@ -1,147 +1,211 @@
 import * as C from '@/constants'
 import * as Kb from '@/common-adapters'
 import * as React from 'react'
-import {SignupScreen, errorBanner} from './common'
+import {SignupScreen, errorBanner, desktopInputWidth} from './common'
+import {startProvision} from '@/provision/flow'
+import * as T from '@/constants/types'
+import {RPCError} from '@/util/errors'
+import {ignorePromise} from '@/constants/utils'
+import logger from '@/logger'
+import {isValidUsername} from '@/util/simple-validators'
+import type {StaticScreenProps} from '@react-navigation/core'
+import {useNavigation} from '@react-navigation/native'
+import type {ParamListBase} from '@react-navigation/native'
+import type {NativeStackNavigationProp} from '@react-navigation/native-stack'
+import {clearSignupDeviceNameDraft} from './device-name-draft'
 
-const ConnectedEnterUsername = () => {
-  const error = C.useSignupState(s => s.usernameError)
-  const initialUsername = C.useSignupState(s => s.username)
-  const usernameTaken = C.useSignupState(s => s.usernameTaken)
-  const checkUsername = C.useSignupState(s => s.dispatch.checkUsername)
-  const waiting = C.Waiting.useAnyWaiting(C.Signup.waitingKey)
-  const navigateUp = C.useRouterState(s => s.dispatch.navigateUp)
-  const restartSignup = C.useSignupState(s => s.dispatch.restartSignup)
+type Props = StaticScreenProps<{inviteCode?: string; username?: string}>
+
+const ConnectedEnterUsername = (p: Props) => {
+  const initialUsername = p.route.params.username ?? ''
+  const inviteCode = p.route.params.inviteCode ?? ''
+  const waiting = C.Waiting.useAnyWaiting(C.waitingKeySignup)
+  const {navigateAppend, navigateUp} = C.Router2
   const onBack = () => {
-    restartSignup()
+    clearSignupDeviceNameDraft()
     navigateUp()
   }
-  const onContinue = checkUsername
+  const [error, setError] = React.useState('')
+  const [usernameTaken, setUsernameTaken] = React.useState('')
+  const onUsernameChange = () => {
+    setError('')
+    setUsernameTaken('')
+  }
+  const onContinue = (username: string) => {
+    onUsernameChange()
+    const localError = isValidUsername(username)
+    if (localError) {
+      setError(localError)
+      return
+    }
+    const f = async () => {
+      logger.info(`checking ${username}`)
+      try {
+        await T.RPCGen.signupCheckUsernameAvailableRpcPromise({username}, C.waitingKeySignup)
+        logger.info(`${username} success`)
+        navigateAppend({name: 'signupEnterDevicename', params: {inviteCode, username}})
+      } catch (error_) {
+        if (error_ instanceof RPCError) {
+          logger.warn(`${username} error: ${error_.message}`)
+          if (error_.code === T.RPCGen.StatusCode.scbadsignupusernametaken) {
+            setUsernameTaken(username)
+            return
+          }
+          setError(error_.code === T.RPCGen.StatusCode.scinputerror ? C.usernameHint : error_.desc)
+        }
+      }
+    }
+    ignorePromise(f())
+  }
 
-  const startProvision = C.useProvisionState(s => s.dispatch.startProvision)
-  const onLogin = (initUsername: string) => {
-    startProvision(initUsername)
-  }
-  const props = {
-    error,
-    initialUsername,
-    onBack,
-    onContinue,
-    onLogin,
-    usernameTaken,
-    waiting,
-  }
-  return <EnterUsername {...props} />
+  const onLogin = (username: string) => startProvision(username)
+  return (
+    <EnterUsername
+      error={error}
+      initialUsername={initialUsername}
+      onBack={onBack}
+      onContinue={onContinue}
+      onLogin={onLogin}
+      onUsernameChange={onUsernameChange}
+      usernameTaken={usernameTaken}
+      waiting={waiting}
+    />
+  )
 }
 
-type Props = {
+type EnterUsernameProps = {
   error: string
   initialUsername?: string
   onBack: () => void
   onContinue: (username: string) => void
   onLogin: (username: string) => void
+  onUsernameChange: () => void
   usernameTaken?: string
   waiting: boolean
 }
 
-const EnterUsername = (props: Props) => {
-  const [username, onChangeUsername] = React.useState(props.initialUsername || '')
+const EnterUsername = (props: EnterUsernameProps) => {
+  const styles = useStyles()
+  const {
+    onLogin,
+    usernameTaken,
+    error,
+    initialUsername,
+    onBack,
+    onContinue: _onContinue,
+    onUsernameChange,
+    waiting,
+  } = props
+  const [username, onChangeUsername] = React.useState(initialUsername || '')
+  const inputRef = React.useRef<Kb.Input3Ref>(null)
+
+  // On mobile, autoFocus fires during the push transition, so the keyboard animates up while
+  // the screen is still sliding in and the content thrashes. Wait for the native-stack
+  // transition to finish, then focus. Desktop has no keyboard, so it keeps instant autoFocus.
+  const navigation = useNavigation() as unknown as NativeStackNavigationProp<ParamListBase>
+  React.useEffect(() => {
+    if (!isMobile) return
+    return navigation.addListener('transitionEnd', e => {
+      if (!e.data.closing) {
+        inputRef.current?.focus()
+      }
+    })
+  }, [navigation])
   const [acceptedEULA, setAcceptedEULA] = React.useState(false)
+  const eulaUrlProps = Kb.useClickURL('https://keybase.io/docs/acceptable-use-policy')
   const usernameTrimmed = username.trim()
-  const disabled = !usernameTrimmed || usernameTrimmed === props.usernameTaken || !acceptedEULA
+  const disabled = !usernameTrimmed || usernameTrimmed === usernameTaken || !acceptedEULA
+  const _onChangeUsername = (username: string) => {
+    onChangeUsername(username)
+    onUsernameChange()
+  }
   const onContinue = () => {
-    if (disabled) {
+    if (disabled || waiting) {
       return
     }
     onChangeUsername(usernameTrimmed) // maybe trim the input
-    props.onContinue(usernameTrimmed)
+    _onContinue(usernameTrimmed)
   }
+  const eulaLabel = (
+    <Kb.Text type={isMobile ? 'BodySmall' : 'Body'} style={styles.eulaText}>
+      I accept the{' '}
+      <Kb.Text type={isMobile ? 'BodySmallPrimaryLink' : 'BodyPrimaryLink'} {...eulaUrlProps}>
+        Keybase Acceptable Use Policy
+      </Kb.Text>
+    </Kb.Text>
+  )
+  const eulaBlock = (
+    <Kb.Checkbox label={eulaLabel} checked={acceptedEULA} onCheck={() => setAcceptedEULA(s => !s)} />
+  )
   return (
     <SignupScreen
       banners={
         <>
-          {props.usernameTaken ? (
+          {usernameTaken ? (
             <Kb.Banner key="usernameTaken" color="blue">
               <Kb.BannerParagraph
                 bannerColor="blue"
                 content={[
                   'Sorry, this username is already taken. Did you mean to ',
                   {
-                    onClick: () => props.usernameTaken && props.onLogin(props.usernameTaken),
-                    text: `log in as ${props.usernameTaken}`,
+                    onClick: () => usernameTaken && onLogin(usernameTaken),
+                    text: `log in as ${usernameTaken}`,
                   },
                   '?',
                 ]}
               />
             </Kb.Banner>
           ) : null}
-          {errorBanner(props.error)}
+          {errorBanner(error)}
         </>
       }
       buttons={[
         {
-          disabled: disabled,
+          disabled,
           label: 'Continue',
           onClick: onContinue,
           type: 'Success',
-          waiting: props.waiting,
+          waiting: waiting,
         },
       ]}
-      onBack={props.onBack}
+      footer={isMobile ? eulaBlock : undefined}
+      hideDesktopHeader={!isMobile}
+      onBack={onBack}
       title="Create account"
     >
       <Kb.ScrollView>
         <Kb.Box2
           alignItems="center"
-          gap={Kb.Styles.isMobile ? 'small' : 'medium'}
+          gap={isMobile ? 'small' : 'medium'}
           direction="vertical"
-          style={styles.body}
+          flex={1}
           fullWidth={true}
         >
           <Kb.Avatar size={C.isLargeScreen ? 96 : 64} />
           <Kb.Box2 direction="vertical" fullWidth={Kb.Styles.isPhone} gap="tiny">
-            <Kb.LabeledInput
-              autoFocus={true}
+            <Kb.Input3
+              textType="BodySemibold"
+              autoFocus={!isMobile}
+              ref={inputRef}
               containerStyle={styles.input}
               placeholder="Pick a username"
-              maxLength={C.Signup.maxUsernameLength}
-              onChangeText={onChangeUsername}
+              maxLength={C.maxUsernameLength}
+              onChangeText={_onChangeUsername}
               onEnterKeyDown={onContinue}
+              value={username}
             />
             <Kb.Text type="BodySmall">Your username is unique and can not be changed in the future.</Kb.Text>
           </Kb.Box2>
-          <Kb.Box2
-            direction={Kb.Styles.isMobile ? 'vertical' : 'horizontal'}
-            fullWidth={Kb.Styles.isPhone}
-            gap="tiny"
-            alignItems="flex-start"
-          >
-            <Kb.Checkbox
-              label="I accept the Keybase Acceptable Use Policy"
-              checked={acceptedEULA}
-              onCheck={() => setAcceptedEULA(s => !s)}
-            />
-            <Kb.Text
-              type="BodyPrimaryLink"
-              style={{marginTop: 2}}
-              onClickURL="https://keybase.io/docs/acceptable-use-policy"
-            >
-              (Read it here)
-            </Kb.Text>
-          </Kb.Box2>
+          {!isMobile && eulaBlock}
         </Kb.Box2>
       </Kb.ScrollView>
     </SignupScreen>
   )
 }
 
-const styles = Kb.Styles.styleSheetCreate(() => ({
-  body: {
-    flex: 1,
-  },
-  input: Kb.Styles.platformStyles({
-    isElectron: {width: 368},
-    isTablet: {width: 368},
-  }),
+const useStyles = Kb.Styles.createStyleHook(() => ({
+  eulaText: {alignSelf: 'center' as const},
+  input: desktopInputWidth,
 }))
 
 export default ConnectedEnterUsername

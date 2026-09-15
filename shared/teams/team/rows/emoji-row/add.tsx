@@ -1,7 +1,7 @@
-import * as C from '@/constants'
 import * as Kb from '@/common-adapters'
-import * as Container from '@/util/container'
 import type * as T from '@/constants/types'
+import {useLoadedTeam} from '@/teams/team/use-loaded-team'
+import {useSafeNavigation} from '@/util/safe-navigation'
 
 type OwnProps = {
   teamID: T.Teams.TeamID
@@ -10,21 +10,23 @@ type OwnProps = {
   setFilter: (filter: string) => void
 }
 const AddEmoji = ({teamID, convID, filter, setFilter}: OwnProps) => {
-  const nav = Container.useSafeNavigation()
-  const canManageEmoji = C.useTeamsState(s => C.Teams.getCanPerformByID(s, teamID).manageEmojis)
+  const styles = useStyles()
+  const nav = useSafeNavigation()
+  const {yourOperations} = useLoadedTeam(teamID)
+  const canManageEmoji = yourOperations.manageEmojis
   const onAddEmoji = () =>
     nav.safeNavigateAppend({
-      props: {conversationIDKey: convID, teamID},
-      selected: 'teamAddEmoji',
+      name: 'teamAddEmoji',
+      params: {conversationIDKey: convID, teamID},
     })
   const onAddAlias = () =>
     nav.safeNavigateAppend({
-      props: {conversationIDKey: convID},
-      selected: 'teamAddEmojiAlias',
+      name: 'teamAddEmojiAlias',
+      params: {conversationIDKey: convID},
     })
   // clear filter on unmount
   return !canManageEmoji ? null : (
-    <Kb.Box2 direction="horizontal" fullWidth={true} alignItems="center" style={styles.containerNew}>
+    <Kb.Box2 direction="horizontal" fullWidth={true} alignItems="center" style={styles.containerNew} justifyContent="space-between">
       <Kb.Box2 direction="horizontal" gap="tiny">
         <Kb.Button
           mode="Secondary"
@@ -41,7 +43,7 @@ const AddEmoji = ({teamID, convID, filter, setFilter}: OwnProps) => {
           style={styles.headerButton}
         />
       </Kb.Box2>
-      {!Kb.Styles.isMobile && (
+      {!isMobile && (
         <Kb.SearchFilter
           size="small"
           placeholderText="Filter"
@@ -56,11 +58,10 @@ const AddEmoji = ({teamID, convID, filter, setFilter}: OwnProps) => {
   )
 }
 
-const styles = Kb.Styles.styleSheetCreate(() => ({
+const useStyles = Kb.Styles.createStyleHook(theme => ({
   containerNew: {
     ...Kb.Styles.padding(6, Kb.Styles.globalMargins.small),
-    backgroundColor: Kb.Styles.globalColors.blueGrey,
-    justifyContent: 'space-between',
+    backgroundColor: theme.blueGrey,
   },
   filterInput: {
     marginRight: Kb.Styles.globalMargins.tiny,
@@ -71,7 +72,6 @@ const styles = Kb.Styles.styleSheetCreate(() => ({
       flexGrow: 1,
     },
   }),
-  text: {padding: Kb.Styles.globalMargins.xtiny},
 }))
 
 export default AddEmoji

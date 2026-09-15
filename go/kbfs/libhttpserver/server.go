@@ -8,6 +8,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"io"
 	"net/http"
 	"path"
@@ -48,8 +49,10 @@ type Server struct {
 	server     *kbhttp.Srv
 }
 
-const tokenByteSize = 32
-const tokenValidTime = 10 * time.Minute
+const (
+	tokenByteSize  = 32
+	tokenValidTime = 10 * time.Minute
+)
 
 // CurrentToken returns the currently valid token that a HTTP client can use to
 // load content from the server.
@@ -104,8 +107,9 @@ func (s *Server) handleInternalServerError(w http.ResponseWriter) {
 }
 
 type obsoleteTrackingFS struct {
-	fs *libfs.FS
-	ch <-chan struct{}
+	fs          *libfs.FS
+	ch          <-chan struct{}
+	unsubscribe func()
 }
 
 func (e obsoleteTrackingFS) isObsolete() bool {
@@ -118,7 +122,8 @@ func (e obsoleteTrackingFS) isObsolete() bool {
 }
 
 func (s *Server) getHTTPFileSystem(ctx context.Context, requestPath string) (
-	toStrip string, fs http.FileSystem, err error) {
+	toStrip string, fs http.FileSystem, err error,
+) {
 	fields := strings.Split(requestPath, "/")
 	if len(fields) < 2 {
 		return "", libfs.NewRootFS(s.config).ToHTTPFileSystem(ctx), nil
@@ -152,12 +157,14 @@ func (s *Server) getHTTPFileSystem(ctx context.Context, requestPath string) (
 		return "", nil, err
 	}
 
-	fsLifeCh, err := tlfFS.SubscribeToObsolete()
+	fsLifeCh, unsubscribe, err := tlfFS.SubscribeToObsolete()
 	if err != nil {
 		return "", nil, err
 	}
 
-	s.fs.Add(toStrip, obsoleteTrackingFS{fs: tlfFS, ch: fsLifeCh})
+	s.fs.Add(toStrip, obsoleteTrackingFS{
+		fs: tlfFS, ch: fsLifeCh, unsubscribe: unsubscribe,
+	})
 
 	return toStrip, tlfFS.ToHTTPFileSystem(ctx), nil
 }
@@ -208,9 +215,11 @@ func (s *Server) serve(w http.ResponseWriter, req *http.Request) {
 	http.StripPrefix(toStrip, http.FileServer(fs)).ServeHTTP(wrappedW, req)
 }
 
-const portStart = 16723
-const portEnd = 60000
-const requestPathRoot = "/files/"
+const (
+	portStart       = 16723
+	portEnd         = 60000
+	requestPathRoot = "/files/"
+)
 
 func (s *Server) restart() (err error) {
 	s.serverLock.Lock()
@@ -222,7 +231,7 @@ func (s *Server) restart() (err error) {
 	if s.server == nil ||
 		// If pinned port is in use, just pick a new one like we never had a
 		// server before.
-		err == kbhttp.ErrPinnedPortInUse {
+		errors.Is(err, kbhttp.ErrPinnedPortInUse) {
 		s.server = kbhttp.NewSrv(s.logger,
 			kbhttp.NewRandomPortRangeListenerSource(portStart, portEnd))
 		err = s.server.Start()
@@ -242,7 +251,8 @@ func (s *Server) monitorAppState(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case state = <-s.appStateUpdater.NextAppStateUpdate(&state):
+		case <-s.appStateUpdater.NextAppStateUpdate(state):
+			state = s.appStateUpdater.AppState()
 			// Due to the way NextUpdate is designed, it's possible we miss an
 			// update if processing the last update takes too long. So it's
 			// possible to get consecutive FOREGROUND updates even if there are
@@ -264,7 +274,8 @@ func (s *Server) monitorAppState(ctx context.Context) {
 
 // New creates and starts a new server.
 func New(appStateUpdater env.AppStateUpdater, config libkbfs.Config) (
-	s *Server, err error) {
+	s *Server, err error,
+) {
 	logger := config.MakeLogger("HTTP")
 	s = &Server{
 		appStateUpdater: appStateUpdater,
@@ -272,7 +283,12 @@ func New(appStateUpdater env.AppStateUpdater, config libkbfs.Config) (
 		logger:          logger,
 		vlog:            config.MakeVLogger(logger),
 	}
-	if s.fs, err = lru.New(fsCacheSize); err != nil {
+	s.fs, err = lru.NewWithEvict(fsCacheSize, func(_ any, value any) {
+		if e, ok := value.(obsoleteTrackingFS); ok && e.unsubscribe != nil {
+			e.unsubscribe()
+		}
+	})
+	if err != nil {
 		return nil, err
 	}
 	if err = s.restart(); err != nil {
@@ -297,5 +313,8 @@ func (s *Server) Shutdown() {
 	s.serverLock.Lock()
 	defer s.serverLock.Unlock()
 	s.server.Stop()
+	// Purge the LRU so its evict callback runs and unsubscribes any
+	// folder-branch observers still held by cached entries.
+	s.fs.Purge()
 	s.cancel()
 }

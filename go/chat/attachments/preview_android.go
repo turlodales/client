@@ -1,25 +1,32 @@
 //go:build android
-// +build android
 
 package attachments
 
 import (
 	"bytes"
+	"context"
 	"io"
 
 	"github.com/keybase/client/go/chat/types"
 	"github.com/keybase/client/go/chat/utils"
-	"golang.org/x/net/context"
 )
 
 func previewVideo(ctx context.Context, log utils.DebugLabeler, src io.Reader,
-	basename string, nvh types.NativeVideoHelper) (res *PreviewRes, err error) {
+	basename string, nvh types.NativeVideoHelper,
+) (res *PreviewRes, err error) {
 	defer log.Trace(ctx, &err, "previewVideo")()
 	dat, duration, err := nvh.ThumbnailAndDuration(ctx, basename)
 	if err != nil {
 		return res, err
 	}
 	log.Debug(ctx, "previewVideo: size: %d duration: %d", len(dat), duration)
+	if len(dat) == 0 && duration > 1 && isAudioExtension(basename) {
+		amps, ampErr := nvh.AudioAmps(ctx, basename)
+		if ampErr != nil {
+			log.Debug(ctx, "previewVideo: AudioAmps failed: %v", ampErr)
+		}
+		return previewAudio(duration, amps)
+	}
 	if len(dat) == 0 {
 		log.Debug(ctx, "failed to generate preview from native, using blank image")
 		return previewVideoBlank(ctx, log, src, basename)

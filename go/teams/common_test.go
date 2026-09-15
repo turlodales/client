@@ -1,9 +1,8 @@
 package teams
 
 import (
+	"context"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	"github.com/keybase/client/go/externalstest"
 	"github.com/keybase/client/go/kbtest"
@@ -63,11 +62,11 @@ func setupNTests(t *testing.T, n int) ([]*kbtest.FakeUser, []*libkb.TestContext,
 // nPukless is how many users start out with no PUK.
 // Those users appear at the end of the list
 func setupNTestsWithPukless(t *testing.T, n, nPukless int) ([]*kbtest.FakeUser, []*libkb.TestContext, func()) {
-	require.True(t, n > 0, "must create at least 1 tc")
-	require.True(t, n >= nPukless, "more pukless users than total users requested")
+	require.Positive(t, n, "must create at least 1 tc")
+	require.GreaterOrEqual(t, n, nPukless, "more pukless users than total users requested")
 	var fus []*kbtest.FakeUser
 	var tcs []*libkb.TestContext
-	for i := 0; i < n; i++ {
+	for i := range n {
 		tc := SetupTest(t, "team", 1)
 		tcs = append(tcs, &tc)
 		if i >= n-nPukless {

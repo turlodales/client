@@ -5,6 +5,7 @@
 package data
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -19,11 +20,11 @@ import (
 	"github.com/keybase/client/go/logger"
 	"github.com/keybase/client/go/protocol/keybase1"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/context"
 )
 
 func setupDirDataTest(t *testing.T, maxPtrsPerBlock, numDirEntries int) (
-	*DirData, BlockCache, DirtyBlockCache) {
+	*DirData, BlockCache, DirtyBlockCache,
+) {
 	// Make a fake dir.
 	ptr := BlockPointer{
 		ID:         kbfsblock.FakeID(42),
@@ -42,7 +43,8 @@ func setupDirDataTest(t *testing.T, maxPtrsPerBlock, numDirEntries int) (
 	cleanCache := NewBlockCacheStandard(1<<10, 1<<20)
 	dirtyBcache := SimpleDirtyBlockCacheStandard()
 	getter := func(ctx context.Context, _ libkey.KeyMetadata, ptr BlockPointer,
-		_ Path, _ BlockReqType) (*DirBlock, bool, error) {
+		_ Path, _ BlockReqType,
+	) (*DirBlock, bool, error) {
 		isDirty := true
 		block, err := dirtyBcache.Get(ctx, id, ptr, MasterBranch)
 		if err != nil {
@@ -91,7 +93,7 @@ func TestDirDataGetChildren(t *testing.T) {
 	t.Log("No entries, direct block")
 	children, err := dd.GetChildren(ctx)
 	require.NoError(t, err)
-	require.Len(t, children, 0)
+	require.Empty(t, children)
 
 	t.Log("Single entry, direct block")
 	addFakeDirDataEntryToBlock(topBlock, "a", 1)
@@ -148,11 +150,11 @@ func TestDirDataGetChildren(t *testing.T) {
 	require.Equal(t, uint64(2), children[NewPathPartString("b", nil)].Size)
 	require.Equal(t, uint64(3), children[NewPathPartString("z1", nil)].Size)
 	require.Equal(t, uint64(4), children[NewPathPartString("z2", nil)].Size)
-
 }
 
 func testDirDataCheckLookup(
-	ctx context.Context, t *testing.T, dd *DirData, name string, size uint64) {
+	ctx context.Context, t *testing.T, dd *DirData, name string, size uint64,
+) {
 	de, err := dd.Lookup(ctx, NewPathPartString(name, nil))
 	require.NoError(t, err)
 	require.Equal(t, size, de.Size)
@@ -219,7 +221,8 @@ func TestDirDataLookup(t *testing.T) {
 }
 
 func addFakeDirDataEntry(
-	ctx context.Context, t *testing.T, dd *DirData, name string, size uint64) {
+	ctx context.Context, t *testing.T, dd *DirData, name string, size uint64,
+) {
 	_, err := dd.AddEntry(ctx, NewPathPartString(name, nil), DirEntry{
 		EntryInfo: EntryInfo{
 			Size: size,
@@ -237,7 +240,8 @@ type testDirDataLeaf struct {
 func testDirDataCheckLeafs(
 	t *testing.T, dd *DirData, cleanBcache BlockCache,
 	dirtyBcache DirtyBlockCache, expectedLeafs []testDirDataLeaf,
-	maxPtrsPerBlock, numDirEntries int) {
+	maxPtrsPerBlock, numDirEntries int,
+) {
 	// Top block should always be dirty.
 	ctx := context.Background()
 	cacheBlock, err := dirtyBcache.Get(
@@ -273,44 +277,44 @@ func testDirDataCheckLeafs(
 			}
 			dblock := cacheBlock.(*DirBlock)
 			if dblock.IsIndirect() {
-				require.True(t, len(dblock.IPtrs) <= maxPtrsPerBlock)
+				require.LessOrEqual(t, len(dblock.IPtrs), maxPtrsPerBlock)
 				// Make sure all the offsets are between the two
 				// parent offsets.
 				for _, childIPtr := range dblock.IPtrs {
-					require.True(t, childIPtr.Off >= iptr.Off,
-						fmt.Sprintf("Child off %s comes before iptr off %s",
-							childIPtr.Off, iptr.Off))
+					require.GreaterOrEqual(t, childIPtr.Off, iptr.Off,
+						"Child off %s comes before iptr off %s", childIPtr.Off, iptr.Off)
 					if nextOff != nil {
-						require.True(t, childIPtr.Off < *nextOff,
-							fmt.Sprintf("Child off %s comes after next off %s",
-								childIPtr.Off, *nextOff))
+						require.Less(t, childIPtr.Off, *nextOff,
+							"Child off %s comes after next off %s", childIPtr.Off, *nextOff)
 					}
 				}
 				newIndBlocks = append(newIndBlocks, dblock)
 			} else {
-				require.True(t, len(dblock.Children) <= numDirEntries)
+				require.LessOrEqual(t, len(dblock.Children), numDirEntries)
 				// Make sure all the children are between the two
 				// parent offsets.
 				for name := range dblock.Children {
-					require.True(t, name >= string(iptr.Off))
+					require.GreaterOrEqual(t, name, string(iptr.Off))
 					if nextOff != nil {
-						require.True(t, name < string(*nextOff))
+						require.Less(t, name, string(*nextOff))
 					}
 				}
 				leafs = append(leafs, testDirDataLeaf{
-					iptr.Off, len(dblock.Children), wasDirty})
+					iptr.Off, len(dblock.Children), wasDirty,
+				})
 			}
 		}
 		indBlocks = append(newIndBlocks, indBlocks[1:]...)
 	}
 
 	require.True(t, reflect.DeepEqual(leafs, expectedLeafs),
-		fmt.Sprintf("leafs=%v, expectedLeafs=%v", leafs, expectedLeafs))
+		"leafs=%v, expectedLeafs=%v", leafs, expectedLeafs)
 }
 
 func testDirDataCleanCache(
 	t *testing.T, dd *DirData, cleanBCache BlockCache,
-	dirtyBCache DirtyBlockCache) {
+	dirtyBCache DirtyBlockCache,
+) {
 	dbc := dirtyBCache.(*DirtyBlockCacheStandard)
 	for id, block := range dbc.cache {
 		ptr := BlockPointer{ID: id.id}
@@ -531,7 +535,6 @@ func TestDirDataUpdateEntry(t *testing.T) {
 		},
 	})
 	require.Equal(t, idutil.NoSuchNameError{Name: "foo"}, err)
-
 }
 
 func TestDirDataShifting(t *testing.T) {
@@ -544,7 +547,7 @@ func TestDirDataShifting(t *testing.T) {
 	require.NoError(t, err)
 
 	for i := 0; i <= 10; i++ {
-		addFakeDirDataEntry(ctx, t, dd, strconv.Itoa(i), uint64(i+1))
+		addFakeDirDataEntry(ctx, t, dd, strconv.Itoa(i), uint64(i+1)) //nolint:gosec // G115: Test data with small values
 	}
 	testDirDataCheckLookup(ctx, t, dd, "10", 11)
 	expectedLeafs := []testDirDataLeaf{

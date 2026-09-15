@@ -3,73 +3,93 @@ import * as C from '@/constants'
 import * as React from 'react'
 import * as Styles from '@/styles'
 import {Box2} from './box'
-import {HeaderHocHeader} from './header-hoc'
+import BackButton from './back-button'
 import ScrollView from './scroll-view'
 import Text from './text'
 import Button from './button'
-import Icon from './icon'
+import ImageIcon from './image-icon'
 import type {RPCError} from '@/util/errors'
+import {settingsFeedbackTab} from '@/constants/settings'
+import {useConfigState} from '@/stores/config'
+import {NavigationContext} from '@react-navigation/core'
 
 const Kb = {
+  BackButton,
   Box2,
   Button,
-  HeaderHocHeader,
-  Icon,
+  ImageIcon,
   ScrollView,
   Text,
 }
 
+const autoReloadedNavigations = new WeakSet<object>()
+const pendingAutoReloadNavigations = new WeakSet<object>()
+
 type ReloadProps = {
   onBack?: () => void
   onFeedback: () => void
-  onReload: () => void
+  onReload: (isRetry?: boolean) => void
   reason: string
   style?: Styles.StylesCrossPlatform
   title?: string
 }
 
-class Reload extends React.PureComponent<ReloadProps, {expanded: boolean}> {
-  state = {expanded: false}
-  _toggle = () => this.setState(p => ({expanded: !p.expanded}))
-  render() {
-    return (
-      <Kb.Box2 direction="vertical" fullWidth={true} fullHeight={true} style={this.props.style}>
-        {Styles.isMobile && this.props.onBack && (
-          <Kb.HeaderHocHeader onBack={this.props.onBack} title={this.props.title} />
-        )}
-        <Kb.ScrollView style={styles.container}>
-          <Kb.Box2 direction="vertical" centerChildren={true} style={styles.reload} gap="small">
-            <Kb.Icon type="icon-illustration-zen-240-180" />
-            <Kb.Text center={true} type="Header">
-              We're having a hard time loading this page.
-            </Kb.Text>
-            {this.state.expanded && (
-              <Kb.Box2 direction="vertical" style={styles.detailContainer}>
-                <Kb.Text type="Terminal" style={styles.details}>
-                  {this.props.reason}
-                </Kb.Text>
-              </Kb.Box2>
-            )}
-            <Kb.Text type="BodySecondaryLink" onClick={this._toggle}>
-              {this.state.expanded ? 'Hide details' : 'Show details'}
-            </Kb.Text>
-            <Kb.Box2 direction="horizontal" gap="tiny">
-              <Kb.Button label="Retry" mode="Secondary" onClick={this.props.onReload} />
-              <Kb.Button label="Feedback" mode="Primary" onClick={this.props.onFeedback} />
-            </Kb.Box2>
+function Reload(props: ReloadProps) {
+  const styles = useStyles()
+  const [expanded, setExpanded] = React.useState(false)
+  const {onReload, onFeedback} = props
+  const toggle = () => setExpanded(e => !e)
+  return (
+    <Kb.Box2 direction="vertical" fullWidth={true} fullHeight={true} style={props.style}>
+      {isMobile && props.onBack && (
+        <Kb.Box2 direction="horizontal" fullWidth={true} alignItems="center" style={styles.header}>
+          <Kb.BackButton onClick={props.onBack} />
+          <Kb.Box2 direction="horizontal" centerChildren={true} flex={1}>
+            {props.title && <Kb.Text type="BodyBig">{props.title}</Kb.Text>}
           </Kb.Box2>
-        </Kb.ScrollView>
-      </Kb.Box2>
-    )
-  }
+          <Kb.Box2 direction="horizontal" style={styles.headerSide} />
+        </Kb.Box2>
+      )}
+      <Kb.ScrollView style={styles.container}>
+        <Kb.Box2
+          direction="vertical"
+          centerChildren={true}
+          flex={1}
+          style={styles.reload}
+          gap="small"
+          padding="small"
+        >
+          <Kb.ImageIcon type="icon-illustration-zen-240-180" />
+          <Kb.Text center={true} type="Header">
+            {"We're having a hard time loading this page."}
+          </Kb.Text>
+          {expanded && (
+            <Kb.Box2 direction="vertical" style={styles.detailContainer}>
+              <Kb.Text type="Terminal" style={styles.details}>
+                {props.reason}
+              </Kb.Text>
+            </Kb.Box2>
+          )}
+          <Kb.Text type="BodySecondaryLink" onClick={toggle}>
+            {expanded ? 'Hide details' : 'Show details'}
+          </Kb.Text>
+          <Kb.Box2 direction="horizontal" gap="tiny">
+            <Kb.Button label="Retry" mode="Secondary" onClick={() => onReload(true)} />
+            <Kb.Button label="Feedback" mode="Primary" onClick={onFeedback} />
+          </Kb.Box2>
+        </Kb.Box2>
+      </Kb.ScrollView>
+    </Kb.Box2>
+  )
 }
 
 export type Props = {
   children: React.ReactNode
+  isWaiting: boolean
   needsReload: boolean
   onBack?: () => void
-  onReload: () => void
   onFeedback: () => void
+  onReload: (isRetry?: boolean) => void
   reason: string
   reloadOnMount?: boolean
   style?: Styles.StylesCrossPlatform
@@ -77,71 +97,97 @@ export type Props = {
 }
 
 const Reloadable = (props: Props) => {
-  const {reloadOnMount, onReload} = props
-
-  const onReloadRef = React.useRef(onReload)
-  onReloadRef.current = onReload
-
-  C.Router2.useSafeFocusEffect(
-    React.useCallback(() => {
-      reloadOnMount && onReloadRef.current()
-    }, [reloadOnMount])
-  )
+  const {reloadOnMount, onReload, isWaiting} = props
+  const navigation = React.useContext(NavigationContext)
+  React.useEffect(() => {
+    if (!navigation) {
+      return
+    }
+    return navigation.addListener('blur', () => {
+      autoReloadedNavigations.delete(navigation)
+      pendingAutoReloadNavigations.delete(navigation)
+    })
+  }, [navigation])
+  const maybeAutoReload = React.useEffectEvent(() => {
+    if (!navigation || !reloadOnMount || autoReloadedNavigations.has(navigation)) {
+      return
+    }
+    if (isWaiting) {
+      pendingAutoReloadNavigations.add(navigation)
+      return
+    }
+    autoReloadedNavigations.add(navigation)
+    pendingAutoReloadNavigations.delete(navigation)
+    onReload()
+  })
+  const [stableReload] = React.useState(() => () => {
+    maybeAutoReload()
+  })
+  C.Router2.useSafeFocusEffect(stableReload)
+  React.useEffect(() => {
+    if (!navigation || isWaiting || !pendingAutoReloadNavigations.has(navigation)) {
+      return
+    }
+    maybeAutoReload()
+  }, [isWaiting, navigation])
   if (!props.needsReload) {
     return <>{props.children}</>
   }
   return (
     <Reload
       onBack={props.onBack}
-      onReload={props.onReload}
       onFeedback={props.onFeedback}
+      onReload={onReload}
       reason={props.reason}
       style={props.style}
     />
   )
 }
 
-const styles = Styles.styleSheetCreate(() => ({
-  container: {
-    height: '100%',
-    width: '100%',
-  },
-  detailContainer: Styles.platformStyles({
-    common: {
-      backgroundColor: Styles.globalColors.blueDarker2,
-      borderRadius: Styles.borderRadius,
-    },
-    isElectron: {
-      padding: Styles.globalMargins.large,
-      width: '75%',
-    },
-    isMobile: {
-      padding: Styles.globalMargins.small,
-      width: '100%',
-    },
-  }),
-  details: Styles.platformStyles({
-    common: {flexGrow: 1},
-    isElectron: {wordBreak: 'break-all'},
-  }),
-  reload: {
-    flexGrow: 1,
-    maxHeight: '100%',
-    maxWidth: '100%',
-    padding: Styles.globalMargins.small,
-  },
-  scrollInside: {
-    height: '100%',
-    maxHeight: '100%',
-    maxWidth: '100%',
-    width: '100%',
-  },
-}))
+const useStyles = Styles.createStyleHook(
+  theme =>
+    ({
+      container: {
+        height: '100%',
+        width: '100%',
+      },
+      detailContainer: Styles.platformStyles({
+        common: {
+          backgroundColor: theme.blueDarker2,
+          borderRadius: Styles.borderRadius,
+        },
+        isElectron: {
+          padding: Styles.globalMargins.large,
+          width: '75%',
+        },
+        isMobile: {
+          padding: Styles.globalMargins.small,
+          width: '100%',
+        },
+      }),
+      details: Styles.platformStyles({
+        common: {flexGrow: 1},
+        isElectron: {wordBreak: 'break-all'},
+      }),
+      header: Styles.platformStyles({
+        common: {
+          ...Styles.bottomDivider(theme),
+        },
+        isAndroid: {height: 56},
+        isIOS: {height: 44},
+      }),
+      headerSide: {width: 44},
+      reload: {
+        maxHeight: '100%',
+        maxWidth: '100%',
+      },
+    }) as const
+)
 
 export type OwnProps = {
   children: React.ReactNode
   onBack?: () => void
-  onReload: () => void
+  onReload: (isRetry?: boolean) => void
   reloadOnMount?: boolean
   style?: Styles.StylesCrossPlatform
   title?: string
@@ -151,6 +197,7 @@ export type OwnProps = {
 
 const ReloadContainer = (ownProps: OwnProps) => {
   let error = C.Waiting.useAnyErrors(ownProps.waitingKeys)
+  const isWaiting = C.Waiting.useAnyWaiting(ownProps.waitingKeys)
 
   // make sure reloadable only responds to network-related errors
   error = error && C.isNetworkErr(error.code) ? error : undefined
@@ -159,7 +206,7 @@ const ReloadContainer = (ownProps: OwnProps) => {
     error = ownProps.errorFilter(error) ? error : undefined
   }
 
-  const _loggedIn = C.useConfigState(s => s.loggedIn)
+  const _loggedIn = useConfigState(s => s.loggedIn)
 
   const stateProps = {
     _loggedIn,
@@ -167,18 +214,20 @@ const ReloadContainer = (ownProps: OwnProps) => {
     reason: error?.message || '',
   }
 
-  const navigateAppend = C.useRouterState(s => s.dispatch.navigateAppend)
+  const navigateAppend = C.Router2.navigateAppend
+  const switchTab = C.Router2.switchTab
   const _onFeedback = (loggedIn: boolean) => {
     if (loggedIn) {
-      navigateAppend(C.Tabs.settingsTab)
-      navigateAppend(C.Settings.settingsFeedbackTab)
+      switchTab(C.Tabs.settingsTab)
+      navigateAppend({name: settingsFeedbackTab, params: {}})
     } else {
-      navigateAppend('feedback')
+      navigateAppend({name: 'feedback', params: {}})
     }
   }
 
   const props = {
     children: ownProps.children,
+    isWaiting,
     needsReload: stateProps.needsReload,
     onBack: ownProps.onBack,
     onFeedback: () => _onFeedback(_loggedIn),

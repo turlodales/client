@@ -5,9 +5,10 @@
 package libdokan
 
 import (
+	"context"
 	"fmt"
 	"os"
-	"path"
+	"path/filepath"
 	"strings"
 
 	"github.com/keybase/client/go/kbfs/dokan"
@@ -19,7 +20,6 @@ import (
 	"github.com/keybase/client/go/logger"
 	"github.com/keybase/client/go/protocol/keybase1"
 	"github.com/keybase/go-framed-msgpack-rpc/rpc"
-	"golang.org/x/net/context"
 )
 
 // StartOptions are options for starting up
@@ -34,9 +34,10 @@ type StartOptions struct {
 }
 
 func startMounting(options StartOptions,
-	log logger.Logger, mi *libfs.MountInterrupter) error {
+	log logger.Logger, mi *libfs.MountInterrupter,
+) error {
 	log.Info("Starting mount with options: %#v", options)
-	var mounter = &mounter{options: options, log: log}
+	mounter := &mounter{options: options, log: log}
 	err := mi.MountAndSetUnmount(mounter)
 	if err != nil {
 		return err
@@ -50,7 +51,8 @@ func Start(options StartOptions, kbCtx libkbfs.Context) *libfs.Error {
 	// Hook simplefs implementation in.
 	shutdownSimpleFS := func(_ context.Context) error { return nil }
 	createSimpleFS := func(
-		libkbfsCtx libkbfs.Context, config libkbfs.Config) (rpc.Protocol, error) {
+		libkbfsCtx libkbfs.Context, config libkbfs.Config,
+	) (rpc.Protocol, error) {
 		var sfs *simplefs.SimpleFS
 		sfs, shutdownSimpleFS = simplefs.NewSimpleFS(
 			libkbfsCtx, config)
@@ -60,7 +62,8 @@ func Start(options StartOptions, kbCtx libkbfs.Context) *libfs.Error {
 	// Hook git implementation in.
 	shutdownGit := func() {}
 	createGitHandler := func(
-		libkbfsCtx libkbfs.Context, config libkbfs.Config) (rpc.Protocol, error) {
+		libkbfsCtx libkbfs.Context, config libkbfs.Config,
+	) (rpc.Protocol, error) {
 		var handler keybase1.KBFSGitInterface
 		handler, shutdownGit = libgit.NewRPCHandlerWithCtx(
 			libkbfsCtx, config, &options.KbfsParams)
@@ -102,7 +105,7 @@ func Start(options StartOptions, kbCtx libkbfs.Context) *libfs.Error {
 			return libfs.InitError(err.Error())
 		}
 		info := libkb.NewServiceInfo(libkb.Version, libkbfs.PrereleaseBuild, options.Label, os.Getpid())
-		err = info.WriteFile(path.Join(options.RuntimeDir, "kbfs.info"), log)
+		err = info.WriteFile(filepath.Join(options.RuntimeDir, "kbfs.info"), log)
 		if err != nil {
 			return libfs.InitError(err.Error())
 		}

@@ -1,11 +1,11 @@
 package systests
 
 import (
+	"context"
 	"strings"
 	"testing"
 
-	"golang.org/x/net/context"
-
+	"github.com/keybase/client/go/ephemeral"
 	libkb "github.com/keybase/client/go/libkb"
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 	teams "github.com/keybase/client/go/teams"
@@ -101,7 +101,7 @@ func TestImplicitTeamUserReset(t *testing.T) {
 
 	// Bob's role should be NONE since he's still reset.
 	role := getRole(bob.username)
-	require.Equal(t, role, keybase1.TeamRole_NONE)
+	require.Equal(t, keybase1.TeamRole_NONE, role)
 
 	// Alice re-adds bob.
 	alice.reAddUserAfterReset(team, bob)
@@ -112,7 +112,7 @@ func TestImplicitTeamUserReset(t *testing.T) {
 
 	// Check if bob is back as OWNER.
 	role = getRole(bob.username)
-	require.Equal(t, role, keybase1.TeamRole_OWNER)
+	require.Equal(t, keybase1.TeamRole_OWNER, role)
 
 	// Reset and re-provision bob again.
 	bob.reset()
@@ -125,7 +125,7 @@ func TestImplicitTeamUserReset(t *testing.T) {
 	tryLoad(team.ID)
 
 	role = getRole(bob.username)
-	require.Equal(t, role, keybase1.TeamRole_NONE)
+	require.Equal(t, keybase1.TeamRole_NONE, role)
 
 	// Alice re-adds bob, again.
 	alice.reAddUserAfterReset(team, bob)
@@ -138,7 +138,7 @@ func TestImplicitTeamUserReset(t *testing.T) {
 	tryLoad(team.ID)
 
 	role = getRole(bob.username)
-	require.Equal(t, role, keybase1.TeamRole_OWNER)
+	require.Equal(t, keybase1.TeamRole_OWNER, role)
 }
 
 // ann and bob both reset
@@ -195,6 +195,12 @@ func TestImplicitTeamResetAndSBSBringback(t *testing.T) {
 
 	bob := tt.addUser("bob")
 	t.Logf("Signed up bob (%s)", bob.username)
+	ekLibIface := bob.tc.G.GetEKLib()
+	ekLib, ok := ekLibIface.(*ephemeral.EKLib)
+	require.True(t, ok)
+	mctx := bob.MetaContext()
+	err := ekLib.Shutdown(mctx)
+	require.NoError(t, err)
 
 	// (1)
 	displayName := strings.Join([]string{ann.username, bob.username}, ",")
@@ -205,6 +211,16 @@ func TestImplicitTeamResetAndSBSBringback(t *testing.T) {
 	bob.kickTeamRekeyd()
 	bob.reset()                  // (2)
 	bob.loginAfterResetPukless() // (3)
+
+	// Disable background EK generation after login to prevent it from racing
+	// with the explicit perUserKeyUpgrade() call below.
+	t.Logf("Disabling background EK generation after login for bob")
+	ekLibIface = bob.tc.G.GetEKLib()
+	ekLib, ok = ekLibIface.(*ephemeral.EKLib)
+	require.True(t, ok)
+	mctx = bob.MetaContext()
+	err = ekLib.Shutdown(mctx)
+	require.NoError(t, err)
 
 	ann.reAddUserAfterReset(iteam, bob) // (4)
 
@@ -224,7 +240,7 @@ func TestImplicitTeamResetAndSBSBringback(t *testing.T) {
 	})
 
 	invites := teamObj.GetActiveAndObsoleteInvites()
-	require.Equal(t, 0, len(invites), "leftover invite")
+	require.Empty(t, invites, "leftover invite")
 }
 
 func testImplicitResetParameterized(t *testing.T, startPUK, getPUKAfter bool) {
@@ -249,6 +265,7 @@ func testImplicitResetParameterized(t *testing.T, startPUK, getPUKAfter bool) {
 	t.Logf("impteam created for %q (id: %s)", displayName, iteam)
 
 	ann.kickTeamRekeyd()
+	bob.kickTeamRekeyd()
 	bob.reset()
 	if getPUKAfter {
 		// Bob resets and gets a PUK afterwards
@@ -256,6 +273,16 @@ func testImplicitResetParameterized(t *testing.T, startPUK, getPUKAfter bool) {
 	} else {
 		// Bob resets and does not get a PUK.
 		bob.loginAfterResetPukless()
+
+		// Disable background EK generation after login to prevent it from racing
+		// with the explicit perUserKeyUpgrade() call below.
+		t.Logf("Disabling background EK generation after login for bob")
+		ekLibIface := bob.tc.G.GetEKLib()
+		ekLib, ok := ekLibIface.(*ephemeral.EKLib)
+		require.True(t, ok)
+		mctx := bob.MetaContext()
+		err = ekLib.Shutdown(mctx)
+		require.NoError(t, err)
 	}
 
 	iteam2, err := ann.lookupImplicitTeam(false /* create */, displayName, false /* isPublic */)
@@ -279,7 +306,7 @@ func testImplicitResetParameterized(t *testing.T, startPUK, getPUKAfter bool) {
 		// but should have active invite
 		invite, uv, found := teamObj.FindActiveKeybaseInvite(bob.uid)
 		require.True(t, found)
-		require.EqualValues(t, bob.userVersion(), uv)
+		require.Equal(t, bob.userVersion(), uv)
 		require.Equal(t, keybase1.TeamRole_OWNER, invite.Role)
 
 		// bob upgrades PUK
@@ -365,7 +392,7 @@ func TestImplicitTeamResetNoPukEncore(t *testing.T) {
 	require.Equal(t, keybase1.TeamRole_OWNER, role)
 
 	invites := teamObj.GetActiveAndObsoleteInvites()
-	require.Equal(t, 0, len(invites), "leftover invite")
+	require.Empty(t, invites, "leftover invite")
 }
 
 func TestImplicitTeamResetBadReadds(t *testing.T) {

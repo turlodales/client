@@ -110,7 +110,7 @@ func (k *KeyringFile) Index() error {
 }
 
 func (k *KeyringFile) Load() error {
-	k.G().Log.Debug(fmt.Sprintf("+ Loading PGP Keyring %s", k.filename))
+	k.G().Log.Debug("+ Loading PGP Keyring %s", k.filename)
 	file, err := os.Open(k.filename)
 	if os.IsNotExist(err) {
 		k.G().Log.Warning(fmt.Sprintf("No PGP Keyring found at %s", k.filename))
@@ -325,6 +325,7 @@ func deviceIDFromDevice(m MetaContext, uid keybase1.UID, device *Device) keybase
 	}
 	return m.G().Env.GetDeviceIDForUID(uid)
 }
+
 func deviceNameLookup(m MetaContext, device *Device, me *User, key GenericKey) string {
 	if device != nil {
 		if device.Description != nil && *device.Description != "" {
@@ -459,12 +460,14 @@ func (k *Keyrings) GetSecretKeyWithPassphrase(m MetaContext, me *User, passphras
 
 type EmptyKeyRing struct{}
 
-func (k EmptyKeyRing) KeysById(id uint64, fp []byte) []openpgp.Key {
+func (k EmptyKeyRing) KeysById(id uint64, fp []byte) []openpgp.Key { //nolint
 	return []openpgp.Key{}
 }
-func (k EmptyKeyRing) KeysByIdUsage(id uint64, fp []byte, usage byte) []openpgp.Key {
+
+func (k EmptyKeyRing) KeysByIdUsage(id uint64, fp []byte, usage byte) []openpgp.Key { //nolint
 	return []openpgp.Key{}
 }
+
 func (k EmptyKeyRing) DecryptionKeys() []openpgp.Key {
 	return []openpgp.Key{}
 }

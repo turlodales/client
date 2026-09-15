@@ -2,7 +2,6 @@
 // this source code is governed by the included BSD license.
 
 //go:build !production
-// +build !production
 
 package pvl
 
@@ -42,6 +41,13 @@ var infoBadSig = ProofInfo{
 	Hostname:       "kronk.example.com",
 	Protocol:       "http:",
 	APIURL:         "https://rooter.example.com/proofs/kronkinator/5.htjsxt",
+}
+
+var infoTwitterX = ProofInfo{
+	ArmoredSig:     sig1,
+	Username:       "kronk",
+	RemoteUsername: "kronkinator",
+	APIURL:         "https://x.com/kronkinator/status/5",
 }
 
 var html1 = `

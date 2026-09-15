@@ -2,53 +2,79 @@ import * as C from '@/constants'
 import * as React from 'react'
 import * as Kb from '@/common-adapters'
 import * as T from '@/constants/types'
-import type {RPCError} from '@/util/errors'
+import logger from '@/logger'
+import {registerExternalResetter} from '@/util/zustand'
 import {ChannelsWidget} from '@/teams/common'
+import {useLoadedTeam} from '../use-loaded-team'
+import {type CachedResourceCache, getCachedResourceCache, useCachedResource} from '@/util/use-cached-resource'
 
 type Props = {
   teamID: T.Teams.TeamID
 }
 
+type DefaultChannelsData = ReadonlyArray<T.Teams.ChannelNameID>
+
+const defaultChannelsStaleMs = 5_000
+const emptyDefaultChannels: DefaultChannelsData = []
+
+// One cache per team, shared by every consumer: each load is a remote
+// chat.1.remote.getDefaultTeamChannels round trip, so a per-instance cache turns
+// every extra mount of the settings tab into another hit on the chat rate limit.
+const defaultChannelsCaches = new Map<
+  T.Teams.TeamID,
+  CachedResourceCache<DefaultChannelsData, T.Teams.TeamID>
+>()
+
+// module scope outlives sign-out, so the next user would inherit this user's channels
+registerExternalResetter('teams-default-channels-caches', () => {
+  defaultChannelsCaches.clear()
+})
+
+// resolve rather than reject on failure: consumers render an empty list (and no
+// spinner) on error, and a cached failure keeps a broken team from re-requesting
+// on every render. Module scope, not inline in the hook: a try/catch wrapping a
+// value block is a react-compiler bailout.
+const loadDefaultChannels = async (teamID: T.Teams.TeamID): Promise<DefaultChannelsData> => {
+  try {
+    const {convs} = await T.RPCChat.localGetDefaultTeamChannelsLocalRpcPromise({teamID})
+    return [
+      {channelname: 'general', conversationIDKey: 'unused'},
+      ...(convs ?? []).map(conv => ({channelname: conv.channel, conversationIDKey: conv.convID})),
+    ]
+  } catch (error) {
+    logger.warn(`Failed to load default channels for ${teamID}`, error)
+    return emptyDefaultChannels
+  }
+}
+
 export const useDefaultChannels = (teamID: T.Teams.TeamID) => {
-  const getDefaultChannelsRPC = C.useRPC(T.RPCChat.localGetDefaultTeamChannelsLocalRpcPromise)
-  const [defaultChannels, setDefaultChannels] = React.useState<Array<T.Teams.ChannelNameID>>([])
-  const [defaultChannelsWaiting, setWaiting] = React.useState(false)
-  const [error, setError] = React.useState<RPCError | undefined>()
+  const cache = React.useMemo(
+    () => getCachedResourceCache(defaultChannelsCaches, emptyDefaultChannels, teamID),
+    [teamID]
+  )
+  const {data, loaded, loading, reload} = useCachedResource({
+    cache,
+    cacheKey: teamID,
+    initialData: emptyDefaultChannels,
+    load: async () => await loadDefaultChannels(teamID),
+    staleMs: defaultChannelsStaleMs,
+  })
 
-  const reloadDefaultChannels = React.useCallback(() => {
-    setWaiting(true)
-    getDefaultChannelsRPC(
-      [{teamID}],
-      result => {
-        setDefaultChannels([
-          {channelname: 'general', conversationIDKey: 'unused'},
-          ...(result.convs || []).map(conv => ({channelname: conv.channel, conversationIDKey: conv.convID})),
-        ])
-        setWaiting(false)
-      },
-      err => {
-        setError(err)
-        setWaiting(false)
-      }
-    )
-  }, [teamID, getDefaultChannelsRPC])
-
-  // Initialize
-  React.useEffect(reloadDefaultChannels, [reloadDefaultChannels])
-
-  return {defaultChannels, defaultChannelsWaiting, error, reloadDefaultChannels}
+  return {
+    defaultChannels: data,
+    defaultChannelsWaiting: loading || !loaded,
+    reloadDefaultChannels: reload,
+  }
 }
 
 const DefaultChannels = (props: Props) => {
   const {teamID} = props
   const {defaultChannels, defaultChannelsWaiting, reloadDefaultChannels} = useDefaultChannels(teamID)
+  const {
+    yourOperations: {manageMembers: canEdit},
+  } = useLoadedTeam(teamID)
   const setDefaultChannelsRPC = C.useRPC(T.RPCChat.localSetDefaultTeamChannelsLocalRpcPromise)
   const [waiting, setWaiting] = React.useState(false)
-  // TODO TRIAGE-2474
-  // Implicit admins should be able to set this, but chat stuff doesnt know about them.
-  // For now limit to people who are admins in this team.
-  // const canEdit = Container.useSelector(s => Constants.getCanPerformByID(s, teamID).manageMembers)
-  const canEdit = C.useTeamsState(s => ['admin', 'owner'].includes(C.Teams.getRole(s, teamID)))
 
   const onAdd = (channels: ReadonlyArray<T.Teams.ChannelNameID>) => {
     setWaiting(true)
@@ -60,7 +86,7 @@ const DefaultChannels = (props: Props) => {
       [{convs, teamID}],
       () => {
         setWaiting(false)
-        reloadDefaultChannels()
+        void reloadDefaultChannels()
       },
       error => {
         setWaiting(false)
@@ -80,7 +106,7 @@ const DefaultChannels = (props: Props) => {
         [{convs, teamID}],
         () => {
           setWaiting(false)
-          reloadDefaultChannels()
+          void reloadDefaultChannels()
         },
         error => {
           setWaiting(false)

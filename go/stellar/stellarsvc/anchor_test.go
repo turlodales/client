@@ -12,6 +12,8 @@ import (
 	"github.com/keybase/client/go/protocol/stellar1"
 	"github.com/keybase/stellarnet"
 	"github.com/stellar/go/build"
+
+	"github.com/stretchr/testify/require"
 )
 
 type anchorTest struct {
@@ -228,12 +230,12 @@ func TestAnchorInteractor(t *testing.T) {
 		ai.httpGetClient = test.MockTransferGet
 		_, err := ai.Deposit(tc.MetaContext())
 		if err == nil {
-			t.Errorf("err test %d [%s]: Deposit returned no error, but expected one", i, test.Name)
+			require.Failf(t, "", "err test %d [%s]: Deposit returned no error, but expected one", i, test.Name)
 			continue
 		}
 		_, err = ai.Withdraw(tc.MetaContext())
 		if err == nil {
-			t.Errorf("err test %d [%s]: Withdraw returned no error, but expected one", i, test.Name)
+			require.Failf(t, "", "err test %d [%s]: Withdraw returned no error, but expected one", i, test.Name)
 			continue
 		}
 	}
@@ -254,25 +256,25 @@ func TestAnchorInteractor(t *testing.T) {
 		if test.Asset.ShowDepositButton {
 			res, err := ai.Deposit(tc.MetaContext())
 			if err != nil {
-				t.Errorf("valid test %d [%s]: Deposit returned an error: %s", i, test.Name, err)
+				require.Failf(t, "", "valid test %d [%s]: Deposit returned an error: %s", i, test.Name, err)
 				continue
 			}
 			if res.ExternalUrl == nil && res.MessageFromAnchor == nil {
-				t.Errorf("valid test %d [%s] deposit: result fields are all nil", i, test.Name)
+				require.Failf(t, "", "valid test %d [%s] deposit: result fields are all nil", i, test.Name)
 				continue
 			}
 			if test.DepositExternalURL != "" && res.ExternalUrl == nil {
-				t.Errorf("valid test %d [%s] deposit: result external url field is nil, expected %s", i, test.Name, test.DepositExternalURL)
+				require.Failf(t, "", "valid test %d [%s] deposit: result external url field is nil, expected %s", i, test.Name, test.DepositExternalURL)
 				continue
 			}
 			if res.ExternalUrl != nil {
 				if test.DepositExternalURL != *res.ExternalUrl {
-					t.Errorf("valid test %d [%s] deposit: result external url field %s, expected %s", i, test.Name, *res.ExternalUrl, test.DepositExternalURL)
+					require.Failf(t, "", "valid test %d [%s] deposit: result external url field %s, expected %s", i, test.Name, *res.ExternalUrl, test.DepositExternalURL)
 				}
 			}
 			if res.MessageFromAnchor != nil {
 				if test.DepositMessage != *res.MessageFromAnchor {
-					t.Errorf("valid test %d [%s] deposit: result message %q, expected %q", i, test.Name, *res.MessageFromAnchor, test.DepositMessage)
+					require.Failf(t, "", "valid test %d [%s] deposit: result message %q, expected %q", i, test.Name, *res.MessageFromAnchor, test.DepositMessage)
 				}
 			}
 		}
@@ -280,25 +282,25 @@ func TestAnchorInteractor(t *testing.T) {
 		if test.Asset.ShowWithdrawButton {
 			res, err := ai.Withdraw(tc.MetaContext())
 			if err != nil {
-				t.Errorf("valid test %d [%s]: Withdraw returned an error: %s", i, test.Name, err)
+				require.Failf(t, "", "valid test %d [%s]: Withdraw returned an error: %s", i, test.Name, err)
 				continue
 			}
 			if res.ExternalUrl == nil && res.MessageFromAnchor == nil {
-				t.Errorf("valid test %d [%s] withdraw: result fields are all nil", i, test.Name)
+				require.Failf(t, "", "valid test %d [%s] withdraw: result fields are all nil", i, test.Name)
 				continue
 			}
 			if test.WithdrawExternalURL != "" && res.ExternalUrl == nil {
-				t.Errorf("valid test %d [%s] withdraw: result external url field is nil, expected %s", i, test.Name, test.WithdrawExternalURL)
+				require.Failf(t, "", "valid test %d [%s] withdraw: result external url field is nil, expected %s", i, test.Name, test.WithdrawExternalURL)
 				continue
 			}
 			if res.ExternalUrl != nil {
 				if test.WithdrawExternalURL != *res.ExternalUrl {
-					t.Errorf("valid test %d [%s] withdraw: result external url field %s, expected %s", i, test.Name, *res.ExternalUrl, test.WithdrawExternalURL)
+					require.Failf(t, "", "valid test %d [%s] withdraw: result external url field %s, expected %s", i, test.Name, *res.ExternalUrl, test.WithdrawExternalURL)
 				}
 			}
 			if res.MessageFromAnchor != nil {
 				if test.WithdrawMessage != *res.MessageFromAnchor {
-					t.Errorf("valid test %d [%s] withdraw: result message %q, expected %q", i, test.Name, *res.MessageFromAnchor, test.WithdrawMessage)
+					require.Failf(t, "", "valid test %d [%s] withdraw: result message %q, expected %q", i, test.Name, *res.MessageFromAnchor, test.WithdrawMessage)
 				}
 			}
 		}
@@ -392,14 +394,19 @@ func mockAuthPost(mctx libkb.MetaContext, url, authToken string, data url.Values
 	}
 }
 
-const depositBody = `{"type":"interactive_customer_info_needed","url":"https://portal.anchorusd.com/onboarding?account=GBZX4364PEPQTDICMIQDZ56K4T75QZCR4NBEYKO6PDRJAHZKGUOJPCXB&identifier=b700518e7430513abdbdab96e7ead566","identifier":"b700518e7430513abdbdab96e7ead566","dimensions":{"width":800,"height":600}}`
-const withdrawBody = `{ "type": "interactive_customer_info_needed", "url" : "https://portal.anchorusd.com/onboarding?account=GACW7NONV43MZIFHCOKCQJAKSJSISSICFVUJ2C6EZIW5773OU3HD64VI", "id": "82fhs729f63dh0v4" }`
-const naobtcBody = `{"how": "19qPSWH6Cytp2zsn4Cntbzz2EMp1fadkRs", "eta": 1800, "extra_info": "3 confirmations needed. this is long term available address", "extra_info_cn": "充值需要三次网络确认。此地址长期有效"}`
-const authDepositBody = `{"type":"interactive_customer_info_needed","url":"https://keybase.io/onboarding?account=GBZX4364PEPQTDICMIQDZ56K4T75QZCR4NBEYKO6PDRJAHZKGUOJPCXB&identifier=b700518e7430513abdbdab96e7ead566","identifier":"b700518e7430513abdbdab96e7ead566","dimensions":{"width":800,"height":600}}`
-const authWithdrawBody = `{ "type": "interactive_customer_info_needed", "url" : "https://keybase.io/onboarding?account=GACW7NONV43MZIFHCOKCQJAKSJSISSICFVUJ2C6EZIW5773OU3HD64VI", "id": "82fhs729f63dh0v4" }`
-const authChallenge = `{"transaction":"AAAAAANjzBWOC6YJo49wLshbTPMAmHnZ1I5AESV73e605u3DAAAnEAAAAAAAAAAAAAAAAQAAAABdRIV+AAAAAF1EhqoAAAAAAAAAAQAAAAEAAAAAc35v3HkfCY0CYiA898rk/9hkUeNCTCneeOKQHyo1HJcAAAAKAAAAEFN0ZWxsYXJwb3J0IGF1dGgAAAABAAAAQMCsw7hA+QQnW9t2MfAU92Sqa7eD1udjvaS5BSO9AJFXuELyBmzw+l+GhIry01cM6nz5HKleHf+wDn2jXYYlFKQAAAAAAAAAAbTm7cMAAABAnoRu4cp4cl9UEYqyRIfAIiLhoSU7h77vU9yV2S1RSNZfhc/YaXlMnlLkb9CAeLho1nVMOQnGNzQ55gWJzXXQDQ=="}`
-const authBody = `{
+const (
+	depositBody      = `{"type":"interactive_customer_info_needed","url":"https://portal.anchorusd.com/onboarding?account=GBZX4364PEPQTDICMIQDZ56K4T75QZCR4NBEYKO6PDRJAHZKGUOJPCXB&identifier=b700518e7430513abdbdab96e7ead566","identifier":"b700518e7430513abdbdab96e7ead566","dimensions":{"width":800,"height":600}}`
+	withdrawBody     = `{ "type": "interactive_customer_info_needed", "url" : "https://portal.anchorusd.com/onboarding?account=GACW7NONV43MZIFHCOKCQJAKSJSISSICFVUJ2C6EZIW5773OU3HD64VI", "id": "82fhs729f63dh0v4" }`
+	naobtcBody       = `{"how": "19qPSWH6Cytp2zsn4Cntbzz2EMp1fadkRs", "eta": 1800, "extra_info": "3 confirmations needed. this is long term available address", "extra_info_cn": "充值需要三次网络确认。此地址长期有效"}`
+	authDepositBody  = `{"type":"interactive_customer_info_needed","url":"https://keybase.io/onboarding?account=GBZX4364PEPQTDICMIQDZ56K4T75QZCR4NBEYKO6PDRJAHZKGUOJPCXB&identifier=b700518e7430513abdbdab96e7ead566","identifier":"b700518e7430513abdbdab96e7ead566","dimensions":{"width":800,"height":600}}`
+	authWithdrawBody = `{ "type": "interactive_customer_info_needed", "url" : "https://keybase.io/onboarding?account=GACW7NONV43MZIFHCOKCQJAKSJSISSICFVUJ2C6EZIW5773OU3HD64VI", "id": "82fhs729f63dh0v4" }`
+	authChallenge    = `{"transaction":"AAAAAANjzBWOC6YJo49wLshbTPMAmHnZ1I5AESV73e605u3DAAAnEAAAAAAAAAAAAAAAAQAAAABdRIV+AAAAAF1EhqoAAAAAAAAAAQAAAAEAAAAAc35v3HkfCY0CYiA898rk/9hkUeNCTCneeOKQHyo1HJcAAAAKAAAAEFN0ZWxsYXJwb3J0IGF1dGgAAAABAAAAQMCsw7hA+QQnW9t2MfAU92Sqa7eD1udjvaS5BSO9AJFXuELyBmzw+l+GhIry01cM6nz5HKleHf+wDn2jXYYlFKQAAAAAAAAAAbTm7cMAAABAnoRu4cp4cl9UEYqyRIfAIiLhoSU7h77vU9yV2S1RSNZfhc/YaXlMnlLkb9CAeLho1nVMOQnGNzQ55gWJzXXQDQ=="}`
+	authBody         = `{
   "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJHQTZVSVhYUEVXWUZJTE5VSVdBQzM3WTRRUEVaTVFWREpIREtWV0ZaSjJLQ1dVQklVNUlYWk5EQSIsImp0aSI6IjE0NGQzNjdiY2IwZTcyY2FiZmRiZGU2MGVhZTBhZDczM2NjNjVkMmE2NTg3MDgzZGFiM2Q2MTZmODg1MTkwMjQiLCJpc3MiOiJodHRwczovL2ZsYXBweS1iaXJkLWRhcHAuZmlyZWJhc2VhcHAuY29tLyIsImlhdCI6MTUzNDI1Nzk5NCwiZXhwIjoxNTM0MzQ0Mzk0fQ.8nbB83Z6vGBgC1X9r3N6oQCFTBzDiITAfCJasRft0z0"
 }`
-const sep24DepBody = `{ "type": "interactive_customer_info_needed", "url" : "https://keybase.io/transfer/deposit?account=GACW7NONV43MZIFHCOKCQJAKSJSISSICFVUJ2C6EZIW5773OU3HD64VI", "id": "82fhs729f63dh0v4" }`
-const sep24WithdrawBody = `{ "type": "interactive_customer_info_needed", "url" : "https://keybase.io/transfer/withdraw?account=GACW7NONV43MZIFHCOKCQJAKSJSISSICFVUJ2C6EZIW5773OU3HD64VI", "id": "82fhs729f63dh0v4" }`
+)
+
+const (
+	sep24DepBody      = `{ "type": "interactive_customer_info_needed", "url" : "https://keybase.io/transfer/deposit?account=GACW7NONV43MZIFHCOKCQJAKSJSISSICFVUJ2C6EZIW5773OU3HD64VI", "id": "82fhs729f63dh0v4" }`
+	sep24WithdrawBody = `{ "type": "interactive_customer_info_needed", "url" : "https://keybase.io/transfer/withdraw?account=GACW7NONV43MZIFHCOKCQJAKSJSISSICFVUJ2C6EZIW5773OU3HD64VI", "id": "82fhs729f63dh0v4" }`
+)

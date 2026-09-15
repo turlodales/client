@@ -5,6 +5,7 @@
 package libkbfs
 
 import (
+	"context"
 	"math"
 	"os"
 	"testing"
@@ -20,9 +21,7 @@ import (
 	"github.com/keybase/client/go/logger"
 	"github.com/keybase/client/go/protocol/keybase1"
 	"github.com/keybase/go-codec/codec"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/context"
 )
 
 type blockJournalEntryFuture struct {
@@ -95,7 +94,8 @@ func TestSaturateAdd(t *testing.T) {
 
 func setupBlockJournalTest(t *testing.T) (
 	ctx context.Context, cancel context.CancelFunc, tempdir string,
-	log logger.Logger, j *blockJournal) {
+	log logger.Logger, j *blockJournal,
+) {
 	codec := kbfscodec.NewMsgpack()
 	log = logger.NewTestLogger(t)
 
@@ -107,7 +107,7 @@ func setupBlockJournalTest(t *testing.T) (
 	defer func() {
 		if !setupSucceeded {
 			err := ioutil.RemoveAll(tempdir)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 		}
 	}()
 
@@ -130,19 +130,21 @@ func setupBlockJournalTest(t *testing.T) (
 }
 
 func teardownBlockJournalTest(ctx context.Context, t *testing.T,
-	cancel context.CancelFunc, tempdir string, j *blockJournal) {
+	cancel context.CancelFunc, tempdir string, j *blockJournal,
+) {
 	cancel()
 
 	err := j.checkInSyncForTest()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	err = ioutil.RemoveAll(tempdir)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 }
 
 func putBlockData(
 	ctx context.Context, t *testing.T, j *blockJournal, data []byte) (
-	kbfsblock.ID, kbfsblock.Context, kbfscrypto.BlockCryptKeyServerHalf) {
+	kbfsblock.ID, kbfsblock.Context, kbfscrypto.BlockCryptKeyServerHalf,
+) {
 	oldLength := j.length()
 
 	bID, err := kbfsblock.MakePermanentID(
@@ -168,7 +170,8 @@ func putBlockData(
 
 func addBlockRef(
 	ctx context.Context, t *testing.T, j *blockJournal,
-	bID kbfsblock.ID) kbfsblock.Context {
+	bID kbfsblock.ID,
+) kbfsblock.Context {
 	oldLength := j.length()
 
 	nonce, err := kbfsblock.MakeRefNonce()
@@ -187,7 +190,8 @@ func addBlockRef(
 
 func getAndCheckBlockData(ctx context.Context, t *testing.T, j *blockJournal,
 	bID kbfsblock.ID, bCtx kbfsblock.Context, expectedData []byte,
-	expectedServerHalf kbfscrypto.BlockCryptKeyServerHalf) {
+	expectedServerHalf kbfscrypto.BlockCryptKeyServerHalf,
+) {
 	data, serverHalf, err := j.getDataWithContext(ctx, bID, bCtx)
 	require.NoError(t, err)
 	require.Equal(t, expectedData, data)
@@ -413,7 +417,8 @@ func testBlockJournalGCd(t *testing.T, j *blockJournal) {
 }
 
 func goGCForTest(ctx context.Context, t *testing.T, j *blockJournal) (
-	int64, int64) {
+	int64, int64,
+) {
 	length, earliest, latest, err := j.getDeferredGCRange()
 	require.NoError(t, err)
 	if length == 0 {
@@ -470,14 +475,14 @@ func TestBlockJournalFlush(t *testing.T) {
 			partialEntries, _, rev, err = j.getNextEntriesToFlush(
 				ctx, end-1, maxJournalBlockFlushBatchSize, kbfsmd.ID{})
 			require.NoError(t, err)
-			require.Equal(t, rev, kbfsmd.RevisionUninitialized)
+			require.Equal(t, kbfsmd.RevisionUninitialized, rev)
 		}
 
 		entries, b, rev, err := j.getNextEntriesToFlush(ctx, end,
 			maxJournalBlockFlushBatchSize, kbfsmd.ID{})
 		require.NoError(t, err)
 		require.Equal(t, partialEntries.length()+1, entries.length())
-		require.Equal(t, rev, kbfsmd.RevisionUninitialized)
+		require.Equal(t, kbfsmd.RevisionUninitialized, rev)
 
 		err = flushBlockEntries(
 			ctx, j.log, j.deferLog, blockServer, bcache, reporter,
@@ -533,11 +538,11 @@ func TestBlockJournalFlush(t *testing.T) {
 
 	// Check they're all gone.
 	_, _, err = blockServer.Get(ctx, tlfID, bID, bCtx, DiskBlockAnyCache)
-	require.IsType(t, kbfsblock.ServerErrorBlockNonExistent{}, err)
+	require.ErrorAs(t, err, new(kbfsblock.ServerErrorBlockNonExistent))
 	_, _, err = blockServer.Get(ctx, tlfID, bID, bCtx2, DiskBlockAnyCache)
-	require.IsType(t, kbfsblock.ServerErrorBlockNonExistent{}, err)
+	require.ErrorAs(t, err, new(kbfsblock.ServerErrorBlockNonExistent))
 	_, _, err = blockServer.Get(ctx, tlfID, bID, bCtx3, DiskBlockAnyCache)
-	require.IsType(t, kbfsblock.ServerErrorBlockNonExistent{}, err)
+	require.ErrorAs(t, err, new(kbfsblock.ServerErrorBlockNonExistent))
 
 	length := j.length()
 	require.Equal(t, uint64(0), length)
@@ -549,7 +554,8 @@ func TestBlockJournalFlush(t *testing.T) {
 func flushBlockJournalOne(ctx context.Context, t *testing.T,
 	j *blockJournal, blockServer BlockServer,
 	bcache kbfsdata.BlockCache, reporter Reporter, tlfID tlf.ID) (
-	flushedBytes, removedFiles, removedBytes int64) {
+	flushedBytes, removedFiles, removedBytes int64,
+) {
 	first, err := j.j.readEarliestOrdinal()
 	require.NoError(t, err)
 	entries, b, _, err := j.getNextEntriesToFlush(ctx, first+1,
@@ -662,10 +668,10 @@ func TestBlockJournalFlushInterleaved(t *testing.T) {
 	flushOneZero()
 
 	_, _, err = blockServer.Get(ctx, tlfID, bID, bCtx, DiskBlockAnyCache)
-	require.IsType(t, kbfsblock.ServerErrorBlockNonExistent{}, err)
+	require.ErrorAs(t, err, new(kbfsblock.ServerErrorBlockNonExistent))
 
 	_, _, err = blockServer.Get(ctx, tlfID, bID, bCtx2, DiskBlockAnyCache)
-	require.IsType(t, kbfsblock.ServerErrorBlockNonExistent{}, err)
+	require.ErrorAs(t, err, new(kbfsblock.ServerErrorBlockNonExistent))
 
 	buf, key, err = blockServer.Get(ctx, tlfID, bID, bCtx3, DiskBlockAnyCache)
 	require.NoError(t, err)
@@ -695,7 +701,7 @@ func TestBlockJournalFlushInterleaved(t *testing.T) {
 	flushOneZero()
 
 	_, _, err = blockServer.Get(ctx, tlfID, bID, bCtx3, DiskBlockAnyCache)
-	require.IsType(t, kbfsblock.ServerErrorBlockNonExistent{}, err)
+	require.ErrorAs(t, err, new(kbfsblock.ServerErrorBlockNonExistent))
 
 	end, err := j.end()
 	require.NoError(t, err)
@@ -1158,7 +1164,8 @@ func TestBlockJournalUnflushedBytesIgnore(t *testing.T) {
 	defer teardownBlockJournalTest(ctx, t, cancel, tempdir, j)
 
 	requireCounts := func(expectedStoredBytes, expectedUnflushedBytes,
-		expectedStoredFiles int) {
+		expectedStoredFiles int,
+	) {
 		require.Equal(t, int64(expectedStoredBytes), j.getStoredBytes())
 		require.Equal(t, int64(expectedUnflushedBytes),
 			j.getUnflushedBytes())

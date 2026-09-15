@@ -10,14 +10,13 @@
 package engine
 
 import (
+	"context"
 	"fmt"
-	insecurerand "math/rand"
 	"sync"
 	"time"
 
 	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/protocol/keybase1"
-	context "golang.org/x/net/context"
 )
 
 // Function to run periodically.
@@ -114,10 +113,8 @@ func (e *BackgroundTask) Run(m libkb.MetaContext) (err error) {
 
 	// start the loop and return
 	go func() {
-		err := e.loop(m)
-		if err != nil {
-			e.log(m, "loop error: %s", err)
-		}
+		// loop only returns when its sleep is canceled; it never returns nil.
+		e.log(m, "loop error: %s", e.loop(m))
 		cancel()
 		e.meta("loop-exit")
 	}()
@@ -140,7 +137,7 @@ func (e *BackgroundTask) loop(mctx libkb.MetaContext) error {
 	// this routine decides when to wake up. That led to this routine never waking.
 	wakeAt := mctx.G().Clock().Now().Add(e.args.Settings.Start)
 	if e.args.Settings.StartStagger > 0 {
-		wakeAt = wakeAt.Add(time.Duration(insecurerand.Int63n(int64(e.args.Settings.StartStagger))))
+		wakeAt = wakeAt.Add(libkb.RandomJitter(e.args.Settings.StartStagger))
 	}
 	if e.args.Settings.MobileForegroundStartAddition > 0 && mctx.G().IsMobileAppType() {
 		appState := mctx.G().MobileAppState.State()
@@ -200,7 +197,7 @@ func (e *BackgroundTask) meta(s string) {
 	}
 }
 
-func (e *BackgroundTask) log(m libkb.MetaContext, format string, args ...interface{}) {
+func (e *BackgroundTask) log(m libkb.MetaContext, format string, args ...any) {
 	content := fmt.Sprintf(format, args...)
 	m.Debug("%s %s", e.Name(), content)
 }

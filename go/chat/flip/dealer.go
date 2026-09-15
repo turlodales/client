@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -14,6 +15,8 @@ import (
 	chat1 "github.com/keybase/client/go/protocol/chat1"
 	clockwork "github.com/keybase/clockwork"
 )
+
+const maxShuffleSize = 10000 // Prevent DoS via large shuffle arrays
 
 // Excludes `Params` from being logged.
 func (s Start) String() string {
@@ -50,9 +53,11 @@ func (g GameMetadata) check() bool {
 	return g.Initiator.check() && !g.ConversationID.IsNil() && g.GameID.Check()
 }
 
-type GameKey string
-type GameIDKey string
-type UserDeviceKey string
+type (
+	GameKey       string
+	GameIDKey     string
+	UserDeviceKey string
+)
 
 func (u UserDevice) ToKey() UserDeviceKey {
 	return UserDeviceKey(strings.Join([]string{u.U.String(), u.D.String()}, ","))
@@ -92,7 +97,7 @@ type Game struct {
 	me                     *playerControl
 	commitmentCompleteHash Hash
 	clock                  func() clockwork.Clock
-	clogf                  func(ctx context.Context, fmt string, args ...interface{})
+	clogf                  func(ctx context.Context, fmt string, args ...any)
 
 	// To handle reorderings between CommitmentComplete and commitements,
 	// wee need some extra bookkeeping.
@@ -185,7 +190,6 @@ func (d *Dealer) run(ctx context.Context, game *Game) {
 
 	if err != nil {
 		d.dh.CLogf(ctx, "[%s] Error running game %s: %s", d.dh.Me(), key, err.Error())
-
 	} else {
 		d.dh.CLogf(ctx, "Game %s ended cleanly", key)
 	}
@@ -294,7 +298,12 @@ func (g *Game) doFlip(ctx context.Context, prng *PRNG) error {
 		modulus.SetBytes(params.Big())
 		res.Big = prng.Big(&modulus)
 	case FlipType_SHUFFLE:
-		res.Shuffle = prng.Permutation(int(params.Shuffle()))
+		shuffleSize64 := params.Shuffle()
+		if shuffleSize64 < 0 || shuffleSize64 > int64(maxShuffleSize) {
+			return fmt.Errorf("shuffle size %d is outside the supported range", shuffleSize64)
+		}
+		shuffleSize := int(shuffleSize64)
+		res.Shuffle = prng.Permutation(shuffleSize)
 	default:
 		return BadFlipTypeError{G: g.GameMetadata(), T: t}
 	}
@@ -354,7 +363,6 @@ func (g *Game) handleCommitment(ctx context.Context, sender UserDevice, now time
 }
 
 func (g *Game) maybeReveal(ctx context.Context) (err error) {
-
 	if !g.gotCommitmentComplete {
 		return nil
 	}
@@ -383,7 +391,6 @@ func (g *Game) maybeReveal(ctx context.Context) (err error) {
 }
 
 func (g *Game) handleCommitmentCompletePlayer(ctx context.Context, u UserDeviceCommitment) (err error) {
-
 	ps := g.getPlayerState(u.Ud)
 	if ps.leaderCommitment != nil {
 		return DuplicateCommitmentCompleteError{G: g.md, U: u.Ud}
@@ -405,7 +412,6 @@ func (g *Game) handleCommitmentCompletePlayer(ctx context.Context, u UserDeviceC
 }
 
 func (g *Game) handleCommitmentComplete(ctx context.Context, sender UserDevice, now time.Time, cc CommitmentComplete) (err error) {
-
 	if !sender.Eq(g.md.Initiator) {
 		return WrongSenderError{G: g.md, Expected: g.md.Initiator, Actual: sender}
 	}
@@ -452,7 +458,6 @@ func errToOk(err error) string {
 }
 
 func (g *Game) handleMessage(ctx context.Context, msg *GameMessageWrapped, now time.Time) (err error) {
-
 	msgID := g.msgID
 	g.msgID++
 
@@ -619,7 +624,7 @@ func (g *Game) runMain(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		}
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return nil
 		}
 		if err != nil {
@@ -760,7 +765,7 @@ func (d *Dealer) handleMessageStart(ctx context.Context, msg *GameMessageWrapped
 	return nil
 }
 
-func (d *Dealer) handleMessageOthers(c context.Context, msg *GameMessageWrapped) error {
+func (d *Dealer) handleMessageOthers(_ context.Context, msg *GameMessageWrapped) error {
 	d.Lock()
 	defer d.Unlock()
 	md := msg.GameMetadata()
@@ -795,7 +800,7 @@ func (d *Dealer) handleMessage(ctx context.Context, msg *GameMessageWrapped) err
 	if err != nil {
 		return err
 	}
-	if !(msg.Forward && msg.isForwardable()) {
+	if !msg.Forward || !msg.isForwardable() {
 		return nil
 	}
 	// Encode and send the message through the external server-routed chat channel
@@ -861,7 +866,8 @@ func (d *Dealer) startFlip(ctx context.Context, start Start, conversationID chat
 }
 
 func (d *Dealer) startFlipWithGameID(ctx context.Context, start Start, conversationID chat1.ConversationID,
-	gameID chat1.FlipGameID) (pc *playerControl, err error) {
+	gameID chat1.FlipGameID,
+) (pc *playerControl, err error) {
 	md := GameMetadata{
 		Initiator:      d.dh.Me(),
 		ConversationID: conversationID,
@@ -891,7 +897,6 @@ func (d *Dealer) sendOutgoingChat(ctx context.Context, md GameMetadata, me *play
 }
 
 func (d *Dealer) sendOutgoingChatWithFirst(ctx context.Context, md GameMetadata, me *playerControl, body GameMessageBody, firstInConversation bool) error {
-
 	gmw := GameMessageWrapped{
 		Sender:              d.dh.Me(),
 		Me:                  me,
@@ -911,10 +916,12 @@ func (d *Dealer) sendOutgoingChatWithFirst(ctx context.Context, md GameMetadata,
 	return nil
 }
 
-var DefaultCommitmentWindowMsec int64 = 3 * 1000
-var DefaultRevealWindowMsec int64 = 30 * 1000
-var DefaultCommitmentCompleteWindowMsec int64 = 15 * 1000
-var DefaultSlackMsec int64 = 1 * 1000
+var (
+	DefaultCommitmentWindowMsec         int64 = 3 * 1000
+	DefaultRevealWindowMsec             int64 = 30 * 1000
+	DefaultCommitmentCompleteWindowMsec int64 = 15 * 1000
+	DefaultSlackMsec                    int64 = 1 * 1000
+)
 
 // For bigger groups, everything is slower, like the time to digest all required messages. So we're
 // going to inflate our timeouts.

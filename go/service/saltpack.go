@@ -7,6 +7,7 @@ import (
 	"archive/zip"
 	"bufio"
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -22,20 +23,21 @@ import (
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 	"github.com/keybase/client/go/saltpackkeys"
 	"github.com/keybase/go-framed-msgpack-rpc/rpc"
-	"golang.org/x/net/context"
 )
 
-const saltpackExtension = ".saltpack"
-const encryptedSuffix = ".encrypted"
-const signedSuffix = ".signed"
-const txtExtension = ".txt"
-const zipExtension = ".zip"
-const encryptedExtension = encryptedSuffix + saltpackExtension
-const signedExtension = signedSuffix + saltpackExtension
-const decryptedExtension = ".decrypted"
-const verifiedExtension = ".verified"
-const encryptedDirSuffix = zipExtension + encryptedSuffix
-const signedDirSuffix = zipExtension + signedSuffix
+const (
+	saltpackExtension  = ".saltpack"
+	encryptedSuffix    = ".encrypted"
+	signedSuffix       = ".signed"
+	txtExtension       = ".txt"
+	zipExtension       = ".zip"
+	encryptedExtension = encryptedSuffix + saltpackExtension
+	signedExtension    = signedSuffix + saltpackExtension
+	decryptedExtension = ".decrypted"
+	verifiedExtension  = ".verified"
+	encryptedDirSuffix = zipExtension + encryptedSuffix
+	signedDirSuffix    = zipExtension + signedSuffix
+)
 
 type SaltpackHandler struct {
 	*BaseHandler
@@ -581,7 +583,7 @@ func (h *SaltpackHandler) SaltpackVerifyFile(ctx context.Context, arg keybase1.S
 
 	spui, err := h.frontendVerify(ctx, arg.SessionID, earg)
 	if err != nil {
-		h.G().Log.Debug("verify error, so removing ouput file")
+		h.G().Log.Debug("verify error, so removing output file")
 		if clErr := bw.Close(); clErr != nil {
 			transformSaltpackError(&clErr)
 			h.G().Log.Debug("error closing bw for output file: %s", clErr)
@@ -724,16 +726,16 @@ func unboxFilename(inFilename, suffix, destinationDir string) (string, *libkb.Bu
 
 	// if the input filename ends in .encrypted.saltpack or .signed.saltpack,
 	// strip that off and use that instead.
-	if strings.HasSuffix(file, encryptedExtension) {
-		desiredFilename = strings.TrimSuffix(file, encryptedExtension)
-	} else if strings.HasSuffix(file, signedExtension) {
-		desiredFilename = strings.TrimSuffix(file, signedExtension)
+	if before, ok := strings.CutSuffix(file, encryptedExtension); ok {
+		desiredFilename = before
+	} else if before, ok := strings.CutSuffix(file, signedExtension); ok {
+		desiredFilename = before
 	}
 
 	finalPath := filepath.Join(dir, desiredFilename)
 
 	var found bool
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		possible := finalPath
 		if i > 0 {
 			// after the first time through, add a (i) to the filename
@@ -959,7 +961,7 @@ func zipDir(directory string, prog *progress.ProgressWriter) io.ReadCloser {
 			if err != nil {
 				return err
 			}
-			f, err := os.Open(path)
+			f, err := os.Open(path) //nolint:gosec // G122: zipping a user-selected directory; Walk path is the archive tree
 			if err != nil {
 				return err
 			}

@@ -1,29 +1,22 @@
-import * as C from '@/constants'
-import NewTeamDialog from '../teams/new-team'
-import upperFirst from 'lodash/upperFirst'
+import {CreateNewTeam} from '../teams/new-team'
+import {useCurrentUserState} from '@/stores/current-user'
+import {createNewTeamAndNavigate} from '@/teams/team-page-actions'
+import * as T from '@/constants/types'
+import {useConversationParticipants} from './conversation/data-hooks'
 
-const Container = () => {
-  const conversationIDKey = C.useChatContext(s => s.id)
-  const baseTeam = ''
-  const errorText = C.useTeamsState(s => upperFirst(s.errorInTeamCreation))
-  const navigateUp = C.useRouterState(s => s.dispatch.navigateUp)
-  const onCancel = () => {
-    navigateUp()
-  }
-  const resetErrorInTeamCreation = C.useTeamsState(s => s.dispatch.resetErrorInTeamCreation)
-  const createNewTeamFromConversation = C.useTeamsState(s => s.dispatch.createNewTeamFromConversation)
-  const onClearError = resetErrorInTeamCreation
+type Props = {conversationIDKey?: T.Chat.ConversationIDKey}
+
+const NewTeamDialog = (props: Props) => {
+  const conversationIDKey = props.conversationIDKey ?? T.Chat.noConversationIDKey
+  const participantInfo = useConversationParticipants(conversationIDKey)
+  const username = useCurrentUserState(s => s.username)
   const onSubmit = (teamname: string) => {
-    createNewTeamFromConversation(conversationIDKey, teamname)
+    const usersToAdd = participantInfo.name
+      .filter(participant => participant !== username)
+      .map(assertion => ({assertion, role: 'writer' as const}))
+    void createNewTeamAndNavigate(teamname, false, {fromChat: true, usersToAdd})
   }
-  const props = {
-    baseTeam,
-    errorText,
-    onCancel,
-    onClearError,
-    onSubmit,
-  }
-  return <NewTeamDialog {...props} />
+  return <CreateNewTeam baseTeam="" onSubmit={onSubmit} />
 }
 
-export default Container
+export default NewTeamDialog

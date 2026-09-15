@@ -1,38 +1,20 @@
 import * as C from '@/constants'
+import {useCurrentUserState} from '@/stores/current-user'
 import * as T from '@/constants/types'
 import ParticipantRekey from './participant-rekey'
 import YouRekey from './you-rekey'
-
-type Props = {
-  onBack: () => void
-  onEnterPaperkey: () => void
-  onRekey: () => void
-  onShowProfile: (username: string) => void
-  rekeyers: Array<string>
-  youRekey: boolean
-}
-
-const Rekey = (props: Props) =>
-  props.youRekey ? (
-    <YouRekey onEnterPaperkey={props.onEnterPaperkey} onBack={props.onBack} onRekey={props.onRekey} />
-  ) : (
-    <ParticipantRekey rekeyers={props.rekeyers} onShowProfile={props.onShowProfile} onBack={props.onBack} />
-  )
+import {navToProfile} from '@/constants/router'
+import {useThreadMeta} from '../thread-context'
 
 const Container = () => {
-  const _you = C.useCurrentUserState(s => s.username)
-  const rekeyers = C.useChatContext(s => s.meta.rekeyers)
-  const navigateUp = C.useRouterState(s => s.dispatch.navigateUp)
-  const navigateAppend = C.useRouterState(s => s.dispatch.navigateAppend)
-  const onBack = () => {
-    navigateUp()
-  }
+  const _you = useCurrentUserState(s => s.username)
+  const rekeyers = useThreadMeta(m => m.rekeyers)
+  const onBack = C.Router2.navigateUp
+  const navigateAppend = C.Router2.navigateAppend
   const onEnterPaperkey = () => {
-    navigateAppend('chatEnterPaperkey')
+    navigateAppend({name: 'chatEnterPaperkey', params: {}})
   }
-
   const rekeyShowPendingRekeyStatus = C.useRPC(T.RPCGen.rekeyShowPendingRekeyStatusRpcPromise)
-
   const onRekey = () => {
     rekeyShowPendingRekeyStatus(
       [],
@@ -41,15 +23,12 @@ const Container = () => {
     )
   }
 
-  const onShowProfile = C.useProfileState(s => s.dispatch.showUserProfile)
-  const props = {
-    onBack,
-    onEnterPaperkey,
-    onRekey,
-    onShowProfile,
-    rekeyers: [...rekeyers],
-    youRekey: rekeyers.has(_you),
-  }
-  return <Rekey {...props} />
+  const onShowProfile = navToProfile
+
+  return rekeyers.has(_you) ? (
+    <YouRekey onEnterPaperkey={onEnterPaperkey} onBack={onBack} onRekey={onRekey} />
+  ) : (
+    <ParticipantRekey rekeyers={[...rekeyers]} onShowProfile={onShowProfile} onBack={onBack} />
+  )
 }
 export default Container

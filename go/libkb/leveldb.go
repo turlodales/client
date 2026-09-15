@@ -4,6 +4,8 @@
 package libkb
 
 import (
+	"context"
+	stderrors "errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,7 +17,6 @@ import (
 	"github.com/syndtr/goleveldb/leveldb/filter"
 	"github.com/syndtr/goleveldb/leveldb/opt"
 	"github.com/syndtr/goleveldb/leveldb/util"
-	"golang.org/x/net/context"
 )
 
 // table names
@@ -68,9 +69,10 @@ func levelDbPut(ops levelDBOps, cleaner *levelDbCleaner, id DbKey, aliases []DbK
 func levelDbGetWhich(ops levelDBOps, cleaner *levelDbCleaner, key []byte) (val []byte, found bool, err error) {
 	val, err = ops.Get(key, nil)
 	found = false
-	if err == nil {
+	switch {
+	case err == nil:
 		found = true
-	} else if err == leveldb.ErrNotFound {
+	case stderrors.Is(err, leveldb.ErrNotFound):
 		err = nil
 	}
 
@@ -226,6 +228,39 @@ func (l *LevelDb) doWhileOpenAndNukeIfCorrupted(action func() error) (err error)
 // use it later.
 func (l *LevelDb) ForceOpen() error {
 	return l.doWhileOpenAndNukeIfCorrupted(func() error { return nil })
+}
+
+// levelDbFlushSentinelKey lives in the "pm" table so the db cleaner ignores
+// it. Written before CompactRange so the memtable contains at least one key
+// and isMemOverlaps returns true for the full-range compaction.
+var levelDbFlushSentinelKey = []byte(levelDbTablePerm + ":ff:flush-sentinel")
+
+// Flush writes the current memtable to disk and rotates the journal. An
+// unclean process kill (routine on iOS) with a non-empty journal forces a
+// journal replay on the next open, or worse a whole-DB recovery if the
+// journal tail is corrupt — both of which block startup. Flushing while
+// entering the background leaves a near-empty journal so the next cold start
+// opens fast. No-op if the DB is not currently open; does not trigger a lazy
+// open.
+func (l *LevelDb) Flush() (err error) {
+	defer convertNoSpaceError(&err)
+	l.RLock()
+	defer l.RUnlock()
+	if l.db == nil {
+		return nil
+	}
+	// Write the sentinel so the memtable is non-empty; then compact the full
+	// key space (util.Range{} with nil Start/Limit) so isMemOverlaps always
+	// returns true regardless of what other keys are live. A narrow range
+	// keyed only on the sentinel could miss the memtable flush if a concurrent
+	// write rotated the memtable between the Put and CompactRange.
+	if err = l.db.Put(levelDbFlushSentinelKey, nil, nil); err != nil {
+		return err
+	}
+	if err = l.db.CompactRange(util.Range{}); err != nil {
+		return err
+	}
+	return l.db.Delete(levelDbFlushSentinelKey, nil)
 }
 
 func (l *LevelDb) Stats() (stats string) {

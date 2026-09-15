@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -9,7 +10,6 @@ import (
 	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/protocol/chat1"
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
-	"golang.org/x/net/context"
 )
 
 type CmdTeamSettings struct {
@@ -449,7 +449,6 @@ func (c *CmdTeamSettings) printCurrentSettings(ctx context.Context, cli keybase1
 				}
 			} else {
 				dui.Printf("  Welcome message:          unset (default)\n")
-
 			}
 		}
 	}

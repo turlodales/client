@@ -77,19 +77,27 @@ func folderFromTeamID(ctx context.Context, g *libkb.GlobalContext, teamID keybas
 }
 
 func folderFromTeamIDNamed(ctx context.Context, g *libkb.GlobalContext, teamID keybase1.TeamID) (keybase1.FolderHandle, error) {
-	name, err := teams.ResolveIDToName(ctx, g, teamID)
+	// Get the name from the FTL rather than teams.ResolveIDToName, which adds a
+	// server resolver round-trip for an untrusted candidate name that it then
+	// verifies via the FTL anyway. The FTL load here already cryptographically
+	// verifies the name itself, and it's cached (Unbox loads the same team), so
+	// this avoids a redundant per-repo round-trip when listing many repos.
+	mctx := libkb.NewMetaContext(ctx, g)
+	res, err := g.GetFastTeamLoader().Load(mctx, keybase1.FastTeamLoadArg{
+		ID:     teamID,
+		Public: teamID.IsPublic(),
+	})
 	if err != nil {
 		return keybase1.FolderHandle{}, err
 	}
 	return keybase1.FolderHandle{
-		Name:       name.String(),
+		Name:       res.Name.String(),
 		FolderType: keybase1.FolderType_TEAM,
 	}, nil
 }
 
 // folderFromTeamIDImplicit converts from a teamID for implicit teams
 func folderFromTeamIDImplicit(ctx context.Context, g *libkb.GlobalContext, teamID keybase1.TeamID) (keybase1.FolderHandle, error) {
-
 	team, err := teams.Load(ctx, g, keybase1.LoadTeamArg{
 		ID:     teamID,
 		Public: teamID.IsPublic(),
@@ -165,8 +173,8 @@ func getMetadataInner(ctx context.Context, g *libkb.GlobalContext, folder *keyba
 	var resLock sync.Mutex
 	var firstErr error
 	var anySuccess bool
-	numUnboxThreads := 2
-	for i := 0; i < numUnboxThreads; i++ {
+	numUnboxThreads := 4
+	for range numUnboxThreads {
 		eg.Go(func() error {
 			for responseRepo := range repoCh {
 				info, skip, err := getMetadataInnerSingle(ctx, g, folder, responseRepo)
@@ -207,8 +215,8 @@ func getMetadataInner(ctx context.Context, g *libkb.GlobalContext, folder *keyba
 
 // if skip is true the other return values are nil
 func getMetadataInnerSingle(ctx context.Context, g *libkb.GlobalContext,
-	folder *keybase1.FolderHandle, responseRepo ServerResponseRepo) (info *keybase1.GitRepoInfo, skip bool, err error) {
-
+	folder *keybase1.FolderHandle, responseRepo ServerResponseRepo,
+) (info *keybase1.GitRepoInfo, skip bool, err error) {
 	cryptoer := NewCrypto(g)
 
 	// If the folder was passed in, use it. Otherwise, load the team to
@@ -291,21 +299,42 @@ func getMetadataInnerSingle(ctx context.Context, g *libkb.GlobalContext,
 		return nil, false, fmt.Errorf("unrecognized variant of GitLocalMetadataVersioned: %#v", version)
 	}
 
-	// Load UPAKs to get the last writer username and device name.
-	lastWriterUPAK, _, err := g.GetUPAKLoader().LoadV2(libkb.NewLoadUserArgWithContext(ctx, g).
-		WithUID(responseRepo.LastModifyingUID).
-		WithPublicKeyOptional())
+	// Load UPAKs to get the last writer username and device name. The UID ->
+	// username and deviceID -> deviceName mappings are immutable, so we first do
+	// a stale-OK load to avoid a per-repo network poll of the merkle tree (the
+	// dominant cost when loading many repos). Only if the device isn't present in
+	// the cached copy (e.g. our cache predates it) do we force a fresh load.
+	loadUPAK := func(staleOK bool) (*keybase1.UserPlusKeysV2AllIncarnations, error) {
+		upak, _, err := g.GetUPAKLoader().LoadV2(libkb.NewLoadUserArgWithContext(ctx, g).
+			WithUID(responseRepo.LastModifyingUID).
+			WithPublicKeyOptional().
+			WithStaleOK(staleOK))
+		return upak, err
+	}
+	findDeviceName := func(upak *keybase1.UserPlusKeysV2AllIncarnations) string {
+		for _, upk := range append([]keybase1.UserPlusKeysV2{upak.Current}, upak.PastIncarnations...) {
+			for _, deviceKey := range upk.DeviceKeys {
+				if deviceKey.DeviceID.Eq(responseRepo.LastModifyingDeviceID) {
+					return deviceKey.DeviceDescription
+				}
+			}
+		}
+		return ""
+	}
+
+	lastWriterUPAK, err := loadUPAK(true)
 	if err != nil {
 		return nil, false, err
 	}
-	var deviceName string
-	for _, upk := range append([]keybase1.UserPlusKeysV2{lastWriterUPAK.Current}, lastWriterUPAK.PastIncarnations...) {
-		for _, deviceKey := range upk.DeviceKeys {
-			if deviceKey.DeviceID.Eq(responseRepo.LastModifyingDeviceID) {
-				deviceName = deviceKey.DeviceDescription
-				break
-			}
+	deviceName := findDeviceName(lastWriterUPAK)
+	if deviceName == "" {
+		// The stale copy might be missing the device; force a fresh load before
+		// giving up.
+		lastWriterUPAK, err = loadUPAK(false)
+		if err != nil {
+			return nil, false, err
 		}
+		deviceName = findDeviceName(lastWriterUPAK)
 	}
 	if deviceName == "" {
 		return nil, false, fmt.Errorf("can't find device name for %s's device ID %s", lastWriterUPAK.Current.Username, responseRepo.LastModifyingDeviceID)
@@ -313,11 +342,12 @@ func getMetadataInnerSingle(ctx context.Context, g *libkb.GlobalContext,
 
 	var settings *keybase1.GitTeamRepoSettings
 	if repoFolder.FolderType == keybase1.FolderType_TEAM {
-		pset, err := convertTeamRepoSettings(ctx, g, responseRepo.TeamID, responseRepo.ChatConvID, responseRepo.ChatDisabled)
-		if err != nil {
-			return nil, false, err
+		// ChatDisabled is free (it's in the bulk response). ChannelName needs a
+		// per-repo chat topic-name lookup (the biggest cost of this call), so
+		// the GUI fetches it lazily via GetTeamRepoSettings on row expand.
+		settings = &keybase1.GitTeamRepoSettings{
+			ChatDisabled: responseRepo.ChatDisabled,
 		}
-		settings = &pset
 	}
 
 	return &keybase1.GitRepoInfo{

@@ -2,19 +2,26 @@
 
 Install xcode
 
+```
+brew install watchman cocoapods #install the file watcher
+```
+
 # Quick Start
 
-1. `brew install watchman` (install the file watcher)
-1. `yarn rn-gobuild-ios` (build the go library)
-1. `yarn rn-start2` (start the packager)
-1. `open ios/Keybase.xcworkspace` (Open workspace (not xcodeproj))
-1. In xcode, select the target `Keybase` and run.
+```
+yarn modules && yarn ios:pod:install
+yarn ios:gobuild # build the go library
+open ios/Keybase.xcworkspace # Open workspace, not xcodeproj
+yarn rn:start # start the packager
+```
+
+In xcode, select the target `Keybase` and run.
 
 # Building the Go Library
 
 ```sh
 # Build the go keybaselib
-yarn rn-gobuild-ios
+yarn ios:gobuild
 
 # if this fails with something like one of these:
 #   * xcrun: error: unable to lookup item 'Path' in SDK 'iphoneos'

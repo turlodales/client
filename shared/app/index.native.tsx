@@ -1,34 +1,72 @@
 import * as C from '@/constants'
+import {useShellState} from '@/stores/shell'
 import * as Kb from '@/common-adapters'
 import * as React from 'react'
-import Main from './main.native'
-import {AppRegistry, AppState, Appearance, Linking, Keyboard} from 'react-native'
+import Main from './main'
+import {KeyboardProvider} from 'react-native-keyboard-controller'
+import {ReducedMotionConfig, ReduceMotion} from 'react-native-reanimated'
+import {AppRegistry, AppState, Appearance, Platform} from 'react-native'
 import {PortalProvider} from '@/common-adapters/portal.native'
 import {SafeAreaProvider, initialWindowMetrics} from 'react-native-safe-area-context'
 import {makeEngine} from '../engine'
 import {GestureHandlerRootView} from 'react-native-gesture-handler'
 import {enableFreeze} from 'react-native-screens'
-import {setKeyboardUp} from '@/styles/keyboard-state'
+import {Image as ExpoImage} from 'expo-image'
 import {setServiceDecoration} from '@/common-adapters/markdown/react'
 import ServiceDecoration from '@/common-adapters/markdown/service-decoration'
 import {useUnmountAll} from '@/util/debug-react'
+import {darkModeSupported, guiConfig} from 'react-native-kb'
+import * as DarkMode from '@/stores/darkmode'
+import {colors, darkColors} from '@/styles/colors'
+import {initPlatformListener, onEngineConnected, onEngineDisconnected, onEngineIncoming} from '@/constants/init/index'
+import logger from '@/logger'
+
+logger.info('INIT App index module load')
 
 enableFreeze(true)
-
 setServiceDecoration(ServiceDecoration)
+// SDWebImage (used by expo-image) flushes its memory cache on iOS memory warnings, but
+// the simulator never sends memory warnings. Cap the cache so loading hundreds of chat
+// images doesn't exhaust VM in the simulator. On a real device this is a safety net only.
+// configureCache is iOS-only native (no Android impl) so calling it on Android throws.
+if (Platform.OS === 'ios') {
+  ExpoImage.configureCache({maxMemoryCost: 100 * 1024 * 1024})
+}
 
 module.hot?.accept(() => {
   console.log('accepted update in shared/index.native')
 })
 
+const initDarkMode = () => {
+  const {setDarkModePreference, setSystemDarkMode, setSystemSupported} =
+    DarkMode.useDarkModeState.getState().dispatch
+  setSystemDarkMode(Appearance.getColorScheme() === 'dark')
+  setSystemSupported(darkModeSupported)
+  try {
+    const obj = JSON.parse(guiConfig) as {ui?: {darkMode?: string}} | undefined
+    const dm = obj?.ui?.darkMode
+    switch (dm) {
+      case 'system': // fallthrough
+      case 'alwaysDark': // fallthrough
+      case 'alwaysLight':
+        setDarkModePreference(dm, false)
+        break
+      default:
+    }
+  } catch {}
+}
+
 const useDarkHookup = () => {
   const appStateRef = React.useRef('active')
-  const {setSystemDarkMode} = C.useDarkModeState.getState().dispatch
-  const setMobileAppState = C.useConfigState(s => s.dispatch.setMobileAppState)
+  const setSystemDarkMode = DarkMode.useDarkModeState(s => s.dispatch.setSystemDarkMode)
+  const setMobileAppState = useShellState(s => s.dispatch.setMobileAppState)
+
   React.useEffect(() => {
     const appStateChangeSub = AppState.addEventListener('change', nextAppState => {
       appStateRef.current = nextAppState
-      nextAppState !== 'unknown' && nextAppState !== 'extension' && setMobileAppState(nextAppState)
+      if (nextAppState !== 'unknown' && nextAppState !== 'extension') {
+        setMobileAppState(nextAppState)
+      }
 
       if (nextAppState === 'active') {
         setSystemDarkMode(Appearance.getColorScheme() === 'dark')
@@ -49,46 +87,11 @@ const useDarkHookup = () => {
   }, [setSystemDarkMode, setMobileAppState])
 }
 
-const useKeyboardHookup = () => {
-  React.useEffect(() => {
-    const kbSubWS = Keyboard.addListener('keyboardWillShow', () => {
-      setKeyboardUp(true)
-    })
-    const kbSubDS = Keyboard.addListener('keyboardDidShow', () => {
-      setKeyboardUp(true)
-    })
-    const kbSubWH = Keyboard.addListener('keyboardWillHide', () => {
-      setKeyboardUp(false)
-    })
-    const kbSubDH = Keyboard.addListener('keyboardDidHide', () => {
-      setKeyboardUp(false)
-    })
-    return () => {
-      kbSubWS.remove()
-      kbSubDS.remove()
-      kbSubWH.remove()
-      kbSubDH.remove()
-    }
-  }, [])
-}
-
-const StoreHelper = (p: {children: React.ReactNode}) => {
+const StoreHelper = (p: {children: React.ReactNode}): React.ReactNode => {
   const {children} = p
   useDarkHookup()
-  useKeyboardHookup()
-  const handleAppLink = C.useDeepLinksState(s => s.dispatch.handleAppLink)
 
-  React.useEffect(() => {
-    const linkingSub = Linking.addEventListener('url', ({url}: {url: string}) => {
-      handleAppLink(url)
-    })
-    return () => {
-      linkingSub.remove()
-    }
-  }, [handleAppLink])
-
-  const darkMode = C.useDarkModeState(s => s.isDarkMode())
-  return <Kb.Styles.DarkModeContext.Provider value={darkMode}>{children}</Kb.Styles.DarkModeContext.Provider>
+  return children
 }
 
 // dont' remake engine/store on reload
@@ -96,52 +99,70 @@ if (__DEV__ && !globalThis.DEBUGmadeEngine) {
   globalThis.DEBUGmadeEngine = false
 }
 
+// once per module
 let inited = false
 const useInit = () => {
-  if (inited) return
-  inited = true
-  const {batch} = C.useWaitingState.getState().dispatch
-  const eng = makeEngine(batch, c => {
-    if (c) {
-      C.useEngineState.getState().dispatch.onEngineConnected()
-    } else {
-      C.useEngineState.getState().dispatch.onEngineDisconnected()
-    }
-  })
-  C.initListeners()
-  eng.listenersAreReady()
-
-  // On mobile there is no installer
-  C.useConfigState.getState().dispatch.installerRan()
+  React.useEffect(() => {
+    if (inited) return
+    inited = true
+    initDarkMode()
+    const {batch} = C.useWaitingState.getState().dispatch
+    const eng = makeEngine(batch, c => {
+      if (c) {
+        onEngineConnected()
+      } else {
+        onEngineDisconnected()
+      }
+    }, onEngineIncoming)
+    initPlatformListener()
+    eng.listenersAreReady()
+  }, [])
 }
+
+// reanimated has issues updating shared values with this on seemingly w/ zoom toolkit
+const wrapInStrict = false as boolean
+const WRAP = wrapInStrict
+  ? ({children}: {children: React.ReactNode}) => <React.StrictMode>{children}</React.StrictMode>
+  : ({children}: {children: React.ReactNode}) => <>{children}</>
 
 // on android this can be recreated a bunch so our engine/store / etc should live outside
 const Keybase = () => {
+  const styles = useStyles()
   useInit()
-  // reanimated still isn't compatible yet with strict mode
-  // <React.StrictMode>
-  // </React.StrictMode>
 
   const {unmountAll, show} = useUnmountAll()
+
+  // The gap between screens during iOS 26 push transitions (the outgoing screen is inset) shows
+  // the first opaque ancestor of the navigator. Nothing in react-navigation paints that region,
+  // so this root view fills it with the themed app background instead of the black root view.
+  const backgroundColor = DarkMode.useDarkModeState(s =>
+    s.isDarkMode() ? darkColors.white : colors.white
+  )
+
   return show ? (
-    <GestureHandlerRootView style={styles.gesture}>
-      <PortalProvider>
-        <SafeAreaProvider initialMetrics={initialWindowMetrics} pointerEvents="box-none">
-          <StoreHelper>
-            <Kb.Styles.CanFixOverdrawContext.Provider value={true}>
-              <Main />
-              {unmountAll}
-            </Kb.Styles.CanFixOverdrawContext.Provider>
-          </StoreHelper>
-        </SafeAreaProvider>
-      </PortalProvider>
-    </GestureHandlerRootView>
+    <WRAP>
+      <Kb.Styles.ThemeProvider>
+        <KeyboardProvider statusBarTranslucent={true} navigationBarTranslucent={true}>
+          <ReducedMotionConfig mode={ReduceMotion.Never} />
+          <GestureHandlerRootView style={[styles.gesture, {backgroundColor}]}>
+            <PortalProvider>
+              <SafeAreaProvider initialMetrics={initialWindowMetrics} pointerEvents="box-none">
+                <StoreHelper>
+                  <Main />
+                  {unmountAll}
+                </StoreHelper>
+              </SafeAreaProvider>
+            </PortalProvider>
+          </GestureHandlerRootView>
+        </KeyboardProvider>
+      </Kb.Styles.ThemeProvider>
+    </WRAP>
   ) : (
     unmountAll
   )
 }
 
-const styles = Kb.Styles.styleSheetCreate(() => ({
+const useStyles = Kb.Styles.createStyleHook(() => ({
   gesture: {flexGrow: 1},
 }))
 

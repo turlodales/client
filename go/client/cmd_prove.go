@@ -4,10 +4,9 @@
 package client
 
 import (
+	"context"
 	"fmt"
 	"os"
-
-	"golang.org/x/net/context"
 
 	"github.com/keybase/cli"
 	"github.com/keybase/client/go/libcmdline"
@@ -56,7 +55,7 @@ func (p *CmdProve) ParseArgv(ctx *cli.Context) error {
 
 func (p *CmdProve) fileOutputHook(txt string) (err error) {
 	p.G().Log.Info("Writing proof to file '" + p.output + "'...")
-	err = os.WriteFile(p.output, []byte(txt), os.FileMode(0644))
+	err = os.WriteFile(p.output, []byte(txt), os.FileMode(0o644))
 	p.G().Log.Info("Written.")
 	return
 }

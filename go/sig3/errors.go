@@ -12,7 +12,7 @@ func (e ParseError) Error() string {
 	return fmt.Sprintf("parse error: %s", e.m)
 }
 
-func newParseError(f string, a ...interface{}) error {
+func newParseError(f string, a ...any) error {
 	return ParseError{m: fmt.Sprintf(f, a...)}
 }
 
@@ -24,7 +24,7 @@ func (e Sig3Error) Error() string {
 	return fmt.Sprintf("sig3 error: %s", e.m)
 }
 
-func newSig3Error(f string, a ...interface{}) error {
+func newSig3Error(f string, a ...any) error {
 	return Sig3Error{m: fmt.Sprintf(f, a...)}
 }
 
@@ -32,7 +32,7 @@ type SequenceError struct {
 	m string
 }
 
-func newSequenceError(f string, a ...interface{}) error {
+func newSequenceError(f string, a ...any) error {
 	return SequenceError{m: fmt.Sprintf(f, a...)}
 }
 
@@ -40,5 +40,7 @@ func (e SequenceError) Error() string {
 	return fmt.Sprintf("sig3 sequencing error: %s", e.m)
 }
 
-var _ error = ParseError{}
-var _ error = Sig3Error{}
+var (
+	_ error = ParseError{}
+	_ error = Sig3Error{}
+)

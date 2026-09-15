@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/keybase/client/go/libkb"
@@ -21,7 +22,8 @@ func (e *LogoutEngine) RequiredUIs() []libkb.UIKind      { return []libkb.UIKind
 func (e *LogoutEngine) SubConsumers() []libkb.UIConsumer { return []libkb.UIConsumer{} }
 
 func (e *LogoutEngine) filterLoggedIn(accounts []keybase1.
-	ConfiguredAccount) (ret []libkb.NormalizedUsername) {
+	ConfiguredAccount,
+) (ret []libkb.NormalizedUsername) {
 	for _, acct := range accounts {
 		if acct.HasStoredSecret {
 			ret = append(ret, libkb.NewNormalizedUsername(acct.Username))
@@ -47,20 +49,20 @@ func (e *LogoutEngine) printSwitchInfo(mctx libkb.MetaContext) (err error) {
 		if len(loggedInAccounts) > 1 {
 			maybePlural = "s"
 		}
-		accountsList := ""
+		var accountsList strings.Builder
 		for idx, acct := range loggedInAccounts {
-			accountsList += string(acct)
+			accountsList.WriteString(string(acct))
 			if idx < len(loggedInAccounts)-2 {
-				accountsList += ", "
+				accountsList.WriteString(", ")
 			}
 			if idx == len(loggedInAccounts)-2 {
-				accountsList += " and "
+				accountsList.WriteString(" and ")
 			}
 
 		}
 		mctx.Info(
 			"You can still sign in to keybase account%s %s"+
-				" without a password.", maybePlural, accountsList)
+				" without a password.", maybePlural, accountsList.String())
 	}
 	return nil
 }

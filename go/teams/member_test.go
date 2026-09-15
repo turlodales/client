@@ -1,8 +1,10 @@
 package teams
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"sort"
 	"testing"
@@ -11,7 +13,6 @@ import (
 	"github.com/keybase/client/go/engine"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/context"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/keybase/client/go/emails"
@@ -26,9 +27,7 @@ func memberSetupWithID(t *testing.T) (libkb.TestContext, *kbtest.FakeUser, strin
 	tc := SetupTest(t, "team", 1)
 
 	u, err := kbtest.CreateAndSignupFakeUser("team", tc.G)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	name, ID := createTeam2(tc)
 
@@ -138,7 +137,7 @@ func testMemberSetRole(t *testing.T, test setRoleTest) {
 	defer tc.Cleanup()
 
 	if err := test.setRoleFunc(context.TODO(), tc.G, name, other.Username); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 
 	assertRole(tc, name, owner.Username, keybase1.TeamRole_OWNER)
@@ -152,19 +151,14 @@ func TestMemberAddOK(t *testing.T) {
 	assertRole(tc, name, other.Username, keybase1.TeamRole_NONE)
 
 	res, err := AddMember(context.TODO(), tc.G, name, other.Username, keybase1.TeamRole_READER, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.User.Username != other.Username {
-		t.Errorf("AddMember result username %q does not match arg username %q", res.User.Username, other.Username)
-	}
+	require.NoError(t, err)
+	require.Equal(t, other.Username, res.User.Username, "AddMember result username %q does not match arg username %q", res.User.Username, other.Username)
 
 	assertRole(tc, name, other.Username, keybase1.TeamRole_READER)
 
 	// second AddMember should return err
-	if _, err := AddMember(context.TODO(), tc.G, name, other.Username, keybase1.TeamRole_WRITER, nil); err == nil {
-		t.Errorf("second AddMember succeeded, should have failed since user already a member")
-	}
+	_, err = AddMember(context.TODO(), tc.G, name, other.Username, keybase1.TeamRole_WRITER, nil)
+	require.Error(t, err, "second AddMember succeeded, should have failed since user already a member")
 
 	assertRole(tc, name, other.Username, keybase1.TeamRole_READER)
 }
@@ -176,18 +170,14 @@ func TestMembersEdit(t *testing.T) {
 	assertRole(tc, name.String(), otherA.Username, keybase1.TeamRole_NONE)
 
 	_, err := AddMember(context.TODO(), tc.G, name.String(), otherA.Username, keybase1.TeamRole_READER, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	assertRole(tc, name.String(), otherA.Username, keybase1.TeamRole_READER)
 
 	assertRole(tc, name.String(), otherB.Username, keybase1.TeamRole_NONE)
 
 	_, err = AddMember(context.TODO(), tc.G, name.String(), otherB.Username, keybase1.TeamRole_READER, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	assertRole(tc, name.String(), otherB.Username, keybase1.TeamRole_READER)
 
@@ -271,9 +261,8 @@ func TestMemberAddInvalidRole(t *testing.T) {
 	tc, _, other, _, name := memberSetupMultiple(t)
 	defer tc.Cleanup()
 
-	if _, err := AddMember(context.TODO(), tc.G, name, other.Username, keybase1.TeamRole(8888), nil); err == nil {
-		t.Errorf("AddMember worked with invalid role")
-	}
+	_, err := AddMember(context.TODO(), tc.G, name, other.Username, keybase1.TeamRole(8888), nil)
+	require.Error(t, err, "AddMember worked with invalid role")
 
 	assertRole(tc, name, other.Username, keybase1.TeamRole_NONE)
 }
@@ -307,7 +296,6 @@ func getFindNextMerkleRootAfterRemoval(t *testing.T, tc libkb.TestContext, user 
 // Check for success simply by asserting that the Merkle Root seqno bumps
 // forward after the removal went into the team sigchain.
 func pollForNextMerkleRootAfterRemovalViaLibkb(t *testing.T, tc libkb.TestContext, user *kbtest.FakeUser, teamName string) (tid keybase1.TeamID, seqno keybase1.Seqno) {
-
 	m := libkb.NewMetaContextForTest(tc)
 	team, err := GetForTestByStringName(context.TODO(), tc.G, teamName)
 	require.NoError(t, err)
@@ -318,7 +306,7 @@ func pollForNextMerkleRootAfterRemovalViaLibkb(t *testing.T, tc libkb.TestContex
 
 	// Unfortunately we need to poll here, since we don't know when merkled will mint a new root.
 	// Locally it is fast, but it might be slowish on CI.
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		res, err := libkb.FindNextMerkleRootAfterTeamRemoval(m, keybase1.FindNextMerkleRootAfterTeamRemovalArg{
 			Uid:               user.GetUID(),
 			Team:              team.ID,
@@ -330,7 +318,7 @@ func pollForNextMerkleRootAfterRemovalViaLibkb(t *testing.T, tc libkb.TestContex
 		// Success case!
 		if err == nil {
 			require.NotNil(t, res.Res)
-			require.True(t, res.Res.Seqno > logPoint.SigMeta.PrevMerkleRootSigned.Seqno)
+			require.Greater(t, res.Res.Seqno, logPoint.SigMeta.PrevMerkleRootSigned.Seqno)
 			return team.ID, res.Res.Seqno
 		}
 
@@ -347,7 +335,7 @@ func pollForNextMerkleRootAfterRemovalViaLibkb(t *testing.T, tc libkb.TestContex
 		t.Logf("sleeping %v", delay)
 		time.Sleep(delay)
 	}
-	t.Fatalf("failed to find a suitable merkle root with team removal")
+	require.FailNow(t, "failed to find a suitable merkle root with team removal")
 	return tid, seqno
 }
 
@@ -357,13 +345,13 @@ func TestMemberRemoveReader(t *testing.T) {
 
 	anyRoleAllowed := true
 	if err := SetRoleReader(context.TODO(), tc.G, name, other.Username); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 	assertRole(tc, name, owner.Username, keybase1.TeamRole_OWNER)
 	assertRole(tc, name, other.Username, keybase1.TeamRole_READER)
 
 	if err := RemoveMember(context.TODO(), tc.G, name, other.Username); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 	assertRole(tc, name, owner.Username, keybase1.TeamRole_OWNER)
 	assertRole(tc, name, other.Username, keybase1.TeamRole_NONE)
@@ -373,7 +361,7 @@ func TestMemberRemoveReader(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, res.Res)
-	require.Equal(t, res.Res.Seqno, expectedSeqno)
+	require.Equal(t, expectedSeqno, res.Res.Seqno)
 }
 
 // Set up log points for a user in a team with roles of
@@ -385,23 +373,23 @@ func TestMemberRemoveWriter(t *testing.T) {
 
 	anyRoleAllowed := false
 	if err := SetRoleWriter(context.TODO(), tc.G, name, other.Username); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 	assertRole(tc, name, owner.Username, keybase1.TeamRole_OWNER)
 	assertRole(tc, name, other.Username, keybase1.TeamRole_WRITER)
 
 	if err := SetRoleReader(context.TODO(), tc.G, name, other.Username); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 	assertRole(tc, name, other.Username, keybase1.TeamRole_READER)
 
 	if err := SetRoleWriter(context.TODO(), tc.G, name, other.Username); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 	assertRole(tc, name, other.Username, keybase1.TeamRole_WRITER)
 
 	if err := SetRoleReader(context.TODO(), tc.G, name, other.Username); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 	assertRole(tc, name, owner.Username, keybase1.TeamRole_OWNER)
 	assertRole(tc, name, other.Username, keybase1.TeamRole_READER)
@@ -411,7 +399,7 @@ func TestMemberRemoveWriter(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, res.Res)
-	require.Equal(t, res.Res.Seqno, expectedSeqno)
+	require.Equal(t, expectedSeqno, res.Res.Seqno)
 }
 
 func TestMemberRemoveWithoutDemotion(t *testing.T) {
@@ -420,7 +408,7 @@ func TestMemberRemoveWithoutDemotion(t *testing.T) {
 
 	anyRoleAllowed := true
 	if err := SetRoleWriter(context.TODO(), tc.G, name, other.Username); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 	assertRole(tc, name, owner.Username, keybase1.TeamRole_OWNER)
 	assertRole(tc, name, other.Username, keybase1.TeamRole_WRITER)
@@ -431,7 +419,7 @@ func TestMemberRemoveWithoutDemotion(t *testing.T) {
 
 	require.Nil(t, res.Res)
 	require.Error(t, err)
-	require.IsType(t, libkb.NotFoundError{}, err)
+	require.ErrorAs(t, err, new(libkb.NotFoundError))
 }
 
 func TestMembersRemove(t *testing.T) {
@@ -441,18 +429,14 @@ func TestMembersRemove(t *testing.T) {
 	assertRole(tc, name.String(), otherA.Username, keybase1.TeamRole_NONE)
 
 	_, err := AddMember(context.TODO(), tc.G, name.String(), otherA.Username, keybase1.TeamRole_READER, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	assertRole(tc, name.String(), otherA.Username, keybase1.TeamRole_READER)
 
 	assertRole(tc, name.String(), otherB.Username, keybase1.TeamRole_NONE)
 
 	_, err = AddMember(context.TODO(), tc.G, name.String(), otherB.Username, keybase1.TeamRole_READER, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	assertRole(tc, name.String(), otherB.Username, keybase1.TeamRole_READER)
 
@@ -488,17 +472,12 @@ func TestMemberAddHasBoxes(t *testing.T) {
 	// is not a member
 	req := keybase1.TeamChangeReq{Readers: []keybase1.UserVersion{other.GetUserVersion()}}
 	tm, err := GetForTestByStringName(context.TODO(), tc.G, name)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	_, boxes, _, _, _, _, err := tm.changeMembershipSection(context.TODO(), req, false /* skipKeyRotation */)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if boxes == nil || len(boxes.Boxes) == 0 {
-		t.Errorf("add member failed to make new boxes")
-	}
+	require.NoError(t, err)
+	require.NotNil(t, boxes, "add member failed to make new boxes")
+	require.NotEmpty(t, boxes.Boxes, "add member failed to make new boxes")
 }
 
 // make sure that changing a role does not send new boxes for the
@@ -512,7 +491,7 @@ func TestMemberChangeRoleNoBoxes(t *testing.T) {
 
 	// add other.Username as a writer
 	if err := SetRoleWriter(context.TODO(), tc.G, name, other.Username); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 
 	assertRole(tc, name, owner.Username, keybase1.TeamRole_OWNER)
@@ -521,17 +500,11 @@ func TestMemberChangeRoleNoBoxes(t *testing.T) {
 	// this change request shouldn't generate any new boxes
 	req := keybase1.TeamChangeReq{Readers: []keybase1.UserVersion{other.GetUserVersion()}}
 	tm, err := GetForTestByStringName(context.TODO(), tc.G, name)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	_, boxes, _, _, _, _, err := tm.changeMembershipSection(context.TODO(), req, false /* skipKeyRotation */)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if boxes != nil && len(boxes.Boxes) > 0 {
-		t.Errorf("change role made new boxes: %+v", boxes)
-	}
+	require.NoError(t, err)
+	require.False(t, boxes != nil && len(boxes.Boxes) > 0, "change role made new boxes: %+v", boxes)
 }
 
 func TestMemberRemoveRotatesKeys(t *testing.T) {
@@ -539,36 +512,26 @@ func TestMemberRemoveRotatesKeys(t *testing.T) {
 	defer tc.Cleanup()
 
 	before, err := GetForTestByStringName(context.TODO(), tc.G, name)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if before.Generation() != 1 {
-		t.Fatalf("initial team generation: %d, expected 1", before.Generation())
-	}
+	require.NoError(t, err)
+	require.Equal(t, keybase1.PerTeamKeyGeneration(1), before.Generation(), "initial team generation: %d, expected 1", before.Generation())
 
 	if err := SetRoleWriter(context.TODO(), tc.G, name, other.Username); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 	if err := RemoveMember(context.TODO(), tc.G, name, other.Username); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 
 	assertRole(tc, name, owner.Username, keybase1.TeamRole_OWNER)
 	assertRole(tc, name, other.Username, keybase1.TeamRole_NONE)
 
 	after, err := GetForTestByStringName(context.TODO(), tc.G, name)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if after.Generation() != 2 {
-		t.Errorf("after member remove: team generation: %d, expected 2", after.Generation())
-	}
+	require.NoError(t, err)
+	require.Equal(t, keybase1.PerTeamKeyGeneration(2), after.Generation(), "after member remove: team generation: %d, expected 2", after.Generation())
 
 	secretAfter := after.Data.PerTeamKeySeedsUnverified[after.Generation()].Seed.ToBytes()
 	secretBefore := before.Data.PerTeamKeySeedsUnverified[before.Generation()].Seed.ToBytes()
-	if libkb.SecureByteArrayEq(secretAfter, secretBefore) {
-		t.Error("Team secret did not change when member removed")
-	}
+	require.False(t, libkb.SecureByteArrayEq(secretAfter, secretBefore), "Team secret did not change when member removed")
 }
 
 func TestMemberAddNotAUser(t *testing.T) {
@@ -578,12 +541,10 @@ func TestMemberAddNotAUser(t *testing.T) {
 	tc.G.SetProofServices(externals.NewProofServices(tc.G))
 
 	_, err := AddMember(context.TODO(), tc.G, name, "not_a_kb_user", keybase1.TeamRole_READER, nil)
-	if err == nil {
-		t.Fatal("Added a non-keybase username to a team")
-	}
-	if _, ok := err.(libkb.NotFoundError); !ok {
-		t.Errorf("error: %s (%T), expected libkb.NotFoundError", err, err)
-	}
+	require.Error(t, err,
+		"Added a non-keybase username to a team")
+	_, ok := err.(libkb.NotFoundError)
+	require.True(t, ok, "error: %s (%T), expected libkb.NotFoundError", err, err)
 }
 
 func TestMemberAddSocial(t *testing.T) {
@@ -615,25 +576,18 @@ func TestMemberAddNoPUK(t *testing.T) {
 	defer tc.Cleanup()
 
 	inviteNoPUK := func(username string, uid keybase1.UID, role keybase1.TeamRole) {
-
 		res, err := AddMember(context.TODO(), tc.G, name, username, role, nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !res.Invited {
-			t.Fatal("res.Invited should be set")
-		}
-		if res.User.Username != username {
-			t.Errorf("AddMember result username %q does not match arg username %q", res.User.Username, username)
-		}
+		require.NoError(t, err)
+		require.True(t, res.Invited,
+			"res.Invited should be set")
+		require.Equal(t, username, res.User.Username, "AddMember result username %q does not match arg username %q", res.User.Username, username)
 
 		fqUID := string(uid) + "%1"
 		assertInvite(tc, name, fqUID, "keybase", role)
 
 		// second AddMember should return err
-		if _, err := AddMember(context.TODO(), tc.G, name, username, keybase1.TeamRole_WRITER, nil); err == nil {
-			t.Errorf("second AddMember succeeded, should have failed since user already invited")
-		}
+		_, err = AddMember(context.TODO(), tc.G, name, username, keybase1.TeamRole_WRITER, nil)
+		require.Error(t, err, "second AddMember succeeded, should have failed since user already invited")
 
 		// existing invite should be untouched
 		assertInvite(tc, name, fqUID, "keybase", role)
@@ -652,22 +606,16 @@ func TestMemberAddNoKeys(t *testing.T) {
 
 	username := "t_ellen"
 	res, err := AddMember(context.TODO(), tc.G, name, username, keybase1.TeamRole_READER, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !res.Invited {
-		t.Fatal("res.Invited should be set")
-	}
-	if res.User.Username != username {
-		t.Errorf("AddMember result username %q does not match arg username %q", res.User.Username, username)
-	}
+	require.NoError(t, err)
+	require.True(t, res.Invited,
+		"res.Invited should be set")
+	require.Equal(t, username, res.User.Username, "AddMember result username %q does not match arg username %q", res.User.Username, username)
 
 	assertInvite(tc, name, "561247eb1cc3b0f5dc9d9bf299da5e19%0", "keybase", keybase1.TeamRole_READER)
 
 	// second AddMember should return err
-	if _, err := AddMember(context.TODO(), tc.G, name, username, keybase1.TeamRole_WRITER, nil); err == nil {
-		t.Errorf("second AddMember succeeded, should have failed since user already invited")
-	}
+	_, err = AddMember(context.TODO(), tc.G, name, username, keybase1.TeamRole_WRITER, nil)
+	require.Error(t, err, "second AddMember succeeded, should have failed since user already invited")
 
 	// existing invite should be untouched
 	assertInvite(tc, name, "561247eb1cc3b0f5dc9d9bf299da5e19%0", "keybase", keybase1.TeamRole_READER)
@@ -675,9 +623,7 @@ func TestMemberAddNoKeys(t *testing.T) {
 	// this is a keybase user, so they should show up in the member list
 	// even though they are technically only "invited"
 	details, err := Details(context.TODO(), tc.G, name)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	found := false
 	for _, m := range details.Members.Readers {
 		if m.Username == username {
@@ -686,9 +632,8 @@ func TestMemberAddNoKeys(t *testing.T) {
 		}
 		t.Logf("not a match: %s != %s", m.Username, username)
 	}
-	if !found {
-		t.Fatal("keybase invited user not in membership list")
-	}
+	require.True(t, found,
+		"keybase invited user not in membership list")
 }
 
 func TestMemberDetailsResetAndDeletedUser(t *testing.T) {
@@ -707,7 +652,7 @@ func TestMemberDetailsResetAndDeletedUser(t *testing.T) {
 
 	require.Len(t, details.Members.Admins, 2)
 	for _, admin := range details.Members.Admins {
-		require.Equal(t, admin.Status, keybase1.TeamMemberStatus_ACTIVE)
+		require.Equal(t, keybase1.TeamMemberStatus_ACTIVE, admin.Status)
 	}
 
 	// Logout owner
@@ -739,36 +684,33 @@ func TestMemberAddEmail(t *testing.T) {
 	address := "noone@keybase.io"
 
 	if err := InviteEmailPhoneMember(context.TODO(), tc.G, teamID, address, "email", keybase1.TeamRole_OWNER); err == nil {
-		t.Fatal("should not be able to invite an owner over email")
+		require.Error(t, err,
+			"should not be able to invite an owner over email")
 	}
 
 	if err := InviteEmailPhoneMember(context.TODO(), tc.G, teamID, address, "email", keybase1.TeamRole_READER); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 
 	assertInvite(tc, name, address, "email", keybase1.TeamRole_READER)
 
 	// second InviteEmailPhoneMember should return err
-	if err := InviteEmailPhoneMember(context.TODO(), tc.G, teamID, address, "email", keybase1.TeamRole_WRITER); err == nil {
-		t.Errorf("second InviteEmailMember succeeded, should have failed since user already invited")
-	}
+	err := InviteEmailPhoneMember(context.TODO(), tc.G, teamID, address, "email", keybase1.TeamRole_WRITER)
+	require.Error(t, err, "second InviteEmailMember succeeded, should have failed since user already invited")
 
 	// existing invite should be untouched
 	assertInvite(tc, name, address, "email", keybase1.TeamRole_READER)
 
 	details, err := Details(context.TODO(), tc.G, name)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	found := false
 	for _, invite := range details.AnnotatedActiveInvites {
 		if invite.TeamName == name && string(invite.InviteMetadata.Invite.Name) == address {
 			found = true
 		}
 	}
-	if !found {
-		t.Fatal("List team does not list invite.")
-	}
+	require.True(t, found,
+		"List team does not list invite.")
 }
 
 func TestMemberAddEmailBulk(t *testing.T) {
@@ -789,9 +731,7 @@ func TestMemberAddEmailBulk(t *testing.T) {
 	require.NoError(t, err)
 
 	res, err := AddEmailsBulk(context.TODO(), tc.G, name, blob, keybase1.TeamRole_WRITER)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	emails := []string{"u1@keybase.io", "u2@keybase.io", "u3@keybase.io", "u4@keybase.io", "u5@keybase.io", "u6@keybase.io", "u7@keybase.io", "fullname@keybase.io", "someone@keybase.io", "u8@keybase.io"}
 
 	require.Len(t, res.Malformed, 2)
@@ -822,7 +762,7 @@ func TestMemberListInviteUsername(t *testing.T) {
 
 	annotatedTeamList, err := ListAll(context.TODO(), tc.G, keybase1.TeamListTeammatesArg{})
 	require.NoError(t, err)
-	require.Equal(t, 1, len(annotatedTeamList.Teams), "ListAll doesn't include keybase invites")
+	require.Len(t, annotatedTeamList.Teams, 1, "ListAll doesn't include keybase invites")
 
 	require.Equal(t, user.Username, annotatedTeamList.Teams[0].Username)
 	require.Equal(t, name, annotatedTeamList.Teams[0].FqName)
@@ -965,7 +905,7 @@ func TestImplicitAdminBecomesExplicit(t *testing.T) {
 	t.Logf("U0 rotates the subteam 3 times")
 	subteam, err := GetForTestByID(context.TODO(), tcs[0].G, subteamID)
 	require.NoError(t, err)
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		err = subteam.Rotate(context.TODO(), keybase1.RotationType_HIDDEN)
 		require.NoError(t, err)
 		subteam, err = GetForTestByID(context.TODO(), tcs[0].G, subteamID)
@@ -978,7 +918,7 @@ func TestImplicitAdminBecomesExplicit(t *testing.T) {
 	mctx := libkb.NewMetaContextForTest(*tcs[1])
 	_, err = ApplicationKeyAtGeneration(mctx, subteamPartial, keybase1.TeamApplication_SALTPACK, keybase1.PerTeamKeyGeneration(4))
 	require.Error(t, err)
-	require.IsType(t, err, libkb.KeyMaskNotFoundError{})
+	require.ErrorAs(t, err, new(libkb.KeyMaskNotFoundError))
 
 	t.Logf("U0 adds U1 as a writer to the subteam")
 	_, err = AddMember(context.TODO(), tcs[0].G, subteamName, fus[1].Username, keybase1.TeamRole_WRITER, nil)
@@ -996,60 +936,54 @@ func TestLeaveSubteamWithImplicitAdminship(t *testing.T) {
 	defer tc.Cleanup()
 
 	if err := SetRoleAdmin(context.TODO(), tc.G, name, otherA.Username); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 	if err := SetRoleAdmin(context.TODO(), tc.G, name, otherB.Username); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 	teamNameParsed, err := keybase1.TeamNameFromString(name)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	subteamNameParsed, _ := createSubteam(&tc, teamNameParsed, "subteam")
 	subteamName := subteamNameParsed.String()
 
 	if err := SetRoleAdmin(context.TODO(), tc.G, subteamName, otherA.Username); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 	if err := SetRoleAdmin(context.TODO(), tc.G, subteamName, otherB.Username); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 
 	err = tc.Logout()
 	require.NoError(t, err)
 
 	if err := otherA.Login(tc.G); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 	if err := Leave(context.TODO(), tc.G, subteamName, false); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 	err = tc.Logout()
 	require.NoError(t, err)
 
 	if err := otherB.Login(tc.G); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 	if err := Leave(context.TODO(), tc.G, subteamName, false); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 	err = tc.Logout()
 	require.NoError(t, err)
 
 	if err := owner.Login(tc.G); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 	team, err := GetForTestByStringName(context.TODO(), tc.G, subteamName)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if team.IsMember(context.TODO(), otherA.GetUserVersion()) {
-		t.Fatal("Admin user is still member after leave.")
-	}
-	if team.IsMember(context.TODO(), otherB.GetUserVersion()) {
-		t.Fatal("Writer user is still member after leave.")
-	}
+	require.NoError(t, err)
+	require.False(t, team.IsMember(context.TODO(), otherA.GetUserVersion()),
+		"Admin user is still member after leave.")
+	require.False(t, team.IsMember(context.TODO(), otherB.GetUserVersion()),
+		"Writer user is still member after leave.")
 
 	// Try to leave the team again.
 	// They are now an implicit admin and not an explicit member.
@@ -1061,26 +995,26 @@ func TestLeaveSubteamWithImplicitAdminship(t *testing.T) {
 	require.NoError(t, err)
 	err = Leave(context.TODO(), tc.G, subteamName, false)
 	require.Error(t, err)
-	require.IsType(t, &ImplicitAdminCannotLeaveError{}, err, "wrong error type")
+	require.ErrorAs(t, err, new(*ImplicitAdminCannotLeaveError), "wrong error type")
 }
 
 // See CORE-6473
 func TestOnlyOwnerLeaveThenUpgradeFriend(t *testing.T) {
-
 	tc, _, otherA, _, name := memberSetupMultiple(t)
 	defer tc.Cleanup()
 
 	if err := SetRoleWriter(context.TODO(), tc.G, name, otherA.Username); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 	if err := Leave(context.TODO(), tc.G, name, false); err == nil {
-		t.Fatal("expected an error when only owner is leaving")
+		require.Error(t, err,
+			"expected an error when only owner is leaving")
 	}
 	if err := SetRoleOwner(context.TODO(), tc.G, name, otherA.Username); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 	if err := Leave(context.TODO(), tc.G, name, false); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 }
 
@@ -1140,21 +1074,15 @@ func TestMemberAddResolveCache(t *testing.T) {
 
 	// load user so it is fully cached
 	_, err := libkb.LoadUser(libkb.NewLoadUserByNameArg(tc.G, other.Username))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	// clear the memory cache so it will come from disk
 	tc.G.Resolver.EnableCaching(libkb.NewMetaContextForTest(tc))
 
 	// add the member
 	res, err := AddMember(context.TODO(), tc.G, name, other.Username, keybase1.TeamRole_READER, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.User.Username != other.Username {
-		t.Errorf("AddMember result username %q does not match arg username %q", res.User.Username, other.Username)
-	}
+	require.NoError(t, err)
+	require.Equal(t, other.Username, res.User.Username, "AddMember result username %q does not match arg username %q", res.User.Username, other.Username)
 
 	assertRole(tc, name, other.Username, keybase1.TeamRole_READER)
 }
@@ -1162,7 +1090,7 @@ func TestMemberAddResolveCache(t *testing.T) {
 func assertRole(tc libkb.TestContext, name, username string, expected keybase1.TeamRole) {
 	role, err := MemberRole(context.TODO(), tc.G, name, username)
 	if err != nil {
-		if err == errInviteRequired && expected == keybase1.TeamRole_NONE {
+		if errors.Is(err, errInviteRequired) && expected == keybase1.TeamRole_NONE {
 			return
 		}
 		require.Fail(tc.T, err.Error())
@@ -1186,9 +1114,7 @@ func assertRole2(tc libkb.TestContext, teamID keybase1.TeamID, username string, 
 	role, err := team.MemberRole(context.TODO(), uv)
 	require.NoError(tc.T, err)
 
-	if role != expected {
-		tc.T.Fatalf("role: %s, expected %s", role, expected)
-	}
+	require.Equal(tc.T, expected, role, "role: %s, expected %s", role, expected)
 }
 
 func assertInvite(tc libkb.TestContext, name, username, typ string, role keybase1.TeamRole) {
@@ -1205,21 +1131,18 @@ func assertInvite(tc libkb.TestContext, name, username, typ string, role keybase
 func assertNoInvite(tc libkb.TestContext, name, username, typ string) {
 	iname := keybase1.TeamInviteName(username)
 	itype, err := TeamInviteTypeFromString(tc.MetaContext(), typ)
-	if err != nil {
-		tc.T.Fatal(err)
-	}
+	require.NoError(tc.T, err)
 	invite, err := memberInvite(context.TODO(), tc.G, name, iname, itype)
-	if err == nil {
-		tc.T.Fatal("expected not found err, got nil")
-	}
+	require.Error(tc.T, err,
+		"expected not found err, got nil")
 	if _, ok := err.(libkb.NotFoundError); !ok {
-		tc.T.Fatalf("expected libkb.NotFoundError, got %T", err)
+		require.True(tc.T, ok,
+			"expected libkb.NotFoundError, got %T", err)
 	}
-	if invite != nil {
-		tc.T.Fatal("invite found")
-	}
-
+	require.Nil(tc.T, invite,
+		"invite found")
 }
+
 func TestImplicitAdminsKeyedForSubteam(t *testing.T) {
 	fus, tcs, cleanup := setupNTests(t, 3)
 	defer cleanup()
@@ -1291,15 +1214,13 @@ func TestMemberCancelInviteNoKeys(t *testing.T) {
 
 	username := "t_ellen"
 	_, err := AddMember(context.TODO(), tc.G, name, username, keybase1.TeamRole_READER, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	assertInvite(tc, name, "561247eb1cc3b0f5dc9d9bf299da5e19%0", "keybase", keybase1.TeamRole_READER)
 	assertRole(tc, name, username, keybase1.TeamRole_NONE)
 
 	if err := RemoveMember(context.TODO(), tc.G, name, username); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 
 	assertNoInvite(tc, name, "561247eb1cc3b0f5dc9d9bf299da5e19%0", "keybase")
@@ -1314,13 +1235,11 @@ func TestMemberCancelInviteSocial(t *testing.T) {
 
 	username := "not_on_kb_yet@twitter"
 	_, err := AddMember(context.TODO(), tc.G, name, username, keybase1.TeamRole_READER, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	assertInvite(tc, name, "not_on_kb_yet", "twitter", keybase1.TeamRole_READER)
 
 	if err := RemoveMember(context.TODO(), tc.G, name, username); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 
 	assertNoInvite(tc, name, "not_on_kb_yet", "twitter")
@@ -1335,7 +1254,7 @@ func TestMemberCancelInviteEmail(t *testing.T) {
 	address := "noone@keybase.io"
 
 	if err := InviteEmailPhoneMember(context.TODO(), tc.G, teamID, address, "email", keybase1.TeamRole_READER); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 	assertInvite(tc, name, address, "email", keybase1.TeamRole_READER)
 
@@ -1345,16 +1264,14 @@ func TestMemberCancelInviteEmail(t *testing.T) {
 
 	// check error type for an email address with no invite
 	err := CancelEmailInvite(context.TODO(), tc.G, teamID, "nope@keybase.io")
-	if err == nil {
-		t.Fatal("expected error canceling email invite for unknown email address")
-	}
-	require.IsType(t, err, &MemberNotFoundInChainError{})
+	require.Error(t, err,
+		"expected error canceling email invite for unknown email address")
+	require.ErrorAs(t, err, new(*MemberNotFoundInChainError))
 
 	// check error type for unknown team
 	err = CancelEmailInvite(context.TODO(), tc.G, "notateam", address)
-	if err == nil {
-		t.Fatal("expected error canceling email invite for unknown team")
-	}
+	require.Error(t, err,
+		"expected error canceling email invite for unknown team")
 	require.EqualError(t, err, "team load arg has invalid ID: \"notateam\"")
 }
 
@@ -1411,7 +1328,7 @@ func TestMemberAddRace(t *testing.T) {
 		return errCh
 	}
 
-	assertNoErr := func(errCh <-chan error, msgAndArgs ...interface{}) {
+	assertNoErr := func(errCh <-chan error, msgAndArgs ...any) {
 		select {
 		case err := <-errCh:
 			require.NoError(t, err, msgAndArgs...)
@@ -1420,7 +1337,7 @@ func TestMemberAddRace(t *testing.T) {
 		}
 	}
 
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		t.Logf("round %v", i)
 		doRotate := i%2 == 1
 
@@ -1483,7 +1400,7 @@ func TestMemberAddRaceConflict(t *testing.T) {
 		return errCh
 	}
 
-	assertNoErr := func(errCh <-chan error, msgAndArgs ...interface{}) {
+	assertNoErr := func(errCh <-chan error, msgAndArgs ...any) {
 		select {
 		case err := <-errCh:
 			require.NoError(t, err, msgAndArgs...)
@@ -1493,7 +1410,7 @@ func TestMemberAddRaceConflict(t *testing.T) {
 	}
 
 	// Exactly one error comes from the list of channels
-	assertOneErr := func(errChs []<-chan error, msgAndArgs ...interface{}) (retErr error) {
+	assertOneErr := func(errChs []<-chan error, msgAndArgs ...any) (retErr error) {
 		for i, errCh := range errChs {
 			select {
 			case err := <-errCh:
@@ -1503,13 +1420,13 @@ func TestMemberAddRaceConflict(t *testing.T) {
 					require.NoError(t, err, msgAndArgs...)
 				}
 			case <-time.After(20 * time.Second):
-				require.FailNow(t, "timeout waiting for return channel: %v", i)
+				require.FailNowf(t, "", "timeout waiting for return channel: %v", i)
 			}
 		}
 		return retErr
 	}
 
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		t.Logf("round %v", i)
 
 		t.Logf("parallel start")
@@ -1518,7 +1435,7 @@ func TestMemberAddRaceConflict(t *testing.T) {
 		errCh2 := mod(1, 2, true)
 		err := assertOneErr([](<-chan error){errCh1, errCh2})
 		require.Errorf(t, err, "round %v", i)
-		require.IsType(t, libkb.ExistsError{}, err, "user should already be in team (round %v)", i)
+		require.ErrorAs(t, err, new(libkb.ExistsError), "user should already be in team (round %v)", i)
 
 		t.Logf("parallel end")
 
@@ -1536,18 +1453,15 @@ func TestMemberInviteChangeRole(t *testing.T) {
 	role := keybase1.TeamRole_READER
 
 	res, err := AddMember(context.TODO(), tc.G, name, username, role, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !res.Invited {
-		t.Fatal("res.Invited should be set")
-	}
+	require.NoError(t, err)
+	require.True(t, res.Invited,
+		"res.Invited should be set")
 
 	fqUID := string(uid) + "%1"
 	assertInvite(tc, name, fqUID, "keybase", role)
 
 	if err := EditMember(context.TODO(), tc.G, name, username, keybase1.TeamRole_ADMIN, nil); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 	assertInvite(tc, name, fqUID, "keybase", keybase1.TeamRole_ADMIN)
 }
@@ -1563,18 +1477,15 @@ func TestMemberInviteChangeRoleOwner(t *testing.T) {
 	role := keybase1.TeamRole_READER
 
 	res, err := AddMember(context.TODO(), tc.G, name, username, role, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !res.Invited {
-		t.Fatal("res.Invited should be set")
-	}
+	require.NoError(t, err)
+	require.True(t, res.Invited,
+		"res.Invited should be set")
 
 	fqUID := string(uid) + "%1"
 	assertInvite(tc, name, fqUID, "keybase", role)
 
 	if err := EditMember(context.TODO(), tc.G, name, username, keybase1.TeamRole_OWNER, nil); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 	assertInvite(tc, name, fqUID, "keybase", keybase1.TeamRole_OWNER)
 }
@@ -1746,9 +1657,9 @@ func TestAddMembersWithRestrictiveContactSettings(t *testing.T) {
 	}
 	added, notAdded, err := AddMembers(context.TODO(), tc.G, teamID, users, nil /* emailInviteMsg */)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(added))
+	require.Len(t, added, 1)
 	require.Equal(t, libkb.NewNormalizedUsername(bob.Username), added[0].Username)
-	require.Equal(t, 1, len(notAdded))
+	require.Len(t, notAdded, 1)
 	require.Equal(t, libkb.NewNormalizedUsername(charlie.Username).String(), notAdded[0].Username)
 }
 
@@ -1796,14 +1707,15 @@ func TestAddMembersWithRestrictiveContactSettingsFailIfNoneAdded(t *testing.T) {
 	}
 	added, notAdded, err := AddMembers(context.TODO(), tc.G, teamID, users, nil /* emailInviteMsg */)
 	require.Error(t, err)
-	require.IsType(t, err, libkb.TeamContactSettingsBlockError{})
-	usernames := err.(libkb.TeamContactSettingsBlockError).BlockedUsernames()
-	require.Equal(t, 2, len(usernames))
+	var contactSettingsErr libkb.TeamContactSettingsBlockError
+	require.ErrorAs(t, err, &contactSettingsErr)
+	usernames := contactSettingsErr.BlockedUsernames()
+	require.Len(t, usernames, 2)
 	for _, username := range usernames {
 		_, ok := expectedFailedUsernames[username]
 		require.True(t, ok)
 	}
-	require.IsType(t, err, libkb.TeamContactSettingsBlockError{})
+	require.ErrorAs(t, err, new(libkb.TeamContactSettingsBlockError))
 	require.Nil(t, added)
 	require.Nil(t, notAdded)
 }
@@ -1843,7 +1755,7 @@ func TestGetUntrustedTeamInfo(t *testing.T) {
 		{Assertion: fus[restrictedBot].Username, Role: keybase1.TeamRole_RESTRICTEDBOT, BotSettings: &keybase1.TeamBotSettings{Cmds: false, Mentions: true}},
 	}, nil)
 	require.NoError(t, err)
-	require.Len(t, notAdded, 0)
+	require.Empty(t, notAdded)
 	require.Len(t, added, 5)
 	t.Logf("Created team %q", team)
 
@@ -1869,8 +1781,8 @@ func TestGetUntrustedTeamInfo(t *testing.T) {
 	// check the information matches what we expect
 	require.Equal(t, teamName, ret.Name)
 	require.Equal(t, description, ret.Description)
-	require.Equal(t, false, ret.InTeam)
-	require.Equal(t, true, ret.Open)
+	require.False(t, ret.InTeam)
+	require.True(t, ret.Open)
 	require.Equal(t, 5, ret.NumMembers)
 	require.Len(t, ret.PublicAdmins, 1)
 	require.Equal(t, fus[publicAdmin].Username, ret.PublicAdmins[0])
@@ -1920,7 +1832,7 @@ func TestMembersDetailsHasCorrectJoinTimes(t *testing.T) {
 				return detail
 			}
 		}
-		t.Fatalf("User %v with role %v not found", username, role)
+		require.FailNow(t, fmt.Sprintf("User %v with role %v not found", username, role))
 		return keybase1.TeamMemberDetails{}
 	}
 
@@ -2027,7 +1939,6 @@ func TestMembersDetailsHasCorrectJoinTimes(t *testing.T) {
 		{Username: fus[charlie].Username, Role: keybase1.TeamRole_ADMIN, JoinLowerBound: removeBoBTime, JoinUpperBound: addCharlieTime},
 		{Username: fus[bob].Username, Role: keybase1.TeamRole_READER, JoinLowerBound: addCharlieTime, JoinUpperBound: secondAddBoBTime},
 	}, 3)
-
 }
 
 func TestTeamPlayerNoRoleChange(t *testing.T) {
@@ -2073,6 +1984,7 @@ var rmMaker = func(assertion string) keybase1.TeamMemberToRemove {
 		RemoveFromSubtree: false,
 	})
 }
+
 var rmRecursiveMaker = func(assertion string) keybase1.TeamMemberToRemove {
 	return keybase1.NewTeamMemberToRemoveWithAssertion(keybase1.AssertionTeamMemberToRemove{
 		Assertion:         assertion,
@@ -2085,19 +1997,19 @@ func TestRemoveMembersHappy(t *testing.T) {
 	defer tc.Cleanup()
 
 	if err := SetRoleReader(context.TODO(), tc.G, name.String(), alice.Username); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 
 	res, err := RemoveMembers(context.TODO(), tc.G, teamID, []keybase1.TeamMemberToRemove{rmMaker(alice.Username)}, false)
 	require.NoError(t, err)
-	require.Len(t, res.Failures, 0)
+	require.Empty(t, res.Failures)
 	assertRole(tc, name.String(), alice.Username, keybase1.TeamRole_NONE)
 
 	if err := SetRoleReader(context.TODO(), tc.G, name.String(), alice.Username); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 	if err := SetRoleReader(context.TODO(), tc.G, name.String(), bob.Username); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 	twitterUser := "not_on_kb_yet@twitter"
 	tAlice := "t_alice"
@@ -2115,7 +2027,7 @@ func TestRemoveMembersHappy(t *testing.T) {
 		rmRecursiveMaker(twitterUser), rmMaker(tAlice),
 	}, false)
 	require.NoError(t, err)
-	require.Len(t, res.Failures, 0)
+	require.Empty(t, res.Failures)
 	assertRole(tc, name.String(), alice.Username, keybase1.TeamRole_NONE)
 	assertRole(tc, name.String(), bob.Username, keybase1.TeamRole_NONE)
 	assertRole(tc, name.String(), twitterUser, keybase1.TeamRole_NONE)
@@ -2159,7 +2071,7 @@ func TestRemoveMembersJustAfterUpgrade(t *testing.T) {
 
 	t.Logf("Test that a just-upgraded admin can remove invited members (previously stubbed links)")
 	if err := SetRoleReader(context.TODO(), ownerTC.G, name.String(), alice.Username); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 	redditUser := "new@reddit"
 	_, err = AddMember(context.TODO(), ownerTC.G, name.String(), redditUser, keybase1.TeamRole_WRITER, nil)
@@ -2173,7 +2085,7 @@ func TestRemoveMembersJustAfterUpgrade(t *testing.T) {
 
 	t.Logf("set as admin")
 	if err := SetRoleAdmin(context.TODO(), ownerTC.G, name.String(), alice.Username); err != nil {
-		t.Fatal(err)
+		require.NoError(t, err)
 	}
 
 	t.Logf("try to remove members")
@@ -2278,7 +2190,7 @@ func TestRemoveMembersHappyTree(t *testing.T) {
 		rmRecursiveMaker(admin.Username),
 	}, false)
 	require.NoError(t, err)
-	require.Len(t, res.Failures, 0)
+	require.Empty(t, res.Failures)
 	assertRole(tc, subteamName.String(), admin.Username, keybase1.TeamRole_NONE)
 	assertRole(tc, subsubsubteamName.String(), admin.Username, keybase1.TeamRole_NONE)
 }
@@ -2347,7 +2259,7 @@ func TestFindAssertionsInTeamForInvites(t *testing.T) {
 	{
 		var assertions []string
 		assertions = append(assertions, fmt.Sprintf("[%s]@email", email2))
-		for i := 0; i < 5; i++ {
+		for range 5 {
 			assertions = append(assertions, fmt.Sprintf("[%s]@email", kbtest.GenerateRandomEmailAddress()))
 		}
 		assertions = append(assertions, fmt.Sprintf("[%s]@email", email))
@@ -2383,7 +2295,7 @@ func TestFindAssertionsInTeamForUsers(t *testing.T) {
 		}
 		ret, err := FindAssertionsInTeamNoResolve(tc.MetaContext(), teamID, assertions)
 		require.NoError(t, err)
-		require.Len(t, ret, 0)
+		require.Empty(t, ret)
 	}
 
 	{
@@ -2473,7 +2385,7 @@ func TestFindAssertionsInTeamCompound(t *testing.T) {
 
 	ret, err := FindAssertionsInTeamNoResolve(tc.MetaContext(), teamID, []string{assertionStr})
 	require.NoError(t, err)
-	require.Len(t, ret, 0)
+	require.Empty(t, ret)
 
 	_, err = AddMemberByID(context.Background(), tc.G, teamID, user.Username, keybase1.TeamRole_WRITER,
 		nil /* botSettings */, nil /* emailInviteMsg */)
@@ -2536,14 +2448,14 @@ func TestTeamPlayerIdempotentChangesAssertRole(t *testing.T) {
 
 	err = state.AssertWasRoleOrAboveAt(uvAlice, keybase1.TeamRole_WRITER, makeScl(1))
 	require.Error(t, err)
-	require.IsType(t, PermissionError{}, err)
+	require.ErrorAs(t, err, new(PermissionError))
 
 	for i := 1; i <= 2; i++ {
 		// Bob was only added at seqno 3, so at seqnos 1 and 2 they weren't an
 		// admin yet.
 		err = state.AssertWasRoleOrAboveAt(uvBob, keybase1.TeamRole_ADMIN, makeScl(i))
 		require.Error(t, err)
-		require.IsType(t, AdminPermissionError{}, err)
+		require.ErrorAs(t, err, new(AdminPermissionError))
 	}
 
 	err = state.AssertWasRoleOrAboveAt(uvAlice, keybase1.TeamRole_WRITER, makeScl(2))
@@ -2553,7 +2465,7 @@ func TestTeamPlayerIdempotentChangesAssertRole(t *testing.T) {
 	require.NoError(t, err)
 
 	// Using memberLists, do bunch of idempotent role changes
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		for _, v := range memberLists {
 			teamSectionCM := makeTestSCTeamSection(team)
 			teamSectionCM.Members = v

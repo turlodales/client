@@ -8,45 +8,39 @@ type Props = {
 }
 
 const Slice = (props: Props) => {
+  const styles = useStyles()
   const styleFilled = props.negative ? styles.filledNegative : styles.filledPositive
   const styleUnfilled = props.negative ? styles.unfilledNegative : styles.unfilledPositive
   return (
-    <Kb.Box style={Kb.Styles.collapseStyles([styles.container, ...(props.style ? [props.style] : [])])}>
-      <Kb.Box style={Kb.Styles.collapseStyles([styles.wholeUnfilled, styleUnfilled])} />
-      <Kb.Box
+    <Kb.Box2 direction="vertical" style={Kb.Styles.collapseStyles([styles.container, ...(props.style ? [props.style] : [])])}>
+      <Kb.Box2 direction="vertical" style={Kb.Styles.collapseStyles([styles.wholeUnfilled, styleUnfilled])} />
+      <Kb.Box2
+        direction="vertical"
         style={Kb.Styles.collapseStyles([
           styles.rotateContainer,
           Kb.Styles.platformStyles({
-            isElectron: {transform: 'rotate(' + props.degrees + 'deg)'},
-            isMobile: {transform: [{rotate: props.degrees + 'deg'}]},
+            isElectron: {transform: `rotate(${props.degrees}deg)`},
+            isMobile: {transform: [{rotate: `${props.degrees}deg`}]},
           }),
         ])}
       >
-        <Kb.Box style={Kb.Styles.collapseStyles([styles.leftFilled, styleFilled])} />
-      </Kb.Box>
-      <Kb.Box
+        <Kb.Box2 direction="vertical" style={Kb.Styles.collapseStyles([styles.leftFilled, styleFilled])} />
+      </Kb.Box2>
+      <Kb.Box2
+        direction="vertical"
         style={Kb.Styles.collapseStyles(
           props.degrees <= 180 ? [styles.leftUnfilled, styleUnfilled] : [styles.rightFilled, styleFilled]
         )}
       />
-    </Kb.Box>
+    </Kb.Box2>
   )
 }
 
-const AnimatedPieSlice = (props: Props) => {
-  const {degrees} = props
-  return <Slice degrees={degrees} style={props.style} negative={props.negative} />
-}
-
-const PieSlice = (props: Props) => {
-  return props.animated ? (
-    <AnimatedPieSlice {...props} />
-  ) : (
-    <Slice degrees={props.degrees} style={props.style} negative={props.negative} />
-  )
-}
-const pieSize = Kb.Styles.isMobile ? 16 : 12
-const pieHalfSize = Kb.Styles.isMobile ? 8 : 6
+const PieSlice = (props: Props) => (
+  <Slice degrees={props.degrees} style={props.style} negative={props.negative} />
+)
+const pieSize = isMobile ? 16 : 12
+const pieHalfSize = isMobile ? 8 : 6
 const stylePieHalf = {
   height: pieSize,
   position: 'absolute' as const,
@@ -57,19 +51,18 @@ const stylePieWhole = {
   position: 'absolute' as const,
   width: pieSize,
 }
-const styles = Kb.Styles.styleSheetCreate(
-  () =>
+const useStyles = Kb.Styles.createStyleHook(
+  theme =>
     ({
       container: {
-        height: pieSize,
+        ...Kb.Styles.size(pieSize),
         position: 'relative' as const,
-        width: pieSize,
       },
       filledNegative: {
-        backgroundColor: Kb.Styles.globalColors.greyLight,
+        backgroundColor: theme.greyLight,
       },
       filledPositive: {
-        backgroundColor: Kb.Styles.globalColors.blue,
+        backgroundColor: theme.blue,
       },
       leftFilled: {
         ...stylePieHalf,
@@ -97,10 +90,10 @@ const styles = Kb.Styles.styleSheetCreate(
         left: 0,
       },
       unfilledNegative: {
-        backgroundColor: Kb.Styles.globalColors.blueDark,
+        backgroundColor: theme.blueDark,
       },
       unfilledPositive: {
-        backgroundColor: Kb.Styles.globalColors.greyLight,
+        backgroundColor: theme.greyLight,
       },
       wholeUnfilled: {
         ...stylePieWhole,

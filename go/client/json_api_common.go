@@ -1,14 +1,13 @@
 package client
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"strings"
-
-	"golang.org/x/net/context"
 
 	"github.com/keybase/cli"
 	"github.com/keybase/client/go/libcmdline"
@@ -67,17 +66,17 @@ type Params struct {
 
 // CallError is the result when there is an error.
 type CallError struct {
-	Code    int         `json:"code"`
-	Message string      `json:"message"`
-	Data    interface{} `json:"data,omitempty"`
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+	Data    any    `json:"data,omitempty"`
 }
 
 // Reply is returned with the results of processing a Call.
 type Reply struct {
-	Jsonrpc string      `json:"jsonrpc,omitempty"`
-	ID      int         `json:"id,omitempty"`
-	Error   *CallError  `json:"error,omitempty"`
-	Result  interface{} `json:"result,omitempty"`
+	Jsonrpc string     `json:"jsonrpc,omitempty"`
+	ID      int        `json:"id,omitempty"`
+	Error   *CallError `json:"error,omitempty"`
+	Result  any        `json:"result,omitempty"`
 }
 
 // Checker implementations can check their options for errors.
@@ -198,10 +197,10 @@ func (c *cmdAPI) decode(ctx context.Context, r io.Reader, w io.Writer, h handler
 		}
 	}()
 	for {
-		if err := dec.Decode(&call); err == io.EOF {
+		if err := dec.Decode(&call); errors.Is(err, io.EOF) {
 			break
 		} else if err != nil {
-			if err == io.ErrUnexpectedEOF {
+			if errors.Is(err, io.ErrUnexpectedEOF) {
 				return ErrInvalidJSON{message: "expected more JSON in input"}
 			}
 			return err
@@ -215,11 +214,10 @@ func (c *cmdAPI) decode(ctx context.Context, r io.Reader, w io.Writer, h handler
 	}
 
 	return nil
-
 }
 
 // encodeResult JSON encodes a successful result to the wr writer.
-func encodeResult(call Call, result interface{}, wr io.Writer, indent bool) error {
+func encodeResult(call Call, result any, wr io.Writer, indent bool) error {
 	reply := Reply{
 		Result: result,
 	}

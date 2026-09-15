@@ -5,12 +5,12 @@
 package libkbfs
 
 import (
+	"context"
 	"testing"
 
 	"github.com/keybase/client/go/kbfs/idutil"
 	"github.com/keybase/client/go/kbfs/kbfsmd"
 	"github.com/keybase/client/go/kbfs/test/clocktest"
-	"golang.org/x/net/context"
 )
 
 type singleCurrentSessionGetter struct {
@@ -18,7 +18,8 @@ type singleCurrentSessionGetter struct {
 }
 
 func (csg singleCurrentSessionGetter) GetCurrentSession(ctx context.Context) (
-	idutil.SessionInfo, error) {
+	idutil.SessionInfo, error,
+) {
 	return csg.session, nil
 }
 
@@ -31,7 +32,8 @@ type testMDServerLocalConfig struct {
 }
 
 func newTestMDServerLocalConfig(
-	t *testing.T, csg idutil.CurrentSessionGetter) testMDServerLocalConfig {
+	t *testing.T, csg idutil.CurrentSessionGetter,
+) testMDServerLocalConfig {
 	cg := newTestCodecGetter()
 	return testMDServerLocalConfig{
 		codecGetter: cg,

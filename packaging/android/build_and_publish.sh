@@ -50,6 +50,9 @@ git log -n 3
 
 cd "$shared_dir"
 
+echo "Cleaning yarn cache to free up disk space"
+yarn cache clean
+
 if [ ! "$cache_npm" = "1" ]; then
 	echo "Cleaning up main node_modules from previous runs"
 	rm -rf node_modules
@@ -58,7 +61,7 @@ fi
 
 if [ ! "$cache_go_lib" = "1" ]; then
 	echo "Building Go library"
-	CHECK_CI="$check_ci" yarn run rn-gobuild-android
+	CHECK_CI="$check_ci" yarn run android:gobuild
 fi
 
 # We can't currently automate this :(, we used to be able to `echo y | android update ...` but that no longer works
@@ -70,6 +73,8 @@ echo "Packager running with PID $rn_packager_pid"
 
 # Build and publish the apk
 cd "$android_dir"
+rm -rf app/.cxx
+rm -rf app/build
 ./gradlew clean
 # yarn jetify
 ./gradlew publishReleaseBundle

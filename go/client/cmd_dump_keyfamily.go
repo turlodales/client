@@ -4,10 +4,9 @@
 package client
 
 import (
+	"context"
 	"fmt"
 	"strings"
-
-	"golang.org/x/net/context"
 
 	"github.com/keybase/cli"
 	"github.com/keybase/client/go/libcmdline"
@@ -110,8 +109,8 @@ func findSubkeys(parentID keybase1.KID, allKeys []keybase1.PublicKey) []keybase1
 }
 
 func (v *CmdDumpKeyfamily) printExportedUser(user keybase1.User, publicKeys []keybase1.PublicKey,
-	devices []keybase1.Device) error {
-
+	devices []keybase1.Device,
+) error {
 	dui := v.G().UI.GetDumbOutputUI()
 	if len(publicKeys) == 0 {
 		dui.Printf("No public keys.\n")

@@ -4,13 +4,12 @@
 package client
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
-
-	"golang.org/x/net/context"
 
 	"github.com/keybase/client/go/libkb"
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
@@ -33,16 +32,16 @@ func (p ProvisionUI) ChooseProvisioningMethod(ctx context.Context, arg keybase1.
 	_ = p.parent.Output("(1) Use an existing device\n")
 	_ = p.parent.Output("(2) Use a paper key\n")
 	_ = p.parent.Output("(3) Use my Keybase passphrase\n")
-	max := 3
+	maxOption := 3
 	if arg.GpgOption {
 		_, _ = p.parent.Printf("(4) Use GPG\n")
-		max = 4
+		maxOption = 4
 	}
 
 	var res keybase1.ProvisionMethod
-	ret, err := PromptSelectionOrCancel(PromptDescriptorChooseProvisioningMethod, p.parent, "Choose a signing option", 1, max)
+	ret, err := PromptSelectionOrCancel(PromptDescriptorChooseProvisioningMethod, p.parent, "Choose a signing option", 1, maxOption)
 	if err != nil {
-		if err == ErrInputCanceled {
+		if errors.Is(err, ErrInputCanceled) {
 			return res, libkb.CanceledError{M: "user canceled input"}
 		}
 		return res, err
@@ -68,14 +67,15 @@ You have two options.
 `)
 		gret, err := PromptSelectionOrCancel(PromptDescriptorChooseGPGMethod, p.parent, "Which do you prefer?", 1, 2)
 		if err != nil {
-			if err == ErrInputCanceled {
+			if errors.Is(err, ErrInputCanceled) {
 				return res, libkb.CanceledError{M: "user canceled input"}
 			}
 			return res, err
 		}
-		if gret == 1 {
+		switch gret {
+		case 1:
 			return keybase1.ProvisionMethod_GPG_SIGN, nil
-		} else if gret == 2 {
+		case 2:
 			return keybase1.ProvisionMethod_GPG_IMPORT, nil
 		}
 	}
@@ -109,7 +109,7 @@ func (p ProvisionUI) ChooseGPGMethod(ctx context.Context, arg keybase1.ChooseGPG
 `)
 	gret, err := PromptSelectionOrCancel(PromptDescriptorChooseGPGMethod, p.parent, "Which do you prefer?", 1, 2)
 	if err != nil {
-		if err == ErrInputCanceled {
+		if errors.Is(err, ErrInputCanceled) {
 			err = libkb.InputCanceledError{}
 		}
 		return keybase1.GPGMethod_GPG_NONE, err
@@ -155,9 +155,8 @@ func (p ProvisionUI) ChooseDevice(ctx context.Context, arg keybase1.ChooseDevice
 	_ = p.parent.Output("\n")
 
 	ret, err := PromptSelectionOrCancel(PromptDescriptorChooseDevice, p.parent, "Choose a device", 1, allowed)
-
 	if err != nil {
-		if err == ErrInputCanceled {
+		if errors.Is(err, ErrInputCanceled) {
 			return keybase1.DeviceID(""), libkb.InputCanceledError{}
 		}
 		return keybase1.DeviceID(""), err
@@ -187,7 +186,7 @@ func (p ProvisionUI) ChooseDeviceType(ctx context.Context, arg keybase1.ChooseDe
 
 	ret, err := PromptSelectionOrCancel(PromptDescriptorChooseDeviceType, p.parent, "Choose a device type", 1, 2)
 	if err != nil {
-		if err == ErrInputCanceled {
+		if errors.Is(err, ErrInputCanceled) {
 			return res, libkb.CanceledError{M: "user canceled input"}
 		}
 		return res, err
@@ -199,12 +198,12 @@ func (p ProvisionUI) ChooseDeviceType(ctx context.Context, arg keybase1.ChooseDe
 		return keybase1.DeviceType_MOBILE, nil
 	}
 	return res, fmt.Errorf("invalid device type option: %d", ret)
-
 }
 
 func (p ProvisionUI) DisplayAndPromptSecret(ctx context.Context, arg keybase1.DisplayAndPromptSecretArg) (keybase1.SecretResponse, error) {
 	var resp keybase1.SecretResponse
-	if p.role == libkb.KexRoleProvisioner {
+	switch p.role {
+	case libkb.KexRoleProvisioner:
 		// This is the provisioner device (device X)
 
 		// For mobile, show the QR code and the phrase, do not prompt:
@@ -213,7 +212,7 @@ func (p ProvisionUI) DisplayAndPromptSecret(ctx context.Context, arg keybase1.Di
 			// ignoring any of these errors...phrase above will suffice.
 			if err == nil {
 				_ = p.parent.Output("Scan this QR Code with the keybase app on your mobile phone:\n\n")
-				_, _ = p.parent.PrintfUnescaped(encodings.Terminal)
+				_, _ = p.parent.PrintfUnescaped("%s", encodings.Terminal)
 				fname := filepath.Join(os.TempDir(), "keybase_qr.png")
 				f, ferr := os.Create(fname)
 				if ferr == nil {
@@ -238,7 +237,7 @@ func (p ProvisionUI) DisplayAndPromptSecret(ctx context.Context, arg keybase1.Di
 			resp.Phrase = ret
 		}
 		return resp, nil
-	} else if p.role == libkb.KexRoleProvisionee {
+	case libkb.KexRoleProvisionee:
 		// this is the provisionee device (device Y)
 		// For command line app, the provisionee displays secrets only
 
@@ -253,7 +252,7 @@ func (p ProvisionUI) DisplayAndPromptSecret(ctx context.Context, arg keybase1.Di
 			// ignoring any of these errors...phrase above will suffice.
 			if err == nil {
 				_ = p.parent.Output("Or, scan this QR Code with the keybase app on your mobile phone:\n\n")
-				_, _ = p.parent.PrintfUnescaped(encodings.Terminal)
+				_, _ = p.parent.PrintfUnescaped("%s", encodings.Terminal)
 				fname := filepath.Join(os.TempDir(), "keybase_qr.png")
 				f, ferr := os.Create(fname)
 				if ferr == nil {
@@ -271,12 +270,12 @@ func (p ProvisionUI) DisplayAndPromptSecret(ctx context.Context, arg keybase1.Di
 
 func (p ProvisionUI) PromptNewDeviceName(ctx context.Context, arg keybase1.PromptNewDeviceNameArg) (string, error) {
 	_ = p.parent.Output("\n\n")
-	_, _ = p.parent.PrintfUnescaped(ColorString(p.G(), "magenta", "************************************************************\n"))
-	_, _ = p.parent.PrintfUnescaped(ColorString(p.G(), "magenta", "* Name your new device!                                    *\n"))
-	_, _ = p.parent.PrintfUnescaped(ColorString(p.G(), "magenta", "************************************************************\n"))
+	_, _ = p.parent.PrintfUnescaped("%s", ColorString(p.G(), "magenta", "************************************************************\n"))
+	_, _ = p.parent.PrintfUnescaped("%s", ColorString(p.G(), "magenta", "* Name your new device!                                    *\n"))
+	_, _ = p.parent.PrintfUnescaped("%s", ColorString(p.G(), "magenta", "************************************************************\n"))
 	_ = p.parent.Output("\n\n\n")
 
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		name, err := PromptWithChecker(PromptDescriptorProvisionDeviceName, p.parent, "Enter a public name for this device", false, libkb.CheckDeviceName)
 		if err != nil {
 			return "", err
@@ -301,14 +300,14 @@ func (p ProvisionUI) PromptNewDeviceName(ctx context.Context, arg keybase1.Promp
 }
 
 func (p ProvisionUI) DisplaySecretExchanged(ctx context.Context, sessionID int) error {
-	_, _ = p.parent.PrintfUnescaped("\n\n" + CHECK + " " + ColorString(p.G(), "bold", "Verification code received") + ".\n\n")
+	_, _ = p.parent.PrintfUnescaped("%s", "\n\n"+CHECK+" "+ColorString(p.G(), "bold", "Verification code received")+".\n\n")
 	return nil
 }
 
 func (p ProvisionUI) ProvisioneeSuccess(ctx context.Context, arg keybase1.ProvisioneeSuccessArg) error {
 	_ = p.parent.Output("\n\n\n")
-	_, _ = p.parent.PrintfUnescaped(CHECK + " Success! You provisioned your device " + ColorString(p.G(), "bold", arg.DeviceName) + ".\n\n")
-	_, _ = p.parent.PrintfUnescaped("You are logged in as " + ColorString(p.G(), "bold", arg.Username) + "\n")
+	_, _ = p.parent.PrintfUnescaped("%s", CHECK+" Success! You provisioned your device "+ColorString(p.G(), "bold", "%s", arg.DeviceName)+".\n\n")
+	_, _ = p.parent.PrintfUnescaped("%s", "You are logged in as "+ColorString(p.G(), "bold", "%s", arg.Username)+"\n")
 	// turn on when kbfs active:
 	if false {
 		_, _ = p.parent.Printf("  - your keybase public directory is available at /keybase/public/%s\n", arg.Username)
@@ -321,6 +320,6 @@ func (p ProvisionUI) ProvisioneeSuccess(ctx context.Context, arg keybase1.Provis
 
 func (p ProvisionUI) ProvisionerSuccess(ctx context.Context, arg keybase1.ProvisionerSuccessArg) error {
 	_ = p.parent.Output("\n\n")
-	_, _ = p.parent.PrintfUnescaped(CHECK + " Success! You added a new device named " + ColorString(p.G(), "bold", arg.DeviceName) + " to your account.\n\n")
+	_, _ = p.parent.PrintfUnescaped("%s", CHECK+" Success! You added a new device named "+ColorString(p.G(), "bold", "%s", arg.DeviceName)+" to your account.\n\n")
 	return nil
 }

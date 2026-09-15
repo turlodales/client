@@ -1,65 +1,88 @@
 import * as React from 'react'
 import * as C from '@/constants'
-import type * as T from '@/constants/types'
+import {clampImageSize} from '@/constants/chat/helpers'
+import * as Chat from '@/constants/chat'
+import * as T from '@/constants/types'
+import logger from '@/logger'
 import {maxWidth, maxHeight} from '../messages/attachment/shared'
+import {openLocalPathInSystemFileManagerDesktop} from '@/util/fs-storeless-actions'
+import {
+  attachmentDownloadMessage,
+  loadNextAttachmentMessage,
+} from '../attachment-actions'
+import {showConversationInfoPanel} from '../thread-context'
+import {useConversationMessage} from '../data-hooks'
+import {registerExternalResetter} from '@/util/zustand'
 
-const blankMessage = C.Chat.makeMessageAttachment({})
-export const useData = (initialOrdinal: T.Chat.Ordinal) => {
-  const conversationIDKey = C.useChatContext(s => s.id)
-  const [ordinal, setOrdinal] = React.useState(initialOrdinal)
+const blankMessage = Chat.makeMessageAttachment({})
+export const useData = (
+  conversationIDKey: T.Chat.ConversationIDKey,
+  initialMessageID: T.Chat.MessageID,
+  initialMessage?: T.Chat.MessageAttachment
+) => {
+  const [messageID, setMessageID] = React.useState(initialMessageID)
+  const [messageOverride, setMessageOverride] = React.useState<T.Chat.MessageAttachment | undefined>(
+    initialMessage
+  )
 
-  const message: T.Chat.MessageAttachment = C.useChatContext(s => {
-    const m = s.messageMap.get(ordinal)
-    return m?.type === 'attachment' ? m : blankMessage
-  })
+  const loadedMessage = useConversationMessage(conversationIDKey, messageID)
+  const initialMessageForID = initialMessage?.id === messageID ? initialMessage : undefined
+  const overrideMessageForID = messageOverride?.id === messageID ? messageOverride : undefined
+  const message: T.Chat.MessageAttachment =
+    loadedMessage?.type === 'attachment'
+      ? loadedMessage
+      : (overrideMessageForID ?? initialMessageForID ?? blankMessage)
+  const hasMessageID = !!T.Chat.messageIDToNumber(message.id)
 
-  const loadNextAttachment = C.useChatContext(s => s.dispatch.loadNextAttachment)
-  const onSwitchAttachment = React.useCallback(
-    (backInTime: boolean) => {
-      const f = async () => {
-        if (conversationIDKey !== blankMessage.conversationIDKey) {
-          const o = await loadNextAttachment(ordinal, backInTime)
-          setOrdinal(o)
-        }
+  React.useEffect(() => {
+    if (message !== blankMessage || !T.Chat.isValidConversationIDKey(conversationIDKey)) {
+      return
+    }
+    logger.warn(
+      `chat attachment fullscreen: missing attachment message for convID=${conversationIDKey} messageID=${messageID}`
+    )
+  }, [conversationIDKey, message, messageID])
+
+  const onSwitchAttachment = (backInTime: boolean) => {
+    const f = async () => {
+      if (conversationIDKey !== blankMessage.conversationIDKey && message !== blankMessage && hasMessageID) {
+        const nextMessage = await loadNextAttachmentMessage(conversationIDKey, message, backInTime)
+        setMessageOverride(nextMessage)
+        setMessageID(nextMessage.id)
       }
-      C.ignorePromise(f())
-    },
-    [conversationIDKey, loadNextAttachment, ordinal]
-  )
+    }
+    C.ignorePromise(f())
+  }
 
-  const onNextAttachment = React.useCallback(() => {
+  const onNextAttachment = () => {
     onSwitchAttachment(false)
-  }, [onSwitchAttachment])
-  const onPreviousAttachment = React.useCallback(() => {
+  }
+  const onPreviousAttachment = () => {
     onSwitchAttachment(true)
-  }, [onSwitchAttachment])
+  }
 
-  const openLocalPathInSystemFileManagerDesktop = C.useFSState(
-    s => s.dispatch.dynamic.openLocalPathInSystemFileManagerDesktop
-  )
-  const navigateUp = C.useRouterState(s => s.dispatch.navigateUp)
-  const showInfoPanel = C.useChatContext(s => s.dispatch.showInfoPanel)
-  const attachmentDownload = C.useChatContext(s => s.dispatch.attachmentDownload)
+  const navigateUp = C.Router2.navigateUp
   const {downloadPath, fileURL: path, fullHeight, fullWidth, fileType} = message
   const {previewHeight, previewURL: previewPath, previewWidth, title, transferProgress} = message
-  const {height: clampedHeight, width: clampedWidth} = C.Chat.clampImageSize(
+  const {height: clampedHeight, width: clampedWidth} = clampImageSize(
     previewWidth,
     previewHeight,
     maxWidth,
     maxHeight
   )
-  const isVideo = C.Chat.isVideoAttachment(message)
+
+  const isPlayableMedia = message.fileType.startsWith('video') || message.fileType.startsWith('audio')
   const showPreview = !fileType.includes('png')
-  const onAllMedia = () => showInfoPanel(true, 'attachments')
+  const onAllMedia = () => showConversationInfoPanel(conversationIDKey, true, 'attachments')
   const onClose = () => navigateUp()
-  const onDownloadAttachment = message.downloadPath
+  const onDownloadAttachment = message.downloadPath || !hasMessageID
     ? undefined
     : () => {
-        attachmentDownload(message.ordinal)
+        attachmentDownloadMessage(conversationIDKey, message)
       }
 
   const onShowInFinder = downloadPath
-    ? () => openLocalPathInSystemFileManagerDesktop?.(downloadPath)
+    ? () => openLocalPathInSystemFileManagerDesktop(downloadPath)
     : undefined
 
   const progress = transferProgress
@@ -72,15 +95,15 @@ export const useData = (initialOrdinal: T.Chat.Ordinal) => {
   return {
     fullHeight,
     fullWidth,
-    isVideo,
+    hasMessageID,
+    isPlayableMedia,
     message,
     onAllMedia,
     onClose,
     onDownloadAttachment,
-    onNextAttachment,
-    onPreviousAttachment,
+    onNextAttachment: hasMessageID ? onNextAttachment : undefined,
+    onPreviousAttachment: hasMessageID ? onPreviousAttachment : undefined,
     onShowInFinder,
-    ordinal,
     path,
     previewHeight: clampedHeight,
     previewPath,
@@ -94,16 +117,21 @@ export const useData = (initialOrdinal: T.Chat.Ordinal) => {
 
 // if we've seen it its likely cached so lets just always just show it and never fallback
 const seenPaths = new Set<string>()
+
+// module scope outlives sign-out; holds the previous user's attachment cache paths
+registerExternalResetter('chat-attachment-seen-paths', () => {
+  seenPaths.clear()
+})
 // preload full and return ''. If too much time passes show preview. Show full when loaded
 export const usePreviewFallback = (
   path: string,
   previewPath: string,
-  isVideo: boolean,
+  isPlayableMedia: boolean,
   showPreview: boolean,
   preload: (path: string, onLoad: () => void, onError: () => void) => void
 ) => {
   const [imgSrc, setImgSrc] = React.useState('')
-  const canUseFallback = path && previewPath && !isVideo && showPreview
+  const canUseFallback = path && previewPath && !isPlayableMedia && showPreview
 
   React.useEffect(() => {
     const onLoad = () => {
@@ -125,7 +153,7 @@ export const usePreviewFallback = (
     return () => {
       clearTimeout(id)
     }
-  }, [path, previewPath, isVideo, preload])
+  }, [path, previewPath, isPlayableMedia, preload])
 
   if (seenPaths.has(path)) {
     return path

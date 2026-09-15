@@ -2,7 +2,8 @@ package s3
 
 import (
 	"bytes"
-	"crypto/md5"
+	"context"
+	"crypto/md5" //nolint:gosec // G501: MD5 required for S3 ETag computation (AWS API requirement, not cryptographic use)
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/xml"
@@ -10,8 +11,6 @@ import (
 	"io"
 	"sort"
 	"strconv"
-
-	"golang.org/x/net/context"
 )
 
 // Multi represents an unfinished multipart upload.
@@ -59,7 +58,7 @@ func (b *Bucket) ListMulti(ctx context.Context, prefix, delim string) (multis []
 	}
 	headers := map[string][]string{}
 	b.addTokenHeader(headers)
-	for attempt := b.S3.AttemptStrategy.Start(); attempt.Next(); {
+	for attempt := b.Start(); attempt.Next(); {
 		req := &request{
 			method:  "GET",
 			bucket:  b.Name,
@@ -67,7 +66,7 @@ func (b *Bucket) ListMulti(ctx context.Context, prefix, delim string) (multis []
 			headers: headers,
 		}
 		var resp listMultiResp
-		err := b.S3.query(ctx, req, &resp)
+		err := b.query(ctx, req, &resp)
 		if shouldRetry(err) && attempt.HasNext() {
 			continue
 		}
@@ -85,7 +84,7 @@ func (b *Bucket) ListMulti(ctx context.Context, prefix, delim string) (multis []
 		}
 		params["key-marker"] = []string{resp.NextKeyMarker}
 		params["upload-id-marker"] = []string{resp.NextUploadIDMarker}
-		attempt = b.S3.AttemptStrategy.Start() // Last request worked.
+		attempt = b.Start() // Last request worked.
 	}
 	panic("unreachable")
 }
@@ -139,8 +138,8 @@ func (b *Bucket) InitMulti(ctx context.Context, key string, contType string, per
 	var resp struct {
 		UploadID string `xml:"UploadId"`
 	}
-	for attempt := b.S3.AttemptStrategy.Start(); attempt.Next(); {
-		err = b.S3.query(ctx, req, &resp)
+	for attempt := b.Start(); attempt.Next(); {
+		err = b.query(ctx, req, &resp)
 		if !shouldRetry(err) {
 			break
 		}
@@ -173,7 +172,7 @@ func (m *Multi) putPart(ctx context.Context, n int, r io.ReadSeeker, partSize in
 		"uploadId":   {m.UploadID},
 		"partNumber": {strconv.FormatInt(int64(n), 10)},
 	}
-	for attempt := m.Bucket.S3.AttemptStrategy.Start(); attempt.Next(); {
+	for attempt := m.Bucket.Start(); attempt.Next(); {
 		_, err := r.Seek(0, 0)
 		if err != nil {
 			return Part{}, err
@@ -186,17 +185,18 @@ func (m *Multi) putPart(ctx context.Context, n int, r io.ReadSeeker, partSize in
 			params:  params,
 			payload: r,
 		}
-		err = m.Bucket.S3.prepare(req)
+		err = m.Bucket.prepare(req)
 		if err != nil {
 			return Part{}, err
 		}
-		resp, err := m.Bucket.S3.run(ctx, req, nil)
+		resp, err := m.Bucket.run(ctx, req, nil)
 		if shouldRetry(err) && attempt.HasNext() {
 			continue
 		}
 		if err != nil {
 			return Part{}, err
 		}
+		defer resp.Body.Close()
 		etag := resp.Header.Get("ETag")
 		if etag == "" {
 			return Part{}, errors.New("part upload succeeded with no ETag")
@@ -211,7 +211,7 @@ func seekerInfo(r io.ReadSeeker) (size int64, md5hex string, md5b64 string, err 
 	if err != nil {
 		return 0, "", "", err
 	}
-	digest := md5.New()
+	digest := md5.New() //nolint:gosec // G401: MD5 required for S3 ETag (AWS API requirement)
 	size, err = io.Copy(digest, r)
 	if err != nil {
 		return 0, "", "", err
@@ -256,7 +256,7 @@ func (m *Multi) ListParts(ctx context.Context) ([]Part, error) {
 	m.Bucket.addTokenHeader(headers)
 
 	var parts partSlice
-	for attempt := m.Bucket.S3.AttemptStrategy.Start(); attempt.Next(); {
+	for attempt := m.Bucket.Start(); attempt.Next(); {
 		req := &request{
 			method:  "GET",
 			bucket:  m.Bucket.Name,
@@ -265,7 +265,7 @@ func (m *Multi) ListParts(ctx context.Context) ([]Part, error) {
 			headers: headers,
 		}
 		var resp listPartsResp
-		err := m.Bucket.S3.query(ctx, req, &resp)
+		err := m.Bucket.query(ctx, req, &resp)
 		if shouldRetry(err) && attempt.HasNext() {
 			continue
 		}
@@ -278,7 +278,7 @@ func (m *Multi) ListParts(ctx context.Context) ([]Part, error) {
 			return parts, nil
 		}
 		params["part-number-marker"] = []string{resp.NextPartNumberMarker}
-		attempt = m.Bucket.S3.AttemptStrategy.Start() // Last request worked.
+		attempt = m.Bucket.Start() // Last request worked.
 	}
 	panic("unreachable")
 }
@@ -391,7 +391,7 @@ func (m *Multi) Complete(ctx context.Context, parts []Part) error {
 	}
 
 	// Setting Content-Length prevents breakage on DreamObjects
-	for attempt := m.Bucket.S3.AttemptStrategy.Start(); attempt.Next(); {
+	for attempt := m.Bucket.Start(); attempt.Next(); {
 		headers := map[string][]string{
 			"Content-Length": {strconv.Itoa(len(data))},
 		}
@@ -406,7 +406,7 @@ func (m *Multi) Complete(ctx context.Context, parts []Part) error {
 		}
 
 		resp := &completeResponse{}
-		err := m.Bucket.S3.query(ctx, req, resp)
+		err := m.Bucket.query(ctx, req, resp)
 		if shouldRetry(err) && attempt.HasNext() {
 			continue
 		}
@@ -446,7 +446,7 @@ func (m *Multi) Abort(ctx context.Context) error {
 	headers := map[string][]string{}
 	m.Bucket.addTokenHeader(headers)
 
-	for attempt := m.Bucket.S3.AttemptStrategy.Start(); attempt.Next(); {
+	for attempt := m.Bucket.Start(); attempt.Next(); {
 		req := &request{
 			method:  "DELETE",
 			bucket:  m.Bucket.Name,
@@ -454,7 +454,7 @@ func (m *Multi) Abort(ctx context.Context) error {
 			params:  params,
 			headers: headers,
 		}
-		err := m.Bucket.S3.query(ctx, req, nil)
+		err := m.Bucket.query(ctx, req, nil)
 		if shouldRetry(err) && attempt.HasNext() {
 			continue
 		}

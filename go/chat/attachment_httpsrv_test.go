@@ -37,7 +37,8 @@ type mockAttachmentRemoteStore struct {
 }
 
 func (m mockAttachmentRemoteStore) DecryptAsset(ctx context.Context, w io.Writer, body io.Reader,
-	asset chat1.Asset, progress types.ProgressReporter) error {
+	asset chat1.Asset, progress types.ProgressReporter,
+) error {
 	if m.decryptCh != nil {
 		m.decryptCh <- struct{}{}
 	}
@@ -46,32 +47,38 @@ func (m mockAttachmentRemoteStore) DecryptAsset(ctx context.Context, w io.Writer
 }
 
 func (m mockAttachmentRemoteStore) DeleteAssets(ctx context.Context, params chat1.S3Params, signer s3.Signer,
-	assets []chat1.Asset) error {
+	assets []chat1.Asset,
+) error {
 	return nil
 }
 
 func (m mockAttachmentRemoteStore) DeleteAsset(ctx context.Context, params chat1.S3Params, signer s3.Signer,
-	asset chat1.Asset) error {
+	asset chat1.Asset,
+) error {
 	return nil
 }
 
 func (m mockAttachmentRemoteStore) DownloadAsset(ctx context.Context, params chat1.S3Params,
-	asset chat1.Asset, w io.Writer, signer s3.Signer, progress types.ProgressReporter) error {
+	asset chat1.Asset, w io.Writer, signer s3.Signer, progress types.ProgressReporter,
+) error {
 	return errors.New("not implemented")
 }
 
 func (m mockAttachmentRemoteStore) UploadAsset(ctx context.Context, task *attachments.UploadTask,
-	encryptedOut io.Writer) (chat1.Asset, error) {
+	encryptedOut io.Writer,
+) (chat1.Asset, error) {
 	return chat1.Asset{}, errors.New("not implemented")
 }
 
 func (m mockAttachmentRemoteStore) StreamAsset(ctx context.Context, params chat1.S3Params, asset chat1.Asset,
-	signer s3.Signer) (io.ReadSeeker, error) {
+	signer s3.Signer,
+) (io.ReadSeeker, error) {
 	return nil, errors.New("not implemented")
 }
 
 func (m mockAttachmentRemoteStore) GetAssetReader(ctx context.Context, params chat1.S3Params, asset chat1.Asset,
-	signer s3.Signer) (io.ReadCloser, error) {
+	signer s3.Signer,
+) (io.ReadCloser, error) {
 	if m.assetReaderCh != nil {
 		m.assetReaderCh <- struct{}{}
 	}
@@ -137,7 +144,7 @@ func TestChatSrvAttachmentHTTPSrv(t *testing.T) {
 			MessageTypes: []chat1.MessageType{chat1.MessageType_ATTACHMENT},
 		}, nil)
 	require.NoError(t, err)
-	require.Equal(t, 2, len(tv.Messages))
+	require.Len(t, tv.Messages, 2)
 
 	uiMsg := utils.PresentMessageUnboxed(context.TODO(), tc.Context(), tv.Messages[0], uid, conv.Id)
 	require.NotNil(t, uiMsg.Valid().AssetUrlInfo)
@@ -148,6 +155,7 @@ func TestChatSrvAttachmentHTTPSrv(t *testing.T) {
 	readAsset := func(msg chat1.UIMessage, cacheHit bool) {
 		httpRes, err := http.Get(msg.Valid().AssetUrlInfo.FullUrl)
 		require.NoError(t, err)
+		defer httpRes.Body.Close()
 		body, err := io.ReadAll(httpRes.Body)
 		require.NoError(t, err)
 		require.Equal(t, "HI", string(body))
@@ -244,7 +252,7 @@ func TestChatSrvAttachmentUploadPreviewCached(t *testing.T) {
 			MessageIDs:     []chat1.MessageID{res.MessageID},
 		})
 	require.NoError(t, err)
-	require.Equal(t, 1, len(msgRes.Messages))
+	require.Len(t, msgRes.Messages, 1)
 	require.True(t, msgRes.Messages[0].IsValid())
 	body := msgRes.Messages[0].Valid().MessageBody
 	require.NotNil(t, body.Attachment().Preview)
@@ -284,7 +292,7 @@ func TestChatSrvAttachmentUploadPreviewCached(t *testing.T) {
 			MessageIDs:     []chat1.MessageID{res.MessageID},
 		})
 	require.NoError(t, err)
-	require.Equal(t, 1, len(msgRes.Messages))
+	require.Len(t, msgRes.Messages, 1)
 	require.True(t, msgRes.Messages[0].IsValid())
 	body = msgRes.Messages[0].Valid().MessageBody
 	require.Nil(t, body.Attachment().Preview)

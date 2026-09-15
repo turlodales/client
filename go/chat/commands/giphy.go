@@ -22,13 +22,15 @@ type defaultGiphySearcher struct {
 }
 
 func (d defaultGiphySearcher) Search(mctx libkb.MetaContext, apiKeySource types.ExternalAPIKeySource,
-	query *string, limit int, urlsrv types.AttachmentURLSrv) ([]chat1.GiphySearchResult, error) {
+	query *string, limit int, urlsrv types.AttachmentURLSrv,
+) ([]chat1.GiphySearchResult, error) {
 	return giphy.Search(d.G(), mctx, apiKeySource, query, limit, urlsrv)
 }
 
 type Giphy struct {
 	sync.Mutex
 	*baseCommand
+	shownMu           sync.Mutex
 	shownResults      map[chat1.ConvIDStr]*string
 	shownWindow       map[chat1.ConvIDStr]bool
 	currentOpCancelFn context.CancelFunc
@@ -69,7 +71,8 @@ func (s *Giphy) getLimit() int {
 }
 
 func (s *Giphy) Execute(ctx context.Context, uid gregor1.UID, convID chat1.ConversationID,
-	tlfName, text string, replyTo *chat1.MessageID) (err error) {
+	tlfName, text string, replyTo *chat1.MessageID,
+) (err error) {
 	if !s.Match(ctx, text) {
 		return ErrInvalidCommand
 	}
@@ -98,7 +101,8 @@ func (s *Giphy) queryEqual(query *string, shown *string) bool {
 }
 
 func (s *Giphy) Preview(ctx context.Context, uid gregor1.UID, convID chat1.ConversationID,
-	tlfName, text string) {
+	tlfName, text string,
+) {
 	defer s.Trace(ctx, nil, "Preview")()
 	s.Lock()
 	if s.currentOpCancelFn != nil {
@@ -116,19 +120,27 @@ func (s *Giphy) Preview(ctx context.Context, uid gregor1.UID, convID chat1.Conve
 	defer close(s.currentOpDoneCb)
 
 	if !s.Match(ctx, text) {
-		if _, ok := s.shownWindow[convID.ConvIDStr()]; ok {
+		s.shownMu.Lock()
+		_, shownOK := s.shownWindow[convID.ConvIDStr()]
+		if shownOK {
+			delete(s.shownResults, convID.ConvIDStr())
+			delete(s.shownWindow, convID.ConvIDStr())
+		}
+		s.shownMu.Unlock()
+		if shownOK {
 			// tell UI to clear
 			err := s.getChatUI().ChatGiphyToggleResultWindow(ctx, convID, false, false)
 			if err != nil {
 				s.Debug(ctx, "Preview: error on toggle result: %+v", err)
 			}
-			delete(s.shownResults, convID.ConvIDStr())
-			delete(s.shownWindow, convID.ConvIDStr())
 		}
 		return
 	}
 	query := s.getQuery(text)
-	if shown, ok := s.shownResults[convID.ConvIDStr()]; ok && s.queryEqual(query, shown) {
+	s.shownMu.Lock()
+	shown, shownOK := s.shownResults[convID.ConvIDStr()]
+	s.shownMu.Unlock()
+	if shownOK && s.queryEqual(query, shown) {
 		s.Debug(ctx, "Preview: same query given, skipping")
 		return
 	}
@@ -137,7 +149,9 @@ func (s *Giphy) Preview(ctx context.Context, uid gregor1.UID, convID chat1.Conve
 		s.Debug(ctx, "Preview: error on toggle result: %+v", err)
 	}
 
+	s.shownMu.Lock()
 	s.shownWindow[convID.ConvIDStr()] = true
+	s.shownMu.Unlock()
 
 	results, err := s.searcher.Search(libkb.NewMetaContext(ctx, s.G().ExternalG()),
 		s.G().ExternalAPIKeySource, query, s.getLimit(), s.G().AttachmentURLSrv)
@@ -154,5 +168,7 @@ func (s *Giphy) Preview(ctx context.Context, uid gregor1.UID, convID chat1.Conve
 		return
 	}
 
+	s.shownMu.Lock()
 	s.shownResults[convID.ConvIDStr()] = query
+	s.shownMu.Unlock()
 }

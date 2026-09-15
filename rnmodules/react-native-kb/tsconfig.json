@@ -1,6 +1,5 @@
 {
   "compilerOptions": {
-    "baseUrl": "./",
     "paths": {
       "react-native-kb": ["./src/index"]
     },
@@ -11,7 +10,7 @@
     "jsx": "react",
     "lib": ["esnext"],
     "module": "esnext",
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "noFallthroughCasesInSwitch": true,
     "noImplicitReturns": true,
     "noImplicitUseStrict": false,
@@ -19,9 +18,13 @@
     "noUncheckedIndexedAccess": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
+    "outDir": "lib/typescript",
     "resolveJsonModule": true,
+    "rootDir": "src",
     "skipLibCheck": true,
     "strict": true,
     "target": "esnext"
-  }
+  },
+  "exclude": ["lib"],
+  "include": ["src"]
 }

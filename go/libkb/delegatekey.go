@@ -83,7 +83,6 @@ func (d Delegator) IsEldest() bool { return d.DelegationType == DelegationTypeEl
 func (d Delegator) GetMerkleTriple() MerkleTriple { return d.merkleTriple }
 
 func (d *Delegator) CheckArgs(m MetaContext) (err error) {
-
 	defer m.Trace("Delegator#CheckArgs", &err)()
 
 	if d.DelegationType == "" {
@@ -102,7 +101,7 @@ func (d *Delegator) CheckArgs(m MetaContext) (err error) {
 		d.DelegationType = DelegationTypeEldest
 	}
 
-	if d.EldestKID.Exists() || d.IsEldest() {
+	if d.EldestKID.Exists() || d.IsEldest() { //nolint
 	} else if kid := d.Me.GetEldestKID(); kid.IsNil() {
 		err = NoSigChainError{}
 		return err

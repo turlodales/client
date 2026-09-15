@@ -1,14 +1,22 @@
 import * as Electron from 'electron'
-import * as RemoteGen from '@/actions/remote-gen'
+import * as RemoteGen from '@/constants/remote-actions'
 import * as R from '@/constants/remote'
 import fs from 'fs'
 import path from 'path'
 import exec from './exec.desktop'
+import {type ExecException} from 'child_process'
 import {keybaseBinPath} from './paths.desktop'
 import {ctlQuit} from './ctl.desktop'
 import {isDarwin} from '@/constants/platform'
 import logger from '@/logger'
 import zlib from 'zlib'
+import {
+  ExitCodeAuthCanceledError,
+  ExitCodeFuseKextError,
+  ExitCodeFuseKextPermissionError,
+  ExitFuseCriticalUpdate,
+  ExitFuseCriticalUpdateFailed,
+} from '@/constants/values'
 
 const file = path.join(Electron.app.getPath('userData'), 'installer.json')
 
@@ -39,7 +47,6 @@ const saveHasPrompted = () => {
 type ErrorTypes = {
   cli: boolean
   fuse: boolean
-  kbnm: boolean
 }
 
 type ResultType =
@@ -56,18 +63,6 @@ type ResultType =
   | undefined
 
 const checkErrors = (result: ResultType, errors: Array<string>, errorTypes: ErrorTypes) => {
-  // Copied from old constants/favorite.js
-  // See Installer.m: KBExitFuseKextError
-  const ExitCodeFuseKextError = 4
-  // See Installer.m: KBExitFuseKextPermissionError
-  const ExitCodeFuseKextPermissionError = 5
-  // See Installer.m: KBExitAuthCanceledError
-  const ExitCodeAuthCanceledError = 6
-  // See Installer.m: KBExitFuseCriticalUpdate
-  const ExitFuseCriticalUpdate = 8
-  // See install_darwin.go: exitCodeFuseCriticalUpdateFailed
-  const ExitFuseCriticalUpdateFailed = 300
-
   const results = result?.componentResults || []
   results.forEach(cr => {
     if (cr.status?.code === 0) {
@@ -109,9 +104,6 @@ const checkErrors = (result: ResultType, errors: Array<string>, errorTypes: Erro
     } else {
       errors.push(`There was an error trying to install the ${cr.name ?? ''}.`)
       errors.push(`\n${cr.status?.desc ?? ''}`)
-      if (cr.name === 'kbnm') {
-        errorTypes.kbnm = true
-      }
     }
   })
 }
@@ -149,13 +141,12 @@ const darwinInstall = (callback: CB) => {
       )
       .catch((err: unknown) => logger.error('[Installer]: Error zipping up logs: ', err))
 
-  const handleResults = (err: {code?: number} | null, _: unknown, stdout: string, stderr: string) => {
+  const handleResults = (err: ExecException | null, _: unknown, stdout: string, stderr: string) => {
     const loggingPromise = logOutput(stdout, stderr)
     const errors: Array<string> = []
     const errorTypes: ErrorTypes = {
       cli: false,
       fuse: false,
-      kbnm: false,
     }
     if (err) {
       errors.push(`There was an error trying to run the install (${err.code}).`)
@@ -177,19 +168,18 @@ const darwinInstall = (callback: CB) => {
     if (errors.length > 0) {
       logger.info(errors.join('\n'))
       logger.info('[Installer]: Install errorred')
-      const buttons = errorTypes.fuse || errorTypes.kbnm ? ['Okay'] : ['Ignore', 'Quit']
+      const buttons = errorTypes.fuse ? ['Okay'] : ['Ignore', 'Quit']
       const detail = errors.join('\n') + `\n\nPlease run \`keybase log send\` to report the error.`
       const message = 'Keybase Install Error'
       loggingPromise
-        .then(async () =>
-          Electron.dialog.showMessageBox({buttons, detail, message}).then(({response}) => {
-            if (response === 1) {
-              ctlQuit()
-            } else {
-              callback(null)
-            }
-          })
-        )
+        .then(async () => Electron.dialog.showMessageBox({buttons, detail, message}))
+        .then(({response}) => {
+          if (response === 1) {
+            ctlQuit()
+          } else {
+            callback(null)
+          }
+        })
         .catch(() => {})
       return
     }

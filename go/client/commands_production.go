@@ -2,7 +2,6 @@
 // this source code is governed by the included BSD license.
 
 //go:build production
-// +build production
 
 // this is the list of commands for the release version of the
 // client.
@@ -44,5 +43,7 @@ func getBuildSpecificFSCommands(cl *libcmdline.CommandLine, g *libkb.GlobalConte
 
 const develUsage = false
 
-var restrictedSignupFlags = []cli.Flag{}
-var restrictedProveFlags = []cli.Flag{}
+var (
+	restrictedSignupFlags = []cli.Flag{}
+	restrictedProveFlags  = []cli.Flag{}
+)

@@ -303,6 +303,65 @@
     },
     {
       "type": "record",
+      "name": "MarkAsReadItem",
+      "fields": [
+        {
+          "type": "ConversationID",
+          "name": "conversationID"
+        },
+        {
+          "type": "MessageID",
+          "name": "msgID"
+        },
+        {
+          "type": "boolean",
+          "name": "forceUnread"
+        }
+      ]
+    },
+    {
+      "type": "record",
+      "name": "MarkAsReadItemResult",
+      "fields": [
+        {
+          "type": "ConversationID",
+          "name": "conversationID"
+        },
+        {
+          "type": [
+            null,
+            "string"
+          ],
+          "name": "error"
+        },
+        {
+          "type": "boolean",
+          "name": "immediateFail"
+        }
+      ]
+    },
+    {
+      "type": "record",
+      "name": "MarkAsReadBatchRes",
+      "fields": [
+        {
+          "type": [
+            null,
+            "RateLimit"
+          ],
+          "name": "rateLimit"
+        },
+        {
+          "type": {
+            "type": "array",
+            "items": "MarkAsReadItemResult"
+          },
+          "name": "results"
+        }
+      ]
+    },
+    {
+      "type": "record",
       "name": "UnreadUpdateFull",
       "fields": [
         {
@@ -632,6 +691,31 @@
         {
           "type": "Expunge",
           "name": "expunge"
+        }
+      ]
+    },
+    {
+      "type": "record",
+      "name": "ValidateTeamGitChatConvRes",
+      "fields": [
+        {
+          "type": "boolean",
+          "name": "isActive"
+        },
+        {
+          "type": "TopicType",
+          "name": "topicType"
+        },
+        {
+          "type": "ConversationMembersType",
+          "name": "membersType"
+        },
+        {
+          "type": [
+            null,
+            "keybase1.TeamID"
+          ],
+          "name": "teamID"
         }
       ]
     },
@@ -1307,6 +1391,18 @@
       ],
       "response": "MarkAsReadRes"
     },
+    "markAsReadBatch": {
+      "request": [
+        {
+          "name": "items",
+          "type": {
+            "type": "array",
+            "items": "MarkAsReadItem"
+          }
+        }
+      ],
+      "response": "MarkAsReadBatchRes"
+    },
     "SetConversationStatus": {
       "request": [
         {
@@ -1770,6 +1866,19 @@
         null,
         "keybase1.TeamID"
       ]
+    },
+    "validateTeamGitChatConv": {
+      "request": [
+        {
+          "name": "teamID",
+          "type": "keybase1.TeamID"
+        },
+        {
+          "name": "convID",
+          "type": "ConversationID"
+        }
+      ],
+      "response": "ValidateTeamGitChatConvRes"
     },
     "serverNow": {
       "request": [],

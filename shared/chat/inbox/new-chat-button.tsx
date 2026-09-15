@@ -1,100 +1,119 @@
 import * as C from '@/constants'
-import * as React from 'react'
 import * as Kb from '@/common-adapters'
-import * as Platforms from '@/constants/platform'
+import {LiquidGlassView, isLiquidGlassSupported} from '@callstack/liquid-glass'
+import {isEmptyInboxLayout, useInboxLayoutState} from './layout-state'
+
+const rainbowHeight = isElectron ? 32 : 36
+const rainbowWidth = 80
+// the button's margin is the rainbow rim; it must be equal on all sides or the
+// container radius can't stay concentric with the button's and the corners wobble
+const rainbowRim = 2
+const rainbowRadius = Kb.Styles.borderRadius + rainbowRim
+const glassRim = 4
+const glassRadius = rainbowRadius + glassRim
+const colorBarCommon = {
+  height: rainbowHeight / 4,
+  position: 'absolute',
+  width: '100%',
+} as const
 
 const HeaderNewChatButton = () => {
-  const hide = C.useChatState(
-    s =>
-      s.inboxHasLoaded &&
-      !!s.inboxLayout &&
-      (s.inboxLayout.smallTeams || []).length === 0 &&
-      (s.inboxLayout.bigTeams || []).length === 0
+  const styles = useStyles()
+  // mobile's empty inbox draws its own big 'Start a new chat' button, so the header one is
+  // redundant there; desktop has no such affordance and must keep it
+  const hide = useInboxLayoutState(s => isMobile && s.hasLoaded && isEmptyInboxLayout(s.layout))
+
+  const onNewChat = C.Router2.appendNewChatBuilder
+
+  if (hide) return null
+
+  const rainbowButton = (
+    <Kb.Box2
+      direction="vertical"
+      style={styles.rainbowButtonContainer}
+      tooltip={`(${C.shortcutSymbol}N)`}
+      className="tooltip-right"
+      alignItems="center"
+      justifyContent="center"
+      overflow="hidden"
+      relative={true}
+    >
+      <Kb.Box2 direction="vertical" style={styles.gradientRed} />
+      <Kb.Box2 direction="vertical" style={styles.gradientOrange} />
+      <Kb.Box2 direction="vertical" style={styles.gradientYellow} />
+      <Kb.Box2 direction="vertical" style={styles.gradientGreen} />
+      <Kb.Button
+        label="New chat"
+        mode="Primary"
+        onClick={onNewChat}
+        small={true}
+        style={styles.rainbowButton}
+        type="Default"
+      />
+    </Kb.Box2>
   )
 
-  const appendNewChatBuilder = C.useRouterState(s => s.appendNewChatBuilder)
-  const onNewChat = React.useCallback(() => {
-    appendNewChatBuilder()
-  }, [appendNewChatBuilder])
-  const content = React.useMemo(() => {
+  // eslint-disable-next-line
+  if (isIOS && isLiquidGlassSupported) {
     return (
-      <Kb.Box2
-        direction="vertical"
-        style={styles.rainbowButtonContainer}
-        tooltip={`(${Platforms.shortcutSymbol}N)`}
-        className="tooltip-right"
-      >
-        <Kb.Box2 direction="vertical" style={styles.gradientContainer} pointerEvents="none">
-          <Kb.Box style={styles.gradientRed} />
-          <Kb.Box style={styles.gradientOrange} />
-          <Kb.Box style={styles.gradientYellow} />
-          <Kb.Box style={styles.gradientGreen} />
-        </Kb.Box2>
-        <Kb.Button
-          label={'New chat'}
-          mode="Primary"
-          onClick={onNewChat}
-          small={true}
-          style={styles.rainbowButton}
-          type="Default"
-        />
-      </Kb.Box2>
+      <LiquidGlassView interactive={true} effect="regular" style={styles.glass}>
+        {rainbowButton}
+      </LiquidGlassView>
     )
-  }, [onNewChat])
-  return hide ? null : content
+  }
+
+  return rainbowButton
 }
 
-const styles = Kb.Styles.styleSheetCreate(
+const calcBarTop = (index: number) => index * colorBarCommon.height
+
+const useStyles = Kb.Styles.createStyleHook(
   () =>
     ({
-      button: {
-        marginLeft: Kb.Styles.globalMargins.small,
-        marginRight: Kb.Styles.globalMargins.small,
-      },
-      gradientContainer: {
-        bottom: 0,
-        left: 0,
-        position: 'absolute',
-        right: 0,
-        top: 0,
-      },
-      gradientGreen: Kb.Styles.platformStyles({
-        common: {
-          backgroundColor: '#3AFFAC',
-          borderBottomLeftRadius: Kb.Styles.borderRadius,
-          borderBottomRightRadius: Kb.Styles.borderRadius,
-          flex: 1,
-        },
-      }),
-      gradientOrange: {backgroundColor: '#FFAC3D', flex: 1},
-      gradientRed: Kb.Styles.platformStyles({
-        common: {
-          backgroundColor: '#FF5D5D',
-          borderTopLeftRadius: Kb.Styles.borderRadius,
-          borderTopRightRadius: Kb.Styles.borderRadius,
-          flex: 1,
-        },
-      }),
-      gradientYellow: {backgroundColor: '#FFF75A', flex: 1},
-      newMeta: {
+      glass: {
+        alignItems: 'center',
         alignSelf: 'center',
-        marginRight: Kb.Styles.globalMargins.tiny,
+        borderRadius: glassRadius,
+        height: rainbowHeight + glassRim * 2,
+        justifyContent: 'center',
+        padding: glassRim,
       },
-      rainbowButton: Kb.Styles.platformStyles({
-        common: {
-          margin: 2,
-          paddingLeft: Kb.Styles.globalMargins.tiny,
-          paddingRight: Kb.Styles.globalMargins.tiny,
-        },
-      }),
+      gradientGreen: {
+        ...colorBarCommon,
+        backgroundColor: '#3AFFAC',
+        top: calcBarTop(3),
+      },
+      gradientOrange: {
+        ...colorBarCommon,
+        backgroundColor: '#FFAC3D',
+        top: calcBarTop(1),
+      },
+      gradientRed: {
+        ...colorBarCommon,
+        backgroundColor: '#FF5D5D',
+        top: calcBarTop(0),
+      },
+      gradientYellow: {
+        ...colorBarCommon,
+        backgroundColor: '#FFF75A',
+        top: calcBarTop(2),
+      },
+      rainbowButton: {
+        margin: rainbowRim,
+        ...Kb.Styles.paddingH(Kb.Styles.globalMargins.tiny),
+      },
       rainbowButtonContainer: Kb.Styles.platformStyles({
         common: {
-          alignSelf: 'flex-start',
-          height: '100%',
-          position: 'relative',
+          borderRadius: Kb.Styles.borderRadius,
+          height: rainbowHeight,
         },
         isElectron: {
           ...Kb.Styles.desktopStyles.windowDraggingClickable,
+          width: rainbowWidth,
+        },
+        isMobile: {
+          alignSelf: 'center',
+          borderRadius: rainbowRadius,
         },
       }),
     }) as const

@@ -5,12 +5,14 @@ package pvl
 
 import (
 	b64 "encoding/base64"
+	"fmt"
 	"log"
 	"strings"
 	"testing"
 
 	"github.com/PuerkitoBio/goquery"
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
+	"github.com/stretchr/testify/require"
 )
 
 func check(err error) {
@@ -22,7 +24,7 @@ func check(err error) {
 func sampleState() scriptState {
 	sigBody := []byte{1, 2, 3, 4, 5}
 
-	var sampleState = scriptState{
+	sampleState := scriptState{
 		WhichScript: 0,
 		PC:          0,
 		Service:     keybase1.ProofType_TWITTER,
@@ -63,11 +65,11 @@ func TestServiceToString(t *testing.T) {
 		name, err := serviceToString(test.service)
 		switch {
 		case (err == nil) != test.shouldwork:
-			t.Fatalf("%v err %v", i, err)
+			require.FailNow(t, fmt.Sprintf("%v err %v", i, err))
 		case !test.shouldwork && (err.GetProofStatus() != test.status):
-			t.Fatalf("%v status %v", i, err.GetProofStatus())
+			require.FailNow(t, fmt.Sprintf("%v status %v", i, err.GetProofStatus()))
 		case test.name != name:
-			t.Fatalf("%v name %v %v", i, test.name, name)
+			require.FailNow(t, fmt.Sprintf("%v name %v %v", i, test.name, name))
 		}
 	}
 }
@@ -78,38 +80,66 @@ var substituteTests = []struct {
 	service     keybase1.ProofType
 	a, b        string
 }{
-	{true, true, keybase1.ProofType_TWITTER,
-		"%{username_service}", "kronk"},
-	{true, true, keybase1.ProofType_GENERIC_WEB_SITE,
-		"%{hostname}", "%\\{sig_id_medium\\}"},
-	{true, true, keybase1.ProofType_TWITTER,
-		"x%{username_service}y%{sig_id_short}z", "xkronky000z"},
-	{true, true, keybase1.ProofType_TWITTER,
-		"http://git(?:hub)?%{username_service}/%20%%{sig_id_short}}{}", "http://git(?:hub)?kronk/%20%000}{}"},
-	{true, true, keybase1.ProofType_DNS,
-		"^%{hostname}/(?:.well-known/keybase.txt|keybase.txt)$", "^%\\{sig_id_medium\\}/(?:.well-known/keybase.txt|keybase.txt)$"},
-	{true, true, keybase1.ProofType_TWITTER,
-		"^.*%{sig_id_short}.*$", "^.*000.*$"},
-	{true, true, keybase1.ProofType_TWITTER,
-		"^keybase-site-verification=%{sig_id_short}$", "^keybase-site-verification=000$"},
-	{true, true, keybase1.ProofType_TWITTER,
-		"^%{sig_id_medium}$", "^sig%\\{sig_id_medium\\}\\.\\*\\$\\(\\^\\)\\\\/$"},
-	{true, true, keybase1.ProofType_TWITTER,
-		"%{username_keybase}:%{sig}", "kronk_on_kb:AQIDBAU="},
+	{
+		true, true, keybase1.ProofType_TWITTER,
+		"%{username_service}", "kronk",
+	},
+	{
+		true, true, keybase1.ProofType_GENERIC_WEB_SITE,
+		"%{hostname}", "%\\{sig_id_medium\\}",
+	},
+	{
+		true, true, keybase1.ProofType_TWITTER,
+		"x%{username_service}y%{sig_id_short}z", "xkronky000z",
+	},
+	{
+		true, true, keybase1.ProofType_TWITTER,
+		"http://git(?:hub)?%{username_service}/%20%%{sig_id_short}}{}", "http://git(?:hub)?kronk/%20%000}{}",
+	},
+	{
+		true, true, keybase1.ProofType_DNS,
+		"^%{hostname}/(?:.well-known/keybase.txt|keybase.txt)$", "^%\\{sig_id_medium\\}/(?:.well-known/keybase.txt|keybase.txt)$",
+	},
+	{
+		true, true, keybase1.ProofType_TWITTER,
+		"^.*%{sig_id_short}.*$", "^.*000.*$",
+	},
+	{
+		true, true, keybase1.ProofType_TWITTER,
+		"^keybase-site-verification=%{sig_id_short}$", "^keybase-site-verification=000$",
+	},
+	{
+		true, true, keybase1.ProofType_TWITTER,
+		"^%{sig_id_medium}$", "^sig%\\{sig_id_medium\\}\\.\\*\\$\\(\\^\\)\\\\/$",
+	},
+	{
+		true, true, keybase1.ProofType_TWITTER,
+		"%{username_keybase}:%{sig}", "kronk_on_kb:AQIDBAU=",
+	},
 
-	{false, true, keybase1.ProofType_TWITTER,
-		"%{}", "%{}"},
-	{false, true, keybase1.ProofType_TWITTER,
-		"%{unset}", ""},
+	{
+		false, true, keybase1.ProofType_TWITTER,
+		"%{}", "%{}",
+	},
+	{
+		false, true, keybase1.ProofType_TWITTER,
+		"%{unset}", "",
+	},
 
-	{false, true, keybase1.ProofType_TWITTER,
-		"%{banned}", ""},
+	{
+		false, true, keybase1.ProofType_TWITTER,
+		"%{banned}", "",
+	},
 
 	// regex escape
-	{true, true, keybase1.ProofType_TWITTER,
-		"%{restuff}", "\\[\\(x\\)\\]"},
-	{true, false, keybase1.ProofType_TWITTER,
-		"%{restuff}", "[(x)]"},
+	{
+		true, true, keybase1.ProofType_TWITTER,
+		"%{restuff}", "\\[\\(x\\)\\]",
+	},
+	{
+		true, false, keybase1.ProofType_TWITTER,
+		"%{restuff}", "[(x)]",
+	},
 }
 
 func TestSubstitute(t *testing.T) {
@@ -123,13 +153,11 @@ func TestSubstitute(t *testing.T) {
 		} else {
 			res, err = substituteExact(test.a, state)
 		}
-		if (err == nil) != test.shouldwork {
-			t.Fatalf("%v error mismatch: %v ; %v ; '%v'", i, test.shouldwork, err, res)
-		}
+		require.Equal(t, test.shouldwork, err == nil, "%v error mismatch: %v ; %v ; '%v'", i, test.shouldwork, err, res)
 		if err == nil && res != test.b {
 			t.Logf("%v lens: %v %v", i, len(res), len(test.b))
-			t.Fatalf("%v wrong substitute result\n%v\n%v\n%v",
-				i, test.a, res, test.b)
+			require.FailNow(t, fmt.Sprintf("%v wrong substitute result\n%v\n%v\n%v",
+				i, test.a, res, test.b))
 		}
 	}
 }
@@ -176,9 +204,7 @@ func TestSelectionContents(t *testing.T) {
 		default:
 			out = selectionText(sel)
 		}
-		if out != test.out {
-			t.Fatalf("%v mismatch\n'%v'\n'%v'", i, out, test.out)
-		}
+		require.Equal(t, test.out, out, "%v mismatch\n'%v'\n'%v'", i, out, test.out)
 	}
 }
 
@@ -226,9 +252,7 @@ func TestValidateDomain(t *testing.T) {
 
 	for i, test := range tests {
 		ans := validateDomain(test.s)
-		if ans != test.ok {
-			t.Fatalf("%v mismatch: %v\ngot      : %v\nexpected : %v\n", i, test.s, ans, test.ok)
-		}
+		require.Equal(t, test.ok, ans, "%v mismatch: %v\ngot      : %v\nexpected : %v\n", i, test.s, ans, test.ok)
 	}
 }
 
@@ -251,10 +275,9 @@ func TestValidateProtocol(t *testing.T) {
 
 	for i, test := range tests {
 		a, b := validateProtocol(test.s, test.allowed)
-		if !(a == test.expected && b == test.ok) {
-			t.Fatalf("%v mismatch: %v\ngot      : %v %v\nexpected : %v %v\n",
-				i, test.s, test.expected, test.ok, a, b)
-		}
+		require.False(t, a != test.expected || b != test.ok,
+			"%v mismatch: %v\ngot      : %v %v\nexpected : %v %v\n",
+			i, test.s, test.expected, test.ok, a, b)
 	}
 }
 

@@ -5,6 +5,7 @@
 package libkbfs
 
 import (
+	"context"
 	"os"
 	"testing"
 
@@ -16,13 +17,12 @@ import (
 	"github.com/keybase/client/go/kbfs/tlf"
 	"github.com/keybase/client/go/protocol/keybase1"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/context"
 )
 
 func getMDStorageLength(t *testing.T, s *mdServerTlfStorage, bid kbfsmd.BranchID) int {
-	len, err := s.journalLength(bid)
+	journalLen, err := s.journalLength(bid)
 	require.NoError(t, err)
-	return int(len)
+	return int(journalLen) //nolint:gosec // G115: Test data with bounded values
 }
 
 // TestMDServerTlfStorageBasic copies TestMDServerBasics, but for a
@@ -87,7 +87,7 @@ func TestMDServerTlfStorageBasic(t *testing.T) {
 	rmds := signRMDSForTest(t, codec, signer, brmd)
 	// MDv3 TODO: pass extra metadata
 	_, err = s.put(ctx, uid, verifyingKey, rmds, nil)
-	require.IsType(t, kbfsmd.ServerErrorConflictRevision{}, err)
+	require.ErrorAs(t, err, new(kbfsmd.ServerErrorConflictRevision))
 
 	require.Equal(t, 10, getMDStorageLength(t, s, kbfsmd.NullBranchID))
 
@@ -126,7 +126,7 @@ func TestMDServerTlfStorageBasic(t *testing.T) {
 
 	rmdses, err := s.getRange(ctx, uid, bid, 1, 100)
 	require.NoError(t, err)
-	require.Equal(t, 35, len(rmdses))
+	require.Len(t, rmdses, 35)
 	for i := kbfsmd.Revision(6); i < 16; i++ {
 		require.Equal(t, i, rmdses[i-6].MD.RevisionNumber())
 	}
@@ -144,7 +144,7 @@ func TestMDServerTlfStorageBasic(t *testing.T) {
 
 	rmdses, err = s.getRange(ctx, uid, kbfsmd.NullBranchID, 1, 100)
 	require.NoError(t, err)
-	require.Equal(t, 10, len(rmdses))
+	require.Len(t, rmdses, 10)
 	for i := kbfsmd.Revision(1); i <= 10; i++ {
 		require.Equal(t, i, rmdses[i-1].MD.RevisionNumber())
 	}

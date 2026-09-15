@@ -5,6 +5,7 @@
 package search
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -14,11 +15,11 @@ import (
 	"github.com/keybase/client/go/kbfs/tlf"
 	"github.com/stretchr/testify/require"
 	"github.com/syndtr/goleveldb/leveldb/storage"
-	"golang.org/x/net/context"
 )
 
 func newIndexedTlfDbForTestWithStorage(
-	t *testing.T, tlfS storage.Storage) *IndexedTlfDb {
+	t *testing.T, tlfS storage.Storage,
+) *IndexedTlfDb {
 	config := libkbfs.MakeTestConfigOrBust(t, "user1")
 	db, err := newIndexedTlfDbFromStorage(config, tlfS)
 	require.NoError(t, err)
@@ -26,7 +27,8 @@ func newIndexedTlfDbForTestWithStorage(
 }
 
 func newIndexedTlfDbForTest(t *testing.T) (
-	*IndexedTlfDb, string) {
+	*IndexedTlfDb, string,
+) {
 	// Use a disk-based level, instead of memory storage, because we
 	// want to simulate a restart and memory storages can't be reused.
 	tempdir, err := os.MkdirTemp(os.TempDir(), "indexed_tlfs_db")
@@ -40,7 +42,7 @@ func newIndexedTlfDbForTest(t *testing.T) (
 
 func shutdownIndexedTlfDbTest(db *IndexedTlfDb, tempdir string) {
 	db.Shutdown(context.Background())
-	os.RemoveAll(tempdir)
+	_ = os.RemoveAll(tempdir)
 }
 
 func TestIndexedTlfDbCreate(t *testing.T) {
@@ -81,7 +83,8 @@ func TestIndexedTlfDb(t *testing.T) {
 	getIR1, getSR1, err := db.Get(ctx, tlfID1)
 	require.NoError(t, err)
 	checkWrite := func(
-		expectedIR, ir, expectedSR, sr kbfsmd.Revision) {
+		expectedIR, ir, expectedSR, sr kbfsmd.Revision,
+	) {
 		require.Equal(t, expectedIR, ir)
 		require.Equal(t, expectedSR, sr)
 	}

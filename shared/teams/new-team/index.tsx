@@ -1,106 +1,92 @@
 import * as C from '@/constants'
 import * as React from 'react'
 import * as Kb from '@/common-adapters'
-import openUrl from '@/util/open-url'
+import * as T from '@/constants/types'
+import {openURL as openUrl} from '@/util/misc'
+import upperFirst from 'lodash/upperFirst'
+import {useLoadedTeam} from '../team/use-loaded-team'
+import {createNewTeamAndNavigate} from '@/teams/team-page-actions'
 
-const openSubteamInfo = () => openUrl('https://book.keybase.io/docs/teams/design')
+const openSubteamInfo = () => { void openUrl('https://book.keybase.io/docs/teams/design') }
 
 type Props = {
   baseTeam?: string // if set we're creating a subteam of this teamname
-  errorText: string
-  onCancel: () => void
-  onClearError: () => void
   onSubmit: (fullName: string, joinSubteam: boolean) => void
 }
 
-const CreateNewTeam = (props: Props) => {
+// used in chat too
+export const CreateNewTeam = (props: Props) => {
+  const styles = useStyles()
   const [name, setName] = React.useState('')
   const [joinSubteam, setJoinSubteam] = React.useState(true)
-  const waiting = C.Waiting.useAnyWaiting(C.Teams.teamCreationWaitingKey)
+  const waiting = C.Waiting.useAnyWaiting(C.waitingKeyTeamsCreation)
+  const errorText = upperFirst(C.Waiting.useAnyErrors(C.waitingKeyTeamsCreation)?.message ?? '')
+  const dispatchClearWaiting = C.Waiting.useDispatchClearWaiting()
 
   const {baseTeam, onSubmit} = props
   const isSubteam = !!baseTeam
 
-  const onSubmitCb = React.useCallback(
-    () => (isSubteam ? onSubmit(baseTeam + '.' + name, joinSubteam) : onSubmit(name, false)),
-    [isSubteam, baseTeam, onSubmit, name, joinSubteam]
-  )
+  const onSubmitCb = () => {
+    dispatchClearWaiting(C.waitingKeyTeamsCreation)
+    return isSubteam ? onSubmit(baseTeam + '.' + name, joinSubteam) : onSubmit(name, false)
+  }
   const disabled = name.length < 2
 
-  // clear error we may have hit on unmount
-  const {onClearError} = props
-  React.useEffect(() => () => onClearError(), [onClearError])
-
-  const modalHeader = Kb.useModalHeaderTitleAndCancel('Create a team', props.onCancel)
+  React.useEffect(() => () => dispatchClearWaiting(C.waitingKeyTeamsCreation), [dispatchClearWaiting])
 
   return (
-    <Kb.Modal
-      banners={
-        <>
-          {!isSubteam ? (
-            <Kb.Banner color="blue">
-              For security reasons, team names are unique and can't be changed, so choose carefully.
-            </Kb.Banner>
-          ) : null}
-          {isSubteam ? (
-            <Kb.Banner color="blue">
-              <Kb.BannerParagraph
-                bannerColor="blue"
-                content={[`You are creating a subteam of ${props.baseTeam}.`]}
-              />
-              <Kb.BannerParagraph
-                bannerColor="blue"
-                content={[{onClick: openSubteamInfo, text: 'Learn more'}]}
-              />
-            </Kb.Banner>
-          ) : null}
-          {props.errorText ? <Kb.Banner color="red">{props.errorText}</Kb.Banner> : null}
-        </>
-      }
-      footer={{
-        content: (
-          <Kb.Button
-            waiting={waiting}
-            fullWidth={true}
-            label="Create team"
-            onClick={onSubmitCb}
-            disabled={disabled}
+    <>
+      {!isSubteam ? (
+        <Kb.Banner color="blue">
+          {"For security reasons, team names are unique and can't be changed, so choose carefully."}
+        </Kb.Banner>
+      ) : null}
+      {isSubteam ? (
+        <Kb.Banner color="blue">
+          <Kb.BannerParagraph
+            bannerColor="blue"
+            content={[`You are creating a subteam of ${props.baseTeam}.`]}
           />
-        ),
-      }}
-      header={modalHeader}
-      onClose={props.onCancel}
-    >
-      <Kb.Box2 direction="vertical" fullWidth={true} style={styles.container} gap="tiny">
-        <Kb.LabeledInput
-          placeholder="Name your team"
-          value={name}
-          onChangeText={setName}
-          maxLength={16}
-          disabled={waiting}
-          onEnterKeyDown={disabled ? undefined : onSubmitCb}
-          autoFocus={!Kb.Styles.isMobile /* keyboard can cover the "join subteam" box on mobile */}
-        />
-        {isSubteam && (
-          <Kb.Text type="BodySmall" style={!name && Kb.Styles.globalStyles.opacity0}>
-            This team will be named{' '}
-            <Kb.Text type="BodySmallSemibold" style={styles.wordBreak}>
-              {props.baseTeam}.{name}
+          <Kb.BannerParagraph
+            bannerColor="blue"
+            content={[{onClick: openSubteamInfo, text: 'Learn more'}]}
+          />
+        </Kb.Banner>
+      ) : null}
+      <Kb.ErrorBanner error={errorText} />
+      <Kb.ScrollView alwaysBounceVertical={false} style={Kb.Styles.globalStyles.flexOne}>
+        <Kb.Box2 direction="vertical" fullWidth={true} padding="small" gap="tiny">
+          <Kb.Input3
+            textType="BodySemibold"
+            placeholder="Name your team"
+            value={name}
+            onChangeText={setName}
+            maxLength={16}
+            disabled={waiting}
+            onEnterKeyDown={disabled ? undefined : onSubmitCb}
+            autoFocus={!isMobile /* keyboard can cover the "join subteam" box on mobile */}
+          />
+          {isSubteam && (
+            <Kb.Text type="BodySmall" style={!name && Kb.Styles.globalStyles.opacity0}>
+              This team will be named{' '}
+              <Kb.Text type="BodySmallSemibold" style={styles.wordBreak}>
+                {props.baseTeam}.{name}
+              </Kb.Text>
             </Kb.Text>
-          </Kb.Text>
-        )}
-        {isSubteam && (
-          <Kb.Checkbox checked={joinSubteam} onCheck={setJoinSubteam} label="Join this subteam." />
-        )}
-      </Kb.Box2>
-    </Kb.Modal>
+          )}
+          {isSubteam && (
+            <Kb.Checkbox checked={joinSubteam} onCheck={setJoinSubteam} label="Join this subteam." />
+          )}
+        </Kb.Box2>
+      </Kb.ScrollView>
+      <Kb.ModalFooter>
+        <Kb.Button waiting={waiting} fullWidth={true} label="Create team" onClick={onSubmitCb} disabled={disabled} />
+      </Kb.ModalFooter>
+    </>
   )
 }
 
-const styles = Kb.Styles.styleSheetCreate(() => ({
-  container: {
-    padding: Kb.Styles.globalMargins.small,
-  },
+const useStyles = Kb.Styles.createStyleHook(() => ({
   wordBreak: Kb.Styles.platformStyles({
     isElectron: {
       wordBreak: 'break-all',
@@ -108,4 +94,25 @@ const styles = Kb.Styles.styleSheetCreate(() => ({
   }),
 }))
 
-export default CreateNewTeam
+type OwnProps = {subteamOf?: T.Teams.TeamID}
+
+const CreateNewTeamContainer = (ownProps: OwnProps) => {
+  const subteamOf = ownProps.subteamOf ?? T.Teams.noTeamID
+  const {
+    loading,
+    teamMeta: {teamname: baseTeam},
+  } = useLoadedTeam(subteamOf)
+  const onSubmit = (teamname: string, joinSubteam: boolean) => {
+    void createNewTeamAndNavigate(teamname, joinSubteam)
+  }
+  const props = {
+    baseTeam,
+    onSubmit,
+  }
+  if (subteamOf !== T.Teams.noTeamID && (loading || !baseTeam)) {
+    return <Kb.LoadingScreen type="Large" />
+  }
+  return <CreateNewTeam {...props} />
+}
+
+export default CreateNewTeamContainer

@@ -6,10 +6,6 @@ fmt:
 vet:
 	go vet ./...
 
-# to run splint, first do this:  go get stathat.com/c/splint
-splint:
-	splint -s 100 `find . -name "*.go"`
-
 cover:
 	go test -covermode=count ./...
 
@@ -55,10 +51,7 @@ linux-clear-test-secrets:
 
 GOLANGCI_RUN_OPT = --color auto
 
-golangci-lint-kbfs:
-	go list -f '{{.Dir}}' ./kbfs/... | fgrep -v dokan | xargs realpath --relative-to=. | xargs golangci-lint run $(GOLANGCI_RUN_OPT) --deadline 5m0s
+golangci-lint:
+	golangci-lint run $(GOLANGCI_RUN_OPT) --timeout 30m0s ./...
 
-golangci-lint-nonkbfs:
-	go list -f '{{.Dir}}' ./... | fgrep -v protocol  | fgrep -v kbfs | xargs realpath --relative-to=. | xargs golangci-lint run $(GOLANGCI_RUN_OPT) --deadline 10m0s
-
-.PHONY: test splint fmt lint vet cover testclean coverclient coverdaemon coverengine coverlibcmdline coverlibkb coverclean gen-deps
+.PHONY: test fmt lint vet cover testclean coverclient coverdaemon coverengine coverlibcmdline coverlibkb coverclean gen-deps golangci-lint

@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	gogit "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/keybase/client/go/kbfs/data"
 	"github.com/keybase/client/go/kbfs/libfs"
 	"github.com/keybase/client/go/kbfs/libkbfs"
@@ -19,14 +21,12 @@ import (
 	"github.com/keybase/client/go/protocol/keybase1"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
-	gogit "gopkg.in/src-d/go-git.v4"
-	"gopkg.in/src-d/go-git.v4/plumbing/object"
 )
 
 func TestAutogitNodeWrappersNoRepos(t *testing.T) {
 	ctx, config, cancel, tempdir := initConfigForAutogit(t)
 	defer cancel()
-	defer os.RemoveAll(tempdir)
+	defer func() { _ = os.RemoveAll(tempdir) }()
 	defer libkbfs.CheckConfigAndShutdown(ctx, t, config)
 
 	shutdown := StartAutogit(config, 25)
@@ -50,7 +50,7 @@ func checkAutogitOneFile(t *testing.T, rootFS *libfs.FS) {
 	require.Len(t, fis, 1)
 	f, err := rootFS.Open(".kbfs_autogit/test/foo")
 	require.NoError(t, err)
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	data, err := io.ReadAll(f)
 	require.NoError(t, err)
 	require.Equal(t, "hello", string(data))
@@ -62,13 +62,13 @@ func checkAutogitTwoFiles(t *testing.T, rootFS *libfs.FS) {
 	require.Len(t, fis, 2) // foo and foo2
 	f, err := rootFS.Open(".kbfs_autogit/test/foo")
 	require.NoError(t, err)
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	data, err := io.ReadAll(f)
 	require.NoError(t, err)
 	require.Equal(t, "hello", string(data))
 	f2, err := rootFS.Open(".kbfs_autogit/test/foo2")
 	require.NoError(t, err)
-	defer f2.Close()
+	defer func() { _ = f2.Close() }()
 	data2, err := io.ReadAll(f2)
 	require.NoError(t, err)
 	require.Equal(t, "hello2", string(data2))
@@ -80,7 +80,7 @@ func checkAutogitTwoFiles(t *testing.T, rootFS *libfs.FS) {
 func TestAutogitRepoNode(t *testing.T) {
 	ctx, config, cancel, tempdir := initConfigForAutogit(t)
 	defer cancel()
-	defer os.RemoveAll(tempdir)
+	defer func() { _ = os.RemoveAll(tempdir) }()
 	defer libkbfs.CheckConfigAndShutdown(ctx, t, config)
 
 	am := NewAutogitManager(config, 25)
@@ -98,7 +98,7 @@ func TestAutogitRepoNode(t *testing.T) {
 	t.Log("Init a new repo directly into KBFS.")
 	dotgitFS, _, err := GetOrCreateRepoAndID(ctx, config, h, "test", "")
 	require.NoError(t, err)
-	err = rootFS.MkdirAll("worktree", 0600)
+	err = rootFS.MkdirAll("worktree", 0o600)
 	require.NoError(t, err)
 	worktreeFS, err := rootFS.Chroot("worktree")
 	require.NoError(t, err)
@@ -153,7 +153,7 @@ func TestAutogitRepoNode(t *testing.T) {
 		".kbfs_autogit/test/.kbfs_autogit_branch_dir/" +
 			".kbfs_autogit_branch_test-branch/foo3")
 	require.NoError(t, err)
-	defer f3.Close()
+	defer func() { _ = f3.Close() }()
 	data3, err := io.ReadAll(f3)
 	require.NoError(t, err)
 	require.Equal(t, "hello3", string(data3))
@@ -162,7 +162,7 @@ func TestAutogitRepoNode(t *testing.T) {
 	f4, err := rootFS.Open(
 		".kbfs_autogit/test/.kbfs_autogit_branch_dir^test-branch/foo3")
 	require.NoError(t, err)
-	defer f4.Close()
+	defer func() { _ = f4.Close() }()
 	data4, err := io.ReadAll(f4)
 	require.NoError(t, err)
 	require.Equal(t, "hello3", string(data4))
@@ -170,7 +170,7 @@ func TestAutogitRepoNode(t *testing.T) {
 	t.Logf("Check non-normalized repo name")
 	f5, err := rootFS.Open(".kbfs_autogit/test.git/foo")
 	require.NoError(t, err)
-	defer f5.Close()
+	defer func() { _ = f5.Close() }()
 	data5, err := io.ReadAll(f5)
 	require.NoError(t, err)
 	require.Equal(t, "hello", string(data5))
@@ -182,7 +182,7 @@ func TestAutogitRepoNode(t *testing.T) {
 func TestAutogitRepoNodeReadonly(t *testing.T) {
 	ctx, config, cancel, tempdir := initConfigForAutogit(t)
 	defer cancel()
-	defer os.RemoveAll(tempdir)
+	defer func() { _ = os.RemoveAll(tempdir) }()
 	defer libkbfs.CheckConfigAndShutdown(ctx, t, config)
 
 	am := NewAutogitManager(config, 25)
@@ -200,7 +200,7 @@ func TestAutogitRepoNodeReadonly(t *testing.T) {
 	t.Log("Init a new repo directly into KBFS.")
 	dotgitFS, _, err := GetOrCreateRepoAndID(ctx, config, h, "test", "")
 	require.NoError(t, err)
-	err = rootFS.MkdirAll("worktree", 0600)
+	err = rootFS.MkdirAll("worktree", 0o600)
 	require.NoError(t, err)
 	worktreeFS, err := rootFS.Chroot("worktree")
 	require.NoError(t, err)
@@ -264,7 +264,7 @@ func TestAutogitRepoNodeReadonly(t *testing.T) {
 func TestAutogitCommitFile(t *testing.T) {
 	ctx, config, cancel, tempdir := initConfigForAutogit(t)
 	defer cancel()
-	defer os.RemoveAll(tempdir)
+	defer func() { _ = os.RemoveAll(tempdir) }()
 	defer libkbfs.CheckConfigAndShutdown(ctx, t, config)
 
 	am := NewAutogitManager(config, 25)
@@ -282,7 +282,7 @@ func TestAutogitCommitFile(t *testing.T) {
 	t.Log("Init a new repo directly into KBFS.")
 	dotgitFS, _, err := GetOrCreateRepoAndID(ctx, config, h, "test", "")
 	require.NoError(t, err)
-	err = rootFS.MkdirAll("worktree", 0600)
+	err = rootFS.MkdirAll("worktree", 0o600)
 	require.NoError(t, err)
 	worktreeFS, err := rootFS.Chroot("worktree")
 	require.NoError(t, err)
@@ -308,7 +308,7 @@ func TestAutogitCommitFile(t *testing.T) {
 	f1, err := rootFS.Open(
 		".kbfs_autogit/test.git/" + AutogitCommitPrefix + hash1.String())
 	require.NoError(t, err)
-	defer f1.Close()
+	defer func() { _ = f1.Close() }()
 	data1, err := io.ReadAll(f1)
 	require.NoError(t, err)
 	require.Equal(t, expectedCommit1, string(data1))
@@ -352,7 +352,7 @@ index %s..%s 100644
 	f2, err := rootFS.Open(
 		".kbfs_autogit/test.git/" + AutogitCommitPrefix + hash2.String())
 	require.NoError(t, err)
-	defer f2.Close()
+	defer func() { _ = f2.Close() }()
 	data2, err := io.ReadAll(f2)
 	require.NoError(t, err)
 	require.Equal(t, expectedCommit2, string(data2))

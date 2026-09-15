@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"testing"
 
 	"github.com/keybase/client/go/engine"
@@ -9,7 +10,6 @@ import (
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 	"github.com/keybase/client/go/teams"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/context"
 )
 
 func TestCheckPassphrase(t *testing.T) {
@@ -103,9 +103,11 @@ func TestContactSettingsAPI(t *testing.T) {
 		AllowGoodTeams:       true,
 		AllowFolloweeDegrees: 2,
 		Teams: []keybase1.TeamContactSettings{
-			{TeamID: *teamID,
+			{
+				TeamID:  *teamID,
 				Enabled: true,
-			}},
+			},
+		},
 	}
 	expectedSettings := settings
 	err = handler.UserSetContactSettings(ctx, settings)
@@ -215,7 +217,7 @@ func TestCancelAutoresetWhenRevoked(t *testing.T) {
 
 	err = handler.CancelReset(ctx, 0)
 	require.Error(t, err)
-	require.IsType(t, UserWasLoggedOutError{}, err)
+	require.ErrorAs(t, err, new(UserWasLoggedOutError))
 
 	// `CancelReset` should have logged us out.
 	require.True(t, tc2.G.ActiveDevice.UID().IsNil())

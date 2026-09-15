@@ -48,13 +48,13 @@ func (s ServiceInfo) WriteFile(path string, log logger.Logger) error {
 		return err
 	}
 
-	file := NewFile(path, out, 0644)
+	file := NewFile(path, out, 0o644)
 	return file.Save(log)
 }
 
 // serviceLog is the log interface for ServiceInfo
 type serviceLog interface {
-	Debug(s string, args ...interface{})
+	Debug(s string, args ...any)
 }
 
 func LoadServiceInfo(path string) (*ServiceInfo, error) {

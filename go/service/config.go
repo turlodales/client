@@ -4,6 +4,7 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,8 +12,6 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/keybase/client/go/engine"
 	"github.com/keybase/client/go/install"
@@ -43,6 +42,7 @@ func NewConfigHandler(xp rpc.Transporter, i libkb.ConnectionID, g *libkb.GlobalC
 
 func (h ConfigHandler) GetCurrentStatus(ctx context.Context, sessionID int) (res keybase1.CurrentStatus, err error) {
 	mctx := libkb.NewMetaContext(ctx, h.G()).WithLogTag("CFG")
+	defer mctx.Trace("GetCurrentStatus", &err)()
 	return status.GetCurrentStatus(mctx)
 }
 
@@ -55,7 +55,7 @@ func (h ConfigHandler) GetValue(ctx context.Context, path string) (ret keybase1.
 }
 
 func (h ConfigHandler) getValue(_ context.Context, path string, reader libkb.JSONReader) (ret keybase1.ConfigValue, err error) {
-	var i interface{}
+	var i any
 	i, err = reader.GetInterfaceAtPath(path)
 	if err != nil {
 		return ret, err
@@ -271,7 +271,6 @@ func (h ConfigHandler) SetPath(_ context.Context, arg keybase1.SetPathArg) error
 }
 
 func mergeIntoPath(g *libkb.GlobalContext, p2 string) error {
-
 	svcPath := os.Getenv("PATH")
 	g.Log.Debug("mergeIntoPath: service path = %s", svcPath)
 	g.Log.Debug("mergeIntoPath: merge path   = %s", p2)
@@ -349,22 +348,26 @@ func (h ConfigHandler) WaitForClient(_ context.Context, arg keybase1.WaitForClie
 	return h.G().ConnectionManager.WaitForClientType(arg.ClientType, arg.Timeout.Duration()), nil
 }
 
-func (h ConfigHandler) GetBootstrapStatus(ctx context.Context, sessionID int) (keybase1.BootstrapStatus, error) {
+func (h ConfigHandler) GetBootstrapStatus(ctx context.Context, sessionID int) (res keybase1.BootstrapStatus, err error) {
+	m := libkb.NewMetaContext(ctx, h.G()).WithLogTag("CFG")
+	defer m.Trace("GetBootstrapStatus", &err)()
+	// The GUI gates its first render on this RPC. Wait out the startup login
+	// attempt (which can be slow: leveldb open/recovery, keychain reads) so
+	// we don't report loggedIn=false while it is still in flight.
+	h.svc.awaitInitialLoginAttempt(m, 30*time.Second)
 	eng := engine.NewBootstrap(h.G())
-	m := libkb.NewMetaContext(ctx, h.G())
-	if err := engine.RunEngine2(m, eng); err != nil {
-		return keybase1.BootstrapStatus{}, err
+	if err = engine.RunEngine2(m, eng); err != nil {
+		return res, err
 	}
-	status := eng.Status()
-	h.G().Log.CDebugf(ctx, "GetBootstrapStatus: attempting to get HTTP server address")
-	for i := 0; i < 40; i++ { // wait at most 2 seconds
-		addr, err := h.svc.httpSrv.Addr()
-		if err != nil {
-			h.G().Log.CDebugf(ctx, "GetBootstrapStatus: failed to get HTTP server address: %s", err)
+	res = eng.Status()
+	m.Debug("GetBootstrapStatus: attempting to get HTTP server address")
+	for range 40 { // wait at most 2 seconds
+		addr, addrErr := h.svc.httpSrv.Addr()
+		if addrErr != nil {
+			m.Debug("GetBootstrapStatus: failed to get HTTP server address: %s", addrErr)
 		} else {
-			h.G().Log.CDebugf(ctx, "GetBootstrapStatus: http server: addr: %s token: %s", addr,
-				h.svc.httpSrv.Token())
-			status.HttpSrvInfo = &keybase1.HttpSrvInfo{
+			m.Debug("GetBootstrapStatus: http server: addr: %s token: %s", addr, h.svc.httpSrv.Token())
+			res.HttpSrvInfo = &keybase1.HttpSrvInfo{
 				Address: addr,
 				Token:   h.svc.httpSrv.Token(),
 			}
@@ -372,10 +375,10 @@ func (h ConfigHandler) GetBootstrapStatus(ctx context.Context, sessionID int) (k
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	if status.HttpSrvInfo == nil {
-		h.G().Log.CDebugf(ctx, "GetBootstrapStatus: failed to get HTTP srv info after max attempts")
+	if res.HttpSrvInfo == nil {
+		m.Debug("GetBootstrapStatus: failed to get HTTP srv info after max attempts")
 	}
-	return status, nil
+	return res, nil
 }
 
 func (h ConfigHandler) RequestFollowingAndUnverifiedFollowers(ctx context.Context, sessionID int) error {
@@ -456,13 +459,10 @@ func (h ConfigHandler) GetUpdateInfo2(ctx context.Context, arg keybase1.GetUpdat
 		version = libkb.VersionString()
 	}
 
-	apiArg := libkb.APIArg{
-		Endpoint: "pkg/check",
-		Args: libkb.HTTPArgs{
-			"version":  libkb.S{Val: version},
-			"platform": libkb.S{Val: platform},
-		},
-		RetryCount: 3,
+	apiArg := libkb.NewRetryAPIArg("pkg/check")
+	apiArg.Args = libkb.HTTPArgs{
+		"version":  libkb.S{Val: version},
+		"platform": libkb.S{Val: platform},
 	}
 	var raw rawGetPkgCheck
 	if err = m.G().API.GetDecode(m, apiArg, &raw); err != nil {
@@ -478,13 +478,14 @@ func (h ConfigHandler) GetProxyData(ctx context.Context) (keybase1.ProxyData, er
 	certPinning := config.IsCertPinningEnabled()
 
 	var convertedProxyType keybase1.ProxyType
-	if proxyType == libkb.NoProxy {
+	switch proxyType {
+	case libkb.NoProxy:
 		convertedProxyType = keybase1.ProxyType_No_Proxy
-	} else if proxyType == libkb.HTTPConnect {
+	case libkb.HTTPConnect:
 		convertedProxyType = keybase1.ProxyType_HTTP_Connect
-	} else if proxyType == libkb.Socks {
+	case libkb.Socks:
 		convertedProxyType = keybase1.ProxyType_Socks
-	} else {
+	default:
 		return keybase1.ProxyData{AddressWithPort: "", ProxyType: keybase1.ProxyType_No_Proxy, CertPinning: true},
 			fmt.Errorf("Failed to convert proxy type into a protocol compatible proxy type!")
 	}
@@ -498,13 +499,14 @@ func (h ConfigHandler) SetProxyData(ctx context.Context, arg keybase1.ProxyData)
 	rpcProxyType := arg.ProxyType
 
 	var convertedProxyType libkb.ProxyType
-	if rpcProxyType == keybase1.ProxyType_No_Proxy {
+	switch rpcProxyType {
+	case keybase1.ProxyType_No_Proxy:
 		convertedProxyType = libkb.NoProxy
-	} else if rpcProxyType == keybase1.ProxyType_HTTP_Connect {
+	case keybase1.ProxyType_HTTP_Connect:
 		convertedProxyType = libkb.HTTPConnect
-	} else if rpcProxyType == keybase1.ProxyType_Socks {
+	case keybase1.ProxyType_Socks:
 		convertedProxyType = libkb.Socks
-	} else {
+	default:
 		// Got a bogus proxy type that we couldn't convert to a libkb enum so return an error
 		return fmt.Errorf("failed to convert given proxy type to a native libkb proxy type")
 	}
@@ -579,7 +581,8 @@ func (h ConfigHandler) GenerateWebAuthToken(ctx context.Context) (ret string, er
 }
 
 func (h ConfigHandler) UpdateLastLoggedInAndServerConfig(
-	ctx context.Context, serverConfigPath string) error {
+	ctx context.Context, serverConfigPath string,
+) error {
 	arg := libkb.APIArg{
 		Endpoint:    "user/features",
 		SessionType: libkb.APISessionTypeREQUIRED,
@@ -620,5 +623,5 @@ func (h ConfigHandler) UpdateLastLoggedInAndServerConfig(
 	if err != nil {
 		return err
 	}
-	return libkb.NewFile(serverConfigPath, newBytes, 0644).Save(h.G().Log)
+	return libkb.NewFile(serverConfigPath, newBytes, 0o644).Save(h.G().Log)
 }

@@ -5,21 +5,22 @@
 package libkb
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 
 	"github.com/keybase/go-codec/codec"
-
-	context "golang.org/x/net/context"
 )
 
 // TLFPseudonym is an identifier for a key in a tlf
 type TlfPseudonym [32]byte
 
-type KeyGen int
-type tlfID [16]byte
+type (
+	KeyGen int
+	tlfID  [16]byte
+)
 
 const tlfPseudonymVersion = 1
 

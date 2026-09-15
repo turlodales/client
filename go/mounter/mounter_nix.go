@@ -2,7 +2,6 @@
 // this source code is governed by the included BSD license.
 
 //go:build !windows
-// +build !windows
 
 package mounter
 
@@ -18,7 +17,9 @@ import (
 // Unmount tries to unmount normally and then if force if unsuccessful.
 func Unmount(dir string, force bool, log Log) error {
 	if !force {
+		//nolint:staticcheck // SA4023: err always/never nil depending on GOOS
 		mounted, err := IsMounted(dir, log)
+		//nolint:staticcheck // SA4023: err always/never nil depending on GOOS
 		if err != nil {
 			return err
 		}

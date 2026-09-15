@@ -2,7 +2,6 @@
 // this source code is governed by the included BSD license.
 
 //go:build windows
-// +build windows
 
 package keybase
 
@@ -28,7 +27,8 @@ func TestUpdatePrompt(t *testing.T) {
 	args := []string{
 		fmt.Sprintf("-out=%s", out),
 		fmt.Sprintf("-outPath=%s", outPath),
-		"writeToFile"}
+		"writeToFile",
+	}
 	ctx := newContext(&testConfigPlatform{ProgramPath: programPath, Args: args}, testLog)
 	resp, err := ctx.UpdatePrompt(testUpdate, testOptions, promptOptions)
 	require.NoError(t, err)
@@ -37,7 +37,7 @@ func TestUpdatePrompt(t *testing.T) {
 
 func TestApplyNoAsset(t *testing.T) {
 	ctx := newContext(&testConfigPlatform{}, testLog)
-	tmpDir, err := util.MakeTempDir("TestApplyNoAsset.", 0700)
+	tmpDir, err := util.MakeTempDir("TestApplyNoAsset.", 0o700)
 	defer util.RemoveFileAtPath(tmpDir)
 	require.NoError(t, err)
 	err = ctx.Apply(testUpdate, testOptions, tmpDir)
@@ -47,7 +47,7 @@ func TestApplyNoAsset(t *testing.T) {
 func TestApplyAsset(t *testing.T) {
 	t.Skip() // was flaking
 	ctx := newContext(&testConfigPlatform{}, testLog)
-	tmpDir, err := util.MakeTempDir("TestApplyAsset.", 0700)
+	tmpDir, err := util.MakeTempDir("TestApplyAsset.", 0o700)
 	defer util.RemoveFileAtPath(tmpDir)
 	require.NoError(t, err)
 

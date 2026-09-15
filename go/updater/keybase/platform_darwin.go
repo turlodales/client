@@ -168,8 +168,10 @@ func (c context) IsCheckCommand() bool {
 	return c.isCheckCommand
 }
 
-const serviceInBundlePath = "/Contents/SharedSupport/bin/keybase"
-const kbfsInBundlePath = "/Contents/SharedSupport/bin/kbfs"
+const (
+	serviceInBundlePath = "/Contents/SharedSupport/bin/keybase"
+	kbfsInBundlePath    = "/Contents/SharedSupport/bin/kbfs"
+)
 
 type processPaths struct {
 	serviceProcPath string
@@ -290,7 +292,7 @@ func openAppDarwin(bin string, appPath string, retryDelay time.Duration, log pro
 	// We need to try 10 times because Gatekeeper has some issues, for example,
 	// http://www.openradar.me/23614087
 	var err error
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		err = tryOpen()
 		if err == nil {
 			break
@@ -331,7 +333,7 @@ func (c context) Apply(update updater.Update, options updater.UpdateOptions, tmp
 	case nil:
 	case *os.LinkError:
 		if err.Op == "rename" && err.Old == "/Applications/Keybase.app" {
-			c.log.Infof("The error was a problem renaming (moving) the app, let's trying installing the app via keybase install --components=app which has more privileges")
+			c.log.Infof("The error was a problem renaming (moving) the app, let's trying installing the app via keybase install --components=app which has more privileges: %s", err)
 
 			// Unzip and get source path
 			unzipPath, err := util.UnzipPath(localPath, c.log)

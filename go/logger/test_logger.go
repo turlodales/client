@@ -4,28 +4,28 @@
 package logger
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"time"
 
 	logging "github.com/keybase/go-logging"
-
-	"golang.org/x/net/context"
 )
 
 // TestLogBackend is an interface for logging to a test object (i.e.,
 // a *testing.T).  We define this in order to avoid pulling in the
 // "testing" package in exported code.
 type TestLogBackend interface {
-	Error(args ...interface{})
-	Errorf(format string, args ...interface{})
-	Fatal(args ...interface{})
-	Fatalf(format string, args ...interface{})
-	Log(args ...interface{})
-	Logf(format string, args ...interface{})
+	Error(args ...any)
+	Errorf(format string, args ...any)
+	Fatal(args ...any)
+	Fatalf(format string, args ...any)
+	Log(args ...any)
+	Logf(format string, args ...any)
 	Failed() bool
 	Name() string
 }
@@ -52,11 +52,13 @@ var _ Logger = (*TestLogger)(nil)
 // it there would result in multiple "TEST FAILED" per test.
 // This way has the drawback that when two tests in different packages
 // share a name, only one of their "TEST FAILED" will print.
-var globalFailReportedLock sync.Mutex
-var globalFailReported = make(map[string]struct{})
+var (
+	globalFailReportedLock sync.Mutex
+	globalFailReported     = make(map[string]struct{})
+)
 
 // ctx can be `nil`
-func (log *TestLogger) common(ctx context.Context, lvl logging.Level, useFatal bool, fmts string, arg ...interface{}) {
+func (log *TestLogger) common(ctx context.Context, lvl logging.Level, useFatal bool, fmts string, arg ...any) {
 	if log.log.Failed() {
 		globalFailReportedLock.Lock()
 		name := log.log.Name()
@@ -108,78 +110,85 @@ func (log *TestLogger) prefixCaller(extraDepth int, lvl logging.Level, fmts stri
 		failed, fileLine, lvl, fmts)
 }
 
-func (log *TestLogger) Debug(fmts string, arg ...interface{}) {
+func (log *TestLogger) Debug(fmts string, arg ...any) {
 	log.common(context.TODO(), logging.DEBUG, false, fmts, arg...)
 }
 
 func (log *TestLogger) CDebugf(ctx context.Context, fmts string,
-	arg ...interface{}) {
+	arg ...any,
+) {
 	log.common(ctx, logging.DEBUG, false, fmts, arg...)
 }
 
-func (log *TestLogger) Info(fmts string, arg ...interface{}) {
+func (log *TestLogger) Info(fmts string, arg ...any) {
 	log.common(context.TODO(), logging.INFO, false, fmts, arg...)
 }
 
 func (log *TestLogger) CInfof(ctx context.Context, fmts string,
-	arg ...interface{}) {
+	arg ...any,
+) {
 	log.common(ctx, logging.INFO, false, fmts, arg...)
 }
 
-func (log *TestLogger) Notice(fmts string, arg ...interface{}) {
+func (log *TestLogger) Notice(fmts string, arg ...any) {
 	log.common(context.TODO(), logging.NOTICE, false, fmts, arg...)
 }
 
 func (log *TestLogger) CNoticef(ctx context.Context, fmts string,
-	arg ...interface{}) {
+	arg ...any,
+) {
 	log.common(ctx, logging.NOTICE, false, fmts, arg...)
 }
 
-func (log *TestLogger) Warning(fmts string, arg ...interface{}) {
+func (log *TestLogger) Warning(fmts string, arg ...any) {
 	log.common(context.TODO(), logging.WARNING, false, fmts, arg...)
 }
 
 func (log *TestLogger) CWarningf(ctx context.Context, fmts string,
-	arg ...interface{}) {
+	arg ...any,
+) {
 	log.common(ctx, logging.WARNING, false, fmts, arg...)
 }
 
-func (log *TestLogger) Error(fmts string, arg ...interface{}) {
+func (log *TestLogger) Error(fmts string, arg ...any) {
 	log.common(context.TODO(), logging.ERROR, false, fmts, arg...)
 }
 
-func (log *TestLogger) Errorf(fmts string, arg ...interface{}) {
+func (log *TestLogger) Errorf(fmts string, arg ...any) {
 	log.common(context.TODO(), logging.ERROR, false, fmts, arg...)
 }
 
 func (log *TestLogger) CErrorf(ctx context.Context, fmts string,
-	arg ...interface{}) {
+	arg ...any,
+) {
 	log.common(ctx, logging.ERROR, false, fmts, arg...)
 }
 
-func (log *TestLogger) Critical(fmts string, arg ...interface{}) {
+func (log *TestLogger) Critical(fmts string, arg ...any) {
 	log.common(context.TODO(), logging.CRITICAL, false, fmts, arg...)
 }
 
 func (log *TestLogger) CCriticalf(ctx context.Context, fmts string,
-	arg ...interface{}) {
+	arg ...any,
+) {
 	log.common(ctx, logging.CRITICAL, false, fmts, arg...)
 }
 
-func (log *TestLogger) Fatalf(fmts string, arg ...interface{}) {
+func (log *TestLogger) Fatalf(fmts string, arg ...any) {
 	log.common(context.TODO(), logging.CRITICAL, true, fmts, arg...)
 }
 
 func (log *TestLogger) CFatalf(ctx context.Context, fmts string,
-	arg ...interface{}) {
+	arg ...any,
+) {
 	log.common(ctx, logging.CRITICAL, true, fmts, arg...)
 }
 
-func (log *TestLogger) Profile(fmts string, arg ...interface{}) {
+func (log *TestLogger) Profile(fmts string, arg ...any) {
 	log.common(context.TODO(), logging.CRITICAL, false, fmts, arg...)
 }
 
-func (log *TestLogger) Configure(style string, debug bool, filename string) {
+func (log *TestLogger) Configure(_ string, _ bool, _ string) {
 	// no-op
 }
 
@@ -196,10 +205,5 @@ func (log *TestLogger) CloneWithAddedDepth(depth int) Logger {
 func (log *TestLogger) SetExternalHandler(_ ExternalHandler) {}
 
 func stringListContains(s string, a []string) bool {
-	for _, t := range a {
-		if s == t {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(a, s)
 }

@@ -5,11 +5,10 @@ package client
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"path/filepath"
 	"strings"
-
-	"golang.org/x/net/context"
 
 	"github.com/keybase/cli"
 	"github.com/keybase/client/go/libcmdline"
@@ -107,7 +106,6 @@ func NewCmdSimpleFSList(cl *libcmdline.CommandLine, g *libkb.GlobalContext) cli.
 			},
 		},
 	}
-
 }
 
 // HandleTopLevelKeybaseList - See if this is either /keybase/public or /keybase/private,
@@ -147,7 +145,6 @@ func (c *CmdSimpleFSList) HandleTopLevelKeybaseList(path keybase1.Path) (bool, e
 				DirentType: keybase1.DirentType_DIR,
 			})
 		}
-
 	}
 	err = c.output(result)
 
@@ -156,7 +153,6 @@ func (c *CmdSimpleFSList) HandleTopLevelKeybaseList(path keybase1.Path) (bool, e
 
 // Run runs the command in client/server mode.
 func (c *CmdSimpleFSList) Run() error {
-
 	cli, err := GetSimpleFSClient(c.G())
 	if err != nil {
 		return err

@@ -2,7 +2,6 @@ package search
 
 import (
 	"context"
-	"fmt"
 	"regexp"
 	"sort"
 	"sync"
@@ -37,7 +36,8 @@ type searchSession struct {
 
 func newSearchSession(query, origQuery string, uid gregor1.UID,
 	hitUICh chan chat1.ChatSearchInboxHit, indexUICh chan chat1.ChatSearchIndexStatus,
-	indexer *Indexer, opts chat1.SearchOpts) *searchSession {
+	indexer *Indexer, opts chat1.SearchOpts,
+) *searchSession {
 	if opts.MaxHits > MaxAllowedSearchHits || opts.MaxHits < 0 {
 		opts.MaxHits = MaxAllowedSearchHits
 	}
@@ -80,7 +80,7 @@ func (s *searchSession) incrementNumConvsSearched() {
 // searchConv finds all messages that match the given set of tokens and opts,
 // results are ordered desc by msg id.
 func (s *searchSession) searchConv(ctx context.Context, convID chat1.ConversationID) (msgIDs []chat1.MessageID, err error) {
-	defer s.indexer.Trace(ctx, &err, fmt.Sprintf("searchConv convID: %s", convID))()
+	defer s.indexer.Trace(ctx, &err, "searchConv convID: %s", convID)()
 	var allMsgIDs mapset.Set
 	for token := range s.tokens {
 		matchedIDs := mapset.NewThreadUnsafeSet()
@@ -109,7 +109,8 @@ func (s *searchSession) searchConv(ctx context.Context, convID chat1.Conversatio
 }
 
 func (s *searchSession) getMsgsAndIDSet(ctx context.Context, convID chat1.ConversationID,
-	msgIDs []chat1.MessageID) (mapset.Set, []chat1.MessageUnboxed, error) {
+	msgIDs []chat1.MessageID,
+) (mapset.Set, []chat1.MessageUnboxed, error) {
 	idSet := mapset.NewThreadUnsafeSet()
 	idSetWithContext := mapset.NewThreadUnsafeSet()
 	// Best effort attempt to get surrounding context. We filter out
@@ -120,10 +121,10 @@ func (s *searchSession) getMsgsAndIDSet(ctx context.Context, convID chat1.Conver
 		if s.opts.BeforeContext > 0 {
 			for i := 0; i < s.opts.BeforeContext+MaxContext; i++ {
 				// ensure we don't underflow MessageID which is a uint.
-				if chat1.MessageID(i+1) >= msgID {
+				if chat1.MessageID(i+1) >= msgID { //nolint:gosec // G115: i is bounded by BeforeContext+MaxContext (small config values), safe to convert
 					break
 				}
-				beforeID := msgID - chat1.MessageID(i+1)
+				beforeID := msgID - chat1.MessageID(i+1) //nolint:gosec // G115: i is bounded by BeforeContext+MaxContext (small config values), safe to convert
 				idSetWithContext.Add(beforeID)
 			}
 		}
@@ -132,7 +133,7 @@ func (s *searchSession) getMsgsAndIDSet(ctx context.Context, convID chat1.Conver
 		idSetWithContext.Add(msgID)
 		if s.opts.AfterContext > 0 {
 			for i := 0; i < s.opts.AfterContext+MaxContext; i++ {
-				afterID := msgID + chat1.MessageID(i+1)
+				afterID := msgID + chat1.MessageID(i+1) //nolint:gosec // G115: i is bounded by AfterContext+MaxContext (small config values), safe to convert
 				idSetWithContext.Add(afterID)
 			}
 		}
@@ -161,10 +162,11 @@ func (s *searchSession) getMsgsAndIDSet(ctx context.Context, convID chat1.Conver
 // messages) and match info (for UI highlighting). Results are ordered desc by
 // msg id.
 func (s *searchSession) searchHitsFromMsgIDs(ctx context.Context, conv types.RemoteConversation,
-	msgIDs []chat1.MessageID) (convHits *chat1.ChatSearchInboxHit, err error) {
+	msgIDs []chat1.MessageID,
+) (convHits *chat1.ChatSearchInboxHit, err error) {
 	convID := conv.GetConvID()
 	defer s.indexer.Trace(ctx, &err,
-		fmt.Sprintf("searchHitsFromMsgIDs convID: %s msgIDs: %d", convID, len(msgIDs)))()
+		"searchHitsFromMsgIDs convID: %s msgIDs: %d", convID, len(msgIDs))()
 	if msgIDs == nil {
 		return nil, nil
 	}
@@ -200,7 +202,8 @@ func (s *searchSession) searchHitsFromMsgIDs(ctx context.Context, conv types.Rem
 }
 
 func (s *searchSession) searchHitBatch(ctx context.Context, convID chat1.ConversationID, msgIDs []chat1.MessageID,
-	hits []chat1.ChatSearchHit) (res []chat1.ChatSearchHit, err error) {
+	hits []chat1.ChatSearchHit,
+) (res []chat1.ChatSearchHit, err error) {
 	idSet, msgs, err := s.getMsgsAndIDSet(ctx, convID, msgIDs)
 	if err != nil {
 		return nil, err
@@ -209,18 +212,12 @@ func (s *searchSession) searchHitBatch(ctx context.Context, convID chat1.Convers
 		if idSet.Contains(msg.GetMessageID()) && msg.IsValidFull() && s.opts.Matches(msg) {
 			var afterMessages, beforeMessages []chat1.UIMessage
 			if s.opts.AfterContext > 0 {
-				afterLimit := i - s.opts.AfterContext
-				if afterLimit < 0 {
-					afterLimit = 0
-				}
+				afterLimit := max(i-s.opts.AfterContext, 0)
 				afterMessages = getUIMsgs(ctx, s.indexer.G(), convID, s.uid, msgs[afterLimit:i])
 			}
 
 			if s.opts.BeforeContext > 0 && i < len(msgs)-1 {
-				beforeLimit := i + 1 + s.opts.BeforeContext
-				if beforeLimit >= len(msgs) {
-					beforeLimit = len(msgs)
-				}
+				beforeLimit := min(i+1+s.opts.BeforeContext, len(msgs))
 				beforeMessages = getUIMsgs(ctx, s.indexer.G(), convID, s.uid, msgs[i+1:beforeLimit])
 			}
 
@@ -241,23 +238,19 @@ func (s *searchSession) searchHitBatch(ctx context.Context, convID chat1.Convers
 }
 
 func (s *searchSession) convFullyIndexed(ctx context.Context, conv chat1.Conversation) (bool, error) {
-	md, err := s.indexer.store.GetMetadata(ctx, conv.GetConvID())
-	if err != nil {
-		return false, err
-	}
-	return md.FullyIndexed(conv), nil
+	return s.indexer.store.FullyIndexed(ctx, conv)
 }
 
 func (s *searchSession) updateInboxIndex(ctx context.Context, conv chat1.Conversation) {
 	if err := s.indexer.store.Flush(); err != nil {
 		s.indexer.Debug(ctx, "updateInboxIndex: failed to flush: %s", err)
 	}
-	md, err := s.indexer.store.GetMetadata(ctx, conv.GetConvID())
+	status, err := s.indexer.store.IndexStatus(ctx, conv)
 	if err != nil {
-		s.indexer.Debug(ctx, "updateInboxIndex: unable to GetMetadata %v", err)
+		s.indexer.Debug(ctx, "updateInboxIndex: unable to get index status %v", err)
 		return
 	}
-	s.inboxIndexStatus.addConv(md, conv)
+	s.inboxIndexStatus.addConv(status, conv)
 }
 
 func (s *searchSession) percentIndexed() int {

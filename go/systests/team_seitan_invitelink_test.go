@@ -1,6 +1,7 @@
 package systests
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -9,7 +10,6 @@ import (
 	"github.com/keybase/client/go/teams"
 	"github.com/keybase/clockwork"
 	"github.com/stretchr/testify/require"
-	context "golang.org/x/net/context"
 )
 
 func TestTeamInviteSeitanInvitelinkHappy(t *testing.T) {
@@ -76,7 +76,7 @@ func testTeamInviteSeitanInvitelinkHappy(t *testing.T, implicitAdmin bool) {
 
 	role, err := t0.MemberRole(context.TODO(), teams.NewUserVersion(bob.uid, 1))
 	require.NoError(t, err)
-	require.Equal(t, role, keybase1.TeamRole_WRITER)
+	require.Equal(t, keybase1.TeamRole_WRITER, role)
 }
 
 func TestTeamInviteLinkAfterLeave(t *testing.T) {
@@ -137,7 +137,7 @@ func TestTeamInviteLinkAfterLeave(t *testing.T) {
 	require.Error(t, err, "server won't let bob back in")
 	appErr, ok := err.(libkb.AppStatusError)
 	require.True(t, ok, "got an app err")
-	require.Equal(t, appErr.Code, libkb.SCTeamBanned)
+	require.Equal(t, libkb.SCTeamBanned, appErr.Code)
 
 	t.Logf("alice adds/removes manually to clear ban")
 	alice.addTeamMember(teamName.String(), bob.username, keybase1.TeamRole_WRITER)
@@ -154,7 +154,7 @@ func TestTeamInviteLinkAfterLeave(t *testing.T) {
 	require.NoError(t, err)
 	role, err := t0.MemberRole(context.TODO(), teams.NewUserVersion(bob.uid, 1))
 	require.NoError(t, err)
-	require.Equal(t, role, keybase1.TeamRole_WRITER)
+	require.Equal(t, keybase1.TeamRole_WRITER, role)
 }
 
 func TestCreateSeitanInvitelinkWithDuration(t *testing.T) {

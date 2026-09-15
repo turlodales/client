@@ -1,81 +1,96 @@
-import * as C from '@/constants'
-import * as React from 'react'
+import type * as React from 'react'
 import * as Kb from '@/common-adapters'
 import * as Platform from '@/constants/platform'
 import SyncingFolders from './syncing-folders'
-import {IconWithPopupDesktop as WhatsNewIconWithPopup} from '@/whats-new/icon/container'
-import * as ReactIs from 'react-is'
-import KB2 from '@/util/electron.desktop'
-import shallowEqual from 'shallowequal'
+import KB2 from '@/util/electron'
+import {useConfigState} from '@/stores/config'
+import {useShellState} from '@/stores/shell'
+import type {HeaderBackButtonProps} from '@react-navigation/elements'
+import type {NativeStackHeaderProps} from '@react-navigation/native-stack'
 
 const {closeWindow, minimizeWindow, toggleMaximizeWindow} = KB2.functions
+
+type HeaderTitleProps = {
+  children: React.ReactNode
+  tintColor?: string
+}
+
+type RawOptions = {
+  headerMode?: string
+  title?: React.ReactNode
+  headerTitle?: React.ReactNode | React.JSXElementConstructor<HeaderTitleProps & {params?: unknown}>
+  headerLeft?: React.ReactNode | ((props: HeaderBackButtonProps) => React.ReactNode)
+  headerRight?: React.ReactNode | ((p: {tintColor?: string}) => React.ReactNode)
+  headerRightActions?: React.ReactNode | React.JSXElementConstructor<object>
+  subHeader?: React.ReactNode | React.JSXElementConstructor<object>
+  headerTransparent?: boolean
+  headerShadowVisible?: boolean
+  headerBottomStyle?: Kb.Styles.StylesCrossPlatform
+  headerStyle?: Kb.Styles.CollapsibleStyle
+}
+
+// Same as RawOptions but with the component-constructor variants already rendered to nodes
+type Options = Omit<RawOptions, 'headerTitle' | 'headerRightActions' | 'subHeader'> & {
+  headerTitle?: React.ReactNode
+  headerRightActions?: React.ReactNode
+  subHeader?: React.ReactNode
+}
 
 // A mobile-like header for desktop
 
 // Fix this as we figure out what this needs to be
 type Props = {
   loggedIn: boolean
-  options: {
-    headerMode?: string
-    title?: React.ReactNode
-    headerTitle?: React.ReactNode
-    headerLeft?: React.ReactNode
-    headerRightActions?: React.JSXElementConstructor<{}>
-    subHeader?: React.JSXElementConstructor<{}>
-    headerTransparent?: boolean
-    headerShadowVisible?: boolean
-    headerBottomStyle?: Kb.Styles.StylesCrossPlatform
-    headerStyle?: Kb.Styles.StylesCrossPlatform
-  }
+  options: Options
   back?: boolean
   style?: Kb.Styles._StylesCrossPlatform
   useNativeFrame: boolean
-  params?: unknown
   isMaximized: boolean
   navigation: {
     pop: () => void
   }
 }
 
-const PlainTitle = ({title}: {title: React.ReactNode}) => (
-  <Kb.Box2 direction="horizontal" style={styles.plainContainer}>
-    <Kb.Text style={styles.plainText} type="Header">
-      {title}
-    </Kb.Text>
-  </Kb.Box2>
-)
+const PlainTitle = ({title}: {title: React.ReactNode}) => {
+  const styles = useStyles()
+  return (
+    <Kb.Box2 direction="horizontal" style={styles.plainContainer}>
+      <Kb.Text style={styles.plainText} type="Header">
+        {title}
+      </Kb.Text>
+    </Kb.Box2>
+  )
+}
 
 const SystemButtons = ({isMaximized}: {isMaximized: boolean}) => {
-  const onMinimize = React.useCallback(() => {
+  const styles = useStyles()
+  const onMinimize = () => {
     minimizeWindow?.()
-  }, [])
-  const onToggleMaximizeWindow = React.useCallback(() => {
+  }
+  const onToggleMaximizeWindow = () => {
     toggleMaximizeWindow?.()
-  }, [])
-  const onCloseWindow = React.useCallback(() => {
+  }
+  const onCloseWindow = () => {
     closeWindow?.()
-  }, [])
+  }
   return (
     <Kb.Box2 direction="horizontal">
       <Kb.ClickableBox
         className="hover_background_color_black_05  color_black_50 hover_color_black"
         onClick={onMinimize}
         style={styles.appIconBox}
+        direction="vertical"
       >
-        <Kb.Icon
-          inheritColor={true}
-          onClick={onMinimize}
-          style={styles.appIcon}
-          type="iconfont-app-minimize"
-        />
+        <Kb.Icon color="inherit" onClick={onMinimize} style={styles.appIcon} type="iconfont-app-minimize" />
       </Kb.ClickableBox>
       <Kb.ClickableBox
         className="hover_background_color_black_05 color_black_50 hover_color_black"
         onClick={onToggleMaximizeWindow}
         style={styles.appIconBox}
+        direction="vertical"
       >
         <Kb.Icon
-          inheritColor={true}
+          color="inherit"
           onClick={onToggleMaximizeWindow}
           style={styles.appIcon}
           type={isMaximized ? 'iconfont-app-un-maximize' : 'iconfont-app-maximize'}
@@ -85,26 +100,26 @@ const SystemButtons = ({isMaximized}: {isMaximized: boolean}) => {
         className="hover_background_color_red hover_color_white color_black_50"
         onClick={onCloseWindow}
         style={styles.appIconBox}
+        direction="vertical"
       >
-        <Kb.Icon
-          inheritColor={true}
-          onClick={onCloseWindow}
-          style={styles.appIcon}
-          type="iconfont-app-close"
-        />
+        <Kb.Icon color="inherit" onClick={onCloseWindow} style={styles.appIcon} type="iconfont-app-close" />
       </Kb.ClickableBox>
     </Kb.Box2>
   )
 }
 
-const DesktopHeader = React.memo(function DesktopHeader(p: Props) {
-  const {back, navigation, options, loggedIn, useNativeFrame, params, isMaximized} = p
-  const {headerMode, title, headerTitle, headerRightActions, subHeader} = options
+function DesktopHeader(p: Props) {
+  const styles = useStyles()
+  const theme = Kb.Styles.useTheme()
+  const {back, navigation, options, loggedIn, useNativeFrame, isMaximized} = p
+  const {headerMode, title, headerTitle, headerRight, headerRightActions, subHeader} = options
   const {headerTransparent, headerShadowVisible, headerBottomStyle, headerStyle, headerLeft} = options
 
-  const pop = React.useCallback(() => {
-    back && navigation.pop()
-  }, [back, navigation])
+  const pop = () => {
+    if (back) {
+      navigation.pop()
+    }
+  }
 
   if (headerMode === 'none') {
     return null
@@ -116,26 +131,19 @@ const DesktopHeader = React.memo(function DesktopHeader(p: Props) {
   }
 
   if (headerTitle) {
-    if (React.isValidElement(headerTitle)) {
-      titleNode = headerTitle
-    } else if (ReactIs.isValidElementType(headerTitle)) {
-      const CustomTitle = headerTitle
-      const props = {params} as any
-      titleNode = <CustomTitle {...props}>{title}</CustomTitle>
-    }
+    titleNode = headerTitle
   }
 
   let rightActions: React.ReactNode = null
-  if (ReactIs.isValidElementType(headerRightActions)) {
-    const CustomActions = headerRightActions
-    rightActions = <CustomActions />
+  if (headerRightActions) {
+    rightActions = headerRightActions
+  } else if (typeof headerRight === 'function') {
+    rightActions = headerRight({tintColor: ''})
+  } else if (headerRight) {
+    rightActions = headerRight
   }
 
-  let subHeaderNode: React.ReactNode = null
-  if (ReactIs.isValidElementType(subHeader)) {
-    const CustomSubHeader = subHeader
-    subHeaderNode = <CustomSubHeader />
-  }
+  const subHeaderNode = subHeader ?? null
 
   let style: Kb.Styles.StylesCrossPlatform = null
   if (headerTransparent) {
@@ -145,22 +153,108 @@ const DesktopHeader = React.memo(function DesktopHeader(p: Props) {
   const showDivider = headerShadowVisible !== false
   const windowDecorationsAreNeeded = !Platform.isMac && !useNativeFrame
 
-  // We normally have the back arrow at the top of the screen. It doesn't overlap with the system
-  // icons (minimize etc) because the left nav bar pushes it to the right -- unless you're logged
-  // out, in which case there's no nav bar and they overlap. So, if we're on Mac, and logged out,
-  // push the back arrow down below the system icons.
+  // The whole header normally clears the system icons (traffic lights on Mac) because the left nav
+  // bar pushes it down/right -- unless you're logged out, in which case there's no nav bar and the
+  // header starts at the top-left corner, overlapping them. So, on Mac when logged out, render a top
+  // strip so the back/title/actions row sits below the traffic lights.
+  const loggedOutDarwin = !loggedIn && Platform.isDarwin
   const iconContainerStyle: Kb.Styles.StylesCrossPlatform = Kb.Styles.collapseStyles([
     styles.iconContainer,
     !back && styles.iconContainerInactive,
-    !loggedIn && Platform.isDarwin && styles.iconContainerDarwin,
   ] as const)
   const iconColor = back
-    ? Kb.Styles.globalColors.black_50
+    ? theme.black_50
     : loggedIn
-      ? Kb.Styles.globalColors.black_10
-      : Kb.Styles.globalColors.transparent
+      ? theme.black_10
+      : theme.transparent
 
-  const popupAnchor = React.createRef<Kb.MeasureRef>()
+  const defaultBackButton = (
+    <Kb.ClickableBox
+      className={Kb.Styles.classNames('hover_container', {
+        hover_background_color_black_10: !!back,
+      })}
+      onClick={pop}
+      style={iconContainerStyle}
+      direction="vertical"
+    >
+      <Kb.Icon
+        type="iconfont-arrow-left"
+        color={iconColor}
+        className={Kb.Styles.classNames({hover_contained_color_blackOrBlack: back})}
+      />
+    </Kb.ClickableBox>
+  )
+
+  // headerLeft === null -> no back button; a node/function -> the route owns the back affordance
+  // (and its onClick, e.g. a flow cancel); undefined -> the default arrow that pops the stack.
+  // The header is a window-drag region, so a route-supplied control must be marked clickable or the
+  // OS drag swallows its clicks.
+  let backButton: React.ReactNode
+  if (headerLeft === null) {
+    backButton = null
+  } else if (typeof headerLeft === 'function') {
+    backButton = <Kb.Box2 direction="vertical" style={styles.headerLeftClickable}>{headerLeft({tintColor: iconColor})}</Kb.Box2>
+  } else if (headerLeft !== undefined) {
+    backButton = <Kb.Box2 direction="vertical" style={styles.headerLeftClickable}>{headerLeft}</Kb.Box2>
+  } else {
+    backButton = defaultBackButton
+  }
+
+  // Logged out: a top strip that holds only the system buttons (or, on Mac, just reserves space so the
+  // OS traffic lights have nothing beside them), then a row below with back on the left, title centered,
+  // actions on the right. The side sections share the same flex so the title stays centered regardless
+  // of their widths. Keeping the back/title/actions row in a fixed spot below the strip stops it from
+  // jumping between screens.
+  if (!loggedIn) {
+    const showTopStrip = loggedOutDarwin || windowDecorationsAreNeeded
+    return (
+      <Kb.Box2
+        noShrink={true}
+        direction="vertical"
+        fullWidth={true}
+        style={Kb.Styles.collapseStyles([
+          styles.headerContainer,
+          showDivider && styles.headerBorder,
+          style,
+          headerStyle,
+        ])}
+      >
+        {showTopStrip && (
+          <Kb.Box2
+            direction="horizontal"
+            fullWidth={true}
+            alignItems="center"
+            justifyContent="flex-end"
+            style={styles.loggedOutTopStrip}
+          >
+            {windowDecorationsAreNeeded && <SystemButtons isMaximized={isMaximized} />}
+          </Kb.Box2>
+        )}
+        <Kb.Box2 direction="horizontal" fullWidth={true} alignItems="center" style={styles.singleRow}>
+          <Kb.Box2 direction="horizontal" flex={1} alignItems="center" justifyContent="flex-start">
+            {backButton}
+          </Kb.Box2>
+          {headerTitle ? (
+            titleNode
+          ) : (
+            <Kb.Text type="Header" lineClamp={1}>
+              {title}
+            </Kb.Text>
+          )}
+          <Kb.Box2
+            direction="horizontal"
+            flex={1}
+            alignItems="center"
+            justifyContent="flex-end"
+            style={styles.headerLeftClickable}
+          >
+            {rightActions}
+          </Kb.Box2>
+        </Kb.Box2>
+        {subHeaderNode}
+      </Kb.Box2>
+    )
+  }
 
   return (
     <Kb.Box2 noShrink={true} direction="vertical" fullWidth={true}>
@@ -175,50 +269,33 @@ const DesktopHeader = React.memo(function DesktopHeader(p: Props) {
           headerStyle,
         ])}
       >
-        <Kb.Box2Measure
+        <Kb.Box2
           key="topBar"
           direction="horizontal"
           fullWidth={true}
           style={styles.headerBack}
           alignItems="center"
-          ref={popupAnchor}
         >
           {/* TODO have headerLeft be the back button */}
-          {headerLeft !== null && (
-            <Kb.Box
-              className={Kb.Styles.classNames('hover_container', {
-                hover_background_color_black_10: !!back,
-              })}
-              onClick={pop}
-              style={iconContainerStyle}
-            >
-              <Kb.Icon
-                type="iconfont-arrow-left"
-                color={iconColor}
-                className={Kb.Styles.classNames({hover_contained_color_blackOrBlack: back})}
-                boxStyle={styles.icon}
-              />
-            </Kb.Box>
-          )}
-          <Kb.Box2 direction="horizontal" style={styles.topRightContainer}>
+          {backButton}
+          <Kb.Box2 direction="horizontal" flex={1} justifyContent="flex-end">
             <SyncingFolders
               negative={
-                p.style?.backgroundColor !== Kb.Styles.globalColors.transparent &&
-                p.style?.backgroundColor !== Kb.Styles.globalColors.white
+                p.style?.backgroundColor !== theme.transparent &&
+                p.style?.backgroundColor !== theme.white
               }
             />
-            {loggedIn && <WhatsNewIconWithPopup attachToRef={popupAnchor} />}
             {!title && rightActions}
             {windowDecorationsAreNeeded && <SystemButtons isMaximized={isMaximized} />}
           </Kb.Box2>
-        </Kb.Box2Measure>
+        </Kb.Box2>
         <Kb.Box2
           key="bottomBar"
           direction="horizontal"
           fullWidth={true}
           style={Kb.Styles.collapseStyles([styles.bottom, headerBottomStyle])}
         >
-          <Kb.Box2 direction="horizontal" style={styles.bottomTitle}>
+          <Kb.Box2 direction="horizontal" flex={1} overflow="hidden" style={styles.bottomTitle}>
             {titleNode}
           </Kb.Box2>
           {!!title && rightActions}
@@ -227,10 +304,10 @@ const DesktopHeader = React.memo(function DesktopHeader(p: Props) {
       {subHeaderNode}
     </Kb.Box2>
   )
-})
+}
 
-const styles = Kb.Styles.styleSheetCreate(
-  () =>
+const useStyles = Kb.Styles.createStyleHook(
+  theme =>
     ({
       appIcon: Kb.Styles.platformStyles({
         isElectron: {
@@ -250,9 +327,7 @@ const styles = Kb.Styles.styleSheetCreate(
         },
       }),
       bottom: {height: 40 - 1, maxHeight: 40 - 1}, // for border
-      bottomExpandable: {minHeight: 40 - 1},
-      bottomTitle: {flexGrow: 1, height: '100%', maxHeight: '100%', overflow: 'hidden'},
-      flexOne: {flex: 1},
+      bottomTitle: {height: '100%', maxHeight: '100%'},
       headerBack: Kb.Styles.platformStyles({
         isElectron: {
           alignItems: 'center',
@@ -262,9 +337,7 @@ const styles = Kb.Styles.styleSheetCreate(
         },
       }),
       headerBorder: {
-        borderBottomColor: Kb.Styles.globalColors.black_10,
-        borderBottomWidth: 1,
-        borderStyle: 'solid',
+        ...Kb.Styles.bottomDivider(theme),
       },
       headerContainer: Kb.Styles.platformStyles({
         isElectron: {
@@ -273,22 +346,13 @@ const styles = Kb.Styles.styleSheetCreate(
           containment: 'layout',
         },
       }),
-      icon: Kb.Styles.platformStyles({
-        isElectron: {
-          display: 'inline-block',
-          height: 14,
-          width: 14,
-        },
-      }),
       iconContainer: Kb.Styles.platformStyles({
         common: {
           // Needed to position blue badge
           position: 'relative',
         },
         isElectron: {
-          ...Kb.Styles.desktopStyles.clickable,
           ...Kb.Styles.desktopStyles.windowDraggingClickable,
-          ...Kb.Styles.globalStyles.flexBoxColumn,
           alignItems: 'center',
           borderRadius: Kb.Styles.borderRadius,
           marginLeft: 4,
@@ -296,14 +360,23 @@ const styles = Kb.Styles.styleSheetCreate(
           padding: Kb.Styles.globalMargins.xtiny,
         },
       }),
-      iconContainerDarwin: Kb.Styles.platformStyles({
-        isElectron: {
-          position: 'relative',
-          top: 30,
-        },
-      }),
       iconContainerInactive: Kb.Styles.platformStyles({
         isElectron: {cursor: 'default'},
+      }),
+      headerLeftClickable: Kb.Styles.platformStyles({
+        isElectron: {...Kb.Styles.desktopStyles.windowDraggingClickable},
+      }),
+      loggedOutTopStrip: Kb.Styles.platformStyles({
+        isElectron: {
+          height: 28,
+          paddingRight: Kb.Styles.globalMargins.tiny,
+        },
+      }),
+      singleRow: Kb.Styles.platformStyles({
+        isElectron: {
+          minHeight: 48,
+          ...Kb.Styles.padding(Kb.Styles.globalMargins.tiny),
+        },
       }),
       plainContainer: {
         ...Kb.Styles.globalStyles.flexGrow,
@@ -312,37 +385,53 @@ const styles = Kb.Styles.styleSheetCreate(
       plainText: {
         ...Kb.Styles.globalStyles.flexGrow,
       },
-      topRightContainer: {flex: 1, justifyContent: 'flex-end'},
     }) as const
 )
 
-type HeaderProps = Omit<Props, 'loggedIn' | 'useNativeFrame' | 'isMaximized'>
+type HeaderProps = Omit<Props, 'back' | 'loggedIn' | 'useNativeFrame' | 'isMaximized'> & {
+  back?: NativeStackHeaderProps['back']
+  options: RawOptions
+  params?: unknown
+}
 
-const DesktopHeaderWrapper = (p: HeaderProps) => {
+function DesktopHeaderWrapper(p: HeaderProps) {
   const {options: _options, back, style, params, navigation} = p
-  const useNativeFrame = C.useConfigState(s => s.useNativeFrame)
-  const loggedIn = C.useConfigState(s => s.loggedIn)
-  const isMaximized = C.useConfigState(s => s.windowState.isMaximized)
-
+  const useNativeFrame = useShellState(s => s.useNativeFrame)
+  const loggedIn = useConfigState(s => s.loggedIn)
+  const isMaximized = useShellState(s => s.windowState.isMaximized)
   const {headerMode, title, headerTitle, headerRightActions, subHeader} = _options
-  const {headerTransparent, headerShadowVisible, headerBottomStyle, headerStyle, headerLeft} = _options
-  const next = {
+  const {headerRight, headerTransparent, headerShadowVisible, headerBottomStyle, headerStyle, headerLeft} =
+    _options
+  let headerTitleNode = headerTitle
+  if (typeof headerTitle === 'function') {
+    const HeaderTitle = headerTitle as React.JSXElementConstructor<HeaderTitleProps & {params?: unknown}>
+    headerTitleNode = <HeaderTitle params={params}>{title}</HeaderTitle>
+  }
+
+  let headerRightActionsNode = headerRightActions
+  if (typeof headerRightActions === 'function') {
+    const HeaderRightActions = headerRightActions as React.JSXElementConstructor<object>
+    headerRightActionsNode = <HeaderRightActions />
+  }
+
+  let subHeaderNode = subHeader
+  if (typeof subHeader === 'function') {
+    const SubHeader = subHeader as React.JSXElementConstructor<object>
+    subHeaderNode = <SubHeader />
+  }
+  const options = {
     headerBottomStyle,
     headerLeft,
     headerMode,
-    headerRightActions,
+    headerRight,
+    headerRightActions: headerRightActionsNode,
     headerShadowVisible,
     headerStyle,
-    headerTitle,
+    headerTitle: headerTitleNode,
     headerTransparent,
-    subHeader,
+    subHeader: subHeaderNode,
     title,
   }
-  const optionsRef = React.useRef(next)
-  if (!shallowEqual(next, optionsRef.current)) {
-    optionsRef.current = next
-  }
-  const options = optionsRef.current
 
   return (
     <DesktopHeader
@@ -351,9 +440,8 @@ const DesktopHeaderWrapper = (p: HeaderProps) => {
       key={String(isMaximized)}
       isMaximized={isMaximized}
       options={options}
-      back={back}
+      back={!!back /* not a bool upstream */}
       style={style}
-      params={params}
       navigation={navigation}
     />
   )

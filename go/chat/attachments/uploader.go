@@ -1,6 +1,7 @@
 package attachments
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -20,7 +21,6 @@ import (
 	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/protocol/chat1"
 	"github.com/keybase/client/go/protocol/gregor1"
-	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -104,7 +104,7 @@ func (u *uploaderTaskStorage) statusOutboxIDPath(outboxID chat1.OutboxID) string
 
 func (u *uploaderTaskStorage) file(outboxID chat1.OutboxID, getPath func(chat1.OutboxID) string) (*encrypteddb.EncryptedFile, error) {
 	dir := u.getDir()
-	if err := os.MkdirAll(dir, os.ModePerm); err != nil {
+	if err := os.MkdirAll(dir, libkb.PermDir); err != nil {
 		return nil, err
 	}
 	return encrypteddb.NewFile(u.G().ExternalG(), getPath(outboxID),
@@ -186,7 +186,8 @@ type Uploader struct {
 var _ types.AttachmentUploader = (*Uploader)(nil)
 
 func NewUploader(g *globals.Context, store Store, s3signer s3.Signer,
-	ri func() chat1.RemoteInterface, size int) *Uploader {
+	ri func() chat1.RemoteInterface, size int,
+) *Uploader {
 	u := &Uploader{
 		Contextified:         globals.NewContextified(g),
 		DebugLabeler:         utils.NewDebugLabeler(g.ExternalG(), "Attachments.Uploader", false),
@@ -343,7 +344,8 @@ func (u *Uploader) getTask(ctx context.Context, outboxID chat1.OutboxID) (upload
 }
 
 func (u *Uploader) saveTask(ctx context.Context, uid gregor1.UID, convID chat1.ConversationID,
-	outboxID chat1.OutboxID, title, filename string, metadata []byte, callerPreview *chat1.MakePreviewRes) error {
+	outboxID chat1.OutboxID, title, filename string, metadata []byte, callerPreview *chat1.MakePreviewRes,
+) error {
 	task := uploaderTask{
 		UID:           uid,
 		OutboxID:      outboxID,
@@ -360,7 +362,8 @@ func (u *Uploader) saveTask(ctx context.Context, uid gregor1.UID, convID chat1.C
 }
 
 func (u *Uploader) Register(ctx context.Context, uid gregor1.UID, convID chat1.ConversationID,
-	outboxID chat1.OutboxID, title, filename string, metadata []byte, callerPreview *chat1.MakePreviewRes) (res types.AttachmentUploaderResultCb, err error) {
+	outboxID chat1.OutboxID, title, filename string, metadata []byte, callerPreview *chat1.MakePreviewRes,
+) (res types.AttachmentUploaderResultCb, err error) {
 	defer u.Trace(ctx, &err, "Register(%s)", outboxID)()
 	// Write down the task information
 	if err := u.saveTask(ctx, uid, convID, outboxID, title, filename, metadata, callerPreview); err != nil {
@@ -376,7 +379,8 @@ func (u *Uploader) Register(ctx context.Context, uid gregor1.UID, convID chat1.C
 }
 
 func (u *Uploader) checkAndSetUploading(uploadCtx context.Context, outboxID chat1.OutboxID,
-	uploadCancelFn context.CancelFunc) (upload *activeUpload, inprogress bool) {
+	uploadCancelFn context.CancelFunc,
+) (upload *activeUpload, inprogress bool) {
 	u.Lock()
 	defer u.Unlock()
 	if upload = u.uploads[outboxID.String()]; upload != nil {
@@ -421,7 +425,7 @@ func (u *Uploader) normalizeFilenameFromCache(dir, file string) string {
 func (u *Uploader) uploadFile(ctx context.Context, diskLRU *disklru.DiskLRU, dirname, prefix string) (f *os.File, err error) {
 	baseDir := u.getBaseDir()
 	dir := filepath.Join(baseDir, dirname)
-	if err := os.MkdirAll(dir, os.ModePerm); err != nil {
+	if err := os.MkdirAll(dir, libkb.PermDir); err != nil {
 		return nil, err
 	}
 	f, err = os.CreateTemp(dir, prefix)
@@ -465,8 +469,8 @@ func (u *Uploader) uploadFullFile(ctx context.Context, md chat1.AssetMetadata) (
 }
 
 func (u *Uploader) upload(ctx context.Context, uid gregor1.UID, convID chat1.ConversationID,
-	outboxID chat1.OutboxID, title, filename string, metadata []byte, callerPreview *chat1.MakePreviewRes) (res types.AttachmentUploaderResultCb, err error) {
-
+	outboxID chat1.OutboxID, title, filename string, metadata []byte, callerPreview *chat1.MakePreviewRes,
+) (res types.AttachmentUploaderResultCb, err error) {
 	// Create the errgroup first so we can register the context in the upload map
 	var g *errgroup.Group
 	var cancelFn context.CancelFunc
@@ -715,7 +719,7 @@ func (u *Uploader) getUploadTempDir(version int, outboxID chat1.OutboxID) string
 
 func (u *Uploader) GetUploadTempFile(ctx context.Context, outboxID chat1.OutboxID, filename string) (string, error) {
 	dir := u.getUploadTempDir(u.versionUploaderTemps, outboxID)
-	if err := os.MkdirAll(dir, os.ModePerm); err != nil {
+	if err := os.MkdirAll(dir, libkb.PermDir); err != nil {
 		return "", err
 	}
 	return filepath.Join(dir, filepath.Base(filename)), nil
@@ -730,7 +734,7 @@ func (u *Uploader) GetUploadTempSink(ctx context.Context, filename string) (*os.
 	if err != nil {
 		return nil, nil, err
 	}
-	file, err := os.Create(filename)
+	file, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, libkb.PermFile)
 	if err != nil {
 		return nil, nil, err
 	}

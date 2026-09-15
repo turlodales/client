@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/keybase/client/go/chat/globals"
@@ -8,7 +9,6 @@ import (
 	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/protocol/chat1"
 	"github.com/keybase/client/go/protocol/gregor1"
-	"golang.org/x/net/context"
 )
 
 const readOutboxVersion = 1
@@ -66,7 +66,7 @@ func (o *ReadOutbox) readStorage(ctx context.Context) (res diskReadOutbox) {
 		found, ierr := o.readDiskBox(ctx, o.dbKey(), &res)
 		if ierr != nil {
 			if _, ok := ierr.(libkb.LoginRequiredError); !ok {
-				o.maybeNuke(NewInternalError(ctx, o.DebugLabeler, ierr.Error()), o.dbKey())
+				o.maybeNuke(NewInternalError(ctx, o.DebugLabeler, "%s", ierr.Error()), o.dbKey())
 			}
 			return diskReadOutbox{Version: readOutboxVersion}
 		}

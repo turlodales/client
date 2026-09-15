@@ -2,343 +2,227 @@ import * as C from '@/constants'
 import * as React from 'react'
 import * as Kb from '@/common-adapters'
 import * as T from '@/constants/types'
-import * as FsConstants from '@/constants/fs'
-import * as FsCommon from '@/fs/common'
+import {useNavigation} from '@react-navigation/native'
 import {MobileSendToChat} from '../chat/send-to-chat'
+import {settingsFeedbackTab} from '@/constants/settings'
+import {useConfigState} from '@/stores/config'
+import {useRPCLoad} from '@/util/use-rpc-load'
+import {getInboxConversationMeta} from '@/chat/inbox/metadata'
+import {IncomingShareHeaderTitle} from './routes'
 
-export const OriginalOrCompressedButton = ({incomingShareItems}: IncomingShareProps) => {
-  const originalTotalSize = incomingShareItems.reduce((bytes, item) => bytes + (item.originalSize ?? 0), 0)
-  const scaledTotalSize = incomingShareItems.reduce(
-    (bytes, item) => bytes + (item.scaledSize ?? item.originalSize ?? 0),
-    0
-  )
-  const originalOnly = originalTotalSize <= scaledTotalSize
-  const setUseOriginalInStore = C.useConfigState.getState().dispatch.setIncomingShareUseOriginal
-
-  const setUseOriginalInService = React.useCallback((useOriginal: boolean) => {
-    T.RPCGen.incomingShareSetPreferenceRpcPromise({
-      preference: useOriginal
-        ? {compressPreference: T.RPCGen.IncomingShareCompressPreference.original}
-        : {compressPreference: T.RPCGen.IncomingShareCompressPreference.compressed},
-    })
-      .then(() => {})
-      .catch(() => {})
-  }, [])
-
-  // If it's original only, set original in store.
-  React.useEffect(() => {
-    originalOnly && setUseOriginalInStore(true)
-  }, [originalOnly, setUseOriginalInStore])
-
-  // From service to store, but only if this is not original only.
-  const getRPC = C.useRPC(T.RPCGen.incomingShareGetPreferenceRpcPromise)
-  const syncCompressPreferenceFromServiceToStore = React.useCallback(() => {
-    getRPC(
-      [undefined],
-      pref =>
-        setUseOriginalInStore(pref.compressPreference === T.RPCGen.IncomingShareCompressPreference.original),
-      err => {
-        throw err
-      }
-    )
-  }, [getRPC, setUseOriginalInStore])
-  React.useEffect(() => {
-    !originalOnly && syncCompressPreferenceFromServiceToStore()
-  }, [originalOnly, syncCompressPreferenceFromServiceToStore])
-
-  const useOriginalValue = C.useConfigState(s => s.incomingShareUseOriginal)
-
-  const isLarge = (useOriginalValue ? originalTotalSize : scaledTotalSize) > 1024 * 1024 * 150
-
-  const makePopup = React.useCallback(
-    (p: Kb.Popup2Parms) => {
-      const {hidePopup} = p
-      const setUseOriginalFromUI = (useOriginal: boolean) => {
-        !originalOnly && setUseOriginalInStore(useOriginal)
-        setUseOriginalInService(useOriginal)
-      }
-
-      return (
-        <Kb.FloatingMenu
-          closeOnSelect={true}
-          visible={true}
-          onHidden={hidePopup}
-          items={[
-            {
-              icon: useOriginalValue ? 'iconfont-check' : undefined,
-              onClick: () => setUseOriginalFromUI(true),
-              rightTitle: isLarge ? 'Large file' : undefined,
-              title: `Keep full size (${FsConstants.humanizeBytes(originalTotalSize, 1)})`,
-            },
-            {
-              icon: useOriginalValue ? undefined : 'iconfont-check',
-              onClick: () => setUseOriginalFromUI(false),
-              title: `Compress (${FsConstants.humanizeBytes(scaledTotalSize, 1)})`,
-            },
-          ]}
-        />
-      )
-    },
-    [
-      isLarge,
-      originalTotalSize,
-      scaledTotalSize,
-      useOriginalValue,
-      originalOnly,
-      setUseOriginalInService,
-      setUseOriginalInStore,
-    ]
-  )
-  const {popup, showPopup} = Kb.usePopup2(makePopup)
-
-  if (originalOnly) {
-    return null
-  }
-
-  if (useOriginalValue === undefined) {
-    return <Kb.ProgressIndicator />
-  }
-
-  return (
-    <>
-      <Kb.Icon
-        type="iconfont-gear"
-        padding="tiny"
-        onClick={showPopup}
-        colorOverride={isLarge ? Kb.Styles.globalColors.yellow : undefined}
-      />
-      {popup}
-    </>
-  )
-}
-
-const getContentDescription = (items: ReadonlyArray<T.RPCGen.IncomingShareItem>) => {
+export const getContentDescriptionText = (items: ReadonlyArray<T.RPCGen.IncomingShareItem>): string => {
   if (items.length === 0) {
-    return undefined
+    return ''
   }
   if (items.length > 1) {
-    return items.some(({type}) => type !== items[0]?.type) ? (
-      <Kb.Text type="BodyTiny">{items.length} items</Kb.Text>
-    ) : (
-      <Kb.Text type="BodyTiny">
-        {items.length} {incomingShareTypeToString(items[0]!.type, false, true)}
-      </Kb.Text>
-    )
+    return items.some(({type}) => type !== items[0]?.type)
+      ? `${items.length} items`
+      : `${items.length} ${incomingShareTypeToString(items[0]!.type, true)}`
   }
 
   const item = items[0]
-  if (!item) return undefined
+  if (!item) return ''
 
   if (item.content) {
-    return (
-      <Kb.Text type="BodyTiny" lineClamp={1}>
-        {item.content}
-      </Kb.Text>
-    )
+    return item.content
   }
 
-  // If it's a URL, originalPath is not populated.
   const name = item.originalPath && T.FS.getLocalPathName(item.originalPath)
-  return name ? (
-    <FsCommon.Filename type="BodyTiny" filename={name} />
-  ) : (
-    <Kb.Text type="BodyTiny">1 {incomingShareTypeToString(item.type, false, false)}</Kb.Text>
-  )
-}
-
-const useHeader = (incomingShareItems: ReadonlyArray<T.RPCGen.IncomingShareItem>) => {
-  const clearModals = C.useRouterState(s => s.dispatch.clearModals)
-  const onCancel = () => clearModals()
-  return {
-    leftButton: (
-      <Kb.Text type="BodyBigLink" onClick={onCancel}>
-        Cancel
-      </Kb.Text>
-    ),
-    rightButton: <OriginalOrCompressedButton incomingShareItems={incomingShareItems} />,
-    title: (
-      <Kb.Box2 direction="vertical" fullWidth={true} centerChildren={true}>
-        {getContentDescription(incomingShareItems)}
-        <Kb.Text type="BodyBig">Share to...</Kb.Text>
-      </Kb.Box2>
-    ),
-  }
+  return name || `1 ${incomingShareTypeToString(item.type, false)}`
 }
 
 const useFooter = (incomingShareItems: ReadonlyArray<T.RPCGen.IncomingShareItem>) => {
-  const setIncomingShareSource = C.useFSState(s => s.dispatch.setIncomingShareSource)
-  const navigateAppend = C.useRouterState(s => s.dispatch.navigateAppend)
+  const styles = useStyles()
+  const theme = Kb.Styles.useTheme()
+  const navigateAppend = C.Router2.navigateAppend
   const saveInFiles = () => {
-    setIncomingShareSource(incomingShareItems)
     navigateAppend({
-      props: {
-        // headerRightButton: <OriginalOrCompressedButton incomingShareItems={incomingShareItems} />,
-        index: 0,
+      name: 'destinationPicker',
+      params: {
+        parentPath: T.FS.stringToPath('/keybase'),
+        source: {source: incomingShareItems, type: T.FS.DestinationPickerSource.IncomingShare},
       },
-      selected: 'destinationPicker',
     })
   }
-  return isChatOnly(incomingShareItems)
-    ? undefined
-    : {
-        content: (
-          <Kb.ClickableBox style={styles.footer} onClick={saveInFiles}>
-            <Kb.Icon type="iconfont-file" color={Kb.Styles.globalColors.blue} style={styles.footerIcon} />
-            <Kb.Text type="BodyBigLink">Save in Files</Kb.Text>
-          </Kb.ClickableBox>
-        ),
-      }
+  return isChatOnly(incomingShareItems) ? undefined : (
+    <Kb.ClickableBox direction="horizontal" centerChildren={true} fullWidth={true} onClick={saveInFiles}>
+      <Kb.Icon type="iconfont-file" color={theme.blue} style={styles.footerIcon} />
+      <Kb.Text type="BodyBigLink">Save in Files</Kb.Text>
+    </Kb.ClickableBox>
+  )
 }
 
 type IncomingShareProps = {
   incomingShareItems: ReadonlyArray<T.RPCGen.IncomingShareItem>
 }
 
-const IncomingShare = (props: IncomingShareProps) => {
-  const useOriginalValue = C.useConfigState(s => s.incomingShareUseOriginal)
+type SelectedConversationProps = {
+  selectedConversationIDKey?: T.Chat.ConversationIDKey
+}
+
+const IncomingShare = (props: IncomingShareProps & SelectedConversationProps) => {
+  const navigateAppend = C.Router2.navigateAppend
+  const navigation = useNavigation()
+  // Always the untouched original: trimming and compression happen downstream on
+  // the get-titles screen, so the extension's copy must not be pre-processed.
   const {sendPaths, text} = props.incomingShareItems.reduce(
     ({sendPaths, text}, item) => {
       if (item.content) {
         return {sendPaths, text: item.content}
-      }
-      if (!useOriginalValue && item.scaledPath) {
-        return {sendPaths: [...sendPaths, item.scaledPath], text}
       }
       if (item.originalPath) {
         return {sendPaths: [...sendPaths, item.originalPath], text}
       }
       return {sendPaths, text}
     },
-    {sendPaths: [] as Array<string>, text: undefined as string | undefined}
+    {sendPaths: new Array<string>(), text: undefined as string | undefined}
   )
+
+  // Pre-selected conv: navToThread + attachments directly (skip MobileSendToChat)
+  const selectedConversationIDKey = props.selectedConversationIDKey
+  const canDirectNav = selectedConversationIDKey && T.Chat.isValidConversationIDKey(selectedConversationIDKey)
+  const hasNavigatedRef = React.useRef(false)
+  React.useEffect(() => {
+    if (!canDirectNav || hasNavigatedRef.current) return
+    hasNavigatedRef.current = true
+    if (sendPaths.length > 0) {
+      C.Router2.navigateToThread(selectedConversationIDKey, 'extension')
+      const meta = getInboxConversationMeta(selectedConversationIDKey)
+      const tlfName = meta?.conversationIDKey === selectedConversationIDKey ? meta.tlfname : ''
+      navigateAppend({
+        name: 'chatAttachmentGetTitles',
+        params: {
+          conversationIDKey: selectedConversationIDKey,
+          inputPrefillText: text,
+          pathAndOutboxIDs: sendPaths.map(p => ({
+            path: Kb.Styles.normalizePath(p),
+          })),
+          selectConversationWithReason: 'extension' as const,
+          tlfName,
+        },
+      })
+    } else {
+      C.Router2.navigateToThread(selectedConversationIDKey, 'extension', {
+        intent: text === undefined ? undefined : {text, type: 'injectText'},
+      })
+    }
+  }, [canDirectNav, selectedConversationIDKey, sendPaths, text, navigateAppend])
+
+  const footer = useFooter(props.incomingShareItems)
+  const contentDescription = getContentDescriptionText(props.incomingShareItems)
+
+  React.useEffect(() => {
+    navigation.setOptions({
+      headerTitle: () => <IncomingShareHeaderTitle title={contentDescription} />,
+    })
+    return () => {
+      navigation.setOptions({
+        headerTitle: () => <IncomingShareHeaderTitle />,
+      })
+    }
+  }, [contentDescription, navigation])
+
+  if (canDirectNav) {
+    return <LoadingSpinner />
+  }
+
   return (
-    <Kb.Modal
-      noScrollView={true}
-      header={useHeader(props.incomingShareItems)}
-      footer={useFooter(props.incomingShareItems)}
-    >
-      <Kb.Box2 direction="vertical" fullWidth={true} fullHeight={true}>
-        <Kb.Box2 direction="vertical" fullWidth={true} style={Kb.Styles.globalStyles.flexOne}>
-          <MobileSendToChat isFromShareExtension={true} sendPaths={sendPaths} text={text} />
-        </Kb.Box2>
+    <>
+      <Kb.Box2 direction="vertical" fullWidth={true} fullHeight={true} flex={1}>
+        <MobileSendToChat isFromShareExtension={true} sendPaths={sendPaths} text={text} />
       </Kb.Box2>
-    </Kb.Modal>
+      {footer ? <Kb.ModalFooter>{footer}</Kb.ModalFooter> : null}
+    </>
   )
 }
 
 const IncomingShareError = () => {
-  const clearModals = C.useRouterState(s => s.dispatch.clearModals)
-  const navigateAppend = C.useRouterState(s => s.dispatch.navigateAppend)
+  const clearModals = C.Router2.clearModals
+  const navigateAppend = C.Router2.navigateAppend
   const erroredSendFeedback = () => {
     clearModals()
     navigateAppend({
-      props: {feedback: `iOS share failure`},
-      selected: C.Settings.settingsFeedbackTab,
+      name: settingsFeedbackTab,
+      params: {feedback: `iOS share failure`},
     })
   }
-  const onCancel = () => clearModals()
 
   return (
-    <Kb.Modal
-      header={{
-        leftButton: (
-          <Kb.Text type="BodyBigLink" onClick={onCancel}>
-            Cancel
-          </Kb.Text>
-        ),
-      }}
-    >
-      <Kb.Box2 direction="vertical" fullWidth={true} fullHeight={true} gap="small" centerChildren={true}>
-        <Kb.Text type="BodySmall">Whoops! Something went wrong.</Kb.Text>
-        <Kb.Button label="Please let us know" onClick={erroredSendFeedback} />
-      </Kb.Box2>
-    </Kb.Modal>
-  )
-}
-
-const useIncomingShareItems = () => {
-  const [incomingShareItems, setIncomingShareItems] = React.useState<
-    ReadonlyArray<T.RPCGen.IncomingShareItem>
-  >([])
-  const [incomingShareError, setIncomingShareError] = React.useState<unknown>(undefined)
-
-  // iOS
-  const rpc = C.useRPC(T.RPCGen.incomingShareGetIncomingShareItemsRpcPromise)
-  const getIncomingShareItemsIOS = React.useCallback(() => {
-    if (!C.isIOS) {
-      return
-    }
-
-    rpc(
-      [undefined],
-      items => setIncomingShareItems(items || []),
-      err => setIncomingShareError(err)
-    )
-  }, [rpc, setIncomingShareError, setIncomingShareItems])
-  React.useEffect(getIncomingShareItemsIOS, [getIncomingShareItemsIOS])
-
-  // Android
-  const androidShare = C.useConfigState(s => s.androidShare)
-  const getIncomingShareItemsAndroid = React.useCallback(() => {
-    if (!C.isAndroid || !androidShare) {
-      return
-    }
-
-    const items =
-      androidShare.type === T.RPCGen.IncomingShareType.file
-        ? androidShare.urls.map(u => ({originalPath: u, type: T.RPCGen.IncomingShareType.file}))
-        : [{content: androidShare.text, type: T.RPCGen.IncomingShareType.text}]
-    setIncomingShareItems(items)
-  }, [androidShare, setIncomingShareItems])
-  React.useEffect(getIncomingShareItemsAndroid, [getIncomingShareItemsAndroid])
-
-  return {incomingShareError, incomingShareItems}
-}
-
-const IncomingShareMain = () => {
-  const {incomingShareError, incomingShareItems} = useIncomingShareItems()
-  return incomingShareError ? (
-    <IncomingShareError />
-  ) : incomingShareItems.length ? (
-    <IncomingShare incomingShareItems={incomingShareItems} />
-  ) : (
-    <Kb.Box2 direction="vertical" centerChildren={true} fullHeight={true}>
-      <Kb.ProgressIndicator type="Large" />
+    <Kb.Box2 direction="vertical" fullWidth={true} fullHeight={true} gap="small" centerChildren={true}>
+      <Kb.Text type="BodySmall">Whoops! Something went wrong.</Kb.Text>
+      <Kb.Button label="Please let us know" onClick={erroredSendFeedback} />
     </Kb.Box2>
   )
 }
 
-const styles = Kb.Styles.styleSheetCreate(() => ({
-  footer: {
-    ...Kb.Styles.globalStyles.flexBoxRow,
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '100%',
-  },
+const noShareItems = new Array<T.RPCGen.IncomingShareItem>()
+
+const useIncomingShareItems = () => {
+  const {data: incomingShareItems = noShareItems, error: incomingShareError} = useRPCLoad(
+    T.RPCGen.incomingShareGetIncomingShareItemsRpcPromise,
+    [undefined],
+    {enabled: isIOS, map: items => items || noShareItems}
+  )
+
+  const androidShare = useConfigState(s => s.androidShare)
+  const androidShareItems =
+    isAndroid && androidShare
+      ? androidShare.type === T.RPCGen.IncomingShareType.file
+        ? androidShare.urls.map(u => ({originalPath: u, type: T.RPCGen.IncomingShareType.file}))
+        : [{content: androidShare.text, type: T.RPCGen.IncomingShareType.text}]
+      : undefined
+
+  // The share is consumed by this screen; clear it so a later cold-path
+  // getInitialURL doesn't resurface a stale share (see router-v2/linking.tsx).
+  const setAndroidShare = useConfigState(s => s.dispatch.setAndroidShare)
+  React.useEffect(() => {
+    return () => {
+      if (isAndroid) {
+        setAndroidShare(undefined)
+      }
+    }
+  }, [setAndroidShare])
+
+  return {incomingShareError, incomingShareItems: androidShareItems ?? incomingShareItems}
+}
+
+const LoadingSpinner = () => <Kb.LoadingScreen type="Large" />
+
+const IncomingShareMain = (props: SelectedConversationProps) => {
+  const {incomingShareError, incomingShareItems} = useIncomingShareItems()
+  return incomingShareError ? (
+    <IncomingShareError />
+  ) : incomingShareItems.length ? (
+    <IncomingShare
+      incomingShareItems={incomingShareItems}
+      selectedConversationIDKey={props.selectedConversationIDKey}
+    />
+  ) : (
+    <LoadingSpinner />
+  )
+}
+
+const useStyles = Kb.Styles.createStyleHook(() => ({
   footerIcon: {
     marginRight: Kb.Styles.globalMargins.tiny,
   },
 }))
 
-const incomingShareTypeToString = (
-  type: T.RPCGen.IncomingShareType,
-  capitalize: boolean,
-  plural: boolean
-): string => {
+const incomingShareTypeToString = (type: T.RPCGen.IncomingShareType, plural: boolean): string => {
   switch (type) {
     case T.RPCGen.IncomingShareType.file:
-      return (capitalize ? 'File' : 'file') + (plural ? 's' : '')
+      return 'file' + (plural ? 's' : '')
     case T.RPCGen.IncomingShareType.text:
-      return (capitalize ? 'Text snippet' : 'text snippet') + (plural ? 's' : '')
+      return 'text snippet' + (plural ? 's' : '')
     case T.RPCGen.IncomingShareType.image:
-      return (capitalize ? 'Image' : 'image') + (plural ? 's' : '')
+      return 'image' + (plural ? 's' : '')
     case T.RPCGen.IncomingShareType.video:
-      return (capitalize ? 'Video' : 'video') + (plural ? 's' : '')
+      return 'video' + (plural ? 's' : '')
   }
 }
 
-const isChatOnly = (items?: ReadonlyArray<T.RPCGen.IncomingShareItem>): boolean =>
-  items?.length === 1 &&
+const isChatOnly = (items: ReadonlyArray<T.RPCGen.IncomingShareItem>): boolean =>
+  items.length === 1 &&
   items[0]!.type === T.RPCGen.IncomingShareType.text &&
   !!items[0]!.content &&
   !items[0]!.originalPath

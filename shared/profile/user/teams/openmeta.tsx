@@ -1,20 +1,11 @@
-import Meta from '@/common-adapters/meta'
-import * as Styles from '@/styles'
+import * as Kb from '@/common-adapters'
 
-const Kb = {
-  Meta,
-  Styles,
+const OpenMeta = ({isOpen}: {isOpen: boolean}) => {
+  const styles = useStyles()
+  return isOpen ? <Kb.Meta variant="open" style={styles.meta} /> : null
 }
 
-type Props = {
-  isOpen: boolean
-  style?: Styles.StylesCrossPlatform
-}
-
-const OpenMeta = ({isOpen}: Props) =>
-  isOpen ? <Kb.Meta backgroundColor={Kb.Styles.globalColors.green} title="open" style={styles.meta} /> : null
-
-const styles = Kb.Styles.styleSheetCreate(
+const useStyles = Kb.Styles.createStyleHook(
   () =>
     ({
       meta: {alignSelf: 'center'},

@@ -1,18 +1,19 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 
 	"github.com/keybase/client/go/kbfs/kbfsmd"
 	"github.com/keybase/client/go/kbfs/libkbfs"
 	"github.com/keybase/client/go/kbfs/tlf"
-	"golang.org/x/net/context"
 )
 
 func mdDumpImmutableRMD(ctx context.Context, config libkbfs.Config,
 	replacements replacementMap,
-	irmd libkbfs.ImmutableRootMetadata) error {
+	irmd libkbfs.ImmutableRootMetadata,
+) error {
 	err := mdDumpFillReplacements(
 		ctx, config.Codec(), config.KeybaseService(), config, "md dump",
 		irmd.GetBareRootMetadata(), irmd.Extra(), replacements)
@@ -36,17 +37,18 @@ func mdDumpImmutableRMD(ctx context.Context, config libkbfs.Config,
 func mdDumpChunk(ctx context.Context, config libkbfs.Config,
 	replacements replacementMap, tlfStr, branchStr string,
 	tlfID tlf.ID, branchID kbfsmd.BranchID,
-	start, stop kbfsmd.Revision) error {
-	min := start
-	max := stop
+	start, stop kbfsmd.Revision,
+) error {
+	minRev := start
+	maxRev := stop
 	reversed := false
 	if start > stop {
-		min = stop
-		max = start
+		minRev = stop
+		maxRev = start
 		reversed = true
 	}
 
-	irmds, err := mdGet(ctx, config, tlfID, branchID, min, max)
+	irmds, err := mdGet(ctx, config, tlfID, branchID, minRev, maxRev)
 	if err != nil {
 		return err
 	}
@@ -70,14 +72,14 @@ func mdDumpChunk(ctx context.Context, config libkbfs.Config,
 }
 
 func mdDumpInput(ctx context.Context, config libkbfs.Config,
-	replacements replacementMap, input string) error {
+	replacements replacementMap, input string,
+) error {
 	tlfStr, branchStr, startStr, stopStr, err := mdSplitInput(input)
 	if err != nil {
 		return err
 	}
 
-	tlfID, branchID, start, stop, err :=
-		mdParseInput(ctx, config, tlfStr, branchStr, startStr, stopStr)
+	tlfID, branchID, start, stop, err := mdParseInput(ctx, config, tlfStr, branchStr, startStr, stopStr)
 	if err != nil {
 		return err
 	}
@@ -91,10 +93,7 @@ func mdDumpInput(ctx context.Context, config libkbfs.Config,
 
 	if start <= stop {
 		for chunkStart := start; chunkStart <= stop; chunkStart += maxChunkSize {
-			chunkStop := chunkStart + maxChunkSize - 1
-			if chunkStop > stop {
-				chunkStop = stop
-			}
+			chunkStop := min(chunkStart+maxChunkSize-1, stop)
 			err = mdDumpChunk(ctx, config, replacements, tlfStr, branchStr, tlfID, branchID, chunkStart, chunkStop)
 			if err != nil {
 				return err
@@ -102,10 +101,7 @@ func mdDumpInput(ctx context.Context, config libkbfs.Config,
 		}
 	} else {
 		for chunkStart := start; chunkStart >= stop; chunkStart -= maxChunkSize {
-			chunkStop := chunkStart - maxChunkSize + 1
-			if chunkStop < stop {
-				chunkStop = stop
-			}
+			chunkStop := max(chunkStart-maxChunkSize+1, stop)
 
 			err = mdDumpChunk(ctx, config, replacements, tlfStr, branchStr, tlfID, branchID, chunkStart, chunkStop)
 			if err != nil {

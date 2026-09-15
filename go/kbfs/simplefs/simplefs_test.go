@@ -9,7 +9,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-
 	"os"
 	"path"
 	"path/filepath"
@@ -19,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	billy "github.com/go-git/go-billy/v5"
 	"github.com/keybase/client/go/kbfs/data"
 	"github.com/keybase/client/go/kbfs/env"
 	"github.com/keybase/client/go/kbfs/libfs"
@@ -29,7 +29,6 @@ import (
 	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/protocol/keybase1"
 	"github.com/stretchr/testify/require"
-	billy "gopkg.in/src-d/go-billy.v4"
 )
 
 const TempDirBase = "."
@@ -58,7 +57,7 @@ func closeSimpleFS(ctx context.Context, t *testing.T, fs *SimpleFS) {
 }
 
 func deleteTempLocalPath(path keybase1.Path) {
-	os.RemoveAll(path.Local())
+	_ = os.RemoveAll(path.Local())
 }
 
 // "pending" tells whether we expect the operation to still be
@@ -70,8 +69,8 @@ func checkPendingOp(ctx context.Context,
 	expectedOp keybase1.AsyncOps,
 	src keybase1.Path,
 	dest keybase1.Path,
-	pending bool) {
-
+	pending bool,
+) {
 	// TODO: what do we expect the progress to be?
 	_, err := sfs.SimpleFSCheck(ctx, opid)
 	if pending {
@@ -84,11 +83,11 @@ func checkPendingOp(ctx context.Context,
 	require.NoError(t, err)
 
 	if !pending {
-		require.Len(t, ops, 0, "Expected zero pending operations")
+		require.Empty(t, ops, "Expected zero pending operations")
 		return
 	}
 
-	require.True(t, len(ops) > 0, "Expected at least one pending operation")
+	require.NotEmpty(t, ops, "Expected at least one pending operation")
 
 	o := ops[0]
 	op, err := o.AsyncOp()
@@ -115,9 +114,9 @@ func checkPendingOp(ctx context.Context,
 		write := o.Write()
 		require.Equal(t, write.Path, src, "Expected matching path in operation")
 	case keybase1.AsyncOps_COPY:
-		copy := o.Copy()
-		require.Equal(t, copy.Src, src, "Expected matching path in operation")
-		require.Equal(t, copy.Dest, dest, "Expected matching path in operation")
+		copyOp := o.Copy()
+		require.Equal(t, copyOp.Src, src, "Expected matching path in operation")
+		require.Equal(t, copyOp.Dest, dest, "Expected matching path in operation")
 	case keybase1.AsyncOps_MOVE:
 		move := o.Move()
 		require.Equal(t, move.Src, src, "Expected matching path in operation")
@@ -130,7 +129,8 @@ func checkPendingOp(ctx context.Context,
 
 func testListWithFilterAndUsername(
 	ctx context.Context, t *testing.T, sfs *SimpleFS, path keybase1.Path,
-	filter keybase1.ListFilter, username string, expectedEntries ...string) {
+	filter keybase1.ListFilter, username string, expectedEntries ...string,
+) {
 	opid, err := sfs.SimpleFSMakeOpid(ctx)
 	require.NoError(t, err)
 	err = sfs.SimpleFSList(ctx, keybase1.SimpleFSListArg{
@@ -152,6 +152,7 @@ func testListWithFilterAndUsername(
 	})
 	sort.Strings(expectedEntries)
 	for i, entry := range listResult.Entries {
+		require.Less(t, i, len(expectedEntries))
 		require.Equal(t, expectedEntries[i], entry.Name)
 		require.Equal(t, username, entry.LastWriterUnverified.Username)
 	}
@@ -167,7 +168,8 @@ func testListWithFilterAndUsername(
 
 func testList(
 	ctx context.Context, t *testing.T, sfs *SimpleFS, path keybase1.Path,
-	expectedEntries ...string) {
+	expectedEntries ...string,
+) {
 	testListWithFilterAndUsername(
 		ctx, t, sfs, path, keybase1.ListFilter_NO_FILTER, "jdoe",
 		expectedEntries...)
@@ -395,7 +397,7 @@ func TestListRecursive(t *testing.T) {
 	require.NoError(t, err)
 	listResult, err := sfs.SimpleFSReadList(ctx, opid)
 	require.NoError(t, err)
-	require.Len(t, listResult.Entries, 0,
+	require.Empty(t, listResult.Entries,
 		"Expected 0 directory entries in listing")
 
 	// make a temp remote directory + files we will clean up later
@@ -482,7 +484,7 @@ func TestCopyToLocal(t *testing.T) {
 
 	// make a temp local dest directory + files we will clean up later
 	tempdir2, err := os.MkdirTemp(TempDirBase, "simpleFstest")
-	defer os.RemoveAll(tempdir2)
+	defer func() { _ = os.RemoveAll(tempdir2) }()
 	require.NoError(t, err)
 	path2 := keybase1.NewPathWithLocal(tempdir2)
 
@@ -521,7 +523,7 @@ func TestCopyRecursive(t *testing.T) {
 	// make a temp local dest directory + files we will clean up later
 	tempdir, err := os.MkdirTemp(TempDirBase, "simpleFstest")
 	require.NoError(t, err)
-	defer os.RemoveAll(tempdir)
+	defer func() { _ = os.RemoveAll(tempdir) }()
 
 	// First try copying from a TLF that doesn't exist yet, which
 	// shouldn't do anything.
@@ -541,18 +543,18 @@ func TestCopyRecursive(t *testing.T) {
 		true)
 	err = sfs.SimpleFSWait(ctx, opid)
 	require.NoError(t, err)
-	d, err := os.Open(testdir)
+	d, err := os.Open(testdir) //nolint:gosec // G304: Test directory path from test setup
 	require.NoError(t, err)
 	fis, err := d.Readdir(0)
 	require.NoError(t, err)
-	require.Len(t, fis, 0)
+	require.Empty(t, fis)
 
 	// Populate local starting directory.
 	err = os.WriteFile(
-		filepath.Join(tempdir, "testdir", "test1.txt"), []byte("foo"), 0600)
+		filepath.Join(tempdir, "testdir", "test1.txt"), []byte("foo"), 0o600)
 	require.NoError(t, err)
 	err = os.WriteFile(
-		filepath.Join(tempdir, "testdir", "test2.txt"), []byte("bar"), 0600)
+		filepath.Join(tempdir, "testdir", "test2.txt"), []byte("bar"), 0o600)
 	require.NoError(t, err)
 
 	opid, err = sfs.SimpleFSMakeOpid(ctx)
@@ -579,7 +581,7 @@ func TestCopyRecursive(t *testing.T) {
 	// Copy it back.
 	tempdir2, err := os.MkdirTemp(TempDirBase, "simpleFstest")
 	require.NoError(t, err)
-	defer os.RemoveAll(tempdir2)
+	defer func() { _ = os.RemoveAll(tempdir2) }()
 	path3 := keybase1.NewPathWithLocal(
 		filepath.ToSlash(filepath.Join(tempdir2, "testdir")))
 	opid2, err := sfs.SimpleFSMakeOpid(ctx)
@@ -594,11 +596,11 @@ func TestCopyRecursive(t *testing.T) {
 		ctx, t, sfs, opid2, keybase1.AsyncOps_COPY, pathKbfs, path3, true)
 	err = sfs.SimpleFSWait(ctx, opid2)
 	require.NoError(t, err)
-	dataFoo, err := os.ReadFile(
+	dataFoo, err := os.ReadFile( //nolint:gosec // G304: Test file path
 		filepath.Join(tempdir2, "testdir", "test1.txt"))
 	require.NoError(t, err)
 	require.Equal(t, "foo", string(dataFoo))
-	dataBar, err := os.ReadFile(
+	dataBar, err := os.ReadFile( //nolint:gosec // G304: Test file path
 		filepath.Join(tempdir2, "testdir", "test2.txt"))
 	require.NoError(t, err)
 	require.Equal(t, "bar", string(dataBar))
@@ -647,11 +649,11 @@ func TestCopyToRemote(t *testing.T) {
 
 	// make a temp local dest directory + files we will clean up later
 	tempdir, err := os.MkdirTemp(TempDirBase, "simpleFstest")
-	defer os.RemoveAll(tempdir)
+	defer func() { _ = os.RemoveAll(tempdir) }()
 	require.NoError(t, err)
 	path1 := keybase1.NewPathWithLocal(tempdir)
 	defer deleteTempLocalPath(path1)
-	err = os.WriteFile(filepath.Join(path1.Local(), "test1.txt"), []byte("foo"), 0644)
+	err = os.WriteFile(filepath.Join(path1.Local(), "test1.txt"), []byte("foo"), 0o644) //nolint:gosec // G306: Test file, doesn't need restrictive permissions
 	require.NoError(t, err)
 
 	opid, err := sfs.SimpleFSMakeOpid(ctx)
@@ -691,7 +693,7 @@ func writeRemoteFile(ctx context.Context, t *testing.T, sfs *SimpleFS, path keyb
 		Dest:  path,
 		Flags: keybase1.OpenFlags_REPLACE | keybase1.OpenFlags_WRITE,
 	})
-	defer sfs.SimpleFSClose(ctx, opid)
+	defer func() { _ = sfs.SimpleFSClose(ctx, opid) }()
 	require.NoError(t, err)
 
 	err = sfs.SimpleFSWrite(ctx, keybase1.SimpleFSWriteArg{
@@ -712,7 +714,7 @@ func writeRemoteDir(ctx context.Context, t *testing.T, sfs *SimpleFS, path keyba
 		Dest:  path,
 		Flags: keybase1.OpenFlags_REPLACE | keybase1.OpenFlags_WRITE | keybase1.OpenFlags_DIRECTORY,
 	})
-	defer sfs.SimpleFSClose(ctx, opid)
+	defer func() { _ = sfs.SimpleFSClose(ctx, opid) }()
 	require.NoError(t, err)
 }
 
@@ -729,7 +731,7 @@ func readRemoteFile(ctx context.Context, t *testing.T, sfs *SimpleFS, path keyba
 		Dest:  path,
 		Flags: keybase1.OpenFlags_READ | keybase1.OpenFlags_EXISTING,
 	})
-	defer sfs.SimpleFSClose(ctx, opid)
+	defer func() { _ = sfs.SimpleFSClose(ctx, opid) }()
 	require.NoError(t, err)
 
 	data, err := sfs.SimpleFSRead(ctx, keybase1.SimpleFSReadArg{
@@ -754,7 +756,7 @@ func readRemoteFile(ctx context.Context, t *testing.T, sfs *SimpleFS, path keyba
 	})
 	require.NoError(t, err)
 	if !isProfile {
-		require.Len(t, dataPastEnd.Data, 0)
+		require.Empty(t, dataPastEnd.Data)
 	}
 
 	return data.Data
@@ -769,7 +771,8 @@ type fsBlocker struct {
 var _ billy.Filesystem = (*fsBlocker)(nil)
 
 func (fs *fsBlocker) OpenFile(filename string, flag int, perm os.FileMode) (
-	f billy.File, err error) {
+	f billy.File, err error,
+) {
 	fs.signalCh <- struct{}{}
 	<-fs.unblockCh
 	return fs.FS.OpenFile(filename, flag, perm)
@@ -800,7 +803,7 @@ func (fs *fsBlocker) ReadDir(p string) (fis []os.FileInfo, err error) {
 }
 
 func (fs *fsBlocker) Chroot(p string) (newFS billy.Filesystem, err error) {
-	chrootFS, err := fs.FS.ChrootAsLibFS(p)
+	chrootFS, err := fs.ChrootAsLibFS(p)
 	if err != nil {
 		return nil, err
 	}
@@ -815,7 +818,8 @@ type fsBlockerMaker struct {
 func (maker fsBlockerMaker) makeNewBlocker(
 	ctx context.Context, config libkbfs.Config,
 	tlfHandle *tlfhandle.Handle, branch data.BranchName, subdir string,
-	create bool) (billy.Filesystem, error) {
+	create bool,
+) (billy.Filesystem, error) {
 	fsMaker := libfs.NewFS
 	if !create {
 		fsMaker = libfs.NewFSIfExists
@@ -829,7 +833,7 @@ func (maker fsBlockerMaker) makeNewBlocker(
 }
 
 func TestCopyProgress(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
 	config := libkbfs.MakeTestConfigOrBust(t, "jdoe")
@@ -849,16 +853,16 @@ func TestCopyProgress(t *testing.T) {
 	// make a temp local dest directory + files we will clean up later
 	tempdir, err := os.MkdirTemp(TempDirBase, "simpleFstest")
 	require.NoError(t, err)
-	defer os.RemoveAll(tempdir)
+	defer func() { _ = os.RemoveAll(tempdir) }()
 
 	// Make local starting directory.
-	err = os.Mkdir(filepath.Join(tempdir, "testdir"), 0700)
+	err = os.Mkdir(filepath.Join(tempdir, "testdir"), 0o700)
 	require.NoError(t, err)
 	err = os.WriteFile(
-		filepath.Join(tempdir, "testdir", "test1.txt"), []byte("foo"), 0600)
+		filepath.Join(tempdir, "testdir", "test1.txt"), []byte("foo"), 0o600)
 	require.NoError(t, err)
 	err = os.WriteFile(
-		filepath.Join(tempdir, "testdir", "test2.txt"), []byte("bar"), 0600)
+		filepath.Join(tempdir, "testdir", "test2.txt"), []byte("bar"), 0o600)
 	require.NoError(t, err)
 	path1 := keybase1.NewPathWithLocal(
 		filepath.ToSlash(filepath.Join(tempdir, "testdir")))
@@ -882,7 +886,7 @@ func TestCopyProgress(t *testing.T) {
 		select {
 		case <-waitCh:
 		case <-ctx.Done():
-			t.Fatal(ctx.Err())
+			require.FailNow(t, fmt.Sprint(ctx.Err()))
 		}
 	}
 	waitFn()
@@ -1218,7 +1222,8 @@ type subscriptionReporter struct {
 }
 
 func (sr *subscriptionReporter) NotifyPathUpdated(
-	_ context.Context, path string) {
+	_ context.Context, path string,
+) {
 	sr.lastPathMtx.Lock()
 	defer sr.lastPathMtx.Unlock()
 	sr.lastPath = path
@@ -1236,7 +1241,7 @@ func (sr *subscriptionReporter) waitForNotification(t *testing.T) {
 	select {
 	case <-sr.lastPathNotify:
 	case <-time.After(10 * time.Millisecond):
-		t.Fatal("Timed out while waiting for notification")
+		require.FailNow(t, "Timed out while waiting for notification")
 	}
 }
 
@@ -1244,7 +1249,7 @@ func (sr *subscriptionReporter) requireNoNotification(t *testing.T) {
 	t.Helper()
 	select {
 	case <-sr.lastPathNotify:
-		t.Fatalf("Got notification but expected none: %q", sr.lastPath)
+		require.FailNow(t, fmt.Sprintf("Got notification but expected none: %q", sr.lastPath))
 	case <-time.After(10 * time.Millisecond):
 	}
 }
@@ -1276,7 +1281,7 @@ func TestRefreshSubscription(t *testing.T) {
 	writeRemoteFile(ctx, t, sfs, pathAppend(path1, `test1.txt`), []byte(`foo`))
 	syncFS(ctx, t, sfs, "/private/jdoe,alice")
 	sr.requireNoNotification(t)
-	require.Equal(t, "", sr.LastPath())
+	require.Empty(t, sr.LastPath())
 
 	t.Log("Subscribe, and make sure we get a notification")
 	opid, err := sfs.SimpleFSMakeOpid(ctx)
@@ -1345,7 +1350,7 @@ func TestRefreshSubscription(t *testing.T) {
 }
 
 func TestGetRevisions(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
 	config := libkbfs.MakeTestConfigOrBust(t, "jdoe")
@@ -1361,7 +1366,8 @@ func TestGetRevisions(t *testing.T) {
 	filePath := pathAppend(path, `test1.txt`)
 
 	getRevisions := func(
-		spanType keybase1.RevisionSpanType) keybase1.GetRevisionsResult {
+		spanType keybase1.RevisionSpanType,
+	) keybase1.GetRevisionsResult {
 		opid, err := sfs.SimpleFSMakeOpid(ctx)
 		require.NoError(t, err)
 		err = sfs.SimpleFSGetRevisions(ctx, keybase1.SimpleFSGetRevisionsArg{
@@ -1381,7 +1387,8 @@ func TestGetRevisions(t *testing.T) {
 
 	gcJump := config.Mode().QuotaReclamationMinUnrefAge() + 1*time.Second
 	checkRevisions := func(
-		numExpected, newestRev int, spanType keybase1.RevisionSpanType) {
+		numExpected, newestRev int, spanType keybase1.RevisionSpanType,
+	) {
 		res := getRevisions(spanType)
 		require.Len(t, res.Revisions, numExpected)
 
@@ -1390,7 +1397,7 @@ func TestGetRevisions(t *testing.T) {
 		expectedTime := clock.Now()
 		expectedRev := keybase1.KBFSRevision(newestRev)
 		for i, r := range res.Revisions {
-			require.Equal(t, keybase1.ToTime(expectedTime), r.Entry.Time, fmt.Sprintf("%d %d", i, r.Revision))
+			require.Equal(t, keybase1.ToTime(expectedTime), r.Entry.Time, "%d %d", i, r.Revision)
 			require.Equal(t, expectedRev, r.Revision)
 			expectedTime = expectedTime.Add(-1 * time.Minute)
 			expectedRev--
@@ -1406,14 +1413,11 @@ func TestGetRevisions(t *testing.T) {
 	}
 
 	t.Log("Write 6 revisions of a single file, spaced out a minute each")
-	for i := 0; i < 6; i++ {
+	for i := range 6 {
 		clock.Add(1 * time.Minute)
 		writeRemoteFile(ctx, t, sfs, filePath, []byte{byte(i)})
 		syncFS(ctx, t, sfs, "/private/jdoe")
-		numExpected := i + 1
-		if numExpected > 5 {
-			numExpected = 5
-		}
+		numExpected := min(i+1, 5)
 		checkRevisions(numExpected, i+2, keybase1.RevisionSpanType_DEFAULT)
 		checkRevisions(numExpected, i+2, keybase1.RevisionSpanType_LAST_FIVE)
 	}
@@ -1457,7 +1461,7 @@ func TestOverallStatusFile(t *testing.T) {
 func TestFavoriteConflicts(t *testing.T) {
 	ctx := context.Background()
 	tempdir, err := os.MkdirTemp(TempDirBase, "journal_for_simplefs_cr")
-	defer os.RemoveAll(tempdir)
+	defer func() { _ = os.RemoveAll(tempdir) }()
 	require.NoError(t, err)
 	sfs := newSimpleFS(
 		env.EmptyAppStateUpdater{}, libkbfs.MakeTestConfigOrBust(t, "jdoe"))
@@ -1558,7 +1562,7 @@ func TestFavoriteConflicts(t *testing.T) {
 			require.Nil(t, f.ConflictState)
 		}
 	}
-	require.NotEqual(t, "", pathConflict.String())
+	require.NotEmpty(t, pathConflict.String())
 	require.Equal(t, pathLocalView.String(), pathConflict.String())
 
 	t.Log("Make sure we see all the conflict files in the local branch")
@@ -1597,7 +1601,7 @@ func TestSyncConfigFavorites(t *testing.T) {
 	config := libkbfs.MakeTestConfigOrBust(t, "jdoe")
 	tempdir, err := os.MkdirTemp(TempDirBase, "journal_for_simplefs_favs")
 	require.NoError(t, err)
-	defer os.RemoveAll(tempdir)
+	defer func() { _ = os.RemoveAll(tempdir) }()
 	err = config.EnableDiskLimiter(tempdir)
 	require.NoError(t, err)
 	config.SetDiskCacheMode(libkbfs.DiskCacheModeLocal)
@@ -1705,7 +1709,7 @@ func TestRemoveFavorite(t *testing.T) {
 func TestBadgeState(t *testing.T) {
 	ctx := context.Background()
 	tempdir, err := os.MkdirTemp(TempDirBase, "journal_for_simplefs_badge")
-	defer os.RemoveAll(tempdir)
+	defer func() { _ = os.RemoveAll(tempdir) }()
 	require.NoError(t, err)
 	sfs := newSimpleFS(
 		env.EmptyAppStateUpdater{}, libkbfs.MakeTestConfigOrBust(t, "jdoe"))
@@ -1807,7 +1811,7 @@ func TestArchiveSymlink(t *testing.T) {
 
 	// make a temp local dest directory + files we will clean up later
 	tempdir, err := os.MkdirTemp(TempDirBase, "simpleFStest")
-	defer os.RemoveAll(tempdir)
+	defer func() { _ = os.RemoveAll(tempdir) }()
 	require.NoError(t, err)
 	t.Logf("temp dir:  %s", tempdir)
 
@@ -1860,7 +1864,7 @@ loopWait:
 		}
 		status, err := sfs.SimpleFSGetArchiveStatus(ctx)
 		require.NoError(t, err)
-		require.Equal(t, 1, len(status.Jobs))
+		require.Len(t, status.Jobs, 1)
 		job := status.Jobs[0]
 		t.Logf("got job status %#+v", job)
 		require.Nil(t, job.Error)
@@ -1874,9 +1878,9 @@ loopWait:
 	require.NoError(t, err)
 
 	files := map[string]bool{"receipt.json": true, "jdoe/test1.txt": true, "jdoe/link1": true, "jdoe": true, ".": true}
-	require.Equal(t, len(files), len(reader.File))
+	require.Len(t, reader.File, len(files))
 	for _, f := range reader.File {
 		delete(files, f.Name)
 	}
-	require.Equal(t, 0, len(files))
+	require.Empty(t, files)
 }

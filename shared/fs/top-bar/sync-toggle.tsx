@@ -1,22 +1,118 @@
+import * as C from '@/constants'
+import * as T from '@/constants/types'
 import * as React from 'react'
 import * as Kb from '@/common-adapters'
-import * as T from '@/constants/types'
+import {useFsErrorActionOrThrow, useFsFolderChildren, useFsRefreshTlf, useFsTlf} from '../common'
+import * as FS from '@/constants/fs'
 
-export type Props = {
-  disableSync: () => void
-  enableSync: () => void
-  hideSyncToggle: boolean
-  syncConfig?: T.FS.TlfSyncConfig
-  waiting: boolean
+type OwnProps = {
+  tlfPath: T.FS.Path
 }
 
-const Confirm = (props: Pick<Props, 'waiting' | 'disableSync'> & {showPopup: () => void}) => {
+const setTlfSyncConfigRPC = async (
+  tlfPath: T.FS.Path,
+  enabled: boolean,
+  refreshTlf: () => void,
+  errorToActionOrThrow: (error: unknown, path?: T.FS.Path) => void
+) => {
+  try {
+    await T.RPCGen.SimpleFSSimpleFSSetFolderSyncConfigRpcPromise(
+      {
+        config: {mode: enabled ? T.RPCGen.FolderSyncMode.enabled : T.RPCGen.FolderSyncMode.disabled},
+        path: FS.pathToRPCPath(tlfPath),
+      },
+      C.waitingKeyFSSyncToggle
+    )
+    refreshTlf()
+  } catch (error) {
+    errorToActionOrThrow(error, tlfPath)
+  }
+}
+
+const SyncToggle = (ownProps: OwnProps) => {
+  const styles = useStyles()
+  const {tlfPath} = ownProps
+  const tlfPathItem = useFsFolderChildren(tlfPath)
+  const tlf = useFsTlf(tlfPath)
+  const errorToActionOrThrow = useFsErrorActionOrThrow()
+  const refreshTlf = useFsRefreshTlf(tlfPath)
+  const waiting = C.Waiting.useAnyWaiting(C.waitingKeyFSSyncToggle)
+
+  const setTlfSyncConfig = (enabled: boolean) => {
+    C.ignorePromise(setTlfSyncConfigRPC(tlfPath, enabled, refreshTlf, errorToActionOrThrow))
+  }
+
+  const enableSync = () => {
+    setTlfSyncConfig(true)
+  }
+  const syncConfig = tlf.syncConfig
+  // Disable sync when the TLF is empty and it's not enabled yet.
+  // Band-aid fix for when new user has a non-exisitent TLF which we
+  // can't enable sync for yet.
+  const hideSyncToggle =
+    syncConfig.mode === T.FS.TlfSyncMode.Disabled &&
+    tlfPathItem.type === T.FS.PathType.Folder &&
+    !tlfPathItem.children.size
+
+  const makePopup = (p: Kb.Popup2Parms) => {
+    const {attachTo, hidePopup, showPopup} = p
+    const disableSync = () => {
+      setTlfSyncConfig(false)
+    }
+    return (
+      <Kb.FloatingMenu
+        attachTo={attachTo}
+        visible={true}
+        onHidden={hidePopup}
+        position="bottom left"
+        closeOnSelect={false}
+        containerStyle={styles.floating}
+        header={<Confirm waiting={waiting} disableSync={disableSync} showPopup={showPopup} />}
+        items={
+          isMobile
+            ? [
+                {
+                  danger: true,
+                  disabled: waiting,
+                  icon: 'iconfont-cloud',
+                  inProgress: waiting,
+                  onClick: disableSync,
+                  style: waiting ? {opacity: 0.3} : undefined,
+                  title: waiting ? 'Unsyncing' : 'Yes, unsync',
+                } as const,
+              ]
+            : []
+        }
+      />
+    )
+  }
+  const {showPopup, showingPopup, popup, popupAnchor} = Kb.usePopup2(makePopup)
+  return !hideSyncToggle ? (
+    <>
+      <Kb.Switch
+        align="right"
+        onClick={syncConfig.mode === T.FS.TlfSyncMode.Enabled ? showPopup : enableSync}
+        on={syncConfig.mode === T.FS.TlfSyncMode.Enabled}
+        color="green"
+        label="Sync on this device"
+        ref={popupAnchor}
+        disabled={waiting}
+      />
+      {showingPopup && popup}
+    </>
+  ) : null
+}
+
+const Confirm = (props: {showPopup: () => void; disableSync: () => void; waiting: boolean}) => {
+  const styles = useStyles()
   const {showPopup, waiting, disableSync} = props
   const wasWaiting = React.useRef(waiting)
-  if (wasWaiting.current !== waiting) {
-    wasWaiting.current = waiting
-    showPopup()
-  }
+  React.useEffect(() => {
+    if (wasWaiting.current !== waiting) {
+      wasWaiting.current = waiting
+      showPopup()
+    }
+  }, [waiting, showPopup])
   return (
     <Kb.Box2 direction="vertical" style={styles.popupContainer} centerChildren={true}>
       <Kb.Text key="title" type="BodyBig">
@@ -25,7 +121,7 @@ const Confirm = (props: Pick<Props, 'waiting' | 'disableSync'> & {showPopup: () 
       <Kb.Text key="explain" type="BodySmall" center={true} style={styles.explainText}>
         This will delete your local copies of all the files in this folder.
       </Kb.Text>
-      {!Kb.Styles.isMobile && (
+      {!isMobile && (
         <Kb.Box2
           direction="horizontal"
           style={styles.popupButtonContainer}
@@ -56,58 +152,7 @@ const Confirm = (props: Pick<Props, 'waiting' | 'disableSync'> & {showPopup: () 
   )
 }
 
-const SyncToggle = (props: Props) => {
-  const {waiting, disableSync} = props
-  const makePopup = React.useCallback(
-    (p: Kb.Popup2Parms) => {
-      const {attachTo, hidePopup, showPopup} = p
-      return (
-        <Kb.FloatingMenu
-          attachTo={attachTo}
-          visible={true}
-          onHidden={hidePopup}
-          position="bottom left"
-          closeOnSelect={false}
-          containerStyle={styles.floating}
-          header={<Confirm waiting={waiting} disableSync={disableSync} showPopup={showPopup} />}
-          items={
-            Kb.Styles.isMobile
-              ? [
-                  {
-                    danger: true,
-                    disabled: waiting,
-                    icon: 'iconfont-cloud',
-                    inProgress: waiting,
-                    onClick: disableSync,
-                    style: waiting ? {opacity: 0.3} : undefined,
-                    title: waiting ? 'Unsyncing' : 'Yes, unsync',
-                  } as const,
-                ]
-              : []
-          }
-        />
-      )
-    },
-    [disableSync, waiting]
-  )
-  const {showPopup, showingPopup, popup, popupAnchor} = Kb.usePopup2(makePopup)
-  return props.syncConfig && !props.hideSyncToggle ? (
-    <>
-      <Kb.Switch
-        align="right"
-        onClick={props.syncConfig.mode === T.FS.TlfSyncMode.Enabled ? showPopup : props.enableSync}
-        on={props.syncConfig.mode === T.FS.TlfSyncMode.Enabled}
-        color="green"
-        label="Sync on this device"
-        ref={popupAnchor}
-        disabled={props.waiting}
-      />
-      {showingPopup && popup}
-    </>
-  ) : null
-}
-
-const styles = Kb.Styles.styleSheetCreate(
+const useStyles = Kb.Styles.createStyleHook(
   () =>
     ({
       explainText: Kb.Styles.platformStyles({
@@ -129,8 +174,7 @@ const styles = Kb.Styles.styleSheetCreate(
       popupContainer: Kb.Styles.platformStyles({
         common: {
           paddingBottom: Kb.Styles.globalMargins.small,
-          paddingLeft: Kb.Styles.globalMargins.medium,
-          paddingRight: Kb.Styles.globalMargins.medium,
+          ...Kb.Styles.paddingH(Kb.Styles.globalMargins.medium),
         },
         isElectron: {
           paddingTop: Kb.Styles.globalMargins.small,

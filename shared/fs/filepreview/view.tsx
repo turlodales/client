@@ -1,11 +1,13 @@
-import * as C from '@/constants'
+import * as Chat from '@/constants/chat'
 import * as React from 'react'
 import * as T from '@/constants/types'
-import DefaultView from './default-view-container'
+import DefaultView from './default-view'
 import TextView from './text-view'
 import AVView from './av-view'
 import PdfView from './pdf-view'
 import * as Kb from '@/common-adapters'
+import * as FS from '@/constants/fs'
+import {useFsFileContext} from '../common'
 
 type Props = {
   path: T.FS.Path
@@ -15,6 +17,7 @@ type Props = {
 const textViewUpperLimit = 10 * 1024 * 1024 // 10MB
 
 const FilePreviewView = (p: Props) => {
+  const styles = useStyles()
   return (
     <Kb.BoxGrow style={styles.container}>
       <FilePreviewViewContent {...p} />
@@ -23,24 +26,23 @@ const FilePreviewView = (p: Props) => {
 }
 
 const FilePreviewViewContent = ({path, onUrlError}: Props) => {
-  const pathItem = C.useFSState(s => C.FS.getPathItem(s.pathItems, path))
+  const styles = useStyles()
+  const {fileContext, pathItem} = useFsFileContext(path)
   const [loadedLastModifiedTimestamp, setLoadedLastModifiedTimestamp] = React.useState(
     pathItem.lastModifiedTimestamp
   )
   const reload = () => setLoadedLastModifiedTimestamp(pathItem.lastModifiedTimestamp)
   const tooLargeForText = pathItem.type === T.FS.PathType.File && pathItem.size > textViewUpperLimit
 
-  const fileContext = C.useFSState(s => s.fileContext.get(path) || C.FS.emptyFileContext)
-
   if (pathItem.type === T.FS.PathType.Symlink) {
     return <DefaultView path={path} />
   }
 
   if (pathItem.type !== T.FS.PathType.File) {
-    return <Kb.Text type="BodySmallError">This shouldn't happen type={pathItem.type}</Kb.Text>
+    return <Kb.Text type="BodySmallError">{`This shouldn't happen type=${pathItem.type}`}</Kb.Text>
   }
 
-  if (fileContext === C.FS.emptyFileContext) {
+  if (fileContext === FS.emptyFileContext) {
     // We are still loading fileContext which is needed to determine which
     // component to use.
     return (
@@ -51,24 +53,25 @@ const FilePreviewViewContent = ({path, onUrlError}: Props) => {
   }
 
   const reloadBanner = loadedLastModifiedTimestamp !== pathItem.lastModifiedTimestamp && (
-    <Kb.Box style={styles.bannerContainer}>
+    <Kb.Box2 direction="vertical" fullWidth={true} relative={true} style={styles.bannerContainer}>
       <Kb.Banner color="blue" style={styles.banner}>
         <Kb.BannerParagraph
           bannerColor="blue"
           content={['The content of this file has updated. ', {onClick: reload, text: 'Reload'}, '.']}
         />
       </Kb.Banner>
-    </Kb.Box>
+    </Kb.Box2>
   )
 
   // Electron caches <img> aggressively and doesn't really probe server to
   // find out if resource has updated. So embed timestamp into URL to force a
   // reload when needed.
   const url = fileContext.url + `&unused_field_ts=${loadedLastModifiedTimestamp}`
-  switch (fileContext.viewType) {
+  const viewType: T.RPCGen.GUIViewType = fileContext.viewType
+  switch (viewType) {
     case T.RPCGen.GUIViewType.default: {
       // mobile client only supports heic now
-      if (C.isIOS && C.Chat.isPathHEIC(pathItem.name)) {
+      if (isIOS && Chat.isPathHEIC(pathItem.name)) {
         return (
           <>
             {reloadBanner}
@@ -109,7 +112,7 @@ const FilePreviewViewContent = ({path, onUrlError}: Props) => {
         </>
       )
     case T.RPCGen.GUIViewType.pdf:
-      return !C.isAndroid ? (
+      return !isAndroid ? (
         <>
           {reloadBanner}
           <PdfView url={url} onUrlError={onUrlError} />
@@ -118,14 +121,14 @@ const FilePreviewViewContent = ({path, onUrlError}: Props) => {
         <DefaultView path={path} />
       )
     default:
-      return <Kb.Text type="BodySmallError">This shouldn't happen</Kb.Text>
+      return <Kb.Text type="BodySmallError">{"This shouldn't happen"}</Kb.Text>
   }
 }
 
 export default FilePreviewView
 
-const styles = Kb.Styles.styleSheetCreate(
-  () =>
+const useStyles = Kb.Styles.createStyleHook(
+  theme =>
     ({
       banner: {
         opacity: 0.85,
@@ -134,15 +137,13 @@ const styles = Kb.Styles.styleSheetCreate(
         width: '100%',
       },
       bannerContainer: {
-        position: 'relative',
-        width: '100%',
         zIndex: 200, // needed for mobile
       },
       container: {
         width: '100%',
       },
       zoomableBox: {
-        backgroundColor: Kb.Styles.globalColors.blackOrBlack,
+        backgroundColor: theme.blackOrBlack,
         height: '100%',
         position: 'relative',
         width: '100%',

@@ -1,57 +1,60 @@
-import * as C from '@/constants'
 import * as Kb from '@/common-adapters'
-import * as Container from '@/util/container'
-import * as T from '@/constants/types'
-import {ModalTitle} from '@/teams/common'
+import * as C from '@/constants'
+import {newTeamWizardToAddMembersWizard, type NewTeamWizard} from './state'
+import CardChoice from '../../common/card-choice'
+import {useNavigation} from '@react-navigation/native'
 
-const MakeBigTeam = () => {
-  const nav = Container.useSafeNavigation()
-  const onBack = () => nav.safeNavigateUp()
-  const setTeamWizardTeamSize = C.useTeamsState(s => s.dispatch.setTeamWizardTeamSize)
-  const onSubmit = (isBig: boolean) => setTeamWizardTeamSize(isBig)
+type Props = {
+  wizard: NewTeamWizard
+}
 
-  const teamID = T.Teams.newTeamWizardTeamID
+const MakeBigTeam = ({wizard: initialWizard}: Props) => {
+  const styles = useStyles()
+  const navigation = useNavigation('teamWizard4TeamSize')
+  const navigateAppend = C.Router2.navigateAppend
+  const onSubmit = (isBig: boolean) => {
+    const wizard = {...initialWizard, isBig}
+    navigation.setParams({wizard})
+    if (isBig) {
+      navigateAppend({name: 'teamWizard5Channels', params: {wizard}})
+    } else {
+      navigateAppend({
+        name: 'teamAddToTeamFromWhere',
+        params: {wizard: newTeamWizardToAddMembersWizard(wizard)},
+      })
+    }
+  }
 
   return (
-    <Kb.Modal
-      mode="DefaultFullHeight"
-      header={{
-        leftButton: <Kb.Icon type="iconfont-arrow-left" onClick={onBack} />,
-        title: <ModalTitle teamID={teamID} title="Make it a big team?" />,
-      }}
-      allowOverflow={true}
-      backgroundStyle={styles.bg}
-    >
+    <>
       <Kb.Box2
         direction="vertical"
         fullWidth={true}
         style={styles.body}
-        gap={Kb.Styles.isMobile ? 'xsmall' : 'tiny'}
+        gap={isMobile ? 'xsmall' : 'tiny'}
       >
-        <Kb.RichButton
-          description="With multiple roles and channels. Big team chats appear in the lower section in the inbox."
+        <CardChoice
           icon="icon-teams-size-big-64"
-          onClick={() => onSubmit(true)}
           title="Yes, make it a big team"
+          subtitle="With multiple roles and channels. Big team chats appear in the lower section in the inbox."
+          onClick={() => onSubmit(true)}
         />
-
-        <Kb.RichButton
-          description="You can always make it a big team later."
+        <CardChoice
           icon="icon-teams-size-small-64"
-          onClick={() => onSubmit(false)}
           title="No, keep it a simple conversation for now"
+          subtitle="You can always make it a big team later."
+          onClick={() => onSubmit(false)}
         />
       </Kb.Box2>
-    </Kb.Modal>
+    </>
   )
 }
 
-const styles = Kb.Styles.styleSheetCreate(() => ({
-  bg: {backgroundColor: Kb.Styles.globalColors.blueGrey},
+const useStyles = Kb.Styles.createStyleHook(() => ({
   body: Kb.Styles.platformStyles({
     common: {
       ...Kb.Styles.padding(Kb.Styles.globalMargins.small),
-      borderRadius: 4,
+      borderRadius: Kb.Styles.borderRadius,
     },
     isMobile: {...Kb.Styles.globalStyles.flexOne},
   }),

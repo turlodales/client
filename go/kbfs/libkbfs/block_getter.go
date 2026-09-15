@@ -5,10 +5,11 @@
 package libkbfs
 
 import (
+	"context"
+
 	"github.com/keybase/client/go/kbfs/data"
 	"github.com/keybase/client/go/kbfs/kbfscrypto"
 	"github.com/keybase/client/go/kbfs/libkey"
-	"golang.org/x/net/context"
 )
 
 // blockGetter provides the API for the block retrieval worker to obtain blocks.
@@ -32,7 +33,8 @@ type realBlockGetter struct {
 // getBlock implements the interface for realBlockGetter.
 func (bg *realBlockGetter) getBlock(
 	ctx context.Context, kmd libkey.KeyMetadata, blockPtr data.BlockPointer,
-	block data.Block, cacheType DiskBlockCacheType) error {
+	block data.Block, cacheType DiskBlockCacheType,
+) error {
 	bserv := bg.config.BlockServer()
 	buf, blockServerHalf, err := bserv.Get(
 		ctx, kmd.TlfID(), blockPtr.ID, blockPtr.Context, cacheType)
@@ -52,14 +54,16 @@ func (bg *realBlockGetter) getBlock(
 
 func (bg *realBlockGetter) assembleBlock(ctx context.Context,
 	kmd libkey.KeyMetadata, ptr data.BlockPointer, block data.Block, buf []byte,
-	serverHalf kbfscrypto.BlockCryptKeyServerHalf) error {
+	serverHalf kbfscrypto.BlockCryptKeyServerHalf,
+) error {
 	return assembleBlock(ctx, bg.config.keyGetter(), bg.config.Codec(),
 		bg.config.cryptoPure(), kmd, ptr, block, buf, serverHalf)
 }
 
 func (bg *realBlockGetter) assembleBlockLocal(ctx context.Context,
 	kmd libkey.KeyMetadata, ptr data.BlockPointer, block data.Block, buf []byte,
-	serverHalf kbfscrypto.BlockCryptKeyServerHalf) error {
+	serverHalf kbfscrypto.BlockCryptKeyServerHalf,
+) error {
 	return assembleBlockLocal(ctx, bg.config.keyGetter(), bg.config.Codec(),
 		bg.config.cryptoPure(), kmd, ptr, block, buf, serverHalf)
 }

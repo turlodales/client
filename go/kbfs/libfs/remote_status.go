@@ -5,6 +5,8 @@
 package libfs
 
 import (
+	"context"
+	"errors"
 	"runtime"
 	"strings"
 	"sync"
@@ -14,7 +16,6 @@ import (
 	kbname "github.com/keybase/client/go/kbun"
 	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/logger"
-	"golang.org/x/net/context"
 )
 
 // Special files in root directory.
@@ -49,7 +50,7 @@ func (r *RemoteStatus) Init(ctx context.Context, log logger.Logger, config libkb
 	r.failingServices = map[string]error{}
 	r.callbacks = rs
 	// A time in the far past that is not IsZero
-	r.failingSince.Add(time.Second)
+	r.failingSince = r.failingSince.Add(time.Second)
 	go r.loop(ctx, log, config)
 }
 
@@ -113,8 +114,8 @@ func (r *RemoteStatus) update(ctx context.Context, st libkbfs.KBFSStatus) {
 }
 
 func isNotLoggedInError(err error) bool {
-	_, ok := err.(libkb.LoginRequiredError)
-	return ok
+	var lre libkb.LoginRequiredError
+	return errors.As(err, &lre)
 }
 
 var newline = func() string {

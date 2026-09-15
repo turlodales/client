@@ -1,22 +1,79 @@
-import type * as C from '@/constants'
+import * as React from 'react'
+import * as C from '@/constants'
+import * as Kb from '@/common-adapters'
 import {newRoutes as provisionNewRoutes} from '../provision/routes-sub'
+import {cancelProvision} from '@/provision/flow'
+import {defineRouteMap} from '@/constants/types/router'
+import {HeaderTitle} from './common'
 
-import devicePage from './device-page.page'
-import deviceRevoke from './device-revoke.page'
-import devicesRoot from './page'
-import deviceAdd from './add-device.page'
-import devicePaperKey from './paper-key.page'
-
-export const newRoutes = {
-  devicePage,
-  deviceRevoke,
-  devicesRoot,
+const HeaderRightActions = () => {
+  const headerStyles = useHeaderStyles()
+  const navigateAppend = C.Router2.navigateAppend
+  const onAdd = () => navigateAppend({name: 'deviceAdd', params: {}})
+  return (
+    <Kb.Button
+      small={true}
+      label="Add a device or paper key"
+      onClick={onAdd}
+      style={headerStyles.addDeviceButton}
+    />
+  )
 }
 
-export const newModalRoutes = {
+const useHeaderStyles = Kb.Styles.createStyleHook(() => ({
+  addDeviceButton: Kb.Styles.platformStyles({
+    common: {
+      alignSelf: 'flex-end',
+      marginBottom: 6,
+      marginRight: Kb.Styles.globalMargins.xsmall,
+    },
+    isElectron: Kb.Styles.desktopStyles.windowDraggingClickable,
+  }),
+}))
+
+const AddDeviceCancelButton = () => (
+  <Kb.Text
+    type="BodyBigLink"
+    onClick={() => {
+      cancelProvision()
+      C.Router2.navigateUp()
+    }}
+  >
+    Cancel
+  </Kb.Text>
+)
+
+export const newRoutes = defineRouteMap({
+  devicePage: C.makeScreen(
+    React.lazy(async () => import('./device-page')),
+    {getOptions: {title: ''}}
+  ),
+  devicesRoot: {
+    getOptions: isMobile
+      ? {title: 'Devices'}
+      : {
+          headerRightActions: HeaderRightActions,
+          headerTitle: () => <HeaderTitle activeCount={0} revokedCount={0} />,
+          title: 'Devices',
+        },
+    screen: React.lazy(async () => import('.')),
+  },
+})
+
+export const newModalRoutes = defineRouteMap({
   ...provisionNewRoutes,
-  deviceAdd,
-  devicePaperKey,
-}
-
-export type RootParamListDevices = C.PagesToParams<typeof newRoutes & typeof newModalRoutes>
+  deviceAdd: C.makeScreen(React.lazy(async () => import('./add-device')), {
+    getOptions: {
+      headerLeft: isMobile ? () => <AddDeviceCancelButton /> : undefined,
+      modalSize: 'wide',
+      title: 'Add a device',
+    },
+  }),
+  devicePaperKey: {
+    getOptions: {gestureEnabled: false, overlayNoClose: true},
+    screen: React.lazy(async () => import('./paper-key')),
+  },
+  deviceRevoke: C.makeScreen(React.lazy(async () => import('./device-revoke')), {
+    getOptions: {modalSize: 'wide'},
+  }),
+})

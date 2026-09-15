@@ -4,6 +4,7 @@
 package client
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
@@ -12,7 +13,6 @@ import (
 	"github.com/keybase/client/go/libkb"
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 	"github.com/keybase/go-framed-msgpack-rpc/rpc"
-	"golang.org/x/net/context"
 )
 
 type CmdCurrencyAdd struct {
@@ -71,7 +71,7 @@ func (c *CmdCurrencyAdd) ParseArgv(ctx *cli.Context) error {
 	c.address = ctx.Args()[0]
 	c.force = ctx.Bool("force")
 	w := ctx.String("type")
-	if !(w == "bitcoin" || w == "zcash" || w == "") {
+	if w != "bitcoin" && w != "zcash" && w != "" {
 		return fmt.Errorf("Bad address type; can only handle 'zcash' or 'bitcoin")
 	}
 	c.wanted = w

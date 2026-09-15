@@ -1,41 +1,19 @@
 import * as C from '@/constants'
-import * as Kb from '@/common-adapters'
-import {Wrapper, ContinueButton} from './common'
+import {SimpleErrorScreen} from '../simple-error'
+import type {StaticScreenProps} from '@react-navigation/core'
 
-const ConnectedSignupError = () => {
-  const error = C.useSignupState(s => s.signupError)
-  const goBackAndClearErrors = C.useSignupState(s => s.dispatch.goBackAndClearErrors)
-  const onBack = goBackAndClearErrors
-  let header = 'Ah Shoot! Something went wrong, try again?'
-  let body = error ? error.desc : ''
-  if (!!error && C.isNetworkErr(error.code)) {
-    header = 'Hit an unexpected error; try again?'
-    body = 'This might be due to a bad connection.'
+type Props = StaticScreenProps<{errorCode?: number; errorMessage?: string}>
+
+const SignupError = (p: Props) => {
+  const errorCode = p.route.params.errorCode
+  const errorMessage = p.route.params.errorMessage ?? ''
+  let heading = 'Ah Shoot! Something went wrong, try again?'
+  let message = errorMessage
+  if (errorCode !== undefined && C.isNetworkErr(errorCode)) {
+    heading = 'Hit an unexpected error; try again?'
+    message = 'This might be due to a bad connection.'
   }
-  const props = {
-    body,
-    header,
-    onBack,
-  }
-  return <Error {...props} />
+  return <SimpleErrorScreen heading={heading} message={message} onBack={C.Router2.navigateUp} />
 }
 
-type Props = {
-  header: string
-  body: string
-  onBack: () => void
-}
-
-const Error = (props: Props) => (
-  <Wrapper onBack={() => {}}>
-    <Kb.Text center={true} type="Header" style={{maxWidth: 460, width: '80%'}}>
-      {props.header}
-    </Kb.Text>
-    <Kb.Text type="Body" center={true}>
-      {props.body}
-    </Kb.Text>
-    <ContinueButton label="Back" onClick={props.onBack} />
-  </Wrapper>
-)
-
-export default ConnectedSignupError
+export default SignupError

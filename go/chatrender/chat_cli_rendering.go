@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/keybase/client/go/chat/utils"
 	"github.com/keybase/client/go/flexibletable"
 	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/protocol/chat1"
@@ -80,7 +82,7 @@ func (v ConversationInfoListView) RenderToWriter(g *libkb.GlobalContext, writer 
 		flexibletable.ExpandableWrappable, // participants
 		flexibletable.ExpandableWrappable, // reset
 	}); err != nil {
-		return fmt.Errorf("rendering conversation info list view error: %v\n", err)
+		return fmt.Errorf("rendering conversation info list view error: %v", err)
 	}
 
 	return nil
@@ -147,18 +149,14 @@ func (v ConversationListView) convNameLite(g *libkb.GlobalContext, convErr chat1
 // before we get to parsing out readers and writers (which itself does more
 // identifying). Instead we get an untrusted TLF name string, and we have the
 // visibility. Cobble together a poor man's conversation name from those, by
-// hacking out the current user's name. This should only be displayed next to
-// an indication that it's unverified.
+// stripping the current user's name when it appears as a complete segment
+// (so e.g. "zoommikem" is not corrupted when removing "mikem").
 func formatUnverifiedConvName(unverifiedTLFName string, visibility keybase1.TLFVisibility, myUsername string) string {
-	// Strip the user's name out if it's got a comma next to it. (Two cases to
-	// handle: leading and trailing.) This both takes care of dangling commas,
-	// and preserves the user's name if it's by itself.
-	strippedTLFName := strings.ReplaceAll(unverifiedTLFName, ","+myUsername, "")
-	strippedTLFName = strings.ReplaceAll(strippedTLFName, myUsername+",", "")
+	unverifiedTLFName = utils.StripUsernameFromConvName(unverifiedTLFName, myUsername)
 	if visibility == keybase1.TLFVisibility_PUBLIC {
-		return publicConvNamePrefix + strippedTLFName
+		return publicConvNamePrefix + unverifiedTLFName
 	}
-	return strippedTLFName
+	return unverifiedTLFName
 }
 
 func without(g *libkb.GlobalContext, slice []string, el string) (res []string) {
@@ -333,7 +331,7 @@ func (v ConversationListView) RenderToWriter(g *libkb.GlobalContext, writer io.W
 		flexibletable.ColumnConstraint(width / 5), // reactionInfo
 		flexibletable.Expandable,                  // body
 	}); err != nil {
-		return fmt.Errorf("rendering conversation list view error: %v\n", err)
+		return fmt.Errorf("rendering conversation list view error: %v", err)
 	}
 
 	return nil
@@ -370,8 +368,8 @@ func (v ConversationView) RenderToWriter(g *libkb.GlobalContext, writer io.Write
 	}
 
 	table := &flexibletable.Table{}
-	for i := len(v.Messages) - 1; i >= 0; i-- {
-		m := v.Messages[i]
+	for _, m := range slices.Backward(v.Messages) {
+
 		mv, err := newMessageView(g, v.Opts, v.Conversation.Info.Id, m)
 		if err != nil {
 			g.Log.Error("Message render error: %s", err)
@@ -402,7 +400,7 @@ func (v ConversationView) RenderToWriter(g *libkb.GlobalContext, writer io.Write
 			flexibletable.Cell{
 				Frame:     [2]string{"[", "]"},
 				Alignment: flexibletable.Right,
-				Content:   flexibletable.SingleCell{Item: strconv.Itoa(int(mv.MessageID))},
+				Content:   flexibletable.SingleCell{Item: strconv.Itoa(int(mv.MessageID))}, //nolint:gosec // G115: MessageID display formatting, safe to convert
 			},
 			flexibletable.Cell{
 				Alignment: flexibletable.Center,
@@ -443,7 +441,10 @@ func (v ConversationView) RenderToWriter(g *libkb.GlobalContext, writer io.Write
 		flexibletable.ColumnConstraint(width / 5), // reactionInfo
 		flexibletable.ExpandableWrappable,         // body
 	}); err != nil {
-		return fmt.Errorf("rendering conversation view error: %v\n", err)
+		if _, ok := err.(flexibletable.NoRowsError); ok {
+			return nil
+		}
+		return fmt.Errorf("rendering conversation view error: %v", err)
 	}
 
 	if showRevokeAdvisory {
@@ -513,7 +514,7 @@ func formatSendPaymentMessage(g *libkb.GlobalContext, opts RenderOptions, body c
 	amountXLM := fmt.Sprintf("%s XLM", libkb.StellarSimplifyAmount(details.Amount))
 
 	var amountDescription string
-	if details.DisplayAmount != nil && details.DisplayCurrency != nil && len(*details.DisplayAmount) > 0 && len(*details.DisplayAmount) > 0 {
+	if details.DisplayAmount != nil && details.DisplayCurrency != nil && len(*details.DisplayAmount) > 0 {
 		amountDescription = fmt.Sprintf("Lumens worth %s %s (%s)", *details.DisplayAmount, *details.DisplayCurrency, amountXLM)
 	} else {
 		amountDescription = amountXLM
@@ -652,7 +653,7 @@ func newMessageViewValid(g *libkb.GlobalContext, opts RenderOptions, conversatio
 	case chat1.MessageType_PIN:
 		mv.Renderable = false
 	default:
-		return mv, fmt.Errorf(fmt.Sprintf("unsupported MessageType: %s", typ.String()))
+		return mv, fmt.Errorf("unsupported MessageType: %s", typ.String())
 	}
 
 	possiblyRevokedMark := ""
@@ -672,7 +673,7 @@ func newMessageViewValid(g *libkb.GlobalContext, opts RenderOptions, conversatio
 				explodedByText = fmt.Sprintf(" by %s", *m.ExplodedBy())
 			}
 			mv.Body = fmt.Sprintf("[exploded%s] ", explodedByText)
-			for i := 0; i < 40; i++ {
+			for range 40 {
 				mv.Body += "* "
 			}
 		} else {
@@ -691,12 +692,12 @@ func newMessageViewValid(g *libkb.GlobalContext, opts RenderOptions, conversatio
 	}
 	sort.Strings(reactionTexts)
 
-	var reactionInfo string
+	var reactionInfo strings.Builder
 	for _, reactionText := range reactionTexts {
 		reactions := m.Reactions.Reactions[reactionText]
-		reactionInfo += emoji.Sprintf("%v[%d] ", reactionText, len(reactions))
+		reactionInfo.WriteString(emoji.Sprintf("%v[%d] ", reactionText, len(reactions)))
 	}
-	mv.ReactionInfo = reactionInfo
+	mv.ReactionInfo = reactionInfo.String()
 
 	return mv, nil
 }
@@ -718,7 +719,6 @@ func outboxStateView(state chat1.OutboxState, body string) string {
 }
 
 func newMessageViewOutbox(g *libkb.GlobalContext, opts RenderOptions, conversationID chat1.ConversationID, m chat1.OutboxRecord) (mv messageView, err error) {
-
 	body := m.Msg.MessageBody
 	typ, err := body.MessageType()
 	mv.messageType = typ
@@ -756,8 +756,8 @@ func newMessageViewOutbox(g *libkb.GlobalContext, opts RenderOptions, conversati
 }
 
 func newMessageViewError(g *libkb.GlobalContext, opts RenderOptions, conversationID chat1.ConversationID,
-	m chat1.MessageUnboxedError) (mv messageView, err error) {
-
+	m chat1.MessageUnboxedError,
+) (mv messageView, err error) {
 	mv.messageType = m.MessageType
 	mv.Renderable = true
 	mv.FromRevokedDevice = false
@@ -804,7 +804,6 @@ func newMessageView(g *libkb.GlobalContext, opts RenderOptions, conversationID c
 	default:
 		return mv, fmt.Errorf("unexpected message state: %v", state)
 	}
-
 }
 
 func FmtTime(t time.Time, opts RenderOptions) string {

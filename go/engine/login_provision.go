@@ -4,11 +4,10 @@
 package engine
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sort"
-
-	"golang.org/x/net/context"
 
 	"github.com/keybase/client/go/kex2"
 	"github.com/keybase/client/go/libkb"
@@ -203,7 +202,7 @@ func (e *loginProvision) deviceWithType(m libkb.MetaContext, provisionerType key
 	}
 	provisionee := NewKex2Provisionee(m.G(), device, secret.Secret(), uid, salt)
 
-	var canceler func()
+	contxt, canceler := context.WithCancel(context.Background())
 
 	// display secret and prompt for secret from X in a goroutine:
 	go func() {
@@ -213,16 +212,14 @@ func (e *loginProvision) deviceWithType(m libkb.MetaContext, provisionerType key
 			Phrase:          secret.Phrase(),
 			OtherDeviceType: provisionerType,
 		}
-		var contxt context.Context
-		contxt, canceler = context.WithCancel(context.Background())
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			receivedSecret, err := m.UIs().ProvisionUI.DisplayAndPromptSecret(contxt, arg)
 			if err != nil {
 				// cancel provisionee run:
 				provisionee.Cancel()
 				m.Warning("DisplayAndPromptSecret error: %s", err)
 				break
-			} else if receivedSecret.Secret != nil && len(receivedSecret.Secret) > 0 {
+			} else if len(receivedSecret.Secret) > 0 {
 				m.Debug("received secret, adding to provisionee")
 				var ks kex2.Secret
 				copy(ks[:], receivedSecret.Secret)
@@ -244,12 +241,11 @@ func (e *loginProvision) deviceWithType(m libkb.MetaContext, provisionerType key
 					provisionee.AddSecret(ks.Secret())
 				}
 				break
-			} else {
-				// empty secret, so must have been a display-only case.
-				// ok to stop the loop
-				m.Debug("login provision DisplayAndPromptSecret returned empty secret, stopping retry loop")
-				break
 			}
+			// empty secret, so must have been a display-only case.
+			// ok to stop the loop
+			m.Debug("login provision DisplayAndPromptSecret returned empty secret, stopping retry loop")
+			break
 		}
 	}()
 
@@ -352,7 +348,7 @@ var paperKeyNotFound = libkb.NotFoundError{
 func (e *loginProvision) getValidPaperKey(m libkb.MetaContext, expectedPrefix *string) (keys *libkb.DeviceWithKeys, err error) {
 	defer m.Trace("loginProvision#getValidPaperKey", &err)()
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		keys, err = e.getValidPaperKeyOnce(m, i, err, expectedPrefix)
 		if err == nil {
 			return keys, err
@@ -376,9 +372,9 @@ func (e *loginProvision) getValidPaperKeyOnce(m libkb.MetaContext, i int, lastEr
 		return nil, err
 	}
 
-	// use the KID to find the uid, deviceID and deviceName
-	var uid keybase1.UID
-	uid, err = keys.Populate(m)
+	// Use the KID to find the device in the user we force-reloaded before
+	// entering provisioning.
+	err = keys.PopulateFromUser(e.arg.User)
 	if err != nil {
 		m.Debug("getValidPaperKeyOnce attempt %d (%s): %s", i, prefix, err)
 
@@ -391,10 +387,6 @@ func (e *loginProvision) getValidPaperKeyOnce(m libkb.MetaContext, i int, lastEr
 			}
 		}
 		return nil, err
-	}
-
-	if uid.NotEqual(e.arg.User.GetUID()) {
-		return nil, paperKeyNotFound
 	}
 
 	// found a paper key that can be used for signing
@@ -563,7 +555,7 @@ func (e *loginProvision) deviceName(m libkb.MetaContext) (string, error) {
 		ExistingDevices: names,
 	}
 
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		devname, err := m.UIs().ProvisionUI.PromptNewDeviceName(m.Ctx(), arg)
 		if err != nil {
 			return "", err
@@ -715,7 +707,6 @@ func (e *loginProvision) checkArg() error {
 }
 
 func (e *loginProvision) route(m libkb.MetaContext) (err error) {
-
 	defer m.Trace("loginProvision#route", &err)()
 
 	// check if User has any pgp keys, active devices
@@ -739,7 +730,7 @@ func (e *loginProvision) route(m libkb.MetaContext) (err error) {
 		// reset their account at this point.
 		// TODO: Once we make your account auto-reset after revoking your last
 		// device, change this error message.
-		return errors.New("Cannot add a new device when all existing devices are revoked. Reset your account on keybase.io.")
+		return errors.New("Cannot add a new device when all existing devices are revoked. Reset your account on keybase.io.") // nolint
 	}
 
 	// User has no existing devices or pgp keys, so create
@@ -875,8 +866,9 @@ func (e *loginProvision) preloadedPaperKey(m libkb.MetaContext, devices []libkb.
 		return libkb.NoPaperKeysError{}
 	}
 
-	// use the KID to find the uid, deviceID and deviceName
-	uid, err := keys.Populate(m)
+	// Resolve the exact KID against the user we force-reloaded before entering
+	// provisioning. The prefix match above is only a UI convenience.
+	err = keys.PopulateFromUser(e.arg.User)
 	if err != nil {
 		switch err := err.(type) {
 		case libkb.NotFoundError:
@@ -887,9 +879,6 @@ func (e *loginProvision) preloadedPaperKey(m libkb.MetaContext, devices []libkb.
 			}
 		}
 		return err
-	}
-	if uid.NotEqual(e.arg.User.GetUID()) {
-		return paperKeyNotFound
 	}
 
 	return e.paper(m, matchedDevice, keys)
@@ -1113,7 +1102,6 @@ func (e *loginProvision) gpgSignKey(m libkb.MetaContext, fp *libkb.PGPFingerprin
 }
 
 func (e *loginProvision) gpgImportKey(m libkb.MetaContext, fp *libkb.PGPFingerprint) (libkb.GenericKey, error) {
-
 	// import it with gpg
 	cli, err := e.gpgClient(m)
 	if err != nil {

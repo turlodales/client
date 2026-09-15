@@ -19,7 +19,7 @@ type testAPIServer struct {
 }
 
 func (t *testAPIServer) GetDecode(mctx libkb.MetaContext, arg libkb.APIArg, resp libkb.APIResponseWrapper) error {
-	*(resp.(*getUpgradeRes)) = t.responseFn()
+	*resp.(*getUpgradeRes) = t.responseFn()
 	return nil
 }
 
@@ -50,7 +50,8 @@ func TestBackgroundTLFUpdater(t *testing.T) {
 		return getUpgradeRes{
 			GetTLFForUpgradeRes: NewGetTLFForUpgradeResWithTlfavailable(GetTLFForUpgradeAvailableRes{
 				TlfID: refTLFID,
-			})}
+			}),
+		}
 	}
 	api.responseFn = f
 	clock := clockwork.NewFakeClock()

@@ -203,7 +203,7 @@ type PukFinder interface {
 	SeedByGeneration(m libkb.MetaContext, generation keybase1.PerUserKeyGeneration) (libkb.PerUserKeySeed, error)
 }
 
-type AccountPukGens map[stellar1.AccountID](keybase1.PerUserKeyGeneration)
+type AccountPukGens map[stellar1.AccountID]keybase1.PerUserKeyGeneration
 
 // DecodeAndUnbox decodes the encrypted and visible encoded bundles and unboxes
 // the encrypted bundle using PukFinder to find the correct puk. It combines
@@ -493,6 +493,7 @@ func decrypt(encBundle stellar1.EncryptedAccountBundle, puk libkb.PerUserKeySeed
 	}
 	return bver, nil
 }
+
 func convertVisibleAccounts(in []stellar1.BundleVisibleEntryV2) []stellar1.BundleEntry {
 	out := make([]stellar1.BundleEntry, len(in))
 	for i, e := range in {

@@ -5,7 +5,6 @@ package libkb
 
 import (
 	"bytes"
-
 	"os"
 	"path/filepath"
 	"runtime"
@@ -112,7 +111,7 @@ func TestSecretStoreFileClearSecret(t *testing.T) {
 	require.NoError(t, err)
 
 	secret, err := ss.RetrieveSecret(m, "alice")
-	require.IsType(t, SecretStoreError{}, err)
+	require.ErrorAs(t, err, new(SecretStoreError))
 	require.True(t, secret.IsNil())
 }
 
@@ -130,8 +129,8 @@ func TestSecretStoreFileGetUsersWithStoredSecrets(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, users, 2)
 	sort.Strings(users)
-	require.Equal(t, users[0], "alice")
-	require.Equal(t, users[1], "bob")
+	require.Equal(t, "alice", users[0])
+	require.Equal(t, "bob", users[1])
 
 	fs, err := newLKSecFullSecretFromBytes([]byte("xavierxavierxavierxavierxavierxa"))
 	require.NoError(t, err)
@@ -144,9 +143,9 @@ func TestSecretStoreFileGetUsersWithStoredSecrets(t *testing.T) {
 	require.Len(t, users, 3)
 
 	sort.Strings(users)
-	require.Equal(t, users[0], "alice")
-	require.Equal(t, users[1], "bob")
-	require.Equal(t, users[2], "xavier")
+	require.Equal(t, "alice", users[0])
+	require.Equal(t, "bob", users[1])
+	require.Equal(t, "xavier", users[2])
 
 	err = ss.ClearSecret(m, "bob")
 	require.NoError(t, err)
@@ -156,8 +155,8 @@ func TestSecretStoreFileGetUsersWithStoredSecrets(t *testing.T) {
 	require.Len(t, users, 2)
 
 	sort.Strings(users)
-	require.Equal(t, users[0], "alice")
-	require.Equal(t, users[1], "xavier")
+	require.Equal(t, "alice", users[0])
+	require.Equal(t, "xavier", users[1])
 }
 
 func assertExists(t *testing.T, path string) {

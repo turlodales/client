@@ -80,14 +80,16 @@ func RenameSubteam(ctx context.Context, g *libkb.GlobalContext, prevName keybase
 
 		mctx.Debug("RenameSubteam make sigs")
 		renameSubteamSig, err := generateRenameSubteamSigForParentChain(
-			mctx, me, deviceSigningKey, parent.chain(), subteam.ID, newName, admin, &ratchetBlindingKeys)
+			mctx, me, deviceSigningKey, parent.chain(), subteam.ID, newName, admin, &ratchetBlindingKeys,
+		)
 		if err != nil {
 			return err
 		}
 
 		renameUpPointerSig, err := generateRenameUpPointerSigForSubteamChain(
 			mctx,
-			me, deviceSigningKey, chainPair{parent: parent.chain(), subteam: subteam.chain()}, newName, admin, &ratchetBlindingKeys)
+			me, deviceSigningKey, chainPair{parent: parent.chain(), subteam: subteam.chain()}, newName, admin, &ratchetBlindingKeys,
+		)
 		if err != nil {
 			return err
 		}
@@ -103,7 +105,7 @@ func RenameSubteam(ctx context.Context, g *libkb.GlobalContext, prevName keybase
 		}
 
 		payload := make(libkb.JSONPayload)
-		payload["sigs"] = []interface{}{renameSubteamSig, renameUpPointerSig}
+		payload["sigs"] = []any{renameSubteamSig, renameUpPointerSig}
 		err = ratchetBlindingKeys.AddToJSONPayload(payload)
 		if err != nil {
 			return err
@@ -119,24 +121,25 @@ func RenameSubteam(ctx context.Context, g *libkb.GlobalContext, prevName keybase
 			return err
 		}
 
-		go func() { _ = mctx.G().GetTeamLoader().NotifyTeamRename(ctx, subteam.ID, newName.String()) }()
+		go func() {
+			_ = mctx.G().GetTeamLoader().NotifyTeamRename(mctx.BackgroundWithLogTags().Ctx(), subteam.ID, newName.String())
+		}()
 
 		return nil
 	})
 }
 
 func generateRenameSubteamSigForParentChain(m libkb.MetaContext, me libkb.UserForSignatures, signingKey libkb.GenericKey, parentTeam *TeamSigChainState, subteamID keybase1.TeamID, newSubteamName keybase1.TeamName, admin *SCTeamAdmin, rbk *hidden.RatchetBlindingKeySet) (item *libkb.SigMultiItem, err error) {
-
 	entropy, err := makeSCTeamEntropy()
 	if err != nil {
 		return nil, err
 	}
 	teamSection := SCTeamSection{
 		Admin: admin,
-		ID:    (SCTeamID)(parentTeam.GetID()),
+		ID:    SCTeamID(parentTeam.GetID()),
 		Subteam: &SCSubteam{
-			ID:   (SCTeamID)(subteamID),
-			Name: (SCTeamName)(newSubteamName.String()),
+			ID:   SCTeamID(subteamID),
+			Name: SCTeamName(newSubteamName.String()),
 		},
 		Entropy: entropy,
 	}
@@ -200,7 +203,7 @@ func generateRenameUpPointerSigForSubteamChain(m libkb.MetaContext, me libkb.Use
 	newSubteamNameStr := newSubteamName.String()
 	teamSection := SCTeamSection{
 		Admin: admin,
-		ID:    (SCTeamID)(teams.subteam.GetID()),
+		ID:    SCTeamID(teams.subteam.GetID()),
 		Name:  (*SCTeamName)(&newSubteamNameStr),
 		Parent: &SCTeamParent{
 			ID:      SCTeamID(teams.parent.GetID()),

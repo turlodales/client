@@ -25,7 +25,8 @@ func newTestGiphySearcher() *testGiphySearcher {
 }
 
 func (d *testGiphySearcher) Search(mctx libkb.MetaContext, apiKeySource types.ExternalAPIKeySource,
-	query *string, limit int, urlsrv types.AttachmentURLSrv) ([]chat1.GiphySearchResult, error) {
+	query *string, limit int, urlsrv types.AttachmentURLSrv,
+) ([]chat1.GiphySearchResult, error) {
 	if d.waitForCancel {
 		if d.waitingCh != nil {
 			close(d.waitingCh)
@@ -76,7 +77,7 @@ func TestGiphyPreview(t *testing.T) {
 	}
 	select {
 	case res := <-ui.GiphyResults:
-		require.Equal(t, 1, len(res.Results))
+		require.Len(t, res.Results, 1)
 		require.Equal(t, "https://www.notmiketown.com", res.Results[0].TargetUrl)
 	case <-time.After(timeout):
 		require.Fail(t, "no results")
@@ -110,7 +111,7 @@ func TestGiphyPreview(t *testing.T) {
 		require.Fail(t, "no waiting ch")
 	}
 	giphy.Preview(ctx, uid, convID, "", "/giphy miketown")
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		select {
 		case show := <-ui.GiphyWindow:
 			require.True(t, show)
@@ -120,7 +121,7 @@ func TestGiphyPreview(t *testing.T) {
 	}
 	select {
 	case res := <-ui.GiphyResults:
-		require.Equal(t, 1, len(res.Results))
+		require.Len(t, res.Results, 1)
 		require.Equal(t, "https://www.miketown.com", res.Results[0].TargetUrl)
 	case <-time.After(timeout):
 		require.Fail(t, "no results")

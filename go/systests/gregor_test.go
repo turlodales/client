@@ -5,6 +5,7 @@ package systests
 
 import (
 	"bytes"
+	"context"
 	"strings"
 	"testing"
 	"time"
@@ -16,8 +17,8 @@ import (
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 	"github.com/keybase/client/go/service"
 	"github.com/keybase/go-framed-msgpack-rpc/rpc"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	context "golang.org/x/net/context"
 )
 
 type electronMock struct {
@@ -76,7 +77,7 @@ func TestGregorForwardToElectron(t *testing.T) {
 		tc.G.Log.Debug("+ Service.Run")
 		err := svc.Run()
 		tc.G.Log.Debug("- Service.Run")
-		require.NoError(t, err)
+		assert.NoError(t, err)
 		stopCh <- err
 	}()
 
@@ -136,7 +137,7 @@ func TestGregorForwardToElectron(t *testing.T) {
 
 	checkState := func(s gregor1.State) {
 		items := filterPubsubdItems(s.Items_)
-		require.Equal(t, 1, len(items))
+		require.Len(t, items, 1)
 		i := items[0]
 		require.True(t, bytes.Equal(i.Md_.MsgID_.Bytes(), msgID.Bytes()))
 		require.Equal(t, "foo", i.Item_.Category_.String())
@@ -144,7 +145,7 @@ func TestGregorForwardToElectron(t *testing.T) {
 	}
 
 	// We get two push states, one from the local send, and one from receiving broadcast
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		select {
 		case pushArg := <-em.stateCh:
 			checkState(pushArg.State)

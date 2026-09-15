@@ -4,6 +4,7 @@
 package engine
 
 import (
+	"context"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -18,7 +19,6 @@ import (
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 	"github.com/keybase/go-framed-msgpack-rpc/rpc"
 	jsonw "github.com/keybase/go-jsonw"
-	"golang.org/x/net/context"
 )
 
 // Kex2Provisionee is an engine.
@@ -44,13 +44,16 @@ type Kex2Provisionee struct {
 
 // Kex2Provisionee implements kex2.Provisionee, libkb.UserBasic,
 // and libkb.APITokener interfaces.
-var _ kex2.Provisionee = (*Kex2Provisionee)(nil)
-var _ libkb.UserBasic = (*Kex2Provisionee)(nil)
-var _ libkb.APITokener = (*Kex2Provisionee)(nil)
+var (
+	_ kex2.Provisionee = (*Kex2Provisionee)(nil)
+	_ libkb.UserBasic  = (*Kex2Provisionee)(nil)
+	_ libkb.APITokener = (*Kex2Provisionee)(nil)
+)
 
 // NewKex2Provisionee creates a Kex2Provisionee engine.
 func NewKex2Provisionee(g *libkb.GlobalContext, device *libkb.Device, secret kex2.Secret,
-	expectedUID keybase1.UID, salt []byte) *Kex2Provisionee {
+	expectedUID keybase1.UID, salt []byte,
+) *Kex2Provisionee {
 	return &Kex2Provisionee{
 		Contextified: libkb.NewContextified(g),
 		device:       device,
@@ -91,7 +94,7 @@ type kex2LogContext struct {
 	log logger.Logger
 }
 
-func (k kex2LogContext) Debug(format string, args ...interface{}) {
+func (k kex2LogContext) Debug(format string, args ...any) {
 	k.log.Debug(format, args...)
 }
 
@@ -177,7 +180,6 @@ func (e *Kex2Provisionee) HandleHello(_ context.Context, harg keybase1.HelloArg)
 }
 
 func (e *Kex2Provisionee) handleHello(m libkb.MetaContext, uid keybase1.UID, token keybase1.SessionToken, csrf keybase1.CsrfToken, sigBody string) (res keybase1.HelloRes, err error) {
-
 	// save parts of the hello arg for later:
 	e.uid = uid
 	e.sessionToken = token
@@ -270,7 +272,6 @@ func (e *Kex2Provisionee) HandleDidCounterSign(_ context.Context, sig []byte) (e
 }
 
 func (e *Kex2Provisionee) handleDidCounterSign(m libkb.MetaContext, sig []byte, perUserKeyBox *keybase1.PerUserKeyBox, userEKBox *keybase1.UserEkBoxed) (err error) {
-
 	defer m.Trace("Kex2Provisionee#handleDidCounterSign()", &err)()
 
 	// load self user (to load merkle root)
@@ -498,7 +499,8 @@ func (e *Kex2Provisionee) reverseSig(jw *jsonw.Wrapper) error {
 // postSigs takes the HTTP args for the signing key and encrypt
 // key and posts them to the api server.
 func (e *Kex2Provisionee) postSigs(signingArgs, encryptArgs *libkb.HTTPArgs,
-	perUserKeyBox *keybase1.PerUserKeyBox, reboxArg *keybase1.UserEkReboxArg) error {
+	perUserKeyBox *keybase1.PerUserKeyBox, reboxArg *keybase1.UserEkReboxArg,
+) error {
 	payload := make(libkb.JSONPayload)
 	payload["sigs"] = []map[string]string{firstValues(signingArgs.ToValues()), firstValues(encryptArgs.ToValues())}
 
@@ -566,7 +568,6 @@ func (e *Kex2Provisionee) dhKeyProof(m libkb.MetaContext, dh libkb.GenericKey, e
 	}
 
 	return dhSig, dhSigID.ToSigIDLegacy(), nil
-
 }
 
 func (e *Kex2Provisionee) pushLKSServerHalf(m libkb.MetaContext) (err error) {

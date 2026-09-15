@@ -107,7 +107,7 @@ func (c *CmdChatListMembers) Run() (err error) {
 			return err
 		}
 		dui := c.G().UI.GetDumbOutputUI()
-		_, err = dui.Printf(string(b) + "\n")
+		_, err = dui.Printf("%s\n", b)
 		return err
 	}
 
@@ -151,7 +151,6 @@ func (c *CmdChatListMembers) getUntrustedConvMemberList(ctx context.Context) ([]
 }
 
 func (c *CmdChatListMembers) ParseArgv(ctx *cli.Context) (err error) {
-
 	c.json = ctx.Bool("json")
 	c.tlfName = ctx.Args().Get(0)
 	c.topicName = ctx.Args().Get(1)

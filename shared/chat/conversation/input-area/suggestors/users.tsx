@@ -1,8 +1,12 @@
-import * as C from '@/constants'
+import * as Chat from '@/constants/chat'
 import * as T from '@/constants/types'
 import * as Common from './common'
 import * as Kb from '@/common-adapters'
-import * as React from 'react'
+import {useUsersState} from '@/stores/users'
+import {useChatTeamMembers} from '../../team-hooks'
+import {useInboxLayoutState} from '@/chat/inbox/layout-state'
+import {useConversationMetadata} from '../../data-hooks'
+import {registerExternalResetter} from '@/util/zustand'
 
 export const transformer = (
   input: {
@@ -28,17 +32,11 @@ export const transformer = (
   return Common.standardTransformer(`${marker}${s}`, tData, preview)
 }
 
-const styles = Kb.Styles.styleSheetCreate(() => ({
+const useStyles = Kb.Styles.createStyleHook(theme => ({
   iconPeople: {
-    alignItems: 'center',
-    backgroundColor: Kb.Styles.globalColors.white,
-    borderColor: Kb.Styles.globalColors.black_10,
-    borderRadius: 16,
-    borderStyle: 'solid',
-    borderWidth: 1,
-    height: 32,
-    justifyContent: 'center',
-    width: 32,
+    backgroundColor: theme.white,
+    ...Kb.Styles.border(theme.black_10, 1, 16),
+    ...Kb.Styles.size(32),
   },
 }))
 
@@ -109,7 +107,7 @@ const filterUsersAndTeams = (
   return [...sortedUsers, ...sortedTeams]
 }
 
-const filterAndJoin = (
+export const filterAndJoin = (
   users: Array<UserListItem>,
   teams: Array<TeamListItem>,
   allChannels: Array<TeamListItem>,
@@ -125,71 +123,72 @@ const filterAndJoin = (
 const getTeams = (layout?: T.RPCChat.UIInboxLayout) => {
   const bigTeams =
     layout?.bigTeams?.reduce<Array<string>>((arr, l) => {
-      l.state === T.RPCChat.UIInboxBigTeamRowTyp.label && arr.push(l.label.name)
+      if (l.state === T.RPCChat.UIInboxBigTeamRowTyp.label) {
+        arr.push(l.label.name)
+      }
       return arr
     }, []) ?? []
   const smallTeams =
     layout?.smallTeams?.reduce<Array<string>>((arr, l) => {
-      l.isTeam && arr.push(l.name)
+      if (l.isTeam) {
+        arr.push(l.name)
+      }
       return arr
     }, []) ?? []
   return bigTeams.concat(smallTeams).map(teamname => ({channelname: '', teamname}))
 }
 
-const useDataUsers = () => {
-  const infoMap = C.useUsersState(s => s.infoMap)
-  const participantInfo = C.useChatContext(s => s.participants)
-  return C.useChatContext(s => {
-    const {teamID, teamType} = s.meta
-    // TODO not reactive
-    const teamMembers = C.useTeamsState.getState().teamIDToMembers.get(teamID)
-    const usernames = teamMembers
-      ? [...teamMembers.values()].map(m => m.username).sort((a, b) => a.localeCompare(b))
-      : participantInfo.all
-    const suggestions = usernames.map(username => ({
-      fullName: infoMap.get(username)?.fullname || '',
-      username,
-    }))
-    if (teamType !== 'adhoc') {
-      const fullName = teamType === 'small' ? 'Everyone in this team' : 'Everyone in this channel'
-      suggestions.push({fullName, username: 'channel'}, {fullName, username: 'here'})
-    }
-    // TODO this will thrash on every store change, TODO fix
-    return suggestions
-  })
+const useDataUsers = (conversationIDKey: T.Chat.ConversationIDKey) => {
+  const infoMap = useUsersState(s => s.infoMap)
+  const {meta, participants: participantInfo} = useConversationMetadata(conversationIDKey)
+  const {teamID, teamType} = meta
+  const {loading: loadingTeamMembers, members: teamMembers} = useChatTeamMembers(teamID)
+  const suggestions =
+    teamType !== 'adhoc' && !loadingTeamMembers && teamMembers.size > 0
+      ? [...teamMembers.values()]
+          .sort((a, b) => a.username.localeCompare(b.username))
+          .map(member => ({
+            fullName: member.fullName || infoMap.get(member.username)?.fullname || '',
+            username: member.username,
+          }))
+      : participantInfo.all.map(username => ({
+          fullName: infoMap.get(username)?.fullname || '',
+          username,
+        }))
+  if (teamType !== 'adhoc') {
+    const fullName = teamType === 'small' ? 'Everyone in this team' : 'Everyone in this channel'
+    suggestions.push({fullName, username: 'channel'}, {fullName, username: 'here'})
+  }
+  return suggestions
 }
 
 const useDataTeams = () => {
-  const inboxLayout = C.useChatState(s => s.inboxLayout)
-  const teams = React.useMemo(() => getTeams(inboxLayout), [inboxLayout])
-  const allChannels = React.useMemo(
-    () =>
-      inboxLayout?.bigTeams?.reduce<Array<TeamListItem>>((arr, t) => {
-        if (t.state === T.RPCChat.UIInboxBigTeamRowTyp.channel) {
-          if (t.channel.channelname.length) {
-            arr.push({channelname: t.channel.channelname, teamname: t.channel.teamname})
-          }
-        }
-        return arr
-      }, []) ?? [],
-    [inboxLayout]
-  )
+  const inboxLayout = useInboxLayoutState(s => s.layout)
+  const teams = getTeams(inboxLayout)
+  const allChannels = inboxLayout?.bigTeams?.reduce<Array<TeamListItem>>((arr, t) => {
+    if (t.state === T.RPCChat.UIInboxBigTeamRowTyp.channel) {
+      if (t.channel.channelname.length) {
+        arr.push({channelname: t.channel.channelname, teamname: t.channel.teamname})
+      }
+    }
+    return arr
+  }, []) ?? []
   return {allChannels, teams}
 }
 
-const useDataSource = (filter: string) => {
+const useDataSource = (conversationIDKey: T.Chat.ConversationIDKey, filter: string) => {
   const fl = filter.toLowerCase()
-  const users = useDataUsers()
+  const users = useDataUsers(conversationIDKey)
   const {teams, allChannels} = useDataTeams()
   return filterAndJoin(users, teams, allChannels, fl)
 }
 
-type UserListItem = {
+export type UserListItem = {
   username: string
   fullName: string
 }
 
-type TeamListItem = {
+export type TeamListItem = {
   teamname: string
   channelname: string
 }
@@ -203,15 +202,19 @@ type ListItem = {
 
 type ListProps = Pick<
   Common.ListProps<ListItem>,
-  'expanded' | 'suggestBotCommandsUpdateStatus' | 'listStyle' | 'spinnerStyle'
+  'suggestBotCommandsUpdateStatus' | 'listStyle' | 'spinnerStyle'
 > & {
+  conversationIDKey: T.Chat.ConversationIDKey
   filter: string
   onSelected: (item: ListItem, final: boolean) => void
-  onMoveRef: React.MutableRefObject<((up: boolean) => void) | undefined>
-  onSubmitRef: React.MutableRefObject<(() => boolean) | undefined>
+  setOnMoveRef: (r: (up: boolean) => void) => void
+  setOnSubmitRef: (r: () => boolean) => void
 }
 
 const ItemRenderer = (p: Common.ItemRendererProps<ListItem>) => {
+  const styles = useStyles()
+  const commonStyles = Common.useStyles()
+  const theme = Kb.Styles.useTheme()
   const {selected, item} = p
   const {username, fullName, teamname, channelname} = item
 
@@ -224,18 +227,18 @@ const ItemRenderer = (p: Common.ItemRendererProps<ListItem>) => {
       direction="horizontal"
       fullWidth={true}
       style={Kb.Styles.collapseStyles([
-        Common.styles.suggestionBase,
-        Common.styles.fixSuggestionHeight,
-        {backgroundColor: selected ? Kb.Styles.globalColors.blueLighter2 : Kb.Styles.globalColors.white},
+        commonStyles.suggestionBase,
+        commonStyles.fixSuggestionHeight,
+        {backgroundColor: selected ? theme.blueLighter2 : theme.white},
       ])}
       gap="tiny"
     >
-      {C.Chat.isSpecialMention(username ?? '') ? (
-        <Kb.Box2 direction="horizontal" style={styles.iconPeople}>
-          <Kb.Icon type="iconfont-people" color={Kb.Styles.globalColors.blueDark} fontSize={16} />
+      {Chat.isSpecialMention(username ?? '') ? (
+        <Kb.Box2 direction="horizontal" style={styles.iconPeople} centerChildren={true}>
+          <Kb.Icon type="iconfont-people" color={theme.blueDark} fontSize={16} />
         </Kb.Box2>
       ) : (
-        <Kb.Avatar username={username} size={32} />
+        <Kb.Avatar username={username} size={Common.avatarSize} />
       )}
       <Kb.ConnectedUsernames
         type="BodyBold"
@@ -256,9 +259,39 @@ const keyExtractor = (item: ListItem) => {
   return item.username ?? ''
 }
 
+// filtering rebuilds item objects every keystroke; reuse prior identities so
+// the memoized suggestion rows can bail. Bounded by users/channels ever
+// suggested; the size guard is a backstop for pathological accounts.
+const listItemCache = new Map<string, ListItem>()
+
+// module scope outlives sign-out; keyed by username / team#channel
+registerExternalResetter('chat-user-suggestor-item-cache', () => {
+  listItemCache.clear()
+})
+const canonicalizeItems = (items: Array<ListItem>) => {
+  if (listItemCache.size > 8192) {
+    listItemCache.clear()
+  }
+  return items.map(item => {
+    const key = keyExtractor(item)
+    const old = listItemCache.get(key)
+    if (
+      old &&
+      old.username === item.username &&
+      old.fullName === item.fullName &&
+      old.teamname === item.teamname &&
+      old.channelname === item.channelname
+    ) {
+      return old
+    }
+    listItemCache.set(key, item)
+    return item
+  })
+}
+
 export const UsersList = (p: ListProps) => {
-  const {filter, ...rest} = p
-  const items = useDataSource(filter)
+  const {conversationIDKey, filter, ...rest} = p
+  const items = canonicalizeItems(useDataSource(conversationIDKey, filter))
   return (
     <Common.List
       {...rest}
@@ -266,6 +299,7 @@ export const UsersList = (p: ListProps) => {
       items={items}
       ItemRenderer={ItemRenderer}
       loading={false}
+      rowHeight={Common.avatarRowHeight}
     />
   )
 }

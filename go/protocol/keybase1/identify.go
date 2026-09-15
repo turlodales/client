@@ -1,12 +1,13 @@
-// Auto-generated to Go types and interfaces using avdl-compiler v1.4.10 (https://github.com/keybase/node-avdl-compiler)
+// Code generated to Go types and interfaces using avdl-compiler v1.4.10 (https://github.com/keybase/node-avdl-compiler). DO NOT EDIT.
 //   Input file: avdl/keybase1/identify.avdl
 
 package keybase1
 
 import (
-	"github.com/keybase/go-framed-msgpack-rpc/rpc"
-	context "golang.org/x/net/context"
+	"context"
 	"time"
+
+	"github.com/keybase/go-framed-msgpack-rpc/rpc"
 )
 
 type IdentifyProofBreak struct {
@@ -67,7 +68,7 @@ func (o Identify2Res) DeepCopy() Identify2Res {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.TrackBreaks),
 	}
@@ -87,7 +88,7 @@ func (o Identify2ResUPK2) DeepCopy() Identify2ResUPK2 {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.TrackBreaks),
 	}
@@ -105,7 +106,7 @@ func (o IdentifyLiteRes) DeepCopy() IdentifyLiteRes {
 			if x == nil {
 				return nil
 			}
-			tmp := (*x).DeepCopy()
+			tmp := x.DeepCopy()
 			return &tmp
 		})(o.TrackBreaks),
 	}
@@ -229,11 +230,11 @@ func IdentifyProtocol(i IdentifyInterface) rpc.Protocol {
 		Name: "keybase.1.identify",
 		Methods: map[string]rpc.ServeHandlerDescription{
 			"Resolve3": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]Resolve3Arg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]Resolve3Arg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]Resolve3Arg)(nil), args)
@@ -244,11 +245,11 @@ func IdentifyProtocol(i IdentifyInterface) rpc.Protocol {
 				},
 			},
 			"identify2": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]Identify2Arg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]Identify2Arg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]Identify2Arg)(nil), args)
@@ -259,11 +260,11 @@ func IdentifyProtocol(i IdentifyInterface) rpc.Protocol {
 				},
 			},
 			"identifyLite": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]IdentifyLiteArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]IdentifyLiteArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]IdentifyLiteArg)(nil), args)
@@ -274,11 +275,11 @@ func IdentifyProtocol(i IdentifyInterface) rpc.Protocol {
 				},
 			},
 			"resolveIdentifyImplicitTeam": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]ResolveIdentifyImplicitTeamArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]ResolveIdentifyImplicitTeamArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]ResolveIdentifyImplicitTeamArg)(nil), args)
@@ -289,11 +290,11 @@ func IdentifyProtocol(i IdentifyInterface) rpc.Protocol {
 				},
 			},
 			"resolveImplicitTeam": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]ResolveImplicitTeamArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]ResolveImplicitTeamArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]ResolveImplicitTeamArg)(nil), args)
@@ -304,11 +305,11 @@ func IdentifyProtocol(i IdentifyInterface) rpc.Protocol {
 				},
 			},
 			"normalizeSocialAssertion": {
-				MakeArg: func() interface{} {
+				MakeArg: func() any {
 					var ret [1]NormalizeSocialAssertionArg
 					return &ret
 				},
-				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+				Handler: func(ctx context.Context, args any) (ret any, err error) {
 					typedArgs, ok := args.(*[1]NormalizeSocialAssertionArg)
 					if !ok {
 						err = rpc.NewTypeError((*[1]NormalizeSocialAssertionArg)(nil), args)
@@ -328,34 +329,34 @@ type IdentifyClient struct {
 
 // Resolve an assertion to a (UID,username) or (TeamID,teamname). On failure, returns an error.
 func (c IdentifyClient) Resolve3(ctx context.Context, __arg Resolve3Arg) (res UserOrTeamLite, err error) {
-	err = c.Cli.Call(ctx, "keybase.1.identify.Resolve3", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "keybase.1.identify.Resolve3", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c IdentifyClient) Identify2(ctx context.Context, __arg Identify2Arg) (res Identify2Res, err error) {
-	err = c.Cli.Call(ctx, "keybase.1.identify.identify2", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "keybase.1.identify.identify2", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c IdentifyClient) IdentifyLite(ctx context.Context, __arg IdentifyLiteArg) (res IdentifyLiteRes, err error) {
-	err = c.Cli.Call(ctx, "keybase.1.identify.identifyLite", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "keybase.1.identify.identifyLite", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c IdentifyClient) ResolveIdentifyImplicitTeam(ctx context.Context, __arg ResolveIdentifyImplicitTeamArg) (res ResolveIdentifyImplicitTeamRes, err error) {
-	err = c.Cli.Call(ctx, "keybase.1.identify.resolveIdentifyImplicitTeam", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "keybase.1.identify.resolveIdentifyImplicitTeam", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 // resolveImplicitTeam returns a TLF display name given a teamID. The publicness
 // of the team is inferred from the TeamID.
 func (c IdentifyClient) ResolveImplicitTeam(ctx context.Context, __arg ResolveImplicitTeamArg) (res Folder, err error) {
-	err = c.Cli.Call(ctx, "keybase.1.identify.resolveImplicitTeam", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "keybase.1.identify.resolveImplicitTeam", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }
 
 func (c IdentifyClient) NormalizeSocialAssertion(ctx context.Context, assertion string) (res SocialAssertion, err error) {
 	__arg := NormalizeSocialAssertionArg{Assertion: assertion}
-	err = c.Cli.Call(ctx, "keybase.1.identify.normalizeSocialAssertion", []interface{}{__arg}, &res, 0*time.Millisecond)
+	err = c.Cli.Call(ctx, "keybase.1.identify.normalizeSocialAssertion", []any{__arg}, &res, 0*time.Millisecond)
 	return
 }

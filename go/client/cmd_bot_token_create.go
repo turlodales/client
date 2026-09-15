@@ -4,7 +4,7 @@
 package client
 
 import (
-	"golang.org/x/net/context"
+	"context"
 
 	"github.com/keybase/cli"
 	"github.com/keybase/client/go/libcmdline"
@@ -42,7 +42,6 @@ func (t *CmdBotTokenCreate) ParseArgv(ctx *cli.Context) (err error) {
 }
 
 func (t *CmdBotTokenCreate) Run() (err error) {
-
 	bcli, err := GetBotClient(t.G())
 	if err != nil {
 		return err

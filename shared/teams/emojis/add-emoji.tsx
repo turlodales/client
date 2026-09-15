@@ -1,25 +1,29 @@
 import * as T from '@/constants/types'
 import * as C from '@/constants'
+import * as Chat from '@/constants/chat'
 import * as React from 'react'
 import * as Kb from '@/common-adapters'
 import {AliasInput, Modal} from './common'
-import {pickImages} from '@/util/pick-files'
+import {pickImages} from '@/util/misc'
 import kebabCase from 'lodash/kebabCase'
 import {useEmojiState} from './use-emoji'
+import {HeaderLeftButton} from '@/common-adapters/header-buttons'
+import {useNavigation} from '@react-navigation/native'
+import KB2 from '@/util/electron'
+import {ensureError} from '@/util/errors'
+import {normalizeFilePathURL} from '@/util/file-url'
 
-const pickEmojisPromise = async () => pickImages('Select emoji images to upload')
+const {getPathForFile} = KB2.functions
+
+const pickEmojisPromise = async () => await pickImages('Select emoji images to upload')
 
 type Props = {
   conversationIDKey: T.Chat.ConversationIDKey
   teamID: T.Teams.TeamID // not supported yet
 }
-type RoutableProps = {
-  conversationIDKey: T.Chat.ConversationIDKey
-  teamID: T.Teams.TeamID // not supported yet
-}
 
 // don't prefill on mobile since it's always a long random string.
-const filePathToDefaultAlias = Kb.Styles.isMobile
+const filePathToDefaultAlias = isMobile
   ? () => ''
   : (path: string) => {
       const name = T.FS.getLocalPathName(path)
@@ -37,11 +41,11 @@ const useDoAddEmojis = (
   const addEmojisRpc = C.useRPC(T.RPCChat.localAddEmojisRpcPromise)
   const [waitingAddEmojis, setWaitingAddEmojis] = React.useState(false)
   const [bannerError, setBannerError] = React.useState('')
-  const clearBannerError = React.useCallback(() => setBannerError(''), [setBannerError])
+  const clearBannerError = () => setBannerError('')
 
-  const clearModals = C.useRouterState(s => s.dispatch.clearModals)
+  const clearModals = C.Router2.clearModals
   const doAddEmojis =
-    conversationIDKey !== C.Chat.noConversationIDKey
+    conversationIDKey !== Chat.noConversationIDKey
       ? () => {
           setWaitingAddEmojis(true)
           addEmojisRpc(
@@ -60,7 +64,9 @@ const useDoAddEmojis = (
                 removeFilePath(new Set(res.successFilenames))
               }
               const failedFilenamesKeys = Object.keys(res.failedFilenames ?? {})
-              !failedFilenamesKeys.length && clearModals()
+              if (!failedFilenamesKeys.length) {
+                clearModals()
+              }
               setErrors(
                 new Map(failedFilenamesKeys.map(key => [key, res.failedFilenames?.[key]?.uidisplay ?? '']))
               )
@@ -68,7 +74,7 @@ const useDoAddEmojis = (
               setWaitingAddEmojis(false)
             },
             err => {
-              throw err
+              throw ensureError(err)
             }
           )
         }
@@ -76,13 +82,12 @@ const useDoAddEmojis = (
   return {bannerError, clearBannerError, doAddEmojis, waitingAddEmojis}
 }
 
-const useStuff = (conversationIDKey: T.Chat.ConversationIDKey, onChange?: () => void) => {
+const useEmojiUpload = (conversationIDKey: T.Chat.ConversationIDKey, onChange?: () => void) => {
   const [filePaths, setFilePaths] = React.useState<Array<string>>([])
 
   const [aliasMap, setAliasMap] = React.useState(new Map<string, string>())
 
-  const addFiles = React.useCallback(
-    (paths: Array<string>) => {
+  const addFiles = (paths: Array<string>) => {
       const pathsToAdd = paths.reduce(
         ({deduplicated, set}, path) => {
           if (!set.has(path)) {
@@ -104,34 +109,25 @@ const useStuff = (conversationIDKey: T.Chat.ConversationIDKey, onChange?: () => 
         )
       )
       setFilePaths([...filePaths, ...pathsToAdd])
-    },
-    [filePaths, aliasMap, setFilePaths]
-  )
-  const clearFiles = React.useCallback(() => setFilePaths([]), [setFilePaths])
+    }
+  const clearFiles = () => setFilePaths([])
 
-  const removeFilePath = React.useCallback(
-    (toRemove: Set<string> | string) =>
+  const removeFilePath = (toRemove: Set<string> | string) =>
       setFilePaths(fps =>
         typeof toRemove === 'string'
           ? fps.filter(filePath => toRemove !== filePath)
           : fps.filter(filePath => !toRemove.has(filePath))
-      ),
-    [setFilePaths]
-  )
+      )
 
   const [errors, setErrors] = React.useState(new Map<string, string>())
 
-  const emojisToAdd = React.useMemo(
-    () =>
-      filePaths.map(path => ({
+  const emojisToAdd = filePaths.map(path => ({
         alias: aliasMap.get(path) || '',
         error: errors.get(path) || '',
         onChangeAlias: (newAlias: string) => setAliasMap(new Map([...aliasMap, [path, newAlias]])),
         onRemove: () => removeFilePath(path),
         path,
-      })),
-    [errors, filePaths, aliasMap, removeFilePath]
-  )
+      }))
 
   const {bannerError, clearBannerError, doAddEmojis, waitingAddEmojis} = useDoAddEmojis(
     conversationIDKey,
@@ -140,10 +136,10 @@ const useStuff = (conversationIDKey: T.Chat.ConversationIDKey, onChange?: () => 
     removeFilePath,
     onChange
   )
-  const clearErrors = React.useCallback(() => {
+  const clearErrors = () => {
     clearBannerError()
     setErrors(new Map<string, string>())
-  }, [clearBannerError, setErrors])
+  }
 
   return {
     addFiles,
@@ -157,10 +153,10 @@ const useStuff = (conversationIDKey: T.Chat.ConversationIDKey, onChange?: () => 
   }
 }
 
-export const AddEmojiModal = (props: Props) => {
+const AddEmojiModal = (props: Props) => {
   const onChange = useEmojiState(s => s.dispatch.triggerEmojiUpdated)
   const {addFiles, bannerError, clearErrors, clearFiles, doAddEmojis, emojisToAdd, waitingAddEmojis} =
-    useStuff(props.conversationIDKey, onChange)
+    useEmojiUpload(props.conversationIDKey, onChange)
 
   const pick = () => {
     pickEmojisPromise()
@@ -168,39 +164,51 @@ export const AddEmojiModal = (props: Props) => {
       .catch(() => {})
   }
 
-  return !emojisToAdd.length ? (
+  const hasEmojis = emojisToAdd.length > 0
+  const navigation = useNavigation()
+  React.useEffect(() => {
+    if (!isMobile) return
+    const onBack = () => {
+      clearErrors()
+      clearFiles()
+    }
+    if (isIOS) {
+      navigation.setOptions({
+        unstable_headerLeftItems: () =>
+          hasEmojis ? [Kb.nativeBackHeaderItem(onBack)] : [Kb.nativeCancelHeaderItem()],
+      } as object)
+    } else if (hasEmojis) {
+      navigation.setOptions({
+        headerLeft: () => <HeaderLeftButton onPress={onBack} />,
+      })
+    } else {
+      navigation.setOptions({
+        headerLeft: () => <HeaderLeftButton mode="cancel" />,
+      })
+    }
+  }, [hasEmojis, navigation, clearErrors, clearFiles])
+
+  return !hasEmojis ? (
     <Modal
-      title="Add emoji"
       bannerImage="icon-illustration-emoji-add-460-96"
       desktopHeight={537}
-      footerButtonLabel={Kb.Styles.isMobile ? 'Choose Images' : undefined}
-      footerButtonOnClick={Kb.Styles.isMobile ? pick : undefined}
+      footerButtonLabel={isMobile ? 'Choose Images' : undefined}
+      footerButtonOnClick={isMobile ? pick : undefined}
     >
       <AddEmojiPrompt addFiles={addFiles} />
     </Modal>
   ) : (
     <Modal
-      title="Add emoji"
       bannerError={bannerError}
       bannerImage="icon-illustration-emoji-add-460-96"
       desktopHeight={537}
       footerButtonLabel="Add emoji"
       footerButtonOnClick={doAddEmojis}
       footerButtonWaiting={waitingAddEmojis}
-      backButtonOnClick={() => {
-        clearErrors()
-        clearFiles()
-      }}
     >
       <AddEmojiAliasAndConfirm addFiles={addFiles} emojisToAdd={emojisToAdd} />
     </Modal>
   )
-}
-
-const AddEmojiModalWrapper = (routableProps: RoutableProps) => {
-  const conversationIDKey = routableProps.conversationIDKey
-  const teamID = routableProps.teamID
-  return <AddEmojiModal conversationIDKey={conversationIDKey} teamID={teamID} />
 }
 
 const usePickFiles = (addFiles: (filePaths: Array<string>) => void) => {
@@ -212,9 +220,12 @@ const usePickFiles = (addFiles: (filePaths: Array<string>) => void) => {
       return
     }
     const filesToAdd = Array.from(e.dataTransfer.files)
-      .filter(file => file.type.startsWith('image/') && typeof file.path === 'string')
-      .map(file => file.path)
-    filesToAdd.length && addFiles(filesToAdd)
+      .filter(file => file.type.startsWith('image/'))
+      .map(file => getPathForFile?.(file) ?? '')
+      .filter(Boolean)
+    if (filesToAdd.length) {
+      addFiles(filesToAdd)
+    }
     setDragOver(false)
   }
   const pick = () => {
@@ -230,6 +241,8 @@ type AddEmojiPromptProps = {
 }
 
 const AddEmojiPrompt = (props: AddEmojiPromptProps) => {
+  const styles = useStyles()
+  const theme = Kb.Styles.useTheme()
   const {dragOver, onDragLeave, onDragOver, onDrop, pick} = usePickFiles(props.addFiles)
   return (
     <Kb.Box2
@@ -239,7 +252,7 @@ const AddEmojiPrompt = (props: AddEmojiPromptProps) => {
       style={styles.contentContainer}
       gap="small"
     >
-      {Kb.Styles.isMobile ? (
+      {isMobile ? (
         <Kb.Text type="Body" center={true}>
           Choose images from your library
         </Kb.Text>
@@ -256,7 +269,7 @@ const AddEmojiPrompt = (props: AddEmojiPromptProps) => {
           </Kb.Text>
         </Kb.Box2>
       )}
-      {!Kb.Styles.isMobile && (
+      {!isMobile && (
         <Kb.Box2
           direction="vertical"
           style={Kb.Styles.collapseStyles([styles.dropArea, dragOver && styles.dropAreaDragOver])}
@@ -265,7 +278,7 @@ const AddEmojiPrompt = (props: AddEmojiPromptProps) => {
           onDragLeave={onDragLeave}
           onDrop={onDrop}
         >
-          <Kb.Icon type="iconfont-emoji" fontSize={48} color={Kb.Styles.globalColors.black_10} />
+          <Kb.Icon type="iconfont-emoji" fontSize={48} color={theme.black_10} />
         </Kb.Box2>
       )}
       <Kb.Text type="BodySmall">Maximum 256KB per image.</Kb.Text>
@@ -296,17 +309,20 @@ type EmojiToAddOrAddRow =
     }
   | {
       type: 'add'
-      add: () => any
+      add: () => void
       height: number
       key: string
       offset: number
     }
 
-const renderRow = (_: number, item: EmojiToAddOrAddRow) =>
-  item.type === 'add' ? (
+const EmojiToAddRow = (p: {item: EmojiToAddOrAddRow}) => {
+  const styles = useStyles()
+  const theme = Kb.Styles.useTheme()
+  const {item} = p
+  return item.type === 'add' ? (
     <Kb.Box2 direction="horizontal" alignItems="center" fullWidth={true} style={styles.emojiToAddRow}>
-      <Kb.ClickableBox onClick={item.add} style={styles.addEmojiIconContainer}>
-        <Kb.Icon type="iconfont-new" color={Kb.Styles.globalColors.blue} />
+      <Kb.ClickableBox direction="vertical" centerChildren={true} onClick={item.add} style={styles.addEmojiIconContainer}>
+        <Kb.Icon type="iconfont-new" color={theme.blue} />
       </Kb.ClickableBox>
     </Kb.Box2>
   ) : (
@@ -319,9 +335,9 @@ const renderRow = (_: number, item: EmojiToAddOrAddRow) =>
         item.emojiToAdd.error && styles.emojiToAddRowWithError,
       ])}
     >
-      <Kb.Box style={styles.emojiToAddImageContainer}>
-        <Kb.Image2 src={item.emojiToAdd.path} style={styles.emojiToAddImage} />
-      </Kb.Box>
+      <Kb.Box2 direction="vertical" style={styles.emojiToAddImageContainer}>
+        <Kb.Image src={normalizeFilePathURL(item.emojiToAdd.path)} style={styles.emojiToAddImage} />
+      </Kb.Box2>
       <AliasInput
         error={item.emojiToAdd.error}
         alias={item.emojiToAdd.alias}
@@ -331,11 +347,15 @@ const renderRow = (_: number, item: EmojiToAddOrAddRow) =>
       />
     </Kb.Box2>
   )
+}
+
+const renderRow = (_: number, item: EmojiToAddOrAddRow) => <EmojiToAddRow item={item} />
 
 const AddEmojiAliasAndConfirm = (props: AddEmojiAliasAndConfirmProps) => {
+  const styles = useStyles()
   const {dragOver, onDragLeave, onDragOver, onDrop, pick} = usePickFiles(props.addFiles)
   const {emojisToAdd} = props
-  const items = React.useMemo(() => {
+  const items = (() => {
     const ret = emojisToAdd.reduce<Array<EmojiToAddOrAddRow>>((arr, emojiToAdd, index) => {
       const previous = arr[index - 1]
       arr.push({
@@ -356,10 +376,7 @@ const AddEmojiAliasAndConfirm = (props: AddEmojiAliasAndConfirmProps) => {
       type: 'add',
     })
     return ret
-  }, [emojisToAdd, pick])
-
-  const [forceLayout, setForceLayout] = React.useState(0)
-  React.useEffect(() => setForceLayout(n => n + 1), [emojisToAdd])
+  })()
 
   return (
     <Kb.Box2
@@ -374,7 +391,7 @@ const AddEmojiAliasAndConfirm = (props: AddEmojiAliasAndConfirmProps) => {
         {items.length > 1 ? 'Choose aliases for these emoji:' : 'Choose an alias for this emoji:'}
       </Kb.Text>
       <Kb.BoxGrow>
-        <Kb.List2
+        <Kb.List
           items={items}
           keyProperty="key"
           renderItem={renderRow}
@@ -386,40 +403,31 @@ const AddEmojiAliasAndConfirm = (props: AddEmojiAliasAndConfirmProps) => {
             }),
             type: 'variable',
           }}
-          forceLayout={forceLayout}
         />
       </Kb.BoxGrow>
     </Kb.Box2>
   )
 }
 
-const emojiToAddRowHeightNoError = Kb.Styles.isMobile ? 48 : 40
-const emojiToAddRowHeightWithError = Kb.Styles.isMobile ? 70 : 60
+const emojiToAddRowHeightNoError = isMobile ? 48 : 40
+const emojiToAddRowHeightWithError = isMobile ? 70 : 60
 
-const styles = Kb.Styles.styleSheetCreate(() => ({
+const useStyles = Kb.Styles.createStyleHook(theme => ({
   addEmojiIconContainer: Kb.Styles.platformStyles({
     common: {
-      ...Kb.Styles.globalStyles.flexBoxColumn,
-      alignItems: 'center',
-      borderColor: Kb.Styles.globalColors.black_20,
-      borderRadius: Kb.Styles.globalMargins.xtiny,
-      borderStyle: 'solid',
-      borderWidth: 1,
-      justifyContent: 'center',
+      ...Kb.Styles.border(theme.black_20, 1, Kb.Styles.globalMargins.xtiny),
     },
     isElectron: {
-      height: Kb.Styles.globalMargins.mediumLarge,
-      width: Kb.Styles.globalMargins.mediumLarge,
+      ...Kb.Styles.size(Kb.Styles.globalMargins.mediumLarge),
     },
     isMobile: {
-      height: Kb.Styles.globalMargins.large,
-      width: Kb.Styles.globalMargins.large,
+      ...Kb.Styles.size(Kb.Styles.globalMargins.large),
     },
   }),
   contentContainer: Kb.Styles.platformStyles({
     common: {
       ...Kb.Styles.globalStyles.flexGrow,
-      backgroundColor: Kb.Styles.globalColors.blueGrey,
+      backgroundColor: theme.blueGrey,
       padding: Kb.Styles.globalMargins.small,
     },
   }),
@@ -430,23 +438,21 @@ const styles = Kb.Styles.styleSheetCreate(() => ({
   }),
   dropArea: Kb.Styles.platformStyles({
     isElectron: {
-      backgroundColor: Kb.Styles.globalColors.black_05,
-      borderColor: Kb.Styles.globalColors.black_35,
+      backgroundColor: theme.black_05,
+      borderColor: theme.black_35,
       borderRadius: 30,
       borderStyle: 'dotted',
       borderWidth: 3,
-      height: 175,
-      width: 175,
+      ...Kb.Styles.size(175),
     },
   }),
   dropAreaDragOver: Kb.Styles.platformStyles({
     isElectron: {
-      backgroundColor: Kb.Styles.globalColors.black_10,
+      backgroundColor: theme.black_10,
     },
   }),
   emojiToAddImage: {
-    height: '100%',
-    width: '100%',
+    ...Kb.Styles.size('100%'),
   },
   emojiToAddImageContainer: Kb.Styles.platformStyles({
     common: {
@@ -481,4 +487,4 @@ const styles = Kb.Styles.styleSheetCreate(() => ({
   },
 }))
 
-export default AddEmojiModalWrapper
+export default AddEmojiModal

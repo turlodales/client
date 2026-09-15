@@ -4,11 +4,11 @@
 package kex2
 
 import (
+	"context"
+	"errors"
 	"net"
 	"strings"
 	"time"
-
-	"golang.org/x/net/context"
 
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 	"github.com/keybase/go-framed-msgpack-rpc/rpc"
@@ -52,7 +52,7 @@ func newProvisioner(arg ProvisionerArg) *provisioner {
 	return ret
 }
 
-func (p *provisioner) debug(fmtString string, args ...interface{}) {
+func (p *provisioner) debug(fmtString string, args ...any) {
 	if p.arg.LogCtx != nil {
 		p.arg.LogCtx.Debug(fmtString, args...)
 	}
@@ -99,7 +99,6 @@ func (p *provisioner) setDeviceID() (err error) {
 }
 
 func (p *provisioner) pickFirstConnection() (err error) {
-
 	// This connection is auto-closed at the end of this function, so if
 	// you don't want it to close, then set it to nil.  See the first
 	// case in the select below.
@@ -163,7 +162,7 @@ func (p *provisioner) runProtocolWithCancel() (err error) {
 		p.canceled = true
 		return ErrCanceled
 	case err = <-ch:
-		if err == context.Canceled && !p.helloReceived {
+		if errors.Is(err, context.Canceled) && !p.helloReceived {
 			return ErrHelloTimeout
 		}
 		return err

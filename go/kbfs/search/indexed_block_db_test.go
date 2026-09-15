@@ -5,6 +5,7 @@
 package search
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -16,11 +17,11 @@ import (
 	"github.com/keybase/client/go/kbfs/tlf"
 	"github.com/stretchr/testify/require"
 	"github.com/syndtr/goleveldb/leveldb/storage"
-	"golang.org/x/net/context"
 )
 
 func newIndexedBlockDbForTestWithStorage(
-	t *testing.T, blockS, tlfS storage.Storage) (db *IndexedBlockDb, done func()) {
+	t *testing.T, blockS, tlfS storage.Storage,
+) (db *IndexedBlockDb, done func()) {
 	config := libkbfs.MakeTestConfigOrBust(t, "user1")
 	db, err := newIndexedBlockDbFromStorage(config, blockS, tlfS)
 	require.NoError(t, err)
@@ -28,7 +29,8 @@ func newIndexedBlockDbForTestWithStorage(
 }
 
 func newIndexedBlockDbForTest(t *testing.T) (
-	db *IndexedBlockDb, tempdir string, done func()) {
+	db *IndexedBlockDb, tempdir string, done func(),
+) {
 	// Use a disk-based level, instead of memory storage, because we
 	// want to simulate a restart and memory storages can't be reused.
 	tempdir, err := os.MkdirTemp(os.TempDir(), "indexed_blocks_db")
@@ -44,7 +46,7 @@ func newIndexedBlockDbForTest(t *testing.T) (
 
 func shutdownIndexedBlockDbTest(db *IndexedBlockDb, tempdir string) {
 	db.Shutdown(context.Background())
-	os.RemoveAll(tempdir)
+	_ = os.RemoveAll(tempdir)
 }
 
 func TestIndexedBlockDbCreate(t *testing.T) {
@@ -94,7 +96,8 @@ func TestIndexedBlockDb(t *testing.T) {
 	require.NoError(t, err)
 	checkWrite := func(
 		expectedVer, ver uint64, expectedDocID, docID string,
-		expectedDirDone, dirDone bool) {
+		expectedDirDone, dirDone bool,
+	) {
 		require.Equal(t, expectedVer, ver)
 		require.Equal(t, expectedDocID, docID)
 		require.Equal(t, expectedDirDone, dirDone)

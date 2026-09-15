@@ -4,6 +4,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"time"
@@ -23,7 +24,6 @@ import (
 	"github.com/keybase/client/go/profiling"
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 	"github.com/keybase/go-framed-msgpack-rpc/rpc"
-	"golang.org/x/net/context"
 )
 
 // UserHandler is the RPC handler for the user interface.
@@ -121,7 +121,7 @@ func (h *UserHandler) LoadUserPlusKeysV2(ctx context.Context, arg keybase1.LoadU
 	}
 
 	retp := &ret
-	servedRet, err := h.service.offlineRPCCache.Serve(mctx, arg.Oa, offline.Version(1), "user.loadUserPlusKeysV2", false, cacheArg, &retp, func(mctx libkb.MetaContext) (interface{}, error) {
+	servedRet, err := h.service.offlineRPCCache.Serve(mctx, arg.Oa, offline.Version(1), "user.loadUserPlusKeysV2", false, cacheArg, &retp, func(mctx libkb.MetaContext) (any, error) {
 		return h.G().GetUPAKLoader().LoadV2WithKID(mctx.Ctx(), arg.Uid, arg.PollForKID)
 	})
 	if s, ok := servedRet.(*keybase1.UserPlusKeysV2AllIncarnations); ok && s != nil {
@@ -203,8 +203,8 @@ func (h *UserHandler) loadPublicKeys(ctx context.Context, larg libkb.LoadUserArg
 }
 
 func (h *UserHandler) LoadAllPublicKeysUnverified(ctx context.Context,
-	arg keybase1.LoadAllPublicKeysUnverifiedArg) (keys []keybase1.PublicKey, err error) {
-
+	arg keybase1.LoadAllPublicKeysUnverifiedArg,
+) (keys []keybase1.PublicKey, err error) {
 	u, err := libkb.LoadUserFromServer(libkb.NewMetaContext(ctx, h.G()), arg.Uid, nil)
 	if err != nil {
 		return
@@ -495,7 +495,8 @@ func (h *UserHandler) proofSuggestionsHelper(mctx libkb.MetaContext, tracer prof
 				PickerText:    serviceType.DisplayName(),
 				PickerSubtext: subtext,
 				Metas:         metas,
-			}})
+			},
+		})
 	}
 	tracer.Stage("misc")
 	hasPGP := len(user.GetActivePGPKeys(true)) > 0
@@ -580,9 +581,8 @@ func (h *UserHandler) proofSuggestionsHelper(mctx libkb.MetaContext, tracer prof
 			return p
 		} else if p, ok := offlineOrderMap[key]; ok {
 			return p + maxServerPriority + 1
-		} else {
-			return len(offlineOrderMap) + maxServerPriority
 		}
+		return len(offlineOrderMap) + maxServerPriority
 	}
 	for i := range suggestions {
 		suggestions[i].Priority = priorityFn(suggestions[i].Key)

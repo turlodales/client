@@ -1,13 +1,14 @@
 import * as C from '@/constants'
-import * as Kb from '@/common-adapters'
-import * as React from 'react'
+import {useEngineActionListener} from '@/engine/action-listener'
 import useBrowserWindow from '../desktop/remote/use-browser-window.desktop'
 import useSerializeProps from '../desktop/remote/use-serialize-props.desktop'
-import {serialize, type ProxyProps} from './remote-serializer.desktop'
+import {handleUnlockFoldersEngineAction} from './engine-actions.desktop'
+import type {ProxyProps} from './main2.desktop'
+import {useUnlockFoldersState} from './store'
 
 const windowOpts = {height: 300, width: 500}
 
-const UnlockFolders = React.memo(function (p: ProxyProps) {
+function UnlockFolders(p: ProxyProps) {
   const windowComponent = 'unlock-folders'
   const windowParam = windowComponent
 
@@ -18,23 +19,30 @@ const UnlockFolders = React.memo(function (p: ProxyProps) {
     windowTitle: 'UnlockFolders',
   })
 
-  useSerializeProps(p, serialize, windowComponent, windowParam)
+  useSerializeProps(p, windowComponent, windowParam)
   return null
-})
+}
 
 const UnlockRemoteProxy = () => {
-  const devices = C.useConfigState(s => s.unlockFoldersDevices)
-  const paperKeyError = C.useConfigState(s => s.unlockFoldersError)
+  const {devices, open, paperKeyError} = useUnlockFoldersState(
+    C.useShallow(s => ({
+      devices: s.devices,
+      open: s.dispatch.open,
+      paperKeyError: s.paperKeyError,
+    }))
+  )
   const waiting = C.Waiting.useAnyWaiting('unlock-folders:waiting')
+
+  useEngineActionListener('keybase.1.rekeyUI.refresh', action => {
+    handleUnlockFoldersEngineAction(action, open)
+  })
+
+  useEngineActionListener('keybase.1.rekeyUI.delegateRekeyUI', action => {
+    handleUnlockFoldersEngineAction(action, open)
+  })
+
   if (devices.length) {
-    return (
-      <UnlockFolders
-        darkMode={Kb.Styles.isDarkMode()}
-        devices={devices}
-        paperKeyError={paperKeyError}
-        waiting={waiting}
-      />
-    )
+    return <UnlockFolders devices={devices} paperKeyError={paperKeyError} waiting={waiting} />
   }
   return null
 }

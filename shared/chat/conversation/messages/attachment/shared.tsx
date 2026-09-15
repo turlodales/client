@@ -1,40 +1,47 @@
 import * as C from '@/constants'
+import {clampImageSize} from '@/constants/chat/helpers'
 import * as Kb from '@/common-adapters'
 import * as React from 'react'
 import * as T from '@/constants/types'
-import {OrdinalContext} from '../ids-context'
-import {sharedStyles} from '../shared-styles'
+import {openLocalPathInSystemFileManagerDesktop} from '@/util/fs-storeless-actions'
+import {useConversationAttachmentActions} from '../../attachment-actions'
+import {useConversationThreadMessageActions} from '../../thread-context'
 
 type Props = {
   transferState: T.Chat.MessageAttachmentTransferState
-  toastTargetRef?: React.RefObject<Kb.MeasureRef>
+  toastTargetRef?: React.RefObject<Kb.MeasureRef | null>
 }
 
 // this is a function of how much space is taken up by the rest of the elements
-export const maxWidth = Kb.Styles.isMobile ? Math.min(356, Kb.Styles.dimensionWidth - 70) : 356
+export const maxWidth = isMobile ? Math.min(356, Kb.Styles.dimensionWidth - 70) : 356
 export const maxHeight = 320
 
-export const missingMessage = C.Chat.makeMessageAttachment()
+export const messageAttachmentHasProgress = (transferState: T.Chat.MessageAttachmentTransferState) => {
+  return !!transferState && transferState !== 'remoteUploading' && transferState !== 'mobileSaving'
+}
 
 export const ShowToastAfterSaving = ({transferState, toastTargetRef}: Props) => {
   const [showingToast, setShowingToast] = React.useState(false)
   const lastTransferStateRef = React.useRef(transferState)
-  const timerRef = React.useRef<ReturnType<typeof setTimeout>>()
+  const timerRef = React.useRef<ReturnType<typeof setTimeout>>(undefined)
 
-  if (transferState !== lastTransferStateRef.current) {
-    // was downloading and now not
-    if (
-      (lastTransferStateRef.current === 'mobileSaving' || lastTransferStateRef.current === 'downloading') &&
-      !transferState
-    ) {
-      setShowingToast(true)
-      clearTimeout(timerRef.current)
-      timerRef.current = setTimeout(() => {
-        setShowingToast(false)
-      }, 2000)
+  React.useEffect(() => {
+    if (transferState !== lastTransferStateRef.current) {
+      // was downloading and now not
+      if (
+        (lastTransferStateRef.current === 'mobileSaving' ||
+          (!isMobile && lastTransferStateRef.current === 'downloading')) &&
+        !transferState
+      ) {
+        setShowingToast(true)
+        clearTimeout(timerRef.current)
+        timerRef.current = setTimeout(() => {
+          setShowingToast(false)
+        }, 2000)
+      }
+      lastTransferStateRef.current = transferState
     }
-    lastTransferStateRef.current = transferState
-  }
+  }, [transferState])
 
   React.useEffect(() => {
     return () => {
@@ -59,57 +66,75 @@ export const ShowToastAfterSaving = ({transferState, toastTargetRef}: Props) => 
   ) : null
 }
 
-export const TransferIcon = (p: {style: Kb.Styles.StylesCrossPlatform}) => {
-  const {style} = p
-  const ordinal = React.useContext(OrdinalContext)
-  const state = C.useChatContext(s => {
-    const m = s.messageMap.get(ordinal)
-    if (!m || m.type !== 'attachment') {
-      return 'none'
-    }
-
-    if (m.downloadPath?.length) {
-      return 'doneWithPath'
-    }
-    if (m.transferProgress === 1) {
-      return 'done'
-    }
-    switch (m.transferState) {
+export const TransferIcon = (p: {
+  message: T.Chat.MessageAttachment
+  ordinal: T.Chat.Ordinal
+  style: Kb.Styles.StylesCrossPlatform
+}) => {
+  const theme = Kb.Styles.useTheme()
+  const {message, ordinal, style} = p
+  const hasMessageID = !!T.Chat.messageIDToNumber(message.id)
+  let state: 'none' | 'doneWithPath' | 'done' | 'downloading' = 'none'
+  const downloadPath = message.downloadPath ?? ''
+  if (downloadPath.length) {
+    state = 'doneWithPath'
+  } else if (message.transferProgress === 1) {
+    state = 'done'
+  } else {
+    switch (message.transferState) {
       case 'downloading':
       case 'mobileSaving':
-        return 'downloading'
+        state = 'downloading'
+        break
       default:
-        return 'none'
     }
-  })
-
-  const downloadPath = C.useChatContext(s => {
-    const m = s.messageMap.get(ordinal)
-    if (m?.type === 'attachment') {
-      return m.downloadPath
+  }
+  const {attachmentDownload, messageAttachmentNativeSave, messageAttachmentNativeShare} =
+    useConversationAttachmentActions()
+  const isMobileAudio = isMobile && message.attachmentType === 'audio'
+  const onDownload = () => {
+    if (!hasMessageID) {
+      return
     }
-    return ''
-  })
+    if (isMobile) {
+      if (isMobileAudio) {
+        messageAttachmentNativeShare(ordinal)
+      } else {
+        messageAttachmentNativeSave(ordinal)
+      }
+    } else {
+      attachmentDownload(ordinal)
+    }
+  }
 
-  const download = C.useChatContext(s =>
-    C.isMobile ? s.dispatch.messageAttachmentNativeSave : s.dispatch.attachmentDownload
-  )
-  const onDownload = React.useCallback(() => {
-    download(ordinal)
-  }, [ordinal, download])
-
-  const openFinder = C.useFSState(s => s.dispatch.dynamic.openLocalPathInSystemFileManagerDesktop)
-  const onFinder = React.useCallback(() => {
-    downloadPath && openFinder?.(downloadPath)
-  }, [openFinder, downloadPath])
+  const onFinder = () => {
+    if (downloadPath) {
+      openLocalPathInSystemFileManagerDesktop(downloadPath)
+    }
+  }
+  const mobileStyle = Kb.Styles.collapseStyles([style, {left: -48, opacity: 0.6}])
 
   switch (state) {
     case 'doneWithPath':
-      return Kb.Styles.isMobile ? null : (
+      if (isMobileAudio) {
+        return (
+          <Kb.Icon
+            className="hover-opacity-full"
+            type="iconfont-share"
+            color={theme.blue}
+            fontSize={20}
+            hint="Share"
+            onClick={onDownload}
+            style={mobileStyle}
+            padding="small"
+          />
+        )
+      }
+      return isMobile ? null : (
         <Kb.Icon
           className="hover-opacity-full"
           type="iconfont-finder"
-          color={Kb.Styles.globalColors.blue}
+          color={theme.blue}
           fontSize={20}
           hint="Open folder"
           onClick={onFinder}
@@ -123,42 +148,41 @@ export const TransferIcon = (p: {style: Kb.Styles.StylesCrossPlatform}) => {
         <Kb.Icon
           className="hover-opacity-full"
           type="iconfont-download"
-          color={Kb.Styles.globalColors.green}
+          color={theme.green}
           fontSize={20}
           hint="Downloading"
           style={style}
         />
       )
     case 'none':
-      return (
+      return hasMessageID ? (
         <Kb.Icon
           className="hover-opacity-full"
-          type="iconfont-download"
-          color={Kb.Styles.globalColors.blue}
+          type={isMobileAudio ? 'iconfont-share' : 'iconfont-download'}
+          color={theme.blue}
           fontSize={20}
           onClick={onDownload}
-          // violates encapsulation but how this works with padding is annoying currently
-          style={
-            Kb.Styles.isMobile ? Kb.Styles.collapseStyles([style, {left: -48, opacity: 0.6}]) : undefined
-          }
-          padding={Kb.Styles.isMobile ? 'small' : undefined}
+          style={isMobile ? mobileStyle : undefined}
+          padding={isMobile ? 'small' : undefined}
         />
-      )
+      ) : null
   }
 }
 
 export const Transferring = (p: {ratio: number; transferState: T.Chat.MessageAttachmentTransferState}) => {
+  const styles = useStyles()
   const {ratio, transferState} = p
   const isTransferring =
     transferState === 'uploading' || transferState === 'downloading' || transferState === 'mobileSaving'
   return (
     <Kb.Box2
       direction="horizontal"
-      style={styles.transferring}
+      overflow="hidden"
       alignItems="center"
       gap="xtiny"
       gapEnd={true}
       gapStart={true}
+      style={styles.transferring}
     >
       {isTransferring ? (
         <Kb.Text type="BodySmall" negative={true}>
@@ -170,27 +194,73 @@ export const Transferring = (p: {ratio: number; transferState: T.Chat.MessageAtt
   )
 }
 
+// mirrors the 'sent'/'sentEditing' pieces of shared-styles.tsx's useSharedStyles; duplicated
+// here because this is a plain helper (not a component), so it can't call that hook, and it's
+// called from render code we don't own, so it can't take the theme as a parameter either
+const getSentStyles = Kb.Styles.createThemedValue(theme => {
+  const editing: Kb.Styles._StylesCrossPlatform = {
+    borderRadius: 2,
+    color: theme.blackOrBlack,
+    paddingLeft: Kb.Styles.globalMargins.tiny,
+    paddingRight: Kb.Styles.globalMargins.tiny,
+  }
+  const sent: Kb.Styles._StylesCrossPlatform = Kb.Styles.platformStyles({
+    isElectron: {
+      // Make text selectable. On mobile we implement that differently.
+      cursor: 'text',
+      userSelect: 'text',
+      whiteSpace: 'pre-wrap',
+      width: '100%',
+      wordBreak: 'break-word',
+    } as const,
+    isMobile: {
+      ...Kb.Styles.globalStyles.flexBoxColumn,
+    },
+  })
+  return {sent, sentEditing: {...sent, ...editing}}
+})
+
 export const getEditStyle = (isEditing: boolean) => {
-  return isEditing ? sharedStyles.sentEditing : sharedStyles.sent
+  const {sent, sentEditing} = getSentStyles(Kb.Styles.getTheme())
+  return isEditing ? sentEditing : sent
 }
 
-export const Title = () => {
-  const ordinal = React.useContext(OrdinalContext)
-  const title = C.useChatContext(s => {
-    const m = s.messageMap.get(ordinal)
-    return m?.type === 'attachment' ? m.decoratedText?.stringValue() ?? m.title : ''
-  })
+export const getAttachmentDisplayFileName = (message: T.Chat.MessageAttachment) => {
+  return message.deviceType === 'desktop'
+    ? message.fileName
+    : `${message.inlineVideoPlayable ? 'Video' : 'Image'} from mobile`
+}
 
-  const styleOverride = React.useMemo(
-    () =>
-      Kb.Styles.isMobile
-        ? {paragraph: {backgroundColor: Kb.Styles.globalColors.black_05_on_white}}
-        : undefined,
-    []
-  )
+export const getAttachmentPreviewSize = (
+  message: T.Chat.MessageAttachment,
+  useSquareFallback = false
+) => {
+  const {fileURL, previewHeight, previewWidth} = message
+  let {previewURL} = message
+  let {height, width} = clampImageSize(previewWidth, previewHeight, maxWidth, maxHeight)
+  // This is mostly a sanity check and also allows us to handle HEIC even though the go side doesn't
+  // understand.
+  if (useSquareFallback && (height === 0 || width === 0)) {
+    height = 320
+    width = 320
+  }
+  if (!previewURL) {
+    previewURL = fileURL
+  }
+  return {height, previewURL, width}
+}
+
+export const Title = ({message}: {message: T.Chat.MessageAttachment}) => {
+  const styles = useStyles()
+  const theme = Kb.Styles.useTheme()
+  const title = message.decoratedText?.stringValue() ?? message.title
+
+  const styleOverride = isMobile
+    ? {paragraph: {backgroundColor: theme.black_05_on_white}}
+    : undefined
 
   return (
-    <Kb.Box2 direction="vertical" fullWidth={true} style={styles.titleContainer}>
+    <Kb.Box2 direction="vertical" fullWidth={true} alignSelf="flex-start" style={styles.titleContainer}>
       <Kb.Markdown
         messageType="attachment"
         selectable={true}
@@ -203,113 +273,58 @@ export const Title = () => {
   )
 }
 
-const CollapseIcon = ({isWhite}: {isWhite: boolean}) => {
-  const ordinal = React.useContext(OrdinalContext)
-  const isCollapsed = C.useChatContext(s => {
-    const m = s.messageMap.get(ordinal)
-    const message = m?.type === 'attachment' ? m : missingMessage
-    const {isCollapsed} = message
-    return isCollapsed
-  })
+const CollapseIcon = ({isCollapsed, isWhite}: {isCollapsed: boolean; isWhite: boolean}) => {
+  const styles = useStyles()
   return (
     <Kb.Icon
-      hint="Collapse"
-      style={isWhite ? (styles.collapseLabelWhite as any) : (styles.collapseLabel as any) /* TODO FIX */}
+      style={isWhite ? styles.collapseLabelWhite : undefined}
       sizeType="Tiny"
       type={isCollapsed ? 'iconfont-caret-right' : 'iconfont-caret-down'}
     />
   )
 }
 
-const styles = Kb.Styles.styleSheetCreate(() => ({
-  collapseLabel: {backgroundColor: Kb.Styles.globalColors.fastBlank},
-  collapseLabelWhite: {color: Kb.Styles.globalColors.white_75},
+const useStyles = Kb.Styles.createStyleHook(theme => ({
+
+  collapseLabelWhite: {color: theme.white_75},
   titleContainer: {
-    alignSelf: 'flex-start',
     paddingTop: Kb.Styles.globalMargins.xxtiny,
   },
   transferring: {
-    backgroundColor: Kb.Styles.globalColors.black_50,
+    backgroundColor: theme.black_50,
     borderRadius: 2,
     left: Kb.Styles.globalMargins.tiny,
-    overflow: 'hidden',
     position: 'absolute',
     top: Kb.Styles.globalMargins.tiny,
   },
 }))
 
-const useCollapseAction = () => {
-  const ordinal = React.useContext(OrdinalContext)
-  const toggleMessageCollapse = C.useChatContext(s => s.dispatch.toggleMessageCollapse)
-  const onCollapse = React.useCallback(
-    (e: React.BaseSyntheticEvent) => {
-      e.stopPropagation()
-      toggleMessageCollapse(T.Chat.numberToMessageID(T.Chat.ordinalToNumber(ordinal)), ordinal)
-    },
-    [toggleMessageCollapse, ordinal]
-  )
+const useCollapseAction = (ordinal: T.Chat.Ordinal) => {
+  const {toggleMessageCollapse} = useConversationThreadMessageActions()
+  const onCollapse = () => {
+    toggleMessageCollapse(T.Chat.numberToMessageID(T.Chat.ordinalToNumber(ordinal)), ordinal)
+  }
   return onCollapse
 }
 
 // not showing this for now
-const useCollapseIconDesktop = (isWhite: boolean) => {
-  const onCollapse = useCollapseAction()
-  const collapseIcon = React.useMemo(() => {
-    return (
-      <Kb.ClickableBox2 onClick={onCollapse}>
-        <Kb.Box2 alignSelf="flex-start" direction="horizontal" gap="xtiny">
-          <CollapseIcon isWhite={isWhite} />
-        </Kb.Box2>
-      </Kb.ClickableBox2>
-    )
-  }, [onCollapse, isWhite])
-
-  return collapseIcon
-}
-const useCollapseIconMobile = (_isWhite: boolean) => null
-
-export const useCollapseIcon = C.isMobile ? useCollapseIconMobile : useCollapseIconDesktop
-
-export const useAttachmentState = () => {
-  const ordinal = React.useContext(OrdinalContext)
-  const attachmentPreviewSelect = C.useChatContext(s => s.dispatch.attachmentPreviewSelect)
-  const openFullscreen = React.useCallback(() => {
-    attachmentPreviewSelect(ordinal)
-  }, [attachmentPreviewSelect, ordinal])
-
-  const {fileName, isCollapsed, isEditing, showTitle, submitState, transferProgress, transferState} =
-    C.useChatContext(
-      C.useShallow(s => {
-        const m = s.messageMap.get(ordinal)
-        const message = m?.type === 'attachment' ? m : missingMessage
-        const {isCollapsed, title, fileName: fileNameRaw, transferProgress} = message
-        const {deviceType, inlineVideoPlayable, transferState, submitState} = message
-        const isEditing = s.editing === ordinal
-        const showTitle = !!title
-        const fileName =
-          deviceType === 'desktop' ? fileNameRaw : `${inlineVideoPlayable ? 'Video' : 'Image'} from mobile`
-
-        return {fileName, isCollapsed, isEditing, showTitle, submitState, transferProgress, transferState}
-      })
-    )
-
-  return {
-    fileName,
-    isCollapsed,
-    isEditing,
-    openFullscreen,
-    showTitle,
-    submitState,
-    transferProgress,
-    transferState,
-  }
-}
-
-export const Collapsed = () => {
-  const onCollapse = useCollapseAction()
-  const collapseIcon = useCollapseIcon(false)
+const useCollapseIconDesktop = (ordinal: T.Chat.Ordinal, isCollapsed: boolean, isWhite: boolean) => {
+  const onCollapse = useCollapseAction(ordinal)
   return (
-    <Kb.Box2 direction="horizontal" fullWidth={true}>
+    <Kb.ClickableBox direction="horizontal" alignSelf="center" gap="xtiny" onClick={onCollapse}>
+      <CollapseIcon isCollapsed={isCollapsed} isWhite={isWhite} />
+    </Kb.ClickableBox>
+  )
+}
+const useCollapseIconMobile = (_ordinal: T.Chat.Ordinal, _isCollapsed: boolean, _isWhite: boolean) => null
+
+export const useCollapseIcon = isMobile ? useCollapseIconMobile : useCollapseIconDesktop
+
+export const Collapsed = ({isCollapsed, ordinal}: {isCollapsed: boolean; ordinal: T.Chat.Ordinal}) => {
+  const onCollapse = useCollapseAction(ordinal)
+  const collapseIcon = useCollapseIcon(ordinal, isCollapsed, false)
+  return (
+    <Kb.Box2 direction="horizontal" fullWidth={true} alignItems="center">
       <Kb.Text type="BodyTiny" onClick={onCollapse}>
         Collapsed
       </Kb.Text>

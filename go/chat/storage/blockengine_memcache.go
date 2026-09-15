@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/keybase/client/go/logger"
@@ -9,7 +10,6 @@ import (
 	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/protocol/chat1"
 	"github.com/keybase/client/go/protocol/gregor1"
-	context "golang.org/x/net/context"
 )
 
 type logContext struct {
@@ -52,14 +52,15 @@ func (b *blockEngineMemCacheImpl) key(uid gregor1.UID, convID chat1.Conversation
 }
 
 func (b *blockEngineMemCacheImpl) getBlock(ctx context.Context, uid gregor1.UID,
-	convID chat1.ConversationID, id int) (block, bool) {
+	convID chat1.ConversationID, id int,
+) (block, bool) {
 	key := b.key(uid, convID, id)
 	lock := b.lockTab.AcquireOnName(ctx, b.logContext, key)
 	defer lock.Release(ctx)
 	if v, ok := b.blockCache.Get(key); ok {
 		bl := v.(block)
 		var retMsgs [blockSize]chat1.MessageUnboxed
-		for i := 0; i < blockSize; i++ {
+		for i := range bl.Msgs {
 			retMsgs[i] = bl.Msgs[i].DeepCopy()
 		}
 		return block{
@@ -71,12 +72,13 @@ func (b *blockEngineMemCacheImpl) getBlock(ctx context.Context, uid gregor1.UID,
 }
 
 func (b *blockEngineMemCacheImpl) writeBlock(ctx context.Context, uid gregor1.UID,
-	convID chat1.ConversationID, bl block) {
+	convID chat1.ConversationID, bl block,
+) {
 	key := b.key(uid, convID, bl.BlockID)
 	lock := b.lockTab.AcquireOnName(ctx, b.logContext, key)
 	defer lock.Release(ctx)
 	var storedMsgs [blockSize]chat1.MessageUnboxed
-	for i := 0; i < blockSize; i++ {
+	for i := range bl.Msgs {
 		storedMsgs[i] = bl.Msgs[i].DeepCopy()
 	}
 	b.blockCache.Add(key, block{

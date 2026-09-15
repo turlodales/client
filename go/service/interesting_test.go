@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	"github.com/keybase/client/go/kbtest"
@@ -17,7 +18,7 @@ func TestInterestingPeople(t *testing.T) {
 
 	maxUsers := 3
 	var users []*kbtest.FakeUser
-	for i := 0; i < maxUsers; i++ {
+	for range maxUsers {
 		u, err := kbtest.CreateAndSignupFakeUser("ppl", tc.G)
 		require.NoError(t, err)
 		users = append(users, u)
@@ -35,8 +36,8 @@ func TestInterestingPeople(t *testing.T) {
 	users = append(users, u)
 
 	fn2 := func(uid keybase1.UID) (res []keybase1.UID, err error) {
-		for i := len(users) - 1; i >= 0; i-- {
-			res = append(res, u.User.GetUID())
+		for _, user := range slices.Backward(users) {
+			res = append(res, user.User.GetUID())
 		}
 		return res, nil
 	}
@@ -47,8 +48,7 @@ func TestInterestingPeople(t *testing.T) {
 
 	res, err := ip.Get(context.TODO(), 20)
 	require.NoError(t, err)
-	require.Equal(t, maxUsers+1, len(res))
+	require.Len(t, res, maxUsers+1)
 	require.Equal(t, users[0].GetUID(), res[0])
 	require.Equal(t, users[len(users)-1].GetUID(), res[len(res)-1])
-
 }

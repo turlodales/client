@@ -1,26 +1,14 @@
 import * as React from 'react'
-import * as C from '@/constants'
+import {useSystemFileManagerIntegration} from './sfmi'
 
-type Props = {
-  refresh: () => void
+const RefreshDriverStatusOnMount = () => {
+  const {refreshDriverStatusDesktop} = useSystemFileManagerIntegration()
+
+  React.useEffect(() => {
+    refreshDriverStatusDesktop()
+  }, [refreshDriverStatusDesktop])
+
+  return null
 }
 
-class Component extends React.PureComponent<Props> {
-  componentDidMount() {
-    this.props.refresh()
-  }
-  render() {
-    return null
-  }
-}
-
-const Container = () => {
-  const refreshDriverStatusDesktop = C.useFSState(s => s.dispatch.dynamic.refreshDriverStatusDesktop)
-  const refresh = () => refreshDriverStatusDesktop?.()
-  const props = {
-    refresh,
-  }
-  return <Component {...props} />
-}
-
-export default Container
+export default RefreshDriverStatusOnMount

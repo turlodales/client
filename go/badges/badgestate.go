@@ -5,8 +5,10 @@ package badges
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"strings"
 	"sync"
 
@@ -18,7 +20,6 @@ import (
 	"github.com/keybase/client/go/protocol/keybase1"
 	"github.com/keybase/client/go/protocol/stellar1"
 	jsonw "github.com/keybase/go-jsonw"
-	"golang.org/x/net/context"
 )
 
 type LocalChatState interface {
@@ -87,9 +88,11 @@ func (b *BadgeState) Export(ctx context.Context) (keybase1.BadgeState, error) {
 	for _, info := range b.chatUnreadMap {
 		b.state.Conversations = append(b.state.Conversations, info)
 	}
-	b.state.Conversations, b.state.SmallTeamBadgeCount, b.state.BigTeamBadgeCount =
-		b.localChatState.ApplyLocalChatState(ctx, b.state.Conversations)
-	b.state.InboxVers = int(b.inboxVers)
+	b.state.Conversations, b.state.SmallTeamBadgeCount, b.state.BigTeamBadgeCount = b.localChatState.ApplyLocalChatState(ctx, b.state.Conversations)
+	if b.inboxVers > math.MaxInt {
+		return keybase1.BadgeState{}, fmt.Errorf("inbox version overflow: %d", b.inboxVers)
+	}
+	b.state.InboxVers = int(b.inboxVers) //nolint:gosec // G115: Overflow checked above
 
 	b.state.UnreadWalletAccounts = []keybase1.WalletAccountInfo{}
 	for accountID, count := range b.walletUnreadMap {
@@ -163,10 +166,6 @@ func (b *BadgeState) ConversationBadge(ctx context.Context, convID chat1.Convers
 	return b.ConversationBadgeStr(ctx, convID.ConvIDStr())
 }
 
-func keyForWotUpdate(w keybase1.WotUpdate) string {
-	return fmt.Sprintf("%s:%s", w.Voucher, w.Vouchee)
-}
-
 // UpdateWithGregor updates the badge state from a gregor state.
 func (b *BadgeState) UpdateWithGregor(ctx context.Context, gstate gregor.State) error {
 	b.Lock()
@@ -186,7 +185,6 @@ func (b *BadgeState) UpdateWithGregor(ctx context.Context, gstate gregor.State) 
 	b.state.ResetState = keybase1.ResetState{}
 	b.state.UnverifiedEmails = 0
 	b.state.UnverifiedPhones = 0
-	b.state.WotUpdates = make(map[string]keybase1.WotUpdate)
 
 	var hsb *libkb.HomeStateBody
 
@@ -258,46 +256,6 @@ func (b *BadgeState) UpdateWithGregor(ctx context.Context, gstate gregor.State) 
 				continue
 			}
 			b.state.NewDevices = append(b.state.NewDevices, keybase1.DeviceID(newDeviceID))
-		case "wot.new_vouch":
-			jsw, err := jsonw.Unmarshal(item.Body().Bytes())
-			if err != nil {
-				b.log.CDebugf(ctx, "BadgeState encountered non-json 'wot.new_vouch' item: %v", err)
-				continue
-			}
-			voucher, err := jsw.AtKey("voucher").GetString()
-			if err != nil {
-				b.log.CDebugf(ctx, "BadgeState encountered gregor 'wot.new_vouch' item without 'voucherUid': %v", err)
-				continue
-			}
-			vouchee := b.env.GetUsername().String()
-			wotUpdate := keybase1.WotUpdate{
-				Voucher: voucher,
-				Vouchee: vouchee,
-				Status:  keybase1.WotStatusType_PROPOSED,
-			}
-			b.state.WotUpdates[keyForWotUpdate(wotUpdate)] = wotUpdate
-		case "wot.accepted", "wot.rejected":
-			jsw, err := jsonw.Unmarshal(item.Body().Bytes())
-			if err != nil {
-				b.log.CDebugf(ctx, "BadgeState encountered non-json '%s' item: %v", category, err)
-				continue
-			}
-			vouchee, err := jsw.AtKey("vouchee").GetString()
-			if err != nil {
-				b.log.CDebugf(ctx, "BadgeState encountered gregor '%s' item without 'voucherUid': %v", category, err)
-				continue
-			}
-			status := keybase1.WotStatusType_ACCEPTED
-			if category == "wot.rejected" {
-				status = keybase1.WotStatusType_REJECTED
-			}
-			voucher := b.env.GetUsername().String()
-			wotUpdate := keybase1.WotUpdate{
-				Voucher: voucher,
-				Vouchee: vouchee,
-				Status:  status,
-			}
-			b.state.WotUpdates[keyForWotUpdate(wotUpdate)] = wotUpdate
 		case "device.revoked":
 			jsw, err := jsonw.Unmarshal(item.Body().Bytes())
 			if err != nil {
@@ -417,7 +375,8 @@ func (b *BadgeState) UpdateWithGregor(ctx context.Context, gstate gregor.State) 
 }
 
 func (b *BadgeState) UpdateWithChat(ctx context.Context, update chat1.UnreadUpdate,
-	inboxVers chat1.InboxVers, isMobile bool) {
+	inboxVers chat1.InboxVers, isMobile bool,
+) {
 	b.Lock()
 	defer b.Unlock()
 

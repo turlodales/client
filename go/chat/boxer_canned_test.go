@@ -117,8 +117,8 @@ func getCannedMessage(t *testing.T, tag string) cannedMessage {
 		}
 	}
 	errStr := fmt.Sprintf("Cannot find canned message: %q", tag)
-	t.Fatalf(errStr)
-	panic(errStr)
+	require.FailNow(t, errStr)
+	return cannedMessage{}
 }
 
 func (cm cannedMessage) AsBoxed(t *testing.T) (res chat1.MessageBoxed) {
@@ -137,7 +137,7 @@ func (cm cannedMessage) EncryptionKey(t *testing.T) *keybase1.CryptKey {
 		Key:           keyBytes32,
 	}
 	require.NotNil(t, res, "nil canned encryption key")
-	require.Equal(t, len(res.Key), 32, "non-32 byte encryption key")
+	require.Len(t, res.Key, 32, "non-32 byte encryption key")
 	return &res
 }
 
@@ -162,7 +162,7 @@ func (cm cannedMessage) SenderDeviceID(t *testing.T) gregor1.DeviceID {
 	return did
 }
 
-func (cm cannedMessage) unhex(t *testing.T, out interface{}, inHex string) {
+func (cm cannedMessage) unhex(t *testing.T, out any, inHex string) {
 	bytes, err := hex.DecodeString(inHex)
 	require.NoError(t, err)
 	mh := codec.MsgpackHandle{WriteExt: true}

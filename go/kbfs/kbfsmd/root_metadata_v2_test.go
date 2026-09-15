@@ -7,6 +7,7 @@ package kbfsmd
 import (
 	"context"
 	"fmt"
+	"maps"
 	"sort"
 	"testing"
 
@@ -112,7 +113,7 @@ func TestWriterMetadataV2Empty(t *testing.T) {
 	// Expected length derived by running with a known good
 	// codec. If the length is greater, something might be broken
 	// with omitempty with the Extra struct field.
-	require.Equal(t, 112, len(buf))
+	require.Len(t, buf, 112)
 }
 
 // Test that old encoded WriterMetadataV2 objects (i.e., without any
@@ -189,7 +190,7 @@ func TestWriterMetadataV2EncodedFields(t *testing.T) {
 	buf, err := c.Encode(wm)
 	require.NoError(t, err)
 
-	var m map[string]interface{}
+	var m map[string]any
 	err = c.Decode(buf, &m)
 	require.NoError(t, err)
 
@@ -330,7 +331,7 @@ type rootMetadataV2Future struct {
 }
 
 func (brmf *rootMetadataV2Future) toCurrent() RootMetadata {
-	rm := brmf.rootMetadataWrapper.RootMetadataV2
+	rm := brmf.RootMetadataV2
 	rm.WriterMetadataV2 = brmf.writerMetadataV2Future.toCurrent()
 	rm.RKeys = brmf.RKeys.toCurrent()
 	return &rm
@@ -745,7 +746,8 @@ func checkCryptKeyInfo(t *testing.T, privKey kbfscrypto.CryptPrivateKey,
 	serverHalf kbfscrypto.TLFCryptKeyServerHalf, expectedEPubKeyIndex int,
 	expectedEPubKey kbfscrypto.TLFEphemeralPublicKey,
 	expectedTLFCryptKey kbfscrypto.TLFCryptKey, info TLFCryptKeyInfo,
-	ePubKey kbfscrypto.TLFEphemeralPublicKey) {
+	ePubKey kbfscrypto.TLFEphemeralPublicKey,
+) {
 	require.Equal(t, expectedEPubKeyIndex, info.EPubKeyIndex)
 	require.Equal(t, expectedEPubKey, ePubKey)
 
@@ -763,7 +765,8 @@ func checkCryptKeyInfo(t *testing.T, privKey kbfscrypto.CryptPrivateKey,
 func checkGetTLFCryptKeyV2(t *testing.T, keyGen KeyGen,
 	expected expectedRekeyInfoV2,
 	expectedTLFCryptKey kbfscrypto.TLFCryptKey,
-	wkb *TLFWriterKeyBundleV2, rkb *TLFReaderKeyBundleV2) {
+	wkb *TLFWriterKeyBundleV2, rkb *TLFReaderKeyBundleV2,
+) {
 	expectedServerHalves := expected.serverHalves[keyGen-FirstValidKeyGen]
 	for uid, privKeys := range expected.writerPrivKeys {
 		for privKey := range privKeys {
@@ -808,7 +811,8 @@ func checkGetTLFCryptKeyV2(t *testing.T, keyGen KeyGen,
 // pubKeys1 and pubKeys2. A user's keys in pubKeys1 and pubKeys2 must
 // be disjoint.
 func accumulatePublicKeys(
-	pubKeys1, pubKeys2 UserDevicePublicKeys) UserDevicePublicKeys {
+	pubKeys1, pubKeys2 UserDevicePublicKeys,
+) UserDevicePublicKeys {
 	pubKeys := make(UserDevicePublicKeys)
 	for uid, keys := range pubKeys1 {
 		pubKeys[uid] = make(DevicePublicKeys)
@@ -835,11 +839,10 @@ func accumulatePublicKeys(
 // unionPublicKeyUsers returns the union of the usersin pubKeys1 and
 // pubKeys2, which must be disjoint. Not a deep copy.
 func unionPublicKeyUsers(
-	pubKeys1, pubKeys2 UserDevicePublicKeys) UserDevicePublicKeys {
+	pubKeys1, pubKeys2 UserDevicePublicKeys,
+) UserDevicePublicKeys {
 	pubKeys := make(UserDevicePublicKeys)
-	for uid, keys := range pubKeys1 {
-		pubKeys[uid] = keys
-	}
+	maps.Copy(pubKeys, pubKeys1)
 	for uid, keys := range pubKeys2 {
 		if pubKeys[uid] != nil {
 			panic(fmt.Sprintf("uid=%s exists in both", uid))
@@ -850,7 +853,8 @@ func unionPublicKeyUsers(
 }
 
 func userDeviceKeyInfoMapV2ToPublicKeys(
-	udkimV2 UserDeviceKeyInfoMapV2) UserDevicePublicKeys {
+	udkimV2 UserDeviceKeyInfoMapV2,
+) UserDevicePublicKeys {
 	pubKeys := make(UserDevicePublicKeys)
 	for uid, dkimV2 := range udkimV2 {
 		pubKeys[uid] = make(DevicePublicKeys)
@@ -862,7 +866,8 @@ func userDeviceKeyInfoMapV2ToPublicKeys(
 }
 
 func userDeviceServerHalvesToPublicKeys(
-	serverHalves UserDeviceKeyServerHalves) UserDevicePublicKeys {
+	serverHalves UserDeviceKeyServerHalves,
+) UserDevicePublicKeys {
 	pubKeys := make(UserDevicePublicKeys)
 	for uid, keys := range serverHalves {
 		pubKeys[uid] = make(DevicePublicKeys)
@@ -877,8 +882,9 @@ func userDeviceServerHalvesToPublicKeys(
 // info expected from expectedRekeyInfos and expectedPubKey.
 func checkKeyBundlesV2(t *testing.T, expectedRekeyInfos []expectedRekeyInfoV2,
 	expectedTLFCryptKeys []kbfscrypto.TLFCryptKey,
-	expectedPubKeys []kbfscrypto.TLFPublicKey, rmd *RootMetadataV2) {
-	require.Equal(t, len(expectedTLFCryptKeys), len(expectedPubKeys))
+	expectedPubKeys []kbfscrypto.TLFPublicKey, rmd *RootMetadataV2,
+) {
+	require.Len(t, expectedPubKeys, len(expectedTLFCryptKeys))
 	require.Equal(t, len(expectedTLFCryptKeys),
 		int(rmd.LatestKeyGeneration()-FirstValidKeyGen+1))
 	for keyGen := FirstValidKeyGen; keyGen <= rmd.LatestKeyGeneration(); keyGen++ {
@@ -899,15 +905,13 @@ func checkKeyBundlesV2(t *testing.T, expectedRekeyInfos []expectedRekeyInfoV2,
 			if expected.writerPrivKeys.hasKeys() ||
 				expected.readerPrivKeys.hasKeys() {
 				if expected.ePubKeyIndex >= 0 {
-					require.Equal(t, expected.ePubKeyIndex,
-						len(expectedWriterEPublicKeys))
+					require.Len(t, expectedWriterEPublicKeys, expected.ePubKeyIndex)
 					expectedWriterEPublicKeys = append(
 						expectedWriterEPublicKeys,
 						expected.ePubKey)
 				} else {
 					i := -1 - expected.ePubKeyIndex
-					require.Equal(t, i,
-						len(expectedReaderEPublicKeys))
+					require.Equal(t, len(expectedReaderEPublicKeys), i)
 					expectedReaderEPublicKeys = append(
 						expectedReaderEPublicKeys,
 						expected.ePubKey)
@@ -930,8 +934,7 @@ func checkKeyBundlesV2(t *testing.T, expectedRekeyInfos []expectedRekeyInfoV2,
 			wkb.TLFPublicKey)
 
 		for _, expected := range expectedRekeyInfos {
-			require.Equal(t, len(expectedTLFCryptKeys),
-				len(expected.serverHalves))
+			require.Len(t, expected.serverHalves, len(expectedTLFCryptKeys))
 			expectedUserPubKeys := unionPublicKeyUsers(
 				expected.writerPrivKeys.toPublicKeys(),
 				expected.readerPrivKeys.toPublicKeys())

@@ -1,19 +1,23 @@
 import * as C from '@/constants'
 import * as Kb from '@/common-adapters'
-import * as React from 'react'
+import type * as React from 'react'
+import * as FS from '@/constants/fs'
 import capitalize from 'lodash/capitalize'
 import * as T from '@/constants/types'
 import {pluralize} from '@/util/string'
+import {useLoadedTeam} from './use-loaded-team'
+import RoleCrown from '../common/role-crown'
+import {makeAddMembersWizard} from '../add-members-wizard/state'
 
 type OwnProps = {
-  attachTo?: React.RefObject<Kb.MeasureRef>
+  attachTo?: React.RefObject<Kb.MeasureRef | null>
   onHidden: () => void
   teamID: T.Teams.TeamID
   visible: boolean
 }
 
 type Props = {
-  attachTo?: React.RefObject<Kb.MeasureRef>
+  attachTo?: React.RefObject<Kb.MeasureRef | null>
   items: Kb.MenuItems
   teamname: string
   memberCount: number
@@ -23,13 +27,14 @@ type Props = {
 }
 
 const TeamMenu = (props: Props) => {
+  const styles = useStyles()
   const {attachTo, items, onHidden, visible, teamname, memberCount, role} = props
   if (visible && items.length === 0) {
     onHidden()
     return null
   }
   const header = (
-    <Kb.ConnectedNameWithIcon
+    <Kb.NameWithIcon
       teamname={teamname}
       title={teamname}
       metaOne={
@@ -39,13 +44,7 @@ const TeamMenu = (props: Props) => {
       }
       metaTwo={
         <Kb.Box2 direction="horizontal" alignItems="flex-start" gap="xtiny">
-          {(role === 'admin' || role === 'owner') && (
-            <Kb.Icon
-              color={role === 'owner' ? Kb.Styles.globalColors.yellowDark : Kb.Styles.globalColors.black_35}
-              fontSize={10}
-              type="iconfont-crown-owner"
-            />
-          )}
+          <RoleCrown role={role} fontSize={10} />
           <Kb.Text type="BodySmall">{capitalize(role)}</Kb.Text>
         </Kb.Box2>
       }
@@ -64,7 +63,7 @@ const TeamMenu = (props: Props) => {
   )
 }
 
-const styles = Kb.Styles.styleSheetCreate(() => ({
+const useStyles = Kb.Styles.createStyleHook(() => ({
   headerContainer: Kb.Styles.platformStyles({
     common: {
       ...Kb.Styles.padding(Kb.Styles.globalMargins.xtiny),
@@ -76,27 +75,26 @@ const styles = Kb.Styles.styleSheetCreate(() => ({
   }),
 }))
 
-const Container = (ownProps: OwnProps) => {
+const TeamMenuContainer = (ownProps: OwnProps) => {
   const {teamID} = ownProps
-  const {teamname, role, memberCount} = C.useTeamsState(s => C.Teams.getTeamMeta(s, teamID))
-  const yourOperations = C.useTeamsState(s => C.Teams.getCanPerformByID(s, teamID))
+  const {teamDetails, teamMeta, yourOperations} = useLoadedTeam(teamID)
+  const {teamname, role, memberCount} = teamMeta
   const canDeleteTeam = yourOperations.deleteTeam
   const canInvite = yourOperations.manageMembers
-  const canLeaveTeam = C.useTeamsState(s => !C.Teams.isLastOwner(s, teamID) && role !== 'none')
+  const ownerCount = [...teamDetails.members.values()].filter(member => member.type === 'owner').length
+  const canLeaveTeam = role !== 'none' && !(role === 'owner' && ownerCount <= 1)
   const canViewFolder = !yourOperations.joinTeam
-  const startAddMembersWizard = C.useTeamsState(s => s.dispatch.startAddMembersWizard)
   const onAddOrInvitePeople = () => {
-    startAddMembersWizard(teamID)
+    C.Router2.navigateAppend({name: 'teamAddToTeamFromWhere', params: {wizard: makeAddMembersWizard(teamID)}})
   }
-  const navigateAppend = C.useRouterState(s => s.dispatch.navigateAppend)
   const onDeleteTeam = () => {
-    navigateAppend({props: {teamID}, selected: 'teamDeleteTeam'})
+    C.Router2.navigateAppend({name: 'teamDeleteTeam', params: {teamID}})
   }
   const onLeaveTeam = () => {
-    navigateAppend({props: {teamID}, selected: 'teamReallyLeaveTeam'})
+    C.Router2.navigateAppend({name: 'teamReallyLeaveTeam', params: {teamID}})
   }
   const onOpenFolder = (teamname: string) => {
-    C.FS.makeActionForOpenPathInFilesTab(T.FS.stringToPath(`/keybase/team/${teamname}`))
+    FS.navToPath(T.FS.stringToPath(`/keybase/team/${teamname}`))
   }
 
   const items: Kb.MenuItems = ['Divider']
@@ -132,16 +130,17 @@ const Container = (ownProps: OwnProps) => {
     })
   }
 
-  const props = {
-    attachTo: ownProps.attachTo,
-    items,
-    memberCount: memberCount,
-    onHidden: ownProps.onHidden,
-    role: role as T.Teams.TeamRoleType,
-    teamname: teamname,
-    visible: ownProps.visible,
-  }
-  return <TeamMenu {...props} />
+  return (
+    <TeamMenu
+      attachTo={ownProps.attachTo}
+      items={items}
+      memberCount={memberCount}
+      onHidden={ownProps.onHidden}
+      role={role as T.Teams.TeamRoleType}
+      teamname={teamname}
+      visible={ownProps.visible}
+    />
+  )
 }
 
-export default Container
+export default TeamMenuContainer

@@ -2,16 +2,17 @@ package signencrypt
 
 import (
 	"bytes"
+	"crypto/ed25519"
 	"encoding/hex"
-	"fmt"
+	"errors"
 	"io"
+	"math"
 	"strings"
 	"testing"
 
 	"golang.org/x/crypto/nacl/secretbox"
 
 	"github.com/keybase/client/go/kbcrypto"
-	"github.com/keybase/go-crypto/ed25519"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,7 +31,7 @@ type arbitraryNested struct {
 	Boring arbitraryMsg `codec:"b" json:"b"`
 }
 
-var associatedDataInputs = []interface{}{
+var associatedDataInputs = []any{
 	"",
 	nil,
 	map[string]map[float64]map[string]string{"first": {2.22000222: {"third": "fourth"}}},
@@ -89,7 +90,7 @@ func zeroOpenWhole(plaintext []byte) ([]byte, error) {
 	return OpenWhole(plaintext, zeroSecretboxKey(), zeroVerifyKey(), testingPrefix(), zeroNonce())
 }
 
-func zeroSealWithAssociatedData(plaintext []byte, associatedData interface{}) []byte {
+func zeroSealWithAssociatedData(plaintext []byte, associatedData any) []byte {
 	res, err := SealWithAssociatedData(plaintext, associatedData, zeroSecretboxKey(), zeroSignKey(), testingPrefix(), zeroNonce())
 	if err != nil {
 		// this should never actually error
@@ -98,27 +99,23 @@ func zeroSealWithAssociatedData(plaintext []byte, associatedData interface{}) []
 	return res
 }
 
-func zeroOpenWithAssociatedData(plaintext []byte, associatedData interface{}) ([]byte, error) {
+func zeroOpenWithAssociatedData(plaintext []byte, associatedData any) ([]byte, error) {
 	return OpenWithAssociatedData(plaintext, associatedData, zeroSecretboxKey(), zeroVerifyKey(), testingPrefix(), zeroNonce())
 }
 
 func assertErrorType(t *testing.T, err error, expectedType ErrorType) {
-	if err == nil {
-		t.Fatal("expected an error, but error was nil")
-	}
+	require.Error(t, err,
+		"expected an error, but error was nil")
 	concreteError, ok := err.(Error)
-	if !ok {
-		t.Fatal("failed to cast to Error")
-	}
-	if concreteError.Type != expectedType {
-		t.Fatalf("expected error type %d but found %d", expectedType, concreteError.Type)
-	}
+	require.True(t, ok,
+		"failed to cast to Error")
+	require.Equal(t, expectedType, concreteError.Type, "expected error type %d but found %d", expectedType, concreteError.Type)
 }
 
 func TestPacketRoundtrips(t *testing.T) {
 	for index, input := range plaintextInputs {
 		// Vary the chunk number, just for fun.
-		chunkNum := uint64(index)
+		chunkNum := uint64(index) //nolint:gosec // G115: Test code, index from range is non-negative
 		sealed := sealPacket(
 			[]byte(input),
 			zeroSecretboxKey(),
@@ -132,16 +129,11 @@ func TestPacketRoundtrips(t *testing.T) {
 			zeroVerifyKey(),
 			testingPrefix(),
 			zeroChunkNonce(chunkNum))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !bytes.Equal([]byte(input), opened) {
-			t.Fatal("opened bytes don't equal the input")
-		}
+		require.NoError(t, err)
+		require.True(t, bytes.Equal([]byte(input), opened),
+			"opened bytes don't equal the input")
 
-		if int64(len(sealed)) != getPacketLen(int64(len(input))) {
-			t.Fatalf("Expected len %d but found %d", getPacketLen(int64(len(input))), len(sealed))
-		}
+		require.Equal(t, getPacketLen(int64(len(input))), int64(len(sealed)), "Expected len %d but found %d", getPacketLen(int64(len(input))), len(sealed))
 	}
 }
 
@@ -149,16 +141,11 @@ func TestWholeRoundtrips(t *testing.T) {
 	for _, input := range plaintextInputs {
 		sealed := zeroSealWhole([]byte(input))
 		opened, err := zeroOpenWhole(sealed)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !bytes.Equal([]byte(input), opened) {
-			t.Fatal("opened bytes don't equal the input")
-		}
+		require.NoError(t, err)
+		require.True(t, bytes.Equal([]byte(input), opened),
+			"opened bytes don't equal the input")
 
-		if int64(len(sealed)) != GetSealedSize(int64(len(input))) {
-			t.Fatalf("Expected len %d but found %d", GetSealedSize(int64(len(input))), len(sealed))
-		}
+		require.Equal(t, GetSealedSize(int64(len(input))), int64(len(sealed)), "Expected len %d but found %d", GetSealedSize(int64(len(input))), len(sealed))
 	}
 }
 
@@ -177,23 +164,16 @@ func TestByteAtATimeRoundtrips(t *testing.T) {
 		decoder := zeroDecoder()
 		for i := 0; i < len(sealed); i++ {
 			output, err := decoder.Write([]byte{sealed[i]})
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			opened = append(opened, output...)
 		}
 		lastOutput, err := decoder.Finish()
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		opened = append(opened, lastOutput...)
-		if !bytes.Equal([]byte(input), opened) {
-			t.Fatal("opened bytes don't equal the input")
-		}
+		require.True(t, bytes.Equal([]byte(input), opened),
+			"opened bytes don't equal the input")
 
-		if int64(len(sealed)) != GetSealedSize(int64(len(input))) {
-			t.Fatalf("Expected len %d but found %d", GetSealedSize(int64(len(input))), len(sealed))
-		}
+		require.Equal(t, GetSealedSize(int64(len(input))), int64(len(sealed)), "Expected len %d but found %d", GetSealedSize(int64(len(input))), len(sealed))
 	}
 }
 
@@ -207,9 +187,8 @@ func TestReaderWrapperRoundtrips(t *testing.T) {
 			zeroNonce(),
 			inputBuffer)
 		encoded, err := io.ReadAll(encodingReader)
-		if err != nil {
-			t.Fatalf("errors shouldn't be possible for encoding: %s", err)
-		}
+		require.NoError(t, err,
+			"errors shouldn't be possible for encoding: %s", err)
 		encodedBuffer := bytes.NewBuffer(encoded)
 		decodingReader := NewDecodingReader(
 			zeroSecretboxKey(),
@@ -218,15 +197,11 @@ func TestReaderWrapperRoundtrips(t *testing.T) {
 			zeroNonce(),
 			encodedBuffer)
 		decoded, err := io.ReadAll(decodingReader)
-		if err != nil {
-			t.Fatalf("error during decoding: %s", err)
-		}
-		if !bytes.Equal([]byte(input), decoded) {
-			t.Fatal("decoded bytes don't equal the input")
-		}
-		if int64(len(encoded)) != GetSealedSize(int64(len(input))) {
-			t.Fatalf("Expected encoded len %d but found %d", GetSealedSize(int64(len(input))), len(encoded))
-		}
+		require.NoError(t, err,
+			"error during decoding: %s", err)
+		require.True(t, bytes.Equal([]byte(input), decoded),
+			"decoded bytes don't equal the input")
+		require.Equal(t, GetSealedSize(int64(len(input))), int64(len(encoded)), "Expected encoded len %d but found %d", GetSealedSize(int64(len(input))), len(encoded))
 	}
 }
 
@@ -240,7 +215,7 @@ func TestBadSecretbox(t *testing.T) {
 	// Then also test a secretbox that's long enough to be real, but has an
 	// invalid authenticator (just a bunch of constant bytes).
 	badAuthenticatorPacket := []byte{0xc6, 0, 0, 0, 100}
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		badAuthenticatorPacket = append(badAuthenticatorPacket, 42)
 	}
 	_, err = openPacket(badAuthenticatorPacket, zeroSecretboxKey(), zeroVerifyKey(), testingPrefix(), zeroChunkNonce(0))
@@ -323,13 +298,13 @@ func TestErrorsReturnedFromDecodingReader(t *testing.T) {
 		zeroNonce(),
 		bytes.NewBuffer(badPacket))
 	n, err := reader.Read(throwawayBuffer())
-	require.Equal(t, n, 0)
+	require.Equal(t, 0, n)
 	assertErrorType(t, err, BadSecretbox)
 
 	// Make sure we get the same error again for any subsequent reads, even
 	// empty ones.
 	n, err = reader.Read(throwawayBuffer())
-	require.Equal(t, n, 0)
+	require.Equal(t, 0, n)
 	assertErrorType(t, err, BadSecretbox)
 }
 
@@ -345,7 +320,7 @@ func TestErrorsReturnedFromReadingDecoderDuringFinish(t *testing.T) {
 		zeroNonce(),
 		bytes.NewBuffer(badSealed))
 	n, err := reader.Read(throwawayBuffer())
-	require.Equal(t, n, 0)
+	require.Equal(t, 0, n)
 	assertErrorType(t, err, BadSecretbox)
 }
 
@@ -367,9 +342,8 @@ func TestReencryptedPacketFails(t *testing.T) {
 	// Now strip off the outer layer of encryption, as a recipient would.
 	originalChunkNonce := makeChunkNonce(originalNonce, originalChunkNum)
 	unboxedSig, valid := secretbox.Open(nil, packet, originalChunkNonce, originalEncryptionKey)
-	if !valid {
-		t.Fatal("expected this secretbox to open cleanly")
-	}
+	require.True(t, valid,
+		"expected this secretbox to open cleanly")
 
 	// Here's the attack: reencrypt the packet under a *different* key.
 	newEncryptionKey := zeroSecretboxKey()
@@ -491,7 +465,7 @@ var fakeErrorString = "random error for the first read"
 func (f *FakeIOErrorReader) Read(buf []byte) (int, error) {
 	if !f.returnedErrorAlready {
 		f.returnedErrorAlready = true
-		return 0, fmt.Errorf(fakeErrorString)
+		return 0, errors.New(fakeErrorString)
 	}
 	return f.inner.Read(buf)
 }
@@ -515,18 +489,13 @@ func TestTransientIOErrorsInReaderWrappers(t *testing.T) {
 
 	// The first read is an error.
 	n, err := encodingReader.Read(throwawayBuffer())
-	if n != 0 {
-		t.Fatalf("Expected 0 bytes, but received %d", n)
-	}
-	if err.Error() != fakeErrorString {
-		t.Fatalf("Expected a fake error, but found: %s", err)
-	}
+	require.Zero(t, n, "Expected 0 bytes, but received %d", n)
+	require.Equal(t, fakeErrorString, err.Error(), "Expected a fake error, but found: %s", err)
 
 	// Subsequent reads should succeed.
 	encoded, err := io.ReadAll(encodingReader)
-	if err != nil {
-		t.Fatalf("no more errors expected during encoding, but found: %s", err)
-	}
+	require.NoError(t, err,
+		"no more errors expected during encoding, but found: %s", err)
 
 	// Similar test for the decoder.
 	encodedBuffer := bytes.NewBuffer(encoded)
@@ -540,21 +509,15 @@ func TestTransientIOErrorsInReaderWrappers(t *testing.T) {
 
 	// Again, the first read is an error.
 	n, err = decodingReader.Read(throwawayBuffer())
-	if n != 0 {
-		t.Fatalf("Expected 0 bytes, but received %d", n)
-	}
-	if err.Error() != fakeErrorString {
-		t.Fatalf("Expected a fake error, but found: %s", err)
-	}
+	require.Zero(t, n, "Expected 0 bytes, but received %d", n)
+	require.Equal(t, fakeErrorString, err.Error(), "Expected a fake error, but found: %s", err)
 
 	// And again, subsequent reads should succeed.
 	decoded, err := io.ReadAll(decodingReader)
-	if err != nil {
-		t.Fatalf("no more errors expected during decoding, but found: %s", err)
-	}
-	if !bytes.Equal(plaintext, decoded) {
-		t.Fatal("decoded bytes don't equal the input")
-	}
+	require.NoError(t, err,
+		"no more errors expected during decoding, but found: %s", err)
+	require.True(t, bytes.Equal(plaintext, decoded),
+		"decoded bytes don't equal the input")
 }
 
 func shouldPanic(t *testing.T, f func()) {
@@ -608,7 +571,7 @@ func TestPrefixDifference(t *testing.T) {
 	// Test that different prefixes fail verification
 	for index, input := range plaintextInputs {
 		// Vary the chunk number, just for fun.
-		chunkNum := uint64(index)
+		chunkNum := uint64(index) //nolint:gosec // G115: Test code, index from range is non-negative
 		sealed := sealPacket(
 			[]byte(input),
 			zeroSecretboxKey(),
@@ -623,12 +586,9 @@ func TestPrefixDifference(t *testing.T) {
 			zeroVerifyKey(),
 			testingPrefix(),
 			zeroChunkNonce(chunkNum))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !bytes.Equal([]byte(input), opened) {
-			t.Fatal("opened bytes don't equal the input")
-		}
+		require.NoError(t, err)
+		require.True(t, bytes.Equal([]byte(input), opened),
+			"opened bytes don't equal the input")
 
 		// Use the wrong prefix
 		_, err = openPacket(
@@ -642,38 +602,32 @@ func TestPrefixDifference(t *testing.T) {
 }
 
 func TestVectors(t *testing.T) {
-	if len(testVectors) < 1 {
-		t.Fatalf("missing test vectors")
-	}
+	require.GreaterOrEqual(t, len(testVectors), 1,
+		"missing test vectors")
 
 	for i, v := range testVectors {
-		if !v.chunked {
-			t.Fatalf("i%d: non-chunked tests not supported yet", i)
-		}
+		require.True(t, v.chunked,
+			"i%d: non-chunked tests not supported yet", i)
 		sealedRef, err := hex.DecodeString(v.sealedHex)
-		if err != nil {
-			t.Fatalf("i:%d sealedHex is invalid hex: %v", i, err)
-		}
+		require.NoError(t, err,
+			"i:%d sealedHex is invalid hex: %v", i, err)
 
 		// Test seal
 		encoder := zeroEncoder()
 		encoder.Write([]byte(v.plaintext))
 		sealed := encoder.Finish()
-		if !bytes.Equal(sealedRef, sealed) {
-			t.Fatalf("i:%d sealed bytes not equal\n     got: %x\nexpected: %x", i, sealed, sealedRef)
-		}
+		require.True(t, bytes.Equal(sealedRef, sealed),
+			"i:%d sealed bytes not equal\n     got: %x\nexpected: %x", i, sealed, sealedRef)
 
 		// Test open
 		decoder := zeroDecoder()
 		_, err = decoder.Write(sealedRef)
 		require.NoError(t, err)
 		opened, err := decoder.Finish()
-		if err != nil {
-			t.Fatalf("i:%d error opening: %v", i, err)
-		}
-		if !bytes.Equal([]byte(v.plaintext), opened) {
-			t.Fatalf("i:%d opened bytes not equal\n     got: %x\nexpected: %x", i, opened, v.plaintext)
-		}
+		require.NoError(t, err,
+			"i:%d error opening: %v", i, err)
+		require.True(t, bytes.Equal([]byte(v.plaintext), opened),
+			"i:%d opened bytes not equal\n     got: %x\nexpected: %x", i, opened, v.plaintext)
 	}
 }
 
@@ -703,12 +657,9 @@ func TestAssociatedData(t *testing.T) {
 		for _, input := range plaintextInputs {
 			sealed := zeroSealWithAssociatedData([]byte(input), associatedData)
 			opened, err := zeroOpenWithAssociatedData(sealed, associatedData)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !bytes.Equal([]byte(input), opened) {
-				t.Fatal("opened bytes don't equal the input")
-			}
+			require.NoError(t, err)
+			require.True(t, bytes.Equal([]byte(input), opened),
+				"opened bytes don't equal the input")
 		}
 	}
 
@@ -723,4 +674,19 @@ func TestAssociatedData(t *testing.T) {
 	opened, err = zeroOpenWithAssociatedData(sealed, incorrectAssociatedData)
 	require.True(t, bytes.Equal(opened, []byte{}))
 	assertErrorType(t, err, AssociatedDataMismatch)
+}
+
+func TestGetChunksInRangeRejectsMalformedRanges(t *testing.T) {
+	cases := [][3]int64{
+		{-1, 1, 1},
+		{1, 0, 2},
+		{0, 0, 2},
+		{2, 3, 2},
+		{0, math.MaxInt64, math.MaxInt64},
+	}
+	for _, tc := range cases {
+		require.NotPanics(t, func() {
+			require.Nil(t, getChunksInRange(tc[0], tc[1], tc[2]))
+		})
+	}
 }

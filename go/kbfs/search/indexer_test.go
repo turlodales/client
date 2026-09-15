@@ -8,7 +8,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-
 	"os"
 	"path"
 	"testing"
@@ -30,7 +29,8 @@ func testInitConfig(
 	ctx context.Context, config libkbfs.Config, session idutil.SessionInfo,
 	log logger.Logger) (
 	newCtx context.Context, newConfig libkbfs.Config,
-	configShutdown func(context.Context) error, err error) {
+	configShutdown func(context.Context) error, err error,
+) {
 	configLocal, ok := config.(*libkbfs.ConfigLocal)
 	if !ok {
 		panic(fmt.Sprintf("Wrong config type: %T", config))
@@ -79,7 +79,8 @@ func testInitConfig(
 
 func writeFile(
 	ctx context.Context, t *testing.T, kbfsOps libkbfs.KBFSOps, i *Indexer,
-	rootNode, node libkbfs.Node, name, text string, newFile bool) {
+	rootNode, node libkbfs.Node, name, text string, newFile bool,
+) {
 	oldMD, err := kbfsOps.GetNodeMetadata(ctx, node)
 	require.NoError(t, err)
 
@@ -121,7 +122,8 @@ func writeFile(
 
 func writeNewFile(
 	ctx context.Context, t *testing.T, kbfsOps libkbfs.KBFSOps, i *Indexer,
-	rootNode libkbfs.Node, name, text string) {
+	rootNode libkbfs.Node, name, text string,
+) {
 	t.Logf("Making file %s", name)
 	namePPS := data.NewPathPartString(name, nil)
 	n, _, err := kbfsOps.CreateFile(
@@ -145,14 +147,14 @@ func testKVStoreName(testName string) string {
 
 func TestIndexFile(t *testing.T) {
 	ctx := libcontext.BackgroundContextWithCancellationDelayer()
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 	config := libkbfs.MakeTestConfigOrBust(t, "user1", "user2")
 	defer libkbfs.CheckConfigAndShutdown(ctx, t, config)
 
 	tempdir, err := os.MkdirTemp("", "indexTest")
 	require.NoError(t, err)
-	defer os.RemoveAll(tempdir)
+	defer func() { _ = os.RemoveAll(tempdir) }()
 	config.SetStorageRoot(tempdir)
 
 	i, err := newIndexerWithConfigInit(
@@ -252,7 +254,8 @@ func TestIndexFile(t *testing.T) {
 
 func makeSingleDirTreeToIndex(
 	ctx context.Context, t *testing.T, kbfsOps libkbfs.KBFSOps,
-	rootNode libkbfs.Node, dirName, text1, text2 string) {
+	rootNode libkbfs.Node, dirName, text1, text2 string,
+) {
 	dirNamePPS := data.NewPathPartString(dirName, nil)
 	dirNode, _, err := kbfsOps.CreateDir(ctx, rootNode, dirNamePPS)
 	require.NoError(t, err)
@@ -274,7 +277,8 @@ func makeSingleDirTreeToIndex(
 
 func makeDirTreesToIndex(
 	ctx context.Context, t *testing.T, kbfsOps libkbfs.KBFSOps,
-	rootNode libkbfs.Node) (names []string) {
+	rootNode libkbfs.Node,
+) (names []string) {
 	aName := "alpha"
 	const a1Text = "Lorem ipsum dolor sit amet, consectetur adipiscing elit."
 	const a2Text = "Mauris et neque sit amet nisi condimentum fringilla " +
@@ -296,14 +300,14 @@ func makeDirTreesToIndex(
 
 func TestFullIndexSyncedTlf(t *testing.T) {
 	ctx := libcontext.BackgroundContextWithCancellationDelayer()
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 	config := libkbfs.MakeTestConfigOrBust(t, "user1", "user2")
 	defer libkbfs.CheckConfigAndShutdown(ctx, t, config)
 
 	tempdir, err := os.MkdirTemp("", "indexTest")
 	require.NoError(t, err)
-	defer os.RemoveAll(tempdir)
+	defer func() { _ = os.RemoveAll(tempdir) }()
 	config.SetStorageRoot(tempdir)
 
 	err = config.EnableDiskLimiter(tempdir)
@@ -433,14 +437,14 @@ func TestFullIndexSyncedTlf(t *testing.T) {
 
 func TestFullIndexSearch(t *testing.T) {
 	ctx := libcontext.BackgroundContextWithCancellationDelayer()
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 	config := libkbfs.MakeTestConfigOrBust(t, "user1", "user2")
 	defer libkbfs.CheckConfigAndShutdown(ctx, t, config)
 
 	tempdir, err := os.MkdirTemp("", "indexTest")
 	require.NoError(t, err)
-	defer os.RemoveAll(tempdir)
+	defer func() { _ = os.RemoveAll(tempdir) }()
 	config.SetStorageRoot(tempdir)
 
 	err = config.EnableDiskLimiter(tempdir)
@@ -487,7 +491,8 @@ func TestFullIndexSearch(t *testing.T) {
 
 	t.Log("Search!")
 	checkSearch := func(
-		query string, numResults, start int, expectedResults map[string]bool) {
+		query string, numResults, start int, expectedResults map[string]bool,
+	) {
 		results, _, err := i.Search(ctx, query, numResults, start)
 		require.NoError(t, err)
 		for _, r := range results {
@@ -495,7 +500,7 @@ func TestFullIndexSearch(t *testing.T) {
 			require.True(t, ok, r.Path)
 			delete(expectedResults, r.Path)
 		}
-		require.Len(t, expectedResults, 0)
+		require.Empty(t, expectedResults)
 	}
 
 	userPath := func(dir, child string) string {

@@ -23,13 +23,13 @@ func TestRemoteUpdateSource(t *testing.T) {
 	data, err := util.ReadFile(jsonPath)
 	require.NoError(t, err)
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprintln(w, string(data))
 	}))
 
 	local := NewRemoteUpdateSource(server.URL, log)
-	assert.Equal(t, local.Description(), "Remote")
+	assert.Equal(t, "Remote", local.Description())
 
 	update, err := local.FindUpdate(updater.UpdateOptions{})
 	require.NoError(t, err)

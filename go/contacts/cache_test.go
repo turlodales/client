@@ -23,13 +23,14 @@ type anotherMockContactsProvider struct {
 }
 
 func (c *anotherMockContactsProvider) LookupAllWithToken(mctx libkb.MetaContext, emails []keybase1.EmailAddress,
-	numbers []keybase1.RawPhoneNumber, _ Token) (ContactLookupResults, error) {
+	numbers []keybase1.RawPhoneNumber, _ Token,
+) (ContactLookupResults, error) {
 	return c.LookupAll(mctx, emails, numbers)
 }
 
 func (c *anotherMockContactsProvider) LookupAll(mctx libkb.MetaContext, emails []keybase1.EmailAddress,
-	numbers []keybase1.RawPhoneNumber) (ContactLookupResults, error) {
-
+	numbers []keybase1.RawPhoneNumber,
+) (ContactLookupResults, error) {
 	if c.disabled {
 		require.FailNow(c.t, "unexpected call to provider, after being disabled")
 	}
@@ -61,12 +62,12 @@ func TestCacheProvider(t *testing.T) {
 
 	res, err := cacheProvider.LookupAll(libkb.NewMetaContextForTest(tc), []keybase1.EmailAddress{}, []keybase1.RawPhoneNumber{})
 	require.NoError(t, err)
-	require.Len(t, res.Results, 0)
+	require.Empty(t, res.Results)
 }
 
 func setupTestCacheProviders(t *testing.T, tc libkb.TestContext) (provider *anotherMockContactsProvider,
-	cacheProvider *CachedContactsProvider) {
-
+	cacheProvider *CachedContactsProvider,
+) {
 	mockProvider := MakeMockProvider(t)
 	provider = &anotherMockContactsProvider{
 		provider: mockProvider,
@@ -93,7 +94,7 @@ func TestLookupCache(t *testing.T) {
 	// Test empty contact list
 	res0, err := ResolveContacts(libkb.NewMetaContextForTest(tc), cacheProvider, []keybase1.Contact{})
 	require.NoError(t, err)
-	require.Len(t, res0, 0)
+	require.Empty(t, res0)
 
 	contactList := []keybase1.Contact{
 		{
@@ -253,5 +254,4 @@ func TestLookupCacheExpiration(t *testing.T) {
 		_, ok := cacheObj.Lookups[MakePhoneLookupKey("+48111222333")]
 		require.True(t, ok)
 	}
-
 }

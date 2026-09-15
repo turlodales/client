@@ -1,35 +1,42 @@
 import * as C from '@/constants'
-import * as React from 'react'
 import * as Kb from '@/common-adapters'
 import {SettingsSection} from './account'
+import {useSettingsContactsState} from '@/stores/settings-contacts'
+import {settingsFeedbackTab} from '@/constants/settings'
+import {openAppSettings} from '@/util/storeless-actions'
 
 const enabledDescription = 'Your phone contacts are being synced on this device.'
 const disabledDescription = 'Import your phone contacts and start encrypted chats with your friends.'
 
 const ManageContacts = () => {
-  const status = C.useSettingsContactsState(s => s.permissionStatus)
-  const contactsImported = C.useSettingsContactsState(s => s.importEnabled)
+  const styles = useStyles()
+  const contactsState = useSettingsContactsState(
+    C.useShallow(s => ({
+      contactsImported: s.importEnabled,
+      editContactImportEnabled: s.dispatch.editContactImportEnabled,
+      loadContactImportEnabled: s.dispatch.loadContactImportEnabled,
+      requestPermissions: s.dispatch.requestPermissions,
+      status: s.permissionStatus,
+    }))
+  )
+  const {contactsImported, editContactImportEnabled, loadContactImportEnabled} = contactsState
+  const {requestPermissions, status} = contactsState
   const waiting = C.Waiting.useAnyWaiting(C.importContactsWaitingKey)
-
-  const loadContactImportEnabled = C.useSettingsContactsState(s => s.dispatch.loadContactImportEnabled)
 
   if (contactsImported === undefined) {
     loadContactImportEnabled()
   }
 
-  const requestPermissions = C.useSettingsContactsState(s => s.dispatch.requestPermissions)
-  const editContactImportEnabled = C.useSettingsContactsState(s => s.dispatch.editContactImportEnabled)
-
-  const onToggle = React.useCallback(() => {
+  const onToggle = () => {
     if (status !== 'granted') {
       requestPermissions(true, true)
     } else {
       editContactImportEnabled(!contactsImported, true)
     }
-  }, [editContactImportEnabled, requestPermissions, contactsImported, status])
+  }
 
   return (
-    <Kb.Box2 direction="vertical" fullWidth={true} fullHeight={true} style={styles.positionRelative}>
+    <Kb.Box2 direction="vertical" fullWidth={true} fullHeight={true} relative={true}>
       <Kb.BoxGrow>
         <ManageContactsBanner />
         <SettingsSection>
@@ -57,24 +64,25 @@ const ManageContacts = () => {
 }
 
 const ManageContactsBanner = () => {
-  const status = C.useSettingsContactsState(s => s.permissionStatus)
-  const contactsImported = C.useSettingsContactsState(s => s.importEnabled)
-  const importedCount = C.useSettingsContactsState(s => s.importedCount)
-  const error = C.useSettingsContactsState(s => s.importError)
-  const onOpenAppSettings = C.useConfigState(s => s.dispatch.dynamic.openAppSettings)
-  const switchTab = C.useRouterState(s => s.dispatch.switchTab)
-  const appendNewChatBuilder = C.useRouterState(s => s.appendNewChatBuilder)
-  const onStartChat = React.useCallback(() => {
+  const {contactsImported, error, importedCount, status} = useSettingsContactsState(
+    C.useShallow(s => ({
+      contactsImported: s.importEnabled,
+      error: s.importError,
+      importedCount: s.importedCount,
+      status: s.permissionStatus,
+    }))
+  )
+  const {appendNewChatBuilder, navigateAppend, switchTab} = C.Router2
+  const onStartChat = () => {
     switchTab(C.Tabs.chatTab)
     appendNewChatBuilder()
-  }, [appendNewChatBuilder, switchTab])
-  const navigateAppend = C.useRouterState(s => s.dispatch.navigateAppend)
-  const onSendFeedback = React.useCallback(() => {
+  }
+  const onSendFeedback = () => {
     navigateAppend({
-      props: {feedback: `Contact import failed\n${error}\n\n`},
-      selected: C.Settings.settingsFeedbackTab,
+      name: settingsFeedbackTab,
+      params: {feedback: `Contact import failed\n${error}\n\n`},
     })
-  }, [navigateAppend, error])
+  }
 
   return (
     <>
@@ -84,7 +92,7 @@ const ManageContactsBanner = () => {
           <Kb.BannerParagraph bannerColor="green" content={[{onClick: onStartChat, text: 'Start a chat'}]} />
         </Kb.Banner>
       )}
-      {(status === 'denied' || (Kb.Styles.isAndroid && status !== 'granted' && contactsImported)) && (
+      {(status === 'denied' || (isAndroid && status !== 'granted' && contactsImported)) && (
         <Kb.Banner color="red">
           <Kb.BannerParagraph
             bannerColor="red"
@@ -92,7 +100,7 @@ const ManageContactsBanner = () => {
               contactsImported
                 ? "Contact importing is paused because Keybase doesn't have permission to access your contacts. "
                 : "Keybase doesn't have permission to access your contacts. ",
-              {onClick: onOpenAppSettings, text: 'Enable in settings'},
+              {onClick: openAppSettings, text: 'Enable in settings'},
               '.',
             ]}
           />
@@ -111,7 +119,7 @@ const ManageContactsBanner = () => {
   )
 }
 
-const styles = Kb.Styles.styleSheetCreate(
+const useStyles = Kb.Styles.createStyleHook(
   () =>
     ({
       buttonBar: {
@@ -119,7 +127,6 @@ const styles = Kb.Styles.styleSheetCreate(
         minHeight: undefined,
         width: undefined,
       },
-      positionRelative: {position: 'relative'},
     }) as const
 )
 

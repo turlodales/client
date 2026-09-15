@@ -4,7 +4,7 @@
 package client
 
 import (
-	"golang.org/x/net/context"
+	"context"
 
 	"github.com/keybase/cli"
 	"github.com/keybase/client/go/libcmdline"
@@ -41,6 +41,7 @@ func (c *CmdInterestingPeople) Run() error {
 
 	return nil
 }
+
 func NewCmdInterestingPeopleRunner(g *libkb.GlobalContext) *CmdInterestingPeople {
 	return &CmdInterestingPeople{Contextified: libkb.NewContextified(g)}
 }

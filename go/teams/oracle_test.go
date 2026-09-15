@@ -12,7 +12,8 @@ import (
 )
 
 func encryptWithTeamKey(t *testing.T, team *Team, data []byte, nonce [24]byte,
-	gen keybase1.PerTeamKeyGeneration) (ciphertext []byte, pubkey libkb.NaclDHKeyPublic) {
+	gen keybase1.PerTeamKeyGeneration,
+) (ciphertext []byte, pubkey libkb.NaclDHKeyPublic) {
 	kp, err := team.encryptionKeyAtGen(context.Background(), gen)
 	require.NoError(t, err)
 	ciphertext = box.Seal(nil, data, &nonce, (*[32]byte)(&kp.Public), (*[32]byte)(kp.Private))
@@ -54,7 +55,7 @@ func TestTeamUnboxOracle(t *testing.T) {
 		TeamID:         team.ID,
 		EncryptedData:  buf,
 		Nonce:          nonce,
-		PeersPublicKey: (keybase1.BoxPublicKey)(pub),
+		PeersPublicKey: keybase1.BoxPublicKey(pub),
 	}
 	ret, err := TryDecryptWithTeamKey(mctx, arg)
 	require.NoError(t, err)
@@ -70,7 +71,7 @@ func TestTeamUnboxOracle(t *testing.T) {
 	buf, pub = encryptWithTeamKey(t, team, clearText, nonce, keybase1.PerTeamKeyGeneration(1))
 	arg.EncryptedData = buf
 	arg.MinGeneration = keybase1.PerTeamKeyGeneration(0) // default
-	arg.PeersPublicKey = (keybase1.BoxPublicKey)(pub)
+	arg.PeersPublicKey = keybase1.BoxPublicKey(pub)
 	ret, err = TryDecryptWithTeamKey(mctx, arg)
 	require.NoError(t, err)
 	require.ElementsMatch(t, ret, clearText)
@@ -112,7 +113,7 @@ func TestTeamOracleRepolling(t *testing.T) {
 		TeamID:         teamID,
 		EncryptedData:  buf,
 		Nonce:          nonce,
-		PeersPublicKey: (keybase1.BoxPublicKey)(pub),
+		PeersPublicKey: keybase1.BoxPublicKey(pub),
 	}
 	ret, err := TryDecryptWithTeamKey(libkb.NewMetaContextBackground(tcs[1].G), arg)
 	require.NoError(t, err)

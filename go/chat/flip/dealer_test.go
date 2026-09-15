@@ -35,7 +35,7 @@ func (t *testDealersHelper) ServerTime(context.Context) (time.Time, error) {
 	return t.clock.Now(), nil
 }
 
-func (t *testDealersHelper) CLogf(ctx context.Context, fmtString string, args ...interface{}) {
+func (t *testDealersHelper) CLogf(ctx context.Context, fmtString string, args ...any) {
 	testPrintf(fmtString+"\n", args...)
 }
 
@@ -44,7 +44,8 @@ func (t *testDealersHelper) Me() UserDevice {
 }
 
 func (t *testDealersHelper) SendChat(ctx context.Context, initiatorUID gregor1.UID, conversationID chat1.ConversationID,
-	gameID chat1.FlipGameID, msg GameMessageEncoded) error {
+	gameID chat1.FlipGameID, msg GameMessageEncoded,
+) error {
 	t.ch <- GameMessageWrappedEncoded{Body: msg, GameID: gameID, Sender: t.me}
 	return nil
 }
@@ -110,7 +111,7 @@ func setupTestBundle(ctx context.Context, t *testing.T) *testBundle {
 }
 
 func (b *testBundle) makeFollowers(t *testing.T, n int) {
-	for i := 0; i < n; i++ {
+	for range n {
 		b.makeFollower(t)
 	}
 }
@@ -210,7 +211,7 @@ func testLeader(t *testing.T, nFollowers int) {
 	b.dh.clock.Advance(time.Duration(6001) * time.Millisecond)
 	msg := <-b.dealer.UpdateCh()
 	require.NotNil(t, msg.CommitmentComplete)
-	require.Equal(t, (nFollowers + 1), len(msg.CommitmentComplete.Players))
+	require.Len(t, msg.CommitmentComplete.Players, (nFollowers + 1))
 	b.assertOutgoingChatSent(t, MessageType_COMMITMENT_COMPLETE)
 	b.assertOutgoingChatSent(t, MessageType_REVEAL)
 	b.receiveRevealFrom(t, leader)
@@ -266,7 +267,7 @@ func testLeaderFollowerPair(t *testing.T, testController testController) {
 		msg := <-b.dealer.UpdateCh()
 		require.NotNil(t, msg.CommitmentComplete)
 		checkPlayers := func(v []UserDeviceCommitment) {
-			require.Equal(t, 2, len(v))
+			require.Len(t, v, 2)
 			find := func(p UserDevice) {
 				require.True(t, v[0].Ud.Eq(p) || v[1].Ud.Eq(p))
 			}

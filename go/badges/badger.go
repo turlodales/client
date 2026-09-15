@@ -4,7 +4,7 @@
 package badges
 
 import (
-	"golang.org/x/net/context"
+	"context"
 
 	"github.com/keybase/client/go/gregor"
 	"github.com/keybase/client/go/libkb"
@@ -18,8 +18,7 @@ type InboxVersionSource interface {
 	GetInboxVersion(context.Context, gregor1.UID) (chat1.InboxVers, error)
 }
 
-type nullInboxVersionSource struct {
-}
+type nullInboxVersionSource struct{}
 
 func (n nullInboxVersionSource) GetInboxVersion(ctx context.Context, uid gregor1.UID) (chat1.InboxVers, error) {
 	return chat1.InboxVers(0), nil
@@ -48,7 +47,7 @@ func NewBadger(g *libkb.GlobalContext) *Badger {
 		shutdownCh:     make(chan struct{}),
 	}
 	go b.notifyLoop()
-	g.PushShutdownHook(func(mctx libkb.MetaContext) error {
+	g.PushShutdownHook(func(_ libkb.MetaContext) error {
 		close(b.shutdownCh)
 		return nil
 	})

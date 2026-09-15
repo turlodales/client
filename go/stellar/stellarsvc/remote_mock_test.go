@@ -381,9 +381,8 @@ func (a *FakeAccount) Check() bool {
 
 func (a *FakeAccount) availableBalance() string {
 	b, err := stellarnet.AvailableBalance(a.balance.Amount, a.subentries)
-	if err != nil {
-		a.T.Fatalf("AvailableBalance error: %s", err)
-	}
+	require.NoError(a.T, err,
+		"AvailableBalance error: %s", err)
 	return b
 }
 
@@ -636,7 +635,7 @@ func NewBackendMock(t testing.TB) *BackendMock {
 	}
 }
 
-func (r *BackendMock) trace(err *error, name string, format string, args ...interface{}) func() {
+func (r *BackendMock) trace(err *error, name string, format string, args ...any) func() {
 	r.T.Logf("+ %s %s", name, fmt.Sprintf(format, args...))
 	return func() {
 		errStr := "?"
@@ -671,7 +670,7 @@ func (r *BackendMock) AccountSeqno(ctx context.Context, accountID stellar1.Accou
 	defer r.Unlock()
 	_, ok := r.seqnos[accountID]
 	if !ok {
-		r.seqnos[accountID] = uint64(time.Now().UnixNano())
+		r.seqnos[accountID] = uint64(time.Now().UnixNano()) //nolint:gosec // G115: Mock test data using timestamp as sequence number, safe to convert
 	}
 
 	return r.seqnos[accountID], nil
@@ -699,13 +698,12 @@ func (r *BackendMock) SubmitPayment(ctx context.Context, tc *TestContext, post s
 
 	if post.QuickReturn {
 		msg := "SubmitPayment with QuickReturn not implemented on BackendMock"
-		r.T.Fatalf(msg)
+		require.FailNow(r.T, msg)
 		return res, errors.New(msg)
 	}
 
 	// Unpack signed transaction and checks if Payment matches transaction.
 	unpackedTx, txIDPrecalc, err := unpackTx(post.SignedTransaction)
-
 	if err != nil {
 		return res, err
 	}
@@ -729,9 +727,9 @@ func (r *BackendMock) SubmitPayment(ctx context.Context, tc *TestContext, post s
 	require.NotNil(tc.T, extract.TimeBounds, "We are expecting TimeBounds in all txs")
 	if extract.TimeBounds != nil {
 		require.NotZero(tc.T, extract.TimeBounds.MaxTime, "We are expecting non-zero TimeBounds.MaxTime in all txs")
-		require.True(tc.T, time.Now().Before(time.Unix(int64(extract.TimeBounds.MaxTime), 0)))
+		require.True(tc.T, time.Now().Before(time.Unix(int64(extract.TimeBounds.MaxTime), 0))) //nolint:gosec // G115: Test code comparing timestamps, safe to convert
 		// We always send MinTime=0 but this assertion should still hold.
-		require.True(tc.T, time.Now().After(time.Unix(int64(extract.TimeBounds.MinTime), 0)))
+		require.True(tc.T, time.Now().After(time.Unix(int64(extract.TimeBounds.MinTime), 0))) //nolint:gosec // G115: Test code comparing timestamps, safe to convert
 	}
 
 	caller, err := tc.G.GetMeUV(ctx)
@@ -751,7 +749,7 @@ func (r *BackendMock) SubmitPayment(ctx context.Context, tc *TestContext, post s
 		b = r.addAccountByID(caller.Uid, extract.To, false)
 	}
 	a.SubtractBalance(extract.Amount)
-	a.AdjustBalance(-(int64(unpackedTx.Tx.Fee)))
+	a.AdjustBalance(-int64(unpackedTx.Tx.Fee))
 	b.AddBalance(extract.Amount)
 
 	summary := stellar1.NewPaymentSummaryWithDirect(stellar1.PaymentSummaryDirect{
@@ -799,7 +797,7 @@ func (r *BackendMock) SubmitRelayPayment(ctx context.Context, tc *TestContext, p
 
 	if post.QuickReturn {
 		msg := "SubmitRelayPayment with QuickReturn not implemented on BackendMock"
-		r.T.Fatalf(msg)
+		require.FailNow(r.T, msg)
 		return res, errors.New(msg)
 	}
 
@@ -836,7 +834,7 @@ func (r *BackendMock) SubmitRelayPayment(ctx context.Context, tc *TestContext, p
 	}
 	b := r.addAccountByID(caller.Uid, extract.To, false)
 	a.SubtractBalance(extract.Amount)
-	a.AdjustBalance(-(int64(unpackedTx.Tx.Fee)))
+	a.AdjustBalance(-int64(unpackedTx.Tx.Fee))
 	b.AddBalance(extract.Amount)
 
 	summary := stellar1.NewPaymentSummaryWithRelay(stellar1.PaymentSummaryRelay{
@@ -890,7 +888,7 @@ func (r *BackendMock) SubmitRelayClaim(ctx context.Context, tc *TestContext, pos
 	if amt, _ := stellarnet.ParseStellarAmount(a.balance.Amount); amt == 0 {
 		return res, fmt.Errorf("claim source account has zero balance: %v", a.accountID)
 	}
-	a.AdjustBalance(-(int64(unpackedTx.Tx.Fee)))
+	a.AdjustBalance(-int64(unpackedTx.Tx.Fee))
 	b.AdjustBalance(a.ZeroBalance())
 
 	caller, err := tc.G.GetMeUV(ctx)
@@ -1112,7 +1110,7 @@ func (r *BackendMock) addAccountRandom(uid keybase1.UID, funded bool) stellar1.A
 
 	require.Nil(r.T, r.accounts[a.accountID], "attempt to re-add account %v", a.accountID)
 	r.accounts[a.accountID] = a
-	r.seqnos[a.accountID] = uint64(time.Now().UnixNano())
+	r.seqnos[a.accountID] = uint64(time.Now().UnixNano()) //nolint:gosec // G115: Mock test data using timestamp as sequence number, safe to convert
 	r.userAccounts[uid] = append(r.userAccounts[uid], a.accountID)
 	return a.accountID
 }
@@ -1133,7 +1131,7 @@ func (r *BackendMock) addAccountByID(uid keybase1.UID, accountID stellar1.Accoun
 	}
 	require.Nil(r.T, r.accounts[a.accountID], "attempt to re-add account %v", a.accountID)
 	r.accounts[a.accountID] = a
-	r.seqnos[a.accountID] = uint64(time.Now().UnixNano())
+	r.seqnos[a.accountID] = uint64(time.Now().UnixNano()) //nolint:gosec // G115: Mock test data using timestamp as sequence number, safe to convert
 	r.userAccounts[uid] = append(r.userAccounts[uid], a.accountID)
 	return a
 }
@@ -1166,7 +1164,7 @@ func (r *BackendMock) SecretKey(accountID stellar1.AccountID) stellar1.SecretKey
 	defer r.Unlock()
 	a := r.accounts[accountID]
 	require.NotNil(r.T, a, "SecretKey: account id not in remote mock: %v", accountID)
-	require.True(r.T, len(a.secretKey) > 0, "secret key missing in mock for: %v", accountID)
+	require.NotEmpty(r.T, a.secretKey, "secret key missing in mock for: %v", accountID)
 	return a.secretKey
 }
 
@@ -1298,7 +1296,7 @@ func (r *BackendMock) SetInflationDestination(ctx context.Context, tc *TestConte
 	accountID := stellar1.AccountID(unpackedTx.Tx.SourceAccount.Address())
 	account, ok := r.accounts[accountID]
 	require.True(tc.T, ok)
-	require.True(tc.T, account.availableBalance() != "0", "inflation on empty account won't work")
+	require.NotEqual(tc.T, "0", account.availableBalance(), "inflation on empty account won't work")
 
 	require.Len(tc.T, unpackedTx.Tx.Operations, 1)
 	op := unpackedTx.Tx.Operations[0]
@@ -1311,9 +1309,9 @@ func (r *BackendMock) SetInflationDestination(ctx context.Context, tc *TestConte
 	require.NotNil(tc.T, unpackedTx.Tx.TimeBounds, "We are expecting TimeBounds in all txs")
 	if unpackedTx.Tx.TimeBounds != nil {
 		require.NotZero(tc.T, unpackedTx.Tx.TimeBounds.MaxTime, "We are expecting non-zero TimeBounds.MaxTime in all txs")
-		require.True(tc.T, time.Now().Before(time.Unix(int64(unpackedTx.Tx.TimeBounds.MaxTime), 0)))
+		require.True(tc.T, time.Now().Before(time.Unix(int64(unpackedTx.Tx.TimeBounds.MaxTime), 0))) //nolint:gosec // G115: Test code comparing timestamps, safe to convert
 		// We always send MinTime=0 but this assertion should still hold.
-		require.True(tc.T, time.Now().After(time.Unix(int64(unpackedTx.Tx.TimeBounds.MinTime), 0)))
+		require.True(tc.T, time.Now().After(time.Unix(int64(unpackedTx.Tx.TimeBounds.MinTime), 0))) //nolint:gosec // G115: Test code comparing timestamps, safe to convert
 	}
 
 	account.inflationDest = stellar1.AccountID(setOpt.InflationDest.Address())

@@ -3,11 +3,12 @@
 // license that can be found in the LICENSE file.
 //
 //go:build !windows
-// +build !windows
 
 package libfuse
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -18,6 +19,7 @@ import (
 
 	"bazil.org/fuse"
 	"bazil.org/fuse/fs"
+
 	"github.com/keybase/client/go/kbfs/data"
 	"github.com/keybase/client/go/kbfs/idutil"
 	"github.com/keybase/client/go/kbfs/libcontext"
@@ -27,7 +29,6 @@ import (
 	"github.com/keybase/client/go/kbfs/tlf"
 	"github.com/keybase/client/go/kbfs/tlfhandle"
 	"github.com/keybase/client/go/libkb"
-	"golang.org/x/net/context"
 )
 
 // Folder represents the info shared among all nodes of a KBFS
@@ -65,7 +66,8 @@ type Folder struct {
 }
 
 func newFolder(ctx context.Context, fl *FolderList, h *tlfhandle.Handle,
-	hPreferredName tlf.PreferredName) *Folder {
+	hPreferredName tlf.PreferredName,
+) *Folder {
 	f := &Folder{
 		fs:             fl.fs,
 		list:           fl,
@@ -84,7 +86,8 @@ func (f *Folder) name() tlf.CanonicalName {
 }
 
 func (f *Folder) processError(ctx context.Context,
-	mode libkbfs.ErrorModeType, err error) error {
+	mode libkbfs.ErrorModeType, err error,
+) error {
 	if err == nil {
 		f.fs.errVlog.CLogf(ctx, libkb.VLog1, "Request complete")
 		return nil
@@ -206,12 +209,14 @@ func (f *Folder) invalidateNodeDataRange(node fs.Node, write libkbfs.WriteRange)
 	if file, ok := node.(*File); ok {
 		file.eiCache.destroy()
 	}
-	off := int64(write.Off)
-	size := int64(write.Len)
+	var off, size int64
 	if write.Off > math.MaxInt64 || write.Len > math.MaxInt64 {
 		// out of bounds, just invalidate all data
 		off = 0
 		size = -1
+	} else {
+		off = int64(write.Off)
+		size = int64(write.Len)
 	}
 	if write.Len == 0 {
 		// truncate, invalidate all data in the now-lost tail
@@ -238,7 +243,8 @@ func (f *Folder) LocalChange(ctx context.Context, node libkbfs.Node, write libkb
 }
 
 func (f *Folder) localChangeInvalidate(ctx context.Context, node libkbfs.Node,
-	write libkbfs.WriteRange) {
+	write libkbfs.WriteRange,
+) {
 	f.nodesMu.Lock()
 	n, ok := f.nodes[node.GetID()]
 	f.nodesMu.Unlock()
@@ -246,7 +252,7 @@ func (f *Folder) localChangeInvalidate(ctx context.Context, node libkbfs.Node,
 		return
 	}
 
-	if err := f.invalidateNodeDataRange(n, write); err != nil && err != fuse.ErrNotCached {
+	if err := f.invalidateNodeDataRange(n, write); err != nil && !errors.Is(err, fuse.ErrNotCached) {
 		// TODO we have no mechanism to do anything about this
 		f.fs.log.CErrorf(ctx, "FUSE invalidate error: %v", err)
 	}
@@ -255,7 +261,8 @@ func (f *Folder) localChangeInvalidate(ctx context.Context, node libkbfs.Node,
 // BatchChanges is called for changes originating anywhere, including
 // other hosts.
 func (f *Folder) BatchChanges(
-	ctx context.Context, changes []libkbfs.NodeChange, _ []libkbfs.NodeID) {
+	ctx context.Context, changes []libkbfs.NodeChange, _ []libkbfs.NodeID,
+) {
 	if !f.fs.conn.Protocol().HasInvalidate() {
 		// OSXFUSE 2.x does not support notifications
 		return
@@ -273,7 +280,8 @@ func (f *Folder) BatchChanges(
 }
 
 func (f *Folder) batchChangesInvalidate(ctx context.Context,
-	changes []libkbfs.NodeChange) {
+	changes []libkbfs.NodeChange,
+) {
 	for _, v := range changes {
 		f.nodesMu.Lock()
 		n, ok := f.nodes[v.Node.GetID()]
@@ -285,13 +293,13 @@ func (f *Folder) batchChangesInvalidate(ctx context.Context,
 		switch {
 		case len(v.DirUpdated) > 0:
 			// invalidate potentially cached Readdir contents
-			if err := f.fs.fuse.InvalidateNodeData(n); err != nil && err != fuse.ErrNotCached {
+			if err := f.fs.fuse.InvalidateNodeData(n); err != nil && !errors.Is(err, fuse.ErrNotCached) {
 				// TODO we have no mechanism to do anything about this
 				f.fs.log.CErrorf(ctx, "FUSE invalidate error: %v", err)
 			}
 			for _, name := range v.DirUpdated {
 				// invalidate the dentry cache
-				if err := f.fs.fuse.InvalidateEntry(n, name.Plaintext()); err != nil && err != fuse.ErrNotCached {
+				if err := f.fs.fuse.InvalidateEntry(n, name.Plaintext()); err != nil && !errors.Is(err, fuse.ErrNotCached) {
 					// TODO we have no mechanism to do anything about this
 					f.fs.log.CErrorf(ctx, "FUSE invalidate error: %v", err)
 				}
@@ -299,7 +307,7 @@ func (f *Folder) batchChangesInvalidate(ctx context.Context,
 
 		case len(v.FileUpdated) > 0:
 			for _, write := range v.FileUpdated {
-				if err := f.invalidateNodeDataRange(n, write); err != nil && err != fuse.ErrNotCached {
+				if err := f.invalidateNodeDataRange(n, write); err != nil && !errors.Is(err, fuse.ErrNotCached) {
 					// TODO we have no mechanism to do anything about this
 					f.fs.log.CErrorf(ctx, "FUSE invalidate error: %v", err)
 				}
@@ -310,7 +318,7 @@ func (f *Folder) batchChangesInvalidate(ctx context.Context,
 				file.eiCache.destroy()
 			}
 			// just the attributes
-			if err := f.fs.fuse.InvalidateNodeAttr(n); err != nil && err != fuse.ErrNotCached {
+			if err := f.fs.fuse.InvalidateNodeAttr(n); err != nil && !errors.Is(err, fuse.ErrNotCached) {
 				// TODO we have no mechanism to do anything about this
 				f.fs.log.CErrorf(ctx, "FUSE invalidate error: %v", err)
 			}
@@ -322,7 +330,8 @@ func (f *Folder) batchChangesInvalidate(ctx context.Context,
 // Note that newHandle may be nil. Then the handle in the folder is used.
 // This is used on e.g. logout/login.
 func (f *Folder) TlfHandleChange(ctx context.Context,
-	newHandle *tlfhandle.Handle) {
+	newHandle *tlfhandle.Handle,
+) {
 	f.fs.log.CDebugf(ctx, "TlfHandleChange called on %q",
 		canonicalNameIfNotNil(newHandle))
 	// Handle in the background because we shouldn't lock during the
@@ -340,7 +349,8 @@ func canonicalNameIfNotNil(h *tlfhandle.Handle) string {
 }
 
 func (f *Folder) tlfHandleChangeInvalidate(ctx context.Context,
-	newHandle *tlfhandle.Handle) {
+	newHandle *tlfhandle.Handle,
+) {
 	session, err := idutil.GetCurrentSessionIfPossible(
 		ctx, f.fs.config.KBPKI(), f.list.tlfType == tlf.Public)
 	// Here we get an error, but there is little that can be done.
@@ -367,7 +377,8 @@ func (f *Folder) tlfHandleChangeInvalidate(ctx context.Context,
 }
 
 func (f *Folder) writePermMode(ctx context.Context,
-	node libkbfs.Node, original os.FileMode) (os.FileMode, error) {
+	node libkbfs.Node, original os.FileMode,
+) (os.FileMode, error) {
 	f.handleMu.RLock()
 	defer f.handleMu.RUnlock()
 	return libfs.WritePermMode(
@@ -379,7 +390,8 @@ func (f *Folder) writePermMode(ctx context.Context,
 // all entryinfo types.
 func (f *Folder) fillAttrWithUIDAndWritePerm(
 	ctx context.Context, node libkbfs.Node, ei *data.EntryInfo,
-	a *fuse.Attr) (err error) {
+	a *fuse.Attr,
+) (err error) {
 	a.Valid = 1 * time.Minute
 	node.FillCacheDuration(&a.Valid)
 
@@ -388,7 +400,7 @@ func (f *Folder) fillAttrWithUIDAndWritePerm(
 	a.Mtime = time.Unix(0, ei.Mtime)
 	a.Ctime = time.Unix(0, ei.Ctime)
 
-	a.Uid = uint32(os.Getuid())
+	a.Uid = uint32(os.Getuid()) //nolint:gosec // G115: UID values are bounded by system limits
 
 	if a.Mode, err = f.writePermMode(ctx, node, a.Mode); err != nil {
 		return err
@@ -414,7 +426,7 @@ func (f *Folder) access(ctx context.Context, r *fuse.AccessRequest) error {
 		return fuse.EPERM
 	}
 
-	if r.Mask&02 == 0 {
+	if r.Mask&0o2 == 0 {
 		// For directory, we only check for the w bit.
 		return nil
 	}
@@ -536,7 +548,7 @@ func (d *Dir) attr(ctx context.Context, a *fuse.Attr) (err error) {
 		return err
 	}
 
-	a.Mode |= os.ModeDir | 0500
+	a.Mode |= os.ModeDir | 0o500
 	a.Inode = d.inode
 	return nil
 }
@@ -652,7 +664,7 @@ func (d *Dir) Create(ctx context.Context, req *fuse.CreateRequest, resp *fuse.Cr
 	d.folder.fs.vlog.CLogf(ctx, libkb.VLog1, "Dir Create %s", namePPS)
 	defer func() { err = d.folder.processError(ctx, libkbfs.WriteMode, err) }()
 
-	isExec := (req.Mode.Perm() & 0100) != 0
+	isExec := (req.Mode.Perm() & 0o100) != 0
 	excl := getEXCLFromCreateRequest(req)
 	newNode, ei, err := d.folder.fs.config.KBFSOps().CreateFile(
 		ctx, d.node, namePPS, isExec, excl)
@@ -680,7 +692,8 @@ func (d *Dir) Create(ctx context.Context, req *fuse.CreateRequest, resp *fuse.Cr
 
 // Mkdir implements the fs.NodeMkdirer interface for Dir.
 func (d *Dir) Mkdir(ctx context.Context, req *fuse.MkdirRequest) (
-	node fs.Node, err error) {
+	node fs.Node, err error,
+) {
 	namePPS := d.node.ChildName(req.Name)
 	ctx = d.folder.fs.config.MaybeStartTrace(ctx, "Dir.Mkdir",
 		fmt.Sprintf("%s %s", d.node.GetBasename(), namePPS))
@@ -711,7 +724,8 @@ func (d *Dir) Mkdir(ctx context.Context, req *fuse.MkdirRequest) (
 
 // Symlink implements the fs.NodeSymlinker interface for Dir.
 func (d *Dir) Symlink(ctx context.Context, req *fuse.SymlinkRequest) (
-	node fs.Node, err error) {
+	node fs.Node, err error,
+) {
 	namePPS := d.node.ChildName(req.NewName)
 	targetPPS := d.node.ChildName(req.Target)
 	ctx = d.folder.fs.config.MaybeStartTrace(ctx, "Dir.Symlink",
@@ -746,13 +760,15 @@ var _ fs.NodeLinker = (*Dir)(nil)
 
 // Link implements the fs.NodeLinker interface for Dir.
 func (d *Dir) Link(
-	_ context.Context, _ *fuse.LinkRequest, _ fs.Node) (fs.Node, error) {
+	_ context.Context, _ *fuse.LinkRequest, _ fs.Node,
+) (fs.Node, error) {
 	return nil, fuse.ENOTSUP
 }
 
 // Rename implements the fs.NodeRenamer interface for Dir.
 func (d *Dir) Rename(ctx context.Context, req *fuse.RenameRequest,
-	newDir fs.Node) (err error) {
+	newDir fs.Node,
+) (err error) {
 	oldNamePPS := d.node.ChildName(req.OldName)
 	// We need to log the new name before we have the new node, so
 	// just obfuscate it with the old node for now, it's the best we
@@ -965,6 +981,6 @@ func (d *Dir) Fsync(ctx context.Context, req *fuse.FsyncRequest) (err error) {
 
 // isNoSuchNameError checks for libkbfs.NoSuchNameError.
 func isNoSuchNameError(err error) bool {
-	_, ok := err.(idutil.NoSuchNameError)
-	return ok
+	var nsne idutil.NoSuchNameError
+	return errors.As(err, &nsne)
 }

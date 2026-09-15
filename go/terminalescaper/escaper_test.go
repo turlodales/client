@@ -3,14 +3,14 @@ package terminalescaper
 import (
 	"bytes"
 	"fmt"
-	"reflect"
 	"testing"
 	"unicode"
 	"unsafe"
+
+	"github.com/stretchr/testify/require"
 )
 
 var tests = map[string]string{
-
 	// The vt100 escape character \033 (i.e. \x1b) is substituted with '^', even as part of escape sequence
 	"\x1b":          "^[",
 	"aaa\x1b[3Gbbb": "aaa^[[3Gbbb",
@@ -148,6 +148,7 @@ func rot13(r rune) rune {
 	}
 	return r
 }
+
 func Test_replace(t *testing.T) {
 	// Run a couple of awful growth/shrinkage tests
 	a := tenRunes('a')
@@ -156,7 +157,7 @@ func Test_replace(t *testing.T) {
 	m := replace(maxRune, a)
 	expect := tenRunes(unicode.MaxRune)
 	if m != expect {
-		t.Errorf("growing: expected %q got %q", expect, m)
+		require.Failf(t, "", "growing: expected %q got %q", expect, m)
 	}
 
 	// 2. Shrink
@@ -164,21 +165,21 @@ func Test_replace(t *testing.T) {
 	m = replace(minRune, tenRunes(unicode.MaxRune))
 	expect = a
 	if m != expect {
-		t.Errorf("shrinking: expected %q got %q", expect, m)
+		require.Failf(t, "", "shrinking: expected %q got %q", expect, m)
 	}
 
 	// 3. Rot13
 	m = replace(rot13, "a to zed")
 	expect = "n gb mrq"
 	if m != expect {
-		t.Errorf("rot13: expected %q got %q", expect, m)
+		require.Failf(t, "", "rot13: expected %q got %q", expect, m)
 	}
 
 	// 4. Rot13^2
 	m = replace(rot13, replace(rot13, "a to zed"))
 	expect = "a to zed"
 	if m != expect {
-		t.Errorf("rot13: expected %q got %q", expect, m)
+		require.Failf(t, "", "rot13: expected %q got %q", expect, m)
 	}
 
 	// 5. Drop^[
@@ -191,7 +192,7 @@ func Test_replace(t *testing.T) {
 	m = replace(dropNotLatin, "Hello, 세계")
 	expect = "Hello"
 	if m != expect {
-		t.Errorf("drop: expected %q got %q", expect, m)
+		require.Failf(t, "", "drop: expected %q got %q", expect, m)
 	}
 
 	// 6. Identity
@@ -200,9 +201,9 @@ func Test_replace(t *testing.T) {
 	}
 	orig := "Input string that we expect not to be copied."
 	m = replace(identity, orig)
-	if (*reflect.StringHeader)(unsafe.Pointer(&orig)).Data !=
-		(*reflect.StringHeader)(unsafe.Pointer(&m)).Data {
-		t.Error("unexpected copy during identity map")
+	if unsafe.StringData(orig) !=
+		unsafe.StringData(m) {
+		require.Fail(t, "unexpected copy during identity map")
 	}
 
 	// 7. Handle invalid UTF-8 sequence
@@ -215,7 +216,7 @@ func Test_replace(t *testing.T) {
 	m = replace(replaceNotLatin, "Hello\255World")
 	expect = "Hello?World"
 	if m != expect {
-		t.Errorf("replace invalid sequence: expected %q got %q", expect, m)
+		require.Failf(t, "", "replace invalid sequence: expected %q got %q", expect, m)
 	}
 
 	// 8. Handle special case of -1 to '^['
@@ -228,16 +229,16 @@ func Test_replace(t *testing.T) {
 	m = replace(aToEscape, "a")
 	expect = "^["
 	if m != expect {
-		t.Errorf("Escaping: expected %q got %q", expect, m)
+		require.Failf(t, "", "Escaping: expected %q got %q", expect, m)
 	}
 	m = replace(aToEscape, "aa")
 	expect = "^[^["
 	if m != expect {
-		t.Errorf("Escaping: expected %q got %q", expect, m)
+		require.Failf(t, "", "Escaping: expected %q got %q", expect, m)
 	}
 	m = replace(aToEscape, "abaaba")
 	expect = "^[b^[^[b^["
 	if m != expect {
-		t.Errorf("Escaping: expected %q got %q", expect, m)
+		require.Failf(t, "", "Escaping: expected %q got %q", expect, m)
 	}
 }

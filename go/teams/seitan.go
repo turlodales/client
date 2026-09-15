@@ -1,20 +1,19 @@
 package teams
 
 import (
-	"fmt"
-	"regexp"
-	"strings"
-
+	"context"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha512"
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"fmt"
+	"regexp"
+	"strings"
 
 	"golang.org/x/crypto/nacl/secretbox"
 	"golang.org/x/crypto/scrypt"
-	"golang.org/x/net/context"
 
 	libkb "github.com/keybase/client/go/libkb"
 	msgpack "github.com/keybase/client/go/msgpack"
@@ -28,13 +27,17 @@ import (
 // Seitan tokens have a '+' as the fifth character. We use this
 // to distinguish from email invite tokens (and team names).
 // See `IsSeitany`
-const SeitanEncodedIKeyLength = 18
-const seitanEncodedIKeyPlusOffset = 5
+const (
+	SeitanEncodedIKeyLength     = 18
+	seitanEncodedIKeyPlusOffset = 5
+)
 
 // Key-Base 30 encoding. lower case letters except "ilot", and digits except for '0' and '1'.
 // See TestSeitanParams for a test to make sure these two parameters match up.
-const KBase30EncodeStd = "abcdefghjkmnpqrsuvwxyz23456789"
-const base30BitMask = byte(0x1f)
+const (
+	KBase30EncodeStd = "abcdefghjkmnpqrsuvwxyz23456789"
+	base30BitMask    = byte(0x1f)
+)
 
 type SeitanVersion uint
 
@@ -58,7 +61,6 @@ type SeitanPKey struct {
 }
 
 func generateIKey(length int, plusOffset int) (str string, err error) {
-
 	alphabet := []byte(KBase30EncodeStd)
 	randEncodingByte := func() (byte, error) {
 		for {
@@ -75,7 +77,7 @@ func generateIKey(length int, plusOffset int) (str string, err error) {
 	}
 
 	var buf []byte
-	for i := 0; i < length; i++ {
+	for i := range length {
 		if i == plusOffset {
 			buf = append(buf, '+')
 		} else {

@@ -1,30 +1,35 @@
-import Box from './box'
+import {Box2} from './box'
 import * as Styles from '@/styles'
+import type {StylesCrossPlatform} from '@/styles'
 
-import type {Props} from './divider.d'
+type Props = {style?: StylesCrossPlatform; vertical?: boolean}
 
-const Divider = (props: Props) => (
-  <Box
-    style={Styles.collapseStyles([
-      styles.divider,
-      props.vertical ? styles.vertical : styles.horizontal,
-      props.style,
-    ])}
-  />
-)
+const Divider = (props: Props) => {
+  const styles = useStyles()
+  return (
+    <Box2
+      direction="vertical"
+      flex={1}
+      style={Styles.collapseStyles([
+        styles.divider,
+        props.vertical ? styles.vertical : styles.horizontal,
+        props.style,
+      ])}
+    />
+  )
+}
 
-const styles = Styles.styleSheetCreate(() => ({
+const useStyles = Styles.createStyleHook(theme => ({
   divider: {
-    backgroundColor: Styles.globalColors.black_10,
-    flex: 1,
+    backgroundColor: theme.black_10,
   },
   horizontal: {
-    maxHeight: 1,
-    minHeight: 1,
+    maxHeight: Styles.hairlineWidth,
+    minHeight: Styles.hairlineWidth,
   },
   vertical: {
-    maxWidth: 1,
-    minWidth: 1,
+    maxWidth: Styles.hairlineWidth,
+    minWidth: Styles.hairlineWidth,
   },
 }))
 

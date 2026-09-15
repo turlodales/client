@@ -55,7 +55,7 @@ func (l *LiveLocationTracker) Start(ctx context.Context, uid gregor1.UID) {
 	l.Lock()
 	defer l.Unlock()
 	l.uid = uid
-	// bring back any trackers that we have stored. This is most relavent when being woken
+	// bring back any trackers that we have stored. This is most relevant when being woken
 	// up on iOS due to a location update. THe app might need to recreate all of its trackers
 	// if the app had been killed.
 	l.restoreLocked(ctx)
@@ -143,7 +143,8 @@ func newUnfurlNotifyListener(g *globals.Context, outboxID chat1.OutboxID, doneCh
 }
 
 func (n *unfurlNotifyListener) NewChatActivity(uid keybase1.UID, activity chat1.ChatActivity,
-	source chat1.ChatActivitySource) {
+	source chat1.ChatActivitySource,
+) {
 	ctx := context.Background()
 	st, err := activity.ActivityType()
 	if err != nil {
@@ -307,7 +308,7 @@ func (l *LiveLocationTracker) tracker(t *locationTrack) error {
 			l.Unlock()
 			l.Debug(ctx, "tracker[%v]: added %d coords", watchID, added)
 			if l.TestingCoordsAddedCh != nil {
-				for i := 0; i < added; i++ {
+				for range added {
 					l.TestingCoordsAddedCh <- struct{}{}
 				}
 			}
@@ -343,7 +344,8 @@ func (l *LiveLocationTracker) tracker(t *locationTrack) error {
 }
 
 func (l *LiveLocationTracker) GetCurrentPosition(ctx context.Context, convID chat1.ConversationID,
-	msgID chat1.MessageID) {
+	msgID chat1.MessageID,
+) {
 	defer l.Trace(ctx, nil, "GetCurrentPosition")()
 	l.Lock()
 	defer l.Unlock()
@@ -356,7 +358,8 @@ func (l *LiveLocationTracker) GetCurrentPosition(ctx context.Context, convID cha
 }
 
 func (l *LiveLocationTracker) StartTracking(ctx context.Context, convID chat1.ConversationID,
-	msgID chat1.MessageID, endTime time.Time) {
+	msgID chat1.MessageID, endTime time.Time,
+) {
 	defer l.Trace(ctx, nil, "StartTracking")()
 	l.Lock()
 	defer l.Unlock()

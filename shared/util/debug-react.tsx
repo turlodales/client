@@ -1,6 +1,6 @@
 import * as React from 'react'
 import {type LayoutChangeEvent, View, Pressable, Text} from 'react-native'
-import {debugClear} from './debug'
+import {debugClear} from './debug-registry'
 
 const ENABLE_UNMOUNT_ALL = __DEV__ && (false as boolean)
 
@@ -28,44 +28,43 @@ const UnmountAll = ({setShow}: {setShow: React.Dispatch<React.SetStateAction<boo
   )
 }
 
-export const useUnmountAll = ENABLE_UNMOUNT_ALL
-  ? () => {
-      const [show, setShow] = React.useState(true)
+const useUnmountAllEnabled = () => {
+  const [show, setShow] = React.useState(true)
 
-      // clear debug globals
+  // clear debug globals
 
-      setTimeout(() => {
-        debugClear()
-      }, 1000)
+  setTimeout(() => {
+    debugClear()
+  }, 1000)
 
-      const unmountAll = <UnmountAll setShow={setShow} />
-      return {show, unmountAll}
-    }
-  : () => {
-      return {show: true, unmountAll: null}
-    }
+  const unmountAll = <UnmountAll setShow={setShow} />
+  return {show, unmountAll}
+}
+
+const useUnmountAllDisabled = () => {
+  return {show: true, unmountAll: null}
+}
+
+export const useUnmountAll = ENABLE_UNMOUNT_ALL ? useUnmountAllEnabled : useUnmountAllDisabled
 
 export const useDebugLayout = __DEV__
   ? (cb?: () => void) => {
       const sizeRef = React.useRef([0 as number, 0 as number] as const)
-      return React.useCallback(
-        (e: LayoutChangeEvent) => {
-          const height = e.nativeEvent.layout.height
-          const width = e.nativeEvent.layout.width
-          const [w, h] = sizeRef.current
-          sizeRef.current = [width, height]
-          if ((w && w !== width) || (h && h !== height)) {
-            console.log('[DEBUG] useDebugLayout', {
-              data: cb?.(),
-              h,
-              height,
-              w,
-              width,
-            })
-          }
-        },
-        [cb]
-      )
+      return (e: LayoutChangeEvent) => {
+        const height = e.nativeEvent.layout.height
+        const width = e.nativeEvent.layout.width
+        const [w, h] = sizeRef.current
+        sizeRef.current = [width, height]
+        if ((w && w !== width) || (h && h !== height)) {
+          console.log('[DEBUG] useDebugLayout', {
+            data: cb?.(),
+            h,
+            height,
+            w,
+            width,
+          })
+        }
+      }
     }
   : () => {
       return undefined

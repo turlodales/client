@@ -1,6 +1,6 @@
 import type * as Types from '.'
 import {toStringForLog} from '@/util/string'
-import {registerDebugClear} from '@/util/debug'
+import {registerDebugClear} from '@/util/debug-registry'
 
 const levelToFunction = {
   Action: 'log',
@@ -16,7 +16,7 @@ class RingLogger {
   private currentWriteIdx: number = 0
   private ringBuffer: Array<Types.LogLine | undefined> = []
   private logLevel: Types.LogLevel
-  private consoleLog: (...s: Array<any>) => void
+  private consoleLog: (...s: Array<unknown>) => void
 
   constructor(logLevel: Types.LogLevel, ringSize: number) {
     this.logLevel = logLevel
@@ -27,7 +27,7 @@ class RingLogger {
     })
   }
 
-  log = (...s: Array<any>) => {
+  log = (...s: Array<unknown>) => {
     const singleString = s.map(toStringForLog).join(' ')
 
     if (__DEV__) {

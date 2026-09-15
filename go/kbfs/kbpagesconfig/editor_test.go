@@ -15,9 +15,7 @@ import (
 )
 
 func TestEditorACLs(t *testing.T) {
-	configDir, err := os.MkdirTemp(".", "kbpagesconfig-editor-test-")
-	require.NoError(t, err)
-	defer os.RemoveAll(configDir)
+	configDir := t.TempDir()
 	kbpConfigPath := filepath.Join(configDir, config.DefaultConfigFilename)
 
 	nextResponse := make(chan string, 4)
@@ -132,13 +130,10 @@ func TestEditorACLs(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, read)
 	require.True(t, list)
-
 }
 
 func TestEditorSimple(t *testing.T) {
-	configDir, err := os.MkdirTemp(".", "kbpagesconfig-editor-test-")
-	require.NoError(t, err)
-	defer os.RemoveAll(configDir)
+	configDir := t.TempDir()
 
 	nextResponse := make(chan string, 4)
 	prompter := &fakePrompterForTest{

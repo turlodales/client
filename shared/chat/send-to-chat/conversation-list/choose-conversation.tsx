@@ -1,4 +1,3 @@
-import * as React from 'react'
 import * as Kb from '@/common-adapters'
 import type * as T from '@/constants/types'
 import ConversationList from './conversation-list'
@@ -10,26 +9,24 @@ type Props = {
 }
 
 const ChooseConversation = (props: Props) => {
+  const styles = useStyles()
   const {onSelect} = props
   const text = !props.convName.length ? 'Choose a conversation' : props.convName
 
-  const makePopup = React.useCallback(
-    (p: Kb.Popup2Parms) => {
-      const {attachTo, hidePopup} = p
-      return (
-        <Kb.Overlay
-          attachTo={attachTo}
-          onHidden={hidePopup}
-          position="center center"
-          style={styles.overlay}
-          visible={true}
-        >
-          <ConversationList onSelect={onSelect} onDone={hidePopup} />
-        </Kb.Overlay>
-      )
-    },
-    [onSelect]
-  )
+  const makePopup = (p: Kb.Popup2Parms) => {
+    const {attachTo, hidePopup} = p
+    return (
+      <Kb.Popup
+        attachTo={attachTo}
+        onHidden={hidePopup}
+        position="center center"
+        style={styles.overlay}
+        visible={true}
+      >
+        <ConversationList onSelect={onSelect} onDone={hidePopup} />
+      </Kb.Popup>
+    )
+  }
   const {showPopup, popup, popupAnchor} = Kb.usePopup2(makePopup)
 
   return (
@@ -51,12 +48,12 @@ const ChooseConversation = (props: Props) => {
 
 export default ChooseConversation
 
-const styles = Kb.Styles.styleSheetCreate(
-  () =>
+const useStyles = Kb.Styles.createStyleHook(
+  theme =>
     ({
       dropdownButton: {width: 300},
       overlay: {
-        backgroundColor: Kb.Styles.globalColors.white,
+        backgroundColor: theme.white,
         height: 360,
         width: 300,
       },

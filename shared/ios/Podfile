@@ -1,68 +1,63 @@
 require File.join(File.dirname(`node --print "require.resolve('expo/package.json')"`), "scripts/autolinking")
-# Resolve react_native_pods.rb with node to allow for hoisting
-require Pod::Executable.execute_command('node', ['-p',
-  'require.resolve(
-    "react-native/scripts/react_native_pods.rb",
-    {paths: [process.argv[1]]},
-  )', __dir__]).strip
+require File.join(File.dirname(`node --print "require.resolve('react-native/package.json')"`), "scripts/react_native_pods")
 
-platform :ios, "13.0"
+require 'json'
+podfile_properties = JSON.parse(File.read(File.join(__dir__, 'Podfile.properties.json'))) rescue {}
+ENV['RCT_USE_RN_DEP'] ||= '1' if podfile_properties['ios.buildReactNativeFromSource'] != 'true'
+ENV['RCT_USE_PREBUILT_RNCORE'] ||= '1' if podfile_properties['ios.buildReactNativeFromSource'] != 'true'
+ENV['RCT_HERMES_V1_ENABLED'] ||= '1' if podfile_properties['expo.useHermesV1'] == 'true'
+platform :ios, '16.4'
+
 prepare_react_native_project!
-
-new_arch = ENV['RCT_NEW_ARCH_ENABLED']
-
-linkage = ENV['USE_FRAMEWORKS']
-if linkage != nil
-  Pod::UI.puts "Configuring Pod with #{linkage}ally linked Frameworks".green
-  use_frameworks! :linkage => linkage.to_sym
-end
 
 target 'Keybase' do
   use_expo_modules!
-  post_integrate do |installer|
-    begin
-      expo_patch_react_imports!(installer)
-    rescue => e
-      Pod::UI.warn e
-    end
-  end
   config = use_native_modules!
 
-  # Flags change depending on the env values.
-  flags = get_default_flags()
+  use_frameworks! :linkage => :static
 
-  use_expo_modules!
+  pod 'KBCommon', :path => '../../rnmodules/kb-common'
+
   use_react_native!(
     :path => config[:reactNativePath],
-    # Hermes is now enabled by default. Disable by setting this flag to false.
-    :hermes_enabled => false, # flags[:hermes_enabled],
-    :fabric_enabled => false, # flags[:fabric_enabled],
+    :hermes_enabled => true,
     # An absolute path to your application root.
-    :app_path => "#{Pod::Config.instance.installation_root}/.."
+    :app_path => "#{Pod::Config.instance.installation_root}/..",
   )
 
-  post_install do |installer|
-    # https://github.com/facebook/react-native/blob/main/packages/react-native/scripts/react_native_pods.rb#L197-L202
-    react_native_post_install(
-      installer,
-      config[:reactNativePath],
-      :mac_catalyst_enabled => false
-    )
-    __apply_Xcode_12_5_M1_post_install_workaround(installer)
-    # fix pods xcode 14 losing signing team
-      installer.pods_project.targets.each do |target|
-            target.build_configurations.each do |config|
-                config.build_settings['CODE_SIGN_IDENTITY'] = ''
-            end
+   post_install do |installer|
+     # https://github.com/facebook/react-native/blob/main/packages/react-native/scripts/react_native_pods.rb#L197-L202
+     react_native_post_install(
+       installer,
+       config[:reactNativePath],
+       :mac_catalyst_enabled => false,
+       :ccache_enabled => false
+     )
+
+   end
+
+end
+
+# Expo sets alwaysOutOfDate on its "Configure project" build phase during
+# integrate_user_targets (which runs after post_install). Use post_integrate
+# to clear it afterward. The phase already has proper input/output paths so
+# Xcode's dependency analysis works fine.
+post_integrate do |installer|
+  # Clear Expo's alwaysOutOfDate flag — it has proper input/output paths
+  # so Xcode's dependency analysis works fine.
+  project = Xcodeproj::Project.open(File.join(__dir__, 'Keybase.xcodeproj'))
+  project.native_targets.each do |target|
+    target.build_phases.each do |phase|
+      if phase.respond_to?(:name) && phase.name&.include?('[Expo] Configure project')
+        phase.always_out_of_date = '0'
       end
+    end
   end
+  project.save
 end
 
 target 'KeybaseShare' do
-  # Uncomment the next line if you're using Swift or would like to use dynamic frameworks
-  # use_frameworks!
-
-  # Pods for KeybaseShare
-  inherit! :search_paths
+  pod 'KBCommon', :path => '../../rnmodules/kb-common'
+  use_frameworks! :linkage => :static
 end
 

@@ -4,10 +4,11 @@
 package service
 
 import (
+	"context"
+
 	"github.com/keybase/client/go/libkb"
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 	"github.com/keybase/go-framed-msgpack-rpc/rpc"
-	"golang.org/x/net/context"
 )
 
 type BaseHandler struct {
@@ -53,7 +54,8 @@ func (u *LoginUI) DisplayPrimaryPaperKey(ctx context.Context, arg keybase1.Displ
 }
 
 func (u *LoginUI) PromptResetAccount(ctx context.Context,
-	arg keybase1.PromptResetAccountArg) (keybase1.ResetPromptResponse, error) {
+	arg keybase1.PromptResetAccountArg,
+) (keybase1.ResetPromptResponse, error) {
 	arg.SessionID = u.sessionID
 	return u.cli.PromptResetAccount(ctx, arg)
 }

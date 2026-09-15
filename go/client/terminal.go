@@ -4,6 +4,7 @@
 package client
 
 import (
+	"errors"
 	"io"
 	"sync"
 
@@ -63,7 +64,7 @@ func (t *Terminal) Prompt(s string) (string, error) {
 		return "", err
 	}
 	s, err := t.engine.Prompt(s)
-	if err == minterm.ErrPromptInterrupted {
+	if errors.Is(err, minterm.ErrPromptInterrupted) {
 		err = libkb.CanceledError{M: "input canceled"}
 	}
 	return s, err
@@ -85,9 +86,10 @@ func (t *Terminal) PromptYesNo(p string, def libkb.PromptDefault) (ret bool, err
 	}
 	prompt := p + " " + ch + " "
 	done := false
-	for !done && err == nil {
+	for !done {
 		var s string
 		if s, err = t.Prompt(prompt); err != nil {
+			return ret, err
 		} else if libkb.IsYes(s) {
 			ret = true
 			done = true
@@ -95,16 +97,17 @@ func (t *Terminal) PromptYesNo(p string, def libkb.PromptDefault) (ret bool, err
 			ret = false
 			done = true
 		} else if libkb.IsEmpty(s) {
-			if def == libkb.PromptDefaultNo {
+			switch def {
+			case libkb.PromptDefaultNo:
 				ret = false
 				done = true
-			} else if def == libkb.PromptDefaultYes {
+			case libkb.PromptDefaultYes:
 				ret = true
 				done = true
 			}
 		}
 	}
-	return
+	return ret, err
 }
 
 // GetSize tries to get the size for the current terminal.
@@ -117,7 +120,6 @@ func (t *Terminal) GetSize() (int, int) {
 }
 
 func (t *Terminal) GetSecret(arg *keybase1.SecretEntryArg) (res *keybase1.SecretEntryRes, err error) {
-
 	if err := t.open(); err != nil {
 		return nil, err
 	}
@@ -146,7 +148,7 @@ func (t *Terminal) GetSecret(arg *keybase1.SecretEntryArg) (res *keybase1.Secret
 		txt, err = t.PromptPassword(s)
 	}
 
-	if err == io.EOF || err == minterm.ErrPromptInterrupted || len(txt) == 0 {
+	if errors.Is(err, io.EOF) || errors.Is(err, minterm.ErrPromptInterrupted) || len(txt) == 0 {
 		err = nil
 		res = &keybase1.SecretEntryRes{Canceled: true}
 	} else if err == nil {

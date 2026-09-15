@@ -1,6 +1,7 @@
 package types
 
 import (
+	"context"
 	"io"
 	"os"
 	"regexp"
@@ -14,7 +15,6 @@ import (
 	"github.com/keybase/client/go/protocol/gregor1"
 	"github.com/keybase/client/go/protocol/keybase1"
 	"github.com/keybase/client/go/protocol/stellar1"
-	context "golang.org/x/net/context"
 )
 
 type Offlinable interface {
@@ -444,6 +444,29 @@ type AttachmentUploader interface {
 
 type NativeVideoHelper interface {
 	ThumbnailAndDuration(ctx context.Context, filename string) ([]byte, int, error)
+	AudioAmps(ctx context.Context, filename string) ([]float64, error)
+}
+
+// ShareConversation holds data for donating a conversation to the iOS share sheet.
+// For non-team DMs: AvatarURL (and optionally AvatarURL2) are participant avatars, combined in UI like frontend Avatars.
+// For teams: AvatarURL is the team avatar.
+// JSON keys must match Swift ShareIntentDonatorImpl.ShareConversation.CodingKeys.
+type ShareConversation struct {
+	ConvID       string       `json:"ConvID"`
+	Name         string       `json:"Name"`
+	AvatarURL    string       `json:"AvatarURL"`  // team avatar, or first participant for non-team
+	AvatarURL2   string       `json:"AvatarURL2"` // second participant for non-team multi-participant DM
+	LastSendTime gregor1.Time `json:"LastSendTime"`
+}
+
+// ShareIntentDonator is implemented by the native iOS layer to donate INSendMessageIntent
+// for recent conversations. When nil (Android, desktop), donations are skipped.
+type ShareIntentDonator interface {
+	DonateShareConversations(conversations []ShareConversation)
+	DeleteAllDonations()
+	// DeleteDonation removes the donated intent for the given conversation ID
+	// (the same identifier used when donating). Call when a conversation is blocked.
+	DeleteDonation(conversationID string)
 }
 
 type StellarLoader interface {
@@ -461,16 +484,16 @@ type StellarSender interface {
 }
 
 type ConvConversationBackedStorage interface {
-	Put(ctx context.Context, uid gregor1.UID, convID chat1.ConversationID, name string, data interface{}) error
-	PutToKnownConv(ctx context.Context, uid gregor1.UID, conv chat1.ConversationLocal, data interface{}) error
-	Get(ctx context.Context, uid gregor1.UID, convID chat1.ConversationID, name string, res interface{},
+	Put(ctx context.Context, uid gregor1.UID, convID chat1.ConversationID, name string, data any) error
+	PutToKnownConv(ctx context.Context, uid gregor1.UID, conv chat1.ConversationLocal, data any) error
+	Get(ctx context.Context, uid gregor1.UID, convID chat1.ConversationID, name string, res any,
 		createConvIfMissing bool) (bool, *chat1.ConversationLocal, error)
-	GetFromKnownConv(ctx context.Context, uid gregor1.UID, conv chat1.ConversationLocal, dest interface{}) (bool, error)
+	GetFromKnownConv(ctx context.Context, uid gregor1.UID, conv chat1.ConversationLocal, dest any) (bool, error)
 }
 
 type UserConversationBackedStorage interface {
-	Put(ctx context.Context, uid gregor1.UID, name string, data interface{}) error
-	Get(ctx context.Context, uid gregor1.UID, name string, res interface{}) (bool, error)
+	Put(ctx context.Context, uid gregor1.UID, name string, data any) error
+	Get(ctx context.Context, uid gregor1.UID, name string, res any) (bool, error)
 }
 
 type WhitelistExemption interface {
@@ -625,6 +648,7 @@ type EmojiSource interface {
 	Add(ctx context.Context, uid gregor1.UID, convID chat1.ConversationID, alias, filename string, allowOverwrite bool) (chat1.EmojiRemoteSource, error)
 	AddAlias(ctx context.Context, uid gregor1.UID, convID chat1.ConversationID,
 		newAlias, existingAlias string) (chat1.EmojiRemoteSource, error)
+	AnimationsDisabled(ctx context.Context) (bool, error)
 	Remove(ctx context.Context, uid gregor1.UID, convID chat1.ConversationID, alias string) error
 	Get(ctx context.Context, uid gregor1.UID, convID *chat1.ConversationID, opts chat1.EmojiFetchOpts) (chat1.UserEmojis, error)
 	Decorate(ctx context.Context, body string, uid gregor1.UID, messageType chat1.MessageType,
@@ -632,7 +656,8 @@ type EmojiSource interface {
 	Harvest(ctx context.Context, body string, uid gregor1.UID, convID chat1.ConversationID,
 		mode EmojiHarvestMode) ([]chat1.HarvestedEmoji, error)
 	IsStockEmoji(alias string) bool
-	RemoteToLocalSource(ctx context.Context, uid gregor1.UID, remote chat1.EmojiRemoteSource) (chat1.EmojiLoadSource, chat1.EmojiLoadSource, error)
+	RemoteToLocalSource(ctx context.Context, remote chat1.EmojiRemoteSource,
+		noAnim bool) (chat1.EmojiLoadSource, chat1.EmojiLoadSource, error)
 	ToggleAnimations(ctx context.Context, uid gregor1.UID, enabled bool) error
 	IsValidSize(size int64) bool
 }
@@ -649,25 +674,27 @@ type EphemeralTracker interface {
 	OnDbNuke(libkb.MetaContext) error
 }
 
-type PauseArchiveFn = func()
-type ChatArchiveRegistry interface {
-	Resumable
+type (
+	PauseArchiveFn      = func()
+	ChatArchiveRegistry interface {
+		Resumable
 
-	// List all known jobs
-	List(ctx context.Context) (res chat1.ArchiveChatListRes, err error)
-	// Get a job for a specific ID
-	Get(ctx context.Context, jobID chat1.ArchiveJobID) (res chat1.ArchiveChatJob, err error)
-	// Delete a jobs metadata, cancels it if it is currently running
-	Delete(ctx context.Context, jobID chat1.ArchiveJobID, deleteOutputPath bool) (err error)
-	// Sets (possibly updating) the job to the given state.
-	// cancel stops a running job by cancelling it's context and returns it's current state
-	Set(ctx context.Context, cancel PauseArchiveFn, job chat1.ArchiveChatJob) (err error)
-	// Stop a running job
-	Pause(ctx context.Context, jobID chat1.ArchiveJobID) (err error)
-	// Resume a paused job
-	Resume(ctx context.Context, jobID chat1.ArchiveJobID) (err error)
-	OnDbNuke(libkb.MetaContext) error
-}
+		// List all known jobs
+		List(ctx context.Context) (res chat1.ArchiveChatListRes, err error)
+		// Get a job for a specific ID
+		Get(ctx context.Context, jobID chat1.ArchiveJobID) (res chat1.ArchiveChatJob, err error)
+		// Delete a jobs metadata, cancels it if it is currently running
+		Delete(ctx context.Context, jobID chat1.ArchiveJobID, deleteOutputPath bool) (err error)
+		// Sets (possibly updating) the job to the given state.
+		// cancel stops a running job by cancelling it's context and returns it's current state
+		Set(ctx context.Context, cancel PauseArchiveFn, job chat1.ArchiveChatJob) (err error)
+		// Stop a running job
+		Pause(ctx context.Context, jobID chat1.ArchiveJobID) (err error)
+		// Resume a paused job
+		Resume(ctx context.Context, jobID chat1.ArchiveJobID) (err error)
+		OnDbNuke(libkb.MetaContext) error
+	}
+)
 
 type ServerConnection interface {
 	Reconnect(context.Context) (bool, error)
@@ -691,4 +718,4 @@ type UnboxingError interface {
 	ToStatus() keybase1.Status
 }
 
-var _ error = (UnboxingError)(nil)
+var _ error = UnboxingError(nil)

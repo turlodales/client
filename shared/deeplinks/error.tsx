@@ -1,38 +1,30 @@
-import * as C from '@/constants'
 import * as Kb from '@/common-adapters'
 
 type KeybaseLinkErrorBodyProps = {
   message: string
   isError: boolean
-  onCancel?: () => void
 }
 
 export const KeybaseLinkErrorBody = (props: KeybaseLinkErrorBodyProps) => {
+  const styles = useStyles()
   const bannerColor = props.isError ? 'red' : 'green'
   return (
-    <Kb.PopupWrapper onCancel={props.onCancel} customCancelText="Close">
-      <Kb.Box2 direction="vertical" fullWidth={true} style={styles.container}>
-        <Kb.Banner color={bannerColor}>
-          <Kb.BannerParagraph bannerColor={bannerColor} content={props.message} selectable={true} />
-        </Kb.Banner>
-      </Kb.Box2>
-    </Kb.PopupWrapper>
+    <Kb.Box2 direction="vertical" fullWidth={true} style={styles.container}>
+      <Kb.Banner color={bannerColor}>
+        <Kb.BannerParagraph bannerColor={bannerColor} content={props.message} selectable={true} />
+      </Kb.Banner>
+    </Kb.Box2>
   )
 }
 
-const KeybaseLinkError = () => {
-  const deepError = C.useDeepLinksState(s => s.keybaseLinkError)
-  const message = deepError
-  const isError = true
-  const navigateUp = C.useRouterState(s => s.dispatch.navigateUp)
-  const onClose = () => navigateUp()
-  return <KeybaseLinkErrorBody onCancel={onClose} isError={isError} message={message} />
-}
+const LinkError = (props: {error?: string}) => (
+  <KeybaseLinkErrorBody isError={true} message={props.error ?? 'Invalid page! (sorry)'} />
+)
 
-const styles = Kb.Styles.styleSheetCreate(() => ({
+const useStyles = Kb.Styles.createStyleHook(theme => ({
   container: Kb.Styles.platformStyles({
     common: {
-      backgroundColor: Kb.Styles.globalColors.white,
+      backgroundColor: theme.white,
     },
     isElectron: {
       height: 560,
@@ -47,4 +39,7 @@ const styles = Kb.Styles.styleSheetCreate(() => ({
   }),
 }))
 
-export default KeybaseLinkError
+import type {StaticScreenProps} from '@react-navigation/core'
+type OwnProps = StaticScreenProps<{error?: string}>
+const Screen = (p: OwnProps) => <LinkError {...p.route.params} />
+export default Screen

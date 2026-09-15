@@ -24,13 +24,6 @@ func NewPRNG(s Secret) *PRNG {
 	}
 }
 
-func min(x, y int) int {
-	if x < y {
-		return x
-	}
-	return y
-}
-
 func (p *PRNG) read(ret []byte) int {
 	n := min(len(p.buf), len(ret))
 	copy(ret[0:n], p.buf[0:n])
@@ -83,7 +76,6 @@ func (p *PRNG) Read(out []byte) int {
 }
 
 func (p *PRNG) Big(modulus *big.Int) *big.Int {
-
 	sign := modulus.Sign()
 	// For moduli of 0, the sign will be 0. Just return it, since there's
 	// nothing we can really do.
@@ -105,7 +97,7 @@ func (p *PRNG) Big(modulus *big.Int) *big.Int {
 	// and AND our candidate with that mask. That'll get rid of the
 	// bits we don't want.
 	var mask big.Int
-	mask.Lsh(big.NewInt(1), uint(bits))
+	mask.Lsh(big.NewInt(1), uint(bits)) //nolint:gosec // G115: BitLen() returns non-negative int, safe for bit shift
 	mask.Sub(&mask, big.NewInt(1))
 
 	// Compute the number of bytes it takes to get that many bits.
@@ -146,8 +138,11 @@ func (p *PRNG) Bool() bool {
 // Be careful for off-by-one errors in this implementation, as we have
 // already witnessed one. We bounty bugs like these, so let us know!
 func (p *PRNG) Permutation(n int) []int {
+	if n < 0 {
+		return nil
+	}
 	ret := make([]int, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		ret[i] = i
 	}
 	for i := n - 1; i >= 1; i-- {

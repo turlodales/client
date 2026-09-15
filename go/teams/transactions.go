@@ -4,10 +4,10 @@
 package teams
 
 import (
+	"context"
 	"errors"
 	"fmt"
-
-	"golang.org/x/net/context"
+	"maps"
 
 	"github.com/keybase/client/go/engine"
 	"github.com/keybase/client/go/externals"
@@ -110,7 +110,7 @@ type txPayload struct {
 	Tag txPayloadTag
 	// txPayload holds either of: *SCTeamInvites or
 	// *keybase1.TeamChangeReq.
-	Val interface{}
+	Val any
 }
 
 func CreateAddMemberTx(t *Team) *AddMemberTx {
@@ -122,7 +122,7 @@ func CreateAddMemberTx(t *Team) *AddMemberTx {
 	}
 }
 
-func (tx *AddMemberTx) DebugPayloads() (res []interface{}) {
+func (tx *AddMemberTx) DebugPayloads() (res []any) {
 	for _, v := range tx.payloads {
 		res = append(res, v.Val)
 	}
@@ -137,7 +137,7 @@ func (tx *AddMemberTx) IsEmpty() bool {
 // of AddMemberTx API. Users of this API should avoid lowercase
 // methods and fields at all cost, even from same package.
 
-func (tx *AddMemberTx) findPayload(tag txPayloadTag, forUID keybase1.UID) interface{} {
+func (tx *AddMemberTx) findPayload(tag txPayloadTag, forUID keybase1.UID) any {
 	minSeqno := 0
 	hasUID := !forUID.IsNil()
 	if hasUID {
@@ -165,7 +165,7 @@ func (tx *AddMemberTx) findPayload(tag txPayloadTag, forUID keybase1.UID) interf
 	case txPayloadTagInviteKeybase, txPayloadTagInviteSocial:
 		ret.Val = &SCTeamInvites{}
 	default:
-		panic(fmt.Sprintf("Unexpected tag %q", tag))
+		panic(fmt.Sprintf("Unexpected tag %d", tag))
 	}
 	tx.payloads = append(tx.payloads, ret)
 	return ret.Val
@@ -209,7 +209,8 @@ func (tx *AddMemberTx) addMember(uv keybase1.UserVersion, role keybase1.TeamRole
 }
 
 func (tx *AddMemberTx) addMemberAndCompleteInvite(uv keybase1.UserVersion,
-	role keybase1.TeamRole, inviteID keybase1.TeamInviteID) error {
+	role keybase1.TeamRole, inviteID keybase1.TeamInviteID,
+) error {
 	// Preconditions: UV is a PUKful user, role is valid and not NONE, invite
 	// exists. Role is not RESTRICTEDBOT as botSettings are set to nil.
 	payload := tx.changeMembershipPayload(uv.Uid)
@@ -272,7 +273,8 @@ func (tx *AddMemberTx) createInvite(typ string, name keybase1.TeamInviteName, ro
 // sweepCryptoMembers will queue "removes" for all cryptomembers with given UID.
 // exceptAdminsRemovingOwners - But don't try to remove owners if we are admin.
 func (tx *AddMemberTx) sweepCryptoMembers(ctx context.Context, uid keybase1.UID,
-	exceptAdminsRemovingOwners bool) {
+	exceptAdminsRemovingOwners bool,
+) {
 	team := tx.team
 	var myRole keybase1.TeamRole
 	if exceptAdminsRemovingOwners {
@@ -343,7 +345,8 @@ func (tx *AddMemberTx) findChangeReqForUV(uv keybase1.UserVersion) *keybase1.Tea
 // Return value `invite` is true if user was PUK-less and was added as
 // keybase-type invite.
 func (tx *AddMemberTx) addMemberByUPKV2(ctx context.Context, user keybase1.UserPlusKeysV2, role keybase1.TeamRole,
-	botSettings *keybase1.TeamBotSettings) (invite bool, err error) {
+	botSettings *keybase1.TeamBotSettings,
+) (invite bool, err error) {
 	team := tx.team
 	g := team.G()
 
@@ -494,7 +497,8 @@ func assertValidNewTeamMemberRole(role keybase1.TeamRole) error {
 // it properly handles that by adding Keybase-type invite. It also cleans up
 // old invites and memberships.
 func (tx *AddMemberTx) AddMemberByUV(ctx context.Context, uv keybase1.UserVersion, role keybase1.TeamRole,
-	botSettings *keybase1.TeamBotSettings) (err error) {
+	botSettings *keybase1.TeamBotSettings,
+) (err error) {
 	team := tx.team
 	g := team.G()
 
@@ -517,7 +521,8 @@ func (tx *AddMemberTx) AddMemberByUV(ctx context.Context, uv keybase1.UserVersio
 // username can become crypto member or a PUKless member. It will also clean up
 // old invites and memberships if necessary.
 func (tx *AddMemberTx) AddMemberByUsername(ctx context.Context, username string, role keybase1.TeamRole,
-	botSettings *keybase1.TeamBotSettings) (err error) {
+	botSettings *keybase1.TeamBotSettings,
+) (err error) {
 	team := tx.team
 	mctx := team.MetaContext(ctx)
 
@@ -671,7 +676,8 @@ func (tx *AddMemberTx) ResolveUPKV2FromAssertion(m libkb.MetaContext, assertion 
 // that can be obtained by calling ResolveUPKV2FromAssertion with assertion
 // string.
 func (tx *AddMemberTx) AddOrInviteMemberCandidate(ctx context.Context, candidate AddMemberCandidate, role keybase1.TeamRole, botSettings *keybase1.TeamBotSettings) (
-	username libkb.NormalizedUsername, uv keybase1.UserVersion, invite bool, err error) {
+	username libkb.NormalizedUsername, uv keybase1.UserVersion, invite bool, err error,
+) {
 	team := tx.team
 	mctx := team.MetaContext(ctx)
 
@@ -720,7 +726,6 @@ func (tx *AddMemberTx) AddOrInviteMemberCandidate(ctx context.Context, candidate
 		return "", uv, false, err
 	}
 	return "", uv, true, nil
-
 }
 
 // AddOrInviteMemberByAssertion adds an assertion to the team. It can
@@ -738,7 +743,8 @@ func (tx *AddMemberTx) AddOrInviteMemberCandidate(ctx context.Context, candidate
 // case (2) and an error The return values (uv, username) can both be
 // zero-valued if the assertion is not a Keybase user.
 func (tx *AddMemberTx) AddOrInviteMemberByAssertion(ctx context.Context, assertion string, role keybase1.TeamRole, botSettings *keybase1.TeamBotSettings) (
-	username libkb.NormalizedUsername, uv keybase1.UserVersion, invite bool, err error) {
+	username libkb.NormalizedUsername, uv keybase1.UserVersion, invite bool, err error,
+) {
 	team := tx.team
 	m := team.MetaContext(ctx)
 
@@ -862,7 +868,7 @@ func (tx *AddMemberTx) CompleteSocialInvitesFor(ctx context.Context, uv keybase1
 		return err
 	}
 
-	var completedInvites = map[keybase1.TeamInviteID]keybase1.UserVersionPercentForm{}
+	completedInvites := map[keybase1.TeamInviteID]keybase1.UserVersionPercentForm{}
 
 	for _, inviteMD := range team.chain().ActiveInvites() {
 		invite := inviteMD.Invite
@@ -908,16 +914,15 @@ func (tx *AddMemberTx) CompleteSocialInvitesFor(ctx context.Context, uv keybase1
 		if payload.CompletedInvites == nil {
 			payload.CompletedInvites = make(map[keybase1.TeamInviteID]keybase1.UserVersionPercentForm)
 		}
-		for i, v := range completedInvites {
-			payload.CompletedInvites[i] = v
-		}
+		maps.Copy(payload.CompletedInvites, completedInvites)
 	}
 
 	return nil
 }
 
 func (tx *AddMemberTx) ReAddMemberToImplicitTeam(ctx context.Context, uv keybase1.UserVersion, hasPUK bool, role keybase1.TeamRole,
-	botSettings *keybase1.TeamBotSettings) error {
+	botSettings *keybase1.TeamBotSettings,
+) error {
 	if !tx.team.IsImplicit() {
 		return fmt.Errorf("ReAddMemberToImplicitTeam only works on implicit teams")
 	}

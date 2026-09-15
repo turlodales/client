@@ -29,7 +29,7 @@ She packed her seven versalia, put her initial into the belt and made herself on
 the way. When she reached the first hills of the Italic Mountains, she had a
 last view back on the skyline of her hometown Bookmarksgrove, the headline of
 Alphabet Village and the subline of her own road, the Line Lane. Pityful a
-rethoric question ran over her cheek, then she continued her way. On her way she
+rhetoric question ran over her cheek, then she continued her way. On her way she
 met a copy. The copy warned the Little Blind Text, that where it came from it
 would have been rewritten a thousand times and everything that was left from its
 origin would be the word "and" and the Little Blind Text should turn around and
@@ -196,7 +196,7 @@ func (e encryptTest) test(t *testing.T, users map[string]map[crypto.Hash]*pgpWar
 		eng := NewPGPEncrypt(alice.tc.G, arg)
 		require.NoErrorf(t, RunEngine2(m, eng), "engine failure [%s]", e.Name)
 
-		require.Greaterf(t, len(sink.Bytes()), 0, "no output [%s]", e.Name)
+		require.NotEmptyf(t, sink.Bytes(), "no output [%s]", e.Name)
 		require.Lenf(t, eng.warnings, e.Count, "warnings count [%s]", e.Name)
 		return
 	}
@@ -211,7 +211,7 @@ func (e encryptTest) test(t *testing.T, users map[string]map[crypto.Hash]*pgpWar
 		eng := NewPGPSignEngine(alice.tc.G, arg)
 		require.NoErrorf(t, RunEngine2(m, eng), "engine failure [%s]", e.Name)
 
-		require.Greaterf(t, len(sink.Bytes()), 0, "no output [%s]", e.Name)
+		require.NotEmptyf(t, sink.Bytes(), "no output [%s]", e.Name)
 		require.Lenf(t, eng.warnings, e.Count, "warnings count [%s]", e.Name)
 		return
 	}

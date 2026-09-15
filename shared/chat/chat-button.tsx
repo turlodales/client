@@ -2,6 +2,7 @@ import * as C from '@/constants'
 import * as Styles from '@/styles'
 import WaitingButton from '@/common-adapters/waiting-button'
 import Icon from '@/common-adapters/icon'
+import {showMain} from '@/util/storeless-actions'
 
 // pulled in from common-adapters/profile-card
 const Kb = {
@@ -17,8 +18,9 @@ type Props = {
 }
 
 const ChatButton = ({small, style, username, afterClick}: Props) => {
-  const showMain = C.useConfigState(s => s.dispatch.showMain)
-  const previewConversation = C.useChatState(s => s.dispatch.previewConversation)
+  const styles = useStyles()
+  const theme = Styles.useTheme()
+  const previewConversation = C.Router2.previewConversation
   const chat = () => {
     afterClick?.()
     showMain()
@@ -28,19 +30,19 @@ const ChatButton = ({small, style, username, afterClick}: Props) => {
     <Kb.WaitingButton
       key="Chat"
       label="Chat"
-      waitingKey={C.Chat.waitingKeyCreating}
+      waitingKey={C.waitingKeyChatCreating}
       onClick={chat}
       small={small}
       style={style}
     >
-      <Kb.Icon type="iconfont-chat" color={Styles.globalColors.whiteOrWhite} style={styles.chatIcon} />
+      <Kb.Icon type="iconfont-chat" color={theme.whiteOrWhite} style={styles.chatIcon} />
     </Kb.WaitingButton>
   )
 }
 
 export default ChatButton
 
-const styles = Styles.styleSheetCreate(() => ({
+const useStyles = Styles.createStyleHook(() => ({
   chatIcon: {
     marginRight: Styles.globalMargins.tiny,
   },

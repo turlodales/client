@@ -76,7 +76,7 @@ func GetPlatformSpecificMountOptionsForTest() []fuse.MountOption {
 }
 
 func translatePlatformSpecificError(err error, platformParams PlatformParams) error {
-	if err == fuse.ErrOSXFUSENotFound {
+	if errors.Is(err, fuse.ErrOSXFUSENotFound) {
 		if platformParams.UseSystemFuse {
 			return errors.New(
 				"cannot locate OSXFUSE 3.x")
@@ -137,7 +137,8 @@ func pidPath(pid int) (path string, err error) {
 // work.
 func wrapCtxWithShorterTimeoutForUnmount(ctx context.Context,
 	log logger.Logger, pid int) (
-	newCtx context.Context, maybeUnmounting bool, cancel context.CancelFunc) {
+	newCtx context.Context, maybeUnmounting bool, cancel context.CancelFunc,
+) {
 	p, err := pidPath(pid)
 	if err != nil {
 		return ctx, false, noop

@@ -1,6 +1,7 @@
 package systests
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -14,7 +15,6 @@ import (
 	"github.com/keybase/clockwork"
 	"github.com/keybase/go-framed-msgpack-rpc/rpc"
 	"github.com/stretchr/testify/require"
-	context "golang.org/x/net/context"
 )
 
 // deviceWrapper wraps a mock "device", meaning an independent running service and
@@ -37,7 +37,7 @@ func (d *deviceWrapper) KID() keybase1.KID {
 }
 
 func (d *deviceWrapper) start(numClones int) {
-	for i := 0; i < numClones; i++ {
+	for range numClones {
 		d.clones = append(d.clones, cloneContext(d.tctx))
 	}
 	d.stopCh = make(chan error)
@@ -212,18 +212,14 @@ func (rkt *rekeyTester) signupUser(dw *deviceWrapper) {
 	signup := client.NewCmdSignupRunner(g)
 	signup.SetTest()
 	if err := signup.Run(); err != nil {
-		rkt.t.Fatal(err)
+		require.NoError(rkt.t, err)
 	}
 	rkt.t.Logf("signed up %s", userInfo.username)
 	rkt.username = userInfo.username
 	var backupKey backupKey
 	devices, backups := rkt.loadEncryptionKIDs()
-	if len(devices) != 1 {
-		rkt.t.Fatalf("Expected 1 device back; got %d", len(devices))
-	}
-	if len(backups) != 1 {
-		rkt.t.Fatalf("Expected 1 backup back; got %d", len(backups))
-	}
+	require.Len(rkt.t, devices, 1, "Expected 1 device back; got %d", len(devices))
+	require.Len(rkt.t, backups, 1, "Expected 1 backup back; got %d", len(backups))
 	dw.deviceKey.KID = devices[0]
 	backupKey = backups[0]
 	backupKey.secret = signupUI.info.displayedPaperKey
@@ -257,7 +253,8 @@ func (rkt *rekeyTester) startUIsAndClients(dw *deviceWrapper) {
 	}
 
 	if err := launch(); err != nil {
-		rkt.t.Fatalf("Failed to launch rekey UI: %s", err)
+		require.NoError(rkt.t, err,
+			"Failed to launch rekey UI: %s", err)
 	}
 }
 
@@ -268,20 +265,20 @@ func (rkt *rekeyTester) confirmNoRekeyUIActivity(dw *deviceWrapper, hours int, f
 			case ev := <-dw.rekeyUI.events:
 				rkt.log.Debug("Hour %d: got rekey event: %+v", hour, ev)
 			case <-dw.rekeyUI.refreshes:
-				rkt.t.Fatalf("Didn't expect any rekeys; got one at hour %d\n", hour)
+				require.FailNow(rkt.t, fmt.Sprintf("Didn't expect any rekeys; got one at hour %d\n", hour))
 			default:
 				return
 			}
 		}
 	}
 
-	for i := 0; i < hours; i++ {
+	for i := range hours {
 		assertNoActivity(i)
 		rkt.fakeClock.Advance(time.Hour)
 	}
 	err := dw.rekeyClient.RekeySync(context.TODO(), keybase1.RekeySyncArg{SessionID: 0, Force: force})
 	if err != nil {
-		rkt.t.Errorf("Error syncing rekey: %s", err)
+		require.Failf(rkt.t, "", "Error syncing rekey: %s", err)
 	}
 	assertNoActivity(hours + 1)
 }
@@ -298,7 +295,6 @@ func (rkt *rekeyTester) makeFullyKeyedHomeTLF() {
 }
 
 func (rkt *rekeyTester) changeKeysOnHomeTLF(kids []keybase1.KID) {
-
 	rkt.log.Debug("+ changeKeysOnHomeTLF(%v)", kids)
 	defer rkt.log.Debug("- changeKeysOnHomeTLF")
 
@@ -323,13 +319,11 @@ func (rkt *rekeyTester) changeKeysOnHomeTLF(kids []keybase1.KID) {
 		SessionType: libkb.APISessionTypeREQUIRED,
 	}
 	_, err := g.API.Post(mctx, apiArg)
-	if err != nil {
-		rkt.t.Fatalf("Failed to post fake TLF: %s", err)
-	}
+	require.NoError(rkt.t, err,
+		"Failed to post fake TLF: %s", err)
 }
 
 func (rkt *rekeyTester) bumpTLF(kid keybase1.KID) {
-
 	rkt.log.Debug("+ bumpTLF(%s)", kid)
 	defer rkt.log.Debug("- bumpTLF")
 
@@ -347,13 +341,11 @@ func (rkt *rekeyTester) bumpTLF(kid keybase1.KID) {
 
 	mctx := libkb.NewMetaContextBackground(g)
 	_, err := g.API.Post(mctx, apiArg)
-	if err != nil {
-		rkt.t.Fatalf("Failed to bump rekey to front of line: %s", err)
-	}
+	require.NoError(rkt.t, err,
+		"Failed to bump rekey to front of line: %s", err)
 }
 
 func (rkt *rekeyTester) kickRekeyd() {
-
 	// Use the global context from the service for making API calls
 	// to the API server.
 	g := rkt.primaryContext()
@@ -367,7 +359,7 @@ func (rkt *rekeyTester) kickRekeyd() {
 	mctx := libkb.NewMetaContextBackground(g)
 	_, err := g.API.Post(mctx, apiArg)
 	if err != nil {
-		rkt.t.Errorf("Failed to accelerate rekeyd: %s", err)
+		require.Failf(rkt.t, "", "Failed to accelerate rekeyd: %s", err)
 	}
 }
 
@@ -376,7 +368,7 @@ func (rkt *rekeyTester) assertRekeyWindowPushed(dw *deviceWrapper) {
 	select {
 	case <-dw.rekeyUI.refreshes:
 	case <-time.After(30 * time.Second):
-		rkt.t.Fatalf("no gregor came in after 30s; something is broken")
+		require.FailNow(rkt.t, "no gregor came in after 30s; something is broken")
 	}
 	rkt.log.Debug("- assertRekeyWindowPushed")
 }
@@ -416,16 +408,14 @@ func (rkt *rekeyTester) snoozeRekeyWindow(dw *deviceWrapper) {
 	defer rkt.log.Debug("- -------- snoozeRekeyWindow ---------")
 
 	_, err := dw.rekeyClient.RekeyStatusFinish(context.TODO(), 0)
-	if err != nil {
-		rkt.t.Fatalf("Failed to finish rekey: %s\n", err)
-	}
+	require.NoError(rkt.t, err,
+		"Failed to finish rekey: %s\n", err)
 
 	// There might be a few stragglers --- that's OK, just clear
 	// them out, but no more once we advance the clock!
 	err = dw.rekeyClient.RekeySync(context.TODO(), keybase1.RekeySyncArg{SessionID: 0, Force: false})
-	if err != nil {
-		rkt.t.Fatalf("Failed to sync: %s", err)
-	}
+	require.NoError(rkt.t, err,
+		"Failed to sync: %s", err)
 	rkt.clearAllEvents(dw)
 
 	// Our snooze should be 23 hours long, and should be resistant
@@ -436,7 +426,6 @@ func (rkt *rekeyTester) snoozeRekeyWindow(dw *deviceWrapper) {
 }
 
 func (rkt *rekeyTester) confirmSnoozeContiues(dw *deviceWrapper) {
-
 	rkt.log.Debug("+ -------- confirmSnoozeContiues ---------")
 	defer rkt.log.Debug("- -------- confirmSnoozeContiues ---------")
 
@@ -446,7 +435,6 @@ func (rkt *rekeyTester) confirmSnoozeContiues(dw *deviceWrapper) {
 }
 
 func (rkt *rekeyTester) confirmRekeyWakesUp(dw *deviceWrapper) {
-
 	rkt.log.Debug("+ -------- confirmRekeyWakesUp ---------")
 	defer rkt.log.Debug("- -------- confirmRekeyWakesUp ---------")
 
@@ -455,12 +443,11 @@ func (rkt *rekeyTester) confirmRekeyWakesUp(dw *deviceWrapper) {
 
 	// Now sync so that we're sure we get a full run through the loop.
 	err := dw.rekeyClient.RekeySync(context.TODO(), keybase1.RekeySyncArg{SessionID: 0, Force: false})
-	if err != nil {
-		rkt.t.Fatalf("Error syncing rekey: %s", err)
-	}
+	require.NoError(rkt.t, err,
+		"Error syncing rekey: %s", err)
 
 	if numRefreshes := rkt.consumeAllRekeyRefreshes(dw); numRefreshes == 0 {
-		rkt.t.Fatal("snoozed rekey window never came back")
+		require.FailNow(rkt.t, "snoozed rekey window never came back")
 	} else {
 		rkt.log.Debug("Got %d refreshes", numRefreshes)
 	}
@@ -479,12 +466,15 @@ func (u *rekeyBackupKeyUI) DisplayPaperKeyPhrase(_ context.Context, arg keybase1
 	u.secret = arg.Phrase
 	return nil
 }
+
 func (u *rekeyBackupKeyUI) DisplayPrimaryPaperKey(context.Context, keybase1.DisplayPrimaryPaperKeyArg) error {
 	return nil
 }
+
 func (u *rekeyBackupKeyUI) PromptRevokePaperKeys(context.Context, keybase1.PromptRevokePaperKeysArg) (bool, error) {
 	return false, nil
 }
+
 func (u *rekeyBackupKeyUI) GetEmailOrUsername(context.Context, int) (string, error) {
 	return "", nil
 }
@@ -566,13 +556,12 @@ func (rkt *rekeyTester) generateNewBackupKey(dw *deviceWrapper) {
 	g.SetUI(&ui)
 	paperGen := client.NewCmdPaperKeyRunner(g)
 	if err := paperGen.Run(); err != nil {
-		rkt.t.Fatal(err)
+		require.NoError(rkt.t, err)
 	}
 	_, backups := rkt.loadEncryptionKIDs()
 	backupKey, found := rkt.findNewBackupKey(backups)
-	if !found {
-		rkt.t.Fatalf("didn't find a new backup key!")
-	}
+	require.True(rkt.t, found,
+		"didn't find a new backup key!")
 	backupKey.secret = ui.secret
 	g.Log.Debug("New backup key is: %s", backupKey.KID)
 
@@ -582,7 +571,6 @@ func (rkt *rekeyTester) generateNewBackupKey(dw *deviceWrapper) {
 }
 
 func (rkt *rekeyTester) expectAlreadyKeyedNoop(dw *deviceWrapper) {
-
 	rkt.log.Debug("+ ----------- expectAlreadyKeyedNoop ------------")
 	defer rkt.log.Debug("- ----------- expectAlreadyKeyedNoop ------------")
 
@@ -596,11 +584,11 @@ func (rkt *rekeyTester) expectAlreadyKeyedNoop(dw *deviceWrapper) {
 			case keybase1.RekeyEventType_NO_GREGOR_MESSAGES, keybase1.RekeyEventType_NO_PROBLEMS:
 				rkt.log.Debug("| In waiting for 'CURRENT_DEVICE_CAN_REKEY': %+v", ev)
 			default:
-				rkt.t.Fatalf("Got wrong event type: %+v", ev)
+				require.FailNow(rkt.t, fmt.Sprintf("Got wrong event type: %+v", ev))
 				done = true
 			}
 		case <-time.After(30 * time.Second):
-			rkt.t.Fatal("Didn't get an event before 30s timeout")
+			require.FailNow(rkt.t, "Didn't get an event before 30s timeout")
 		}
 	}
 	rkt.confirmNoRekeyUIActivity(dw, 28, false)
@@ -617,64 +605,84 @@ var _ libkb.LoginUI = (*rekeyProvisionUI)(nil)
 func (r *rekeyProvisionUI) GetEmailOrUsername(context.Context, int) (string, error) {
 	return r.username, nil
 }
+
 func (r *rekeyProvisionUI) PromptRevokePaperKeys(context.Context, keybase1.PromptRevokePaperKeysArg) (ret bool, err error) {
 	return false, nil
 }
+
 func (r *rekeyProvisionUI) DisplayPaperKeyPhrase(context.Context, keybase1.DisplayPaperKeyPhraseArg) error {
 	return nil
 }
+
 func (r *rekeyProvisionUI) DisplayPrimaryPaperKey(context.Context, keybase1.DisplayPrimaryPaperKeyArg) error {
 	return nil
 }
+
 func (r *rekeyProvisionUI) ChooseProvisioningMethod(context.Context, keybase1.ChooseProvisioningMethodArg) (ret keybase1.ProvisionMethod, err error) {
 	return ret, nil
 }
+
 func (r *rekeyProvisionUI) ChooseGPGMethod(context.Context, keybase1.ChooseGPGMethodArg) (ret keybase1.GPGMethod, err error) {
 	return ret, nil
 }
+
 func (r *rekeyProvisionUI) SwitchToGPGSignOK(context.Context, keybase1.SwitchToGPGSignOKArg) (ret bool, err error) {
 	return ret, nil
 }
+
 func (r *rekeyProvisionUI) ChooseDeviceType(context.Context, keybase1.ChooseDeviceTypeArg) (ret keybase1.DeviceType, err error) {
 	return ret, nil
 }
+
 func (r *rekeyProvisionUI) DisplayAndPromptSecret(context.Context, keybase1.DisplayAndPromptSecretArg) (ret keybase1.SecretResponse, err error) {
 	return ret, nil
 }
+
 func (r *rekeyProvisionUI) DisplaySecretExchanged(context.Context, int) error {
 	return nil
 }
+
 func (r *rekeyProvisionUI) PromptNewDeviceName(context.Context, keybase1.PromptNewDeviceNameArg) (ret string, err error) {
 	return "taco tsar", nil
 }
+
 func (r *rekeyProvisionUI) ProvisioneeSuccess(context.Context, keybase1.ProvisioneeSuccessArg) error {
 	return nil
 }
+
 func (r *rekeyProvisionUI) ProvisionerSuccess(context.Context, keybase1.ProvisionerSuccessArg) error {
 	return nil
 }
+
 func (r *rekeyProvisionUI) ChooseDevice(context.Context, keybase1.ChooseDeviceArg) (ret keybase1.DeviceID, err error) {
 	return r.backupKey.deviceID, nil
 }
+
 func (r *rekeyProvisionUI) GetPassphrase(context.Context, keybase1.GetPassphraseArg) (ret keybase1.GetPassphraseRes, err error) {
 	ret.Passphrase = r.backupKey.secret
 	return ret, nil
 }
+
 func (r *rekeyProvisionUI) PromptResetAccount(_ context.Context, arg keybase1.PromptResetAccountArg) (keybase1.ResetPromptResponse, error) {
 	return keybase1.ResetPromptResponse_NOTHING, nil
 }
+
 func (r *rekeyProvisionUI) DisplayResetProgress(_ context.Context, arg keybase1.DisplayResetProgressArg) error {
 	return nil
 }
+
 func (r *rekeyProvisionUI) ExplainDeviceRecovery(_ context.Context, arg keybase1.ExplainDeviceRecoveryArg) error {
 	return nil
 }
+
 func (r *rekeyProvisionUI) PromptPassphraseRecovery(_ context.Context, arg keybase1.PromptPassphraseRecoveryArg) (bool, error) {
 	return false, nil
 }
+
 func (r *rekeyProvisionUI) ChooseDeviceToRecoverWith(_ context.Context, arg keybase1.ChooseDeviceToRecoverWithArg) (keybase1.DeviceID, error) {
 	return "", nil
 }
+
 func (r *rekeyProvisionUI) DisplayResetMessage(_ context.Context, arg keybase1.DisplayResetMessageArg) error {
 	return nil
 }
@@ -720,19 +728,20 @@ func (rkt *rekeyTester) provisionNewDevice() *deviceWrapper {
 	}
 
 	if err := launch(); err != nil {
-		rkt.t.Fatalf("Failed to login rekey UI: %s", err)
+		require.NoError(rkt.t, err,
+			"Failed to login rekey UI: %s", err)
 	}
 	cmd := client.NewCmdLoginRunner(g)
 	if err := cmd.Run(); err != nil {
-		rkt.t.Fatalf("Login failed: %s\n", err)
+		require.NoError(rkt.t, err,
+			"Login failed: %s\n", err)
 	}
 
 	var found bool
 	devices, _ := rkt.loadEncryptionKIDs()
 	dev2.deviceKey.KID, found = rkt.findNewDeviceKey(devices)
-	if !found {
-		rkt.t.Fatalf("Failed to failed device kid for new device")
-	}
+	require.True(rkt.t, found,
+		"Failed to failed device kid for new device")
 	rkt.log.Debug("new device KID: %s", dev2.deviceKey.KID)
 
 	// Clear the paper key because we don't want it hanging around to
@@ -744,7 +753,6 @@ func (rkt *rekeyTester) provisionNewDevice() *deviceWrapper {
 }
 
 func (rkt *rekeyTester) bumpTLFAndAssertRekeyWindowPushed(dw *deviceWrapper) {
-
 	rkt.log.Debug("+ -------- bumpTLFAndAssertRekeyWindowPushed ------------")
 	defer rkt.log.Debug("- -------- bumpTLFAndAssertRekeyWindowPushed ------------")
 
@@ -769,9 +777,8 @@ func (rkt *rekeyTester) bumpTLFAndAssertRekeyWindowPushed(dw *deviceWrapper) {
 
 func (rkt *rekeyTester) confirmRekeyDismiss(dw *deviceWrapper) {
 	err := dw.rekeyClient.RekeySync(context.TODO(), keybase1.RekeySyncArg{SessionID: 0, Force: false})
-	if err != nil {
-		rkt.t.Fatalf("failed to sync: %s", err)
-	}
+	require.NoError(rkt.t, err,
+		"failed to sync: %s", err)
 	found := false
 	done := false
 	for !found && !done {
@@ -787,14 +794,13 @@ func (rkt *rekeyTester) confirmRekeyDismiss(dw *deviceWrapper) {
 			done = true
 		}
 	}
-	if !found {
-		rkt.t.Fatalf("failed to find a refresh UI dismissal")
-	}
+	require.True(rkt.t, found,
+		"failed to find a refresh UI dismissal")
 }
 
 func (rkt *rekeyTester) isGregorStateEmpty() (ret bool) {
 	rkt.log.Debug("+ isGregorStateEmpty")
-	defer func() { rkt.log.Debug(fmt.Sprintf("- isGregorStateEmpty -> %v", ret)) }()
+	defer func() { rkt.log.Debug("- isGregorStateEmpty -> %v", ret) }()
 	state, err := rkt.primaryDevice().gregorClient.GetState(context.TODO())
 	if err != nil {
 		rkt.log.Warning("failed to query gregor state: %s", err)
@@ -830,7 +836,7 @@ func (rkt *rekeyTester) confirmGregorStateIsClean() {
 		time.Sleep(delay)
 		i++
 	}
-	rkt.t.Fatal("Failed to find a clean gregor state")
+	require.FailNow(rkt.t, "Failed to find a clean gregor state")
 }
 
 func (rkt *rekeyTester) fullyRekeyAndAssertCleared(dw *deviceWrapper) {

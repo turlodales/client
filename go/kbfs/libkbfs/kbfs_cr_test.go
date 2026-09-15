@@ -5,6 +5,7 @@
 package libkbfs
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"sync"
@@ -21,11 +22,11 @@ import (
 	kbname "github.com/keybase/client/go/kbun"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/context"
 )
 
 func readAndCompareData(ctx context.Context, t *testing.T, config Config,
-	name string, expectedData []byte, user kbname.NormalizedUsername) {
+	name string, expectedData []byte, user kbname.NormalizedUsername,
+) {
 	rootNode := GetRootNodeOrBust(ctx, t, config, name, tlf.Private)
 
 	kbfsOps := config.KBFSOps()
@@ -43,12 +44,14 @@ type testCRObserver struct {
 }
 
 func (t *testCRObserver) LocalChange(ctx context.Context, node Node,
-	write WriteRange) {
+	write WriteRange,
+) {
 	// ignore
 }
 
 func (t *testCRObserver) BatchChanges(ctx context.Context,
-	changes []NodeChange, _ []NodeID) {
+	changes []NodeChange, _ []NodeID,
+) {
 	t.changes = append(t.changes, changes...)
 	if len(changes) > 0 {
 		t.c <- struct{}{}
@@ -61,7 +64,8 @@ func (t *testCRObserver) TlfHandleChange(ctx context.Context,
 
 func checkStatus(ctx context.Context, t *testing.T, kbfsOps KBFSOps,
 	staged bool, headWriter kbname.NormalizedUsername, dirtyPaths []string, fb data.FolderBranch,
-	prefix string) {
+	prefix string,
+) {
 	status, _, err := kbfsOps.FolderStatus(ctx, fb)
 	require.NoError(t, err)
 	assert.Equal(t, status.Staged, staged)
@@ -100,7 +104,7 @@ func TestBasicMDUpdate(t *testing.T) {
 
 	entries, err := kbfsOps2.GetDirChildren(ctx, rootNode2)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(entries))
+	require.Len(t, entries, 1)
 	_, ok := entries[rootNode2.ChildName("a")]
 	require.True(t, ok)
 
@@ -161,7 +165,7 @@ func testMultipleMDUpdates(t *testing.T, unembedChanges bool) {
 
 	entries, err := kbfsOps2.GetDirChildren(ctx, rootNode2)
 	require.NoError(t, err)
-	require.Equal(t, 2, len(entries))
+	require.Len(t, entries, 2)
 	_, ok := entries[rootNode2.ChildName("b")]
 	require.True(t, ok)
 	_, ok = entries[rootNode2.ChildName("c")]
@@ -386,15 +390,15 @@ func TestUnmergedAfterRestart(t *testing.T) {
 	select {
 	case <-c:
 	default:
-		t.Fatal("No update!")
+		require.FailNow(t, "No update!")
 	}
 	select {
 	case <-c:
 	default:
-		t.Fatal("No 2nd update!")
+		require.FailNow(t, "No 2nd update!")
 	}
 	// make sure we see two sync op changes, on the same node
-	assert.Equal(t, 2, len(cro.changes))
+	assert.Len(t, cro.changes, 2)
 	var n Node
 	for _, change := range cro.changes {
 		if n == nil {
@@ -557,7 +561,7 @@ func testBasicCRNoConflict(t *testing.T, unembedChanges bool) {
 	children2, err := kbfsOps2.GetDirChildren(ctx, rootNode2)
 	require.NoError(t, err)
 
-	assert.Equal(t, len(expectedChildren), len(children1))
+	assert.Len(t, children1, len(expectedChildren))
 
 	for _, child := range expectedChildren {
 		_, ok := children1[rootNode1.ChildName(child)]
@@ -600,7 +604,8 @@ type mdServerLocalRecordingRegisterForUpdate struct {
 // MDServerLocal that records RegisterforUpdate calls.
 func newMDServerLocalRecordingRegisterForUpdate(mdServerRaw mdServerLocal) (
 	mdServer mdServerLocalRecordingRegisterForUpdate,
-	records <-chan registerForUpdateRecord) {
+	records <-chan registerForUpdateRecord,
+) {
 	ch := make(chan registerForUpdateRecord, 8)
 	ret := mdServerLocalRecordingRegisterForUpdate{mdServerRaw, ch}
 	return ret, ch
@@ -608,7 +613,8 @@ func newMDServerLocalRecordingRegisterForUpdate(mdServerRaw mdServerLocal) (
 
 func (md mdServerLocalRecordingRegisterForUpdate) RegisterForUpdate(
 	ctx context.Context,
-	id tlf.ID, currHead kbfsmd.Revision) (<-chan error, error) {
+	id tlf.ID, currHead kbfsmd.Revision,
+) (<-chan error, error) {
 	md.ch <- registerForUpdateRecord{id: id, currHead: currHead}
 	return md.mdServerLocal.RegisterForUpdate(ctx, id, currHead)
 }
@@ -662,7 +668,7 @@ func TestCRFileConflictWithMoreUpdatesFromOneUser(t *testing.T) {
 	require.NoError(t, err)
 
 	// User 2 makes a few changes in the file
-	for i := byte(0); i < 4; i++ {
+	for i := range byte(4) {
 		// This makes sure the unmerged head of user 2 is ahead of (has large
 		// revision than) the merged master branch, so we can test that we properly
 		// fetch updates when unmerged revision number is greater than merged
@@ -682,7 +688,7 @@ func TestCRFileConflictWithMoreUpdatesFromOneUser(t *testing.T) {
 
 	// check for at most 4 times. This should be sufficiently long for client get
 	// latest merged revision and register with that
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		record := <-chForMdServer2
 		mergedRev, err := mdServ.getCurrentMergedHeadRevision(
 			ctx, rootNode2.GetFolderBranch().Tlf)
@@ -779,7 +785,7 @@ func TestBasicCRFileConflict(t *testing.T) {
 	children2, err := kbfsOps2.GetDirChildren(ctx, dirA2)
 	require.NoError(t, err)
 
-	assert.Equal(t, len(expectedChildren), len(children1))
+	assert.Len(t, children1, len(expectedChildren))
 
 	for _, child := range expectedChildren {
 		_, ok := children1[dirA1.ChildName(child)]
@@ -793,7 +799,7 @@ func TestBasicCRFileConflict(t *testing.T) {
 // and that we can move the conflicts out of the way.
 func TestBasicCRFailureAndFixing(t *testing.T) {
 	tempdir, err := ioutil.TempDir(os.TempDir(), "journal_for_fail_fix")
-	defer os.RemoveAll(tempdir)
+	defer func() { _ = os.RemoveAll(tempdir) }()
 
 	// simulate two users
 	var userName1, userName2 kbname.NormalizedUsername = "u1", "u2"
@@ -882,7 +888,7 @@ func TestBasicCRFailureAndFixing(t *testing.T) {
 	fbo := ops.getOpsNoAdd(ctx, rootNode2.GetFolderBranch())
 
 	t.Log("Write a bunch more files as user 2, creating more conflicts.")
-	for i := 0; i < maxConflictResolutionAttempts; i++ {
+	for i := range maxConflictResolutionAttempts {
 		fileName := fmt.Sprintf("file%d", i)
 		newFile, _, err := kbfsOps2.CreateFile(
 			ctx, dirA2, testPPS(fileName), false, NoExcl)
@@ -897,7 +903,7 @@ func TestBasicCRFailureAndFixing(t *testing.T) {
 	crdb := config2.GetConflictResolutionDB()
 	crData, err := crdb.Get(fbo.id().Bytes(), nil)
 	require.NoError(t, err)
-	require.NotZero(t, len(crData))
+	require.NotEmpty(t, crData)
 
 	t.Log("Clear the conflict state and re-enable CR.")
 	err = fbo.clearConflictView(ctx)
@@ -1039,7 +1045,7 @@ func TestBasicCRFileCreateUnmergedWriteConflict(t *testing.T) {
 	children2, err := kbfsOps2.GetDirChildren(ctx, dirA2)
 	require.NoError(t, err)
 
-	assert.Equal(t, len(expectedChildren), len(children1))
+	assert.Len(t, children1, len(expectedChildren))
 
 	for _, child := range expectedChildren {
 		_, ok := children1[dirA1.ChildName(child)]
@@ -1109,9 +1115,7 @@ func TestCRDouble(t *testing.T) {
 	onSyncStalledCh, syncUnstallCh, syncCtx := StallMDOp(
 		syncCtx, config2, StallableMDAfterPutUnmerged, 1)
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err = kbfsOps2.SyncAll(syncCtx, fileNodeC.GetFolderBranch())
 		// Even though internally folderBranchOps ignores the
 		// cancellation error when putting on an unmerged branch, the
@@ -1119,7 +1123,7 @@ func TestCRDouble(t *testing.T) {
 		if err != nil {
 			assert.Equal(t, context.Canceled, err)
 		}
-	}()
+	})
 	<-onSyncStalledCh
 	cancel()
 	close(syncUnstallCh)
@@ -1249,7 +1253,7 @@ func TestBasicCRFileConflictWithRekey(t *testing.T) {
 	// user2 device 2 should be unable to read the data now since its device
 	// wasn't registered when the folder was originally created.
 	_, err = GetRootNodeForTest(ctx, config2Dev2, name, tlf.Private)
-	require.IsType(t, NeedSelfRekeyError{}, err)
+	require.ErrorAs(t, err, new(NeedSelfRekeyError))
 
 	// User 2 syncs
 	err = kbfsOps2.SyncFromServer(ctx,
@@ -1327,7 +1331,7 @@ func TestBasicCRFileConflictWithRekey(t *testing.T) {
 	children2Dev2, err := kbfsOps2Dev2.GetDirChildren(ctx, dirA2Dev2)
 	require.NoError(t, err)
 
-	assert.Equal(t, len(expectedChildren), len(children1))
+	assert.Len(t, children1, len(expectedChildren))
 
 	for _, child := range expectedChildren {
 		_, ok := children1[dirA1.ChildName(child)]
@@ -1391,7 +1395,7 @@ func TestBasicCRFileConflictWithMergedRekey(t *testing.T) {
 	// user2 device 2 should be unable to read the data now since its device
 	// wasn't registered when the folder was originally created.
 	_, err = GetRootNodeForTest(ctx, config2Dev2, name, tlf.Private)
-	require.IsType(t, NeedSelfRekeyError{}, err)
+	require.ErrorAs(t, err, new(NeedSelfRekeyError))
 
 	// User 2 syncs
 	err = kbfsOps2.SyncFromServer(ctx,
@@ -1459,7 +1463,7 @@ func TestBasicCRFileConflictWithMergedRekey(t *testing.T) {
 	children2Dev2, err := kbfsOps2Dev2.GetDirChildren(ctx, dirA2Dev2)
 	require.NoError(t, err)
 
-	assert.Equal(t, len(expectedChildren), len(children1))
+	assert.Len(t, children1, len(expectedChildren))
 
 	for _, child := range expectedChildren {
 		_, ok := children1[dirA1.ChildName(child)]
@@ -1570,7 +1574,7 @@ func TestCRSyncParallelBlocksErrorCleanup(t *testing.T) {
 
 	// Wait for the rest of the puts (this indicates that the first
 	// two succeeded correctly and two more were sent to replace them)
-	for i := 0; i < maxParallelBlockPuts; i++ {
+	for range maxParallelBlockPuts {
 		<-onSyncStalledCh
 	}
 	// Cancel so all other block puts fail
@@ -1665,15 +1669,11 @@ func TestCRCanceledAfterNewOperation(t *testing.T) {
 	err = kbfsOps2.SyncAll(ctx, aNode2.GetFolderBranch())
 	require.NoError(t, err)
 
-	onPutStalledCh, putUnstallCh, putCtx :=
-		StallMDOp(context.Background(), config2, StallableMDResolveBranch, 1)
+	onPutStalledCh, putUnstallCh, putCtx := StallMDOp(context.Background(), config2, StallableMDResolveBranch, 1)
 
 	var wg sync.WaitGroup
 	putCtx, cancel2 := context.WithCancel(putCtx)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-
+	wg.Go(func() {
 		c <- struct{}{}
 		// Make sure the CR gets done with a context we can use for
 		// stalling.
@@ -1683,7 +1683,7 @@ func TestCRCanceledAfterNewOperation(t *testing.T) {
 		err = kbfsOps2.SyncFromServer(putCtx,
 			rootNode2.GetFolderBranch(), nil)
 		assert.Error(t, err)
-	}()
+	})
 	<-onPutStalledCh
 	cancel2()
 	close(putUnstallCh)
@@ -1719,7 +1719,7 @@ func TestCRCanceledAfterNewOperation(t *testing.T) {
 	}
 	children2, err := kbfsOps2.GetDirChildren(ctx, rootNode2)
 	require.NoError(t, err)
-	assert.Equal(t, len(expectedChildren), len(children2))
+	assert.Len(t, children2, len(expectedChildren))
 	for _, child := range expectedChildren {
 		_, ok := children2[rootNode2.ChildName(child)]
 		assert.True(t, ok)
@@ -1786,15 +1786,11 @@ func TestBasicCRBlockUnmergedWrites(t *testing.T) {
 	// Start CR, but cancel it before it completes, which should lead
 	// to it locking next time (since it has seen how many revisions
 	// are outstanding).
-	onPutStalledCh, putUnstallCh, putCtx :=
-		StallMDOp(context.Background(), config2, StallableMDResolveBranch, 1)
+	onPutStalledCh, putUnstallCh, putCtx := StallMDOp(context.Background(), config2, StallableMDResolveBranch, 1)
 
 	var wg sync.WaitGroup
 	firstPutCtx, cancel := context.WithCancel(putCtx)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-
+	wg.Go(func() {
 		// Make sure the CR gets done with a context we can use for
 		// stalling.
 		err = RestartCRForTesting(firstPutCtx, config2,
@@ -1811,7 +1807,7 @@ func TestBasicCRBlockUnmergedWrites(t *testing.T) {
 		if !assert.NoError(t, err) {
 			return
 		}
-	}()
+	})
 	<-onPutStalledCh
 	cancel()
 	putUnstallCh <- struct{}{}
@@ -1824,10 +1820,7 @@ func TestBasicCRBlockUnmergedWrites(t *testing.T) {
 	require.NoError(t, err)
 
 	// Now restart CR, and make sure it blocks all writes.
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-
+	wg.Go(func() {
 		// Make sure the CR gets done with a context we can use for
 		// stalling.
 		err = RestartCRForTesting(putCtx, config2,
@@ -1835,7 +1828,7 @@ func TestBasicCRBlockUnmergedWrites(t *testing.T) {
 		if !assert.NoError(t, err) {
 			return
 		}
-	}()
+	})
 	<-onPutStalledCh
 	c <- struct{}{}
 
@@ -1846,7 +1839,7 @@ func TestBasicCRBlockUnmergedWrites(t *testing.T) {
 			ctx, dirA2, testPPS("g"), false, NoExcl)
 		assert.NoError(t, err)
 		err = kbfsOps2.SyncAll(ctx, rootNode2.GetFolderBranch())
-		require.NoError(t, err)
+		assert.NoError(t, err)
 		writeErrCh <- err
 	}()
 
@@ -1856,7 +1849,7 @@ func TestBasicCRBlockUnmergedWrites(t *testing.T) {
 	timer := time.After(20 * time.Millisecond)
 	select {
 	case <-writeErrCh:
-		t.Fatalf("Write finished without blocking")
+		require.FailNow(t, "Write finished without blocking")
 	case <-timer:
 	}
 
@@ -1922,17 +1915,14 @@ func TestUnmergedPutAfterCanceledUnmergedPut(t *testing.T) {
 	err = kbfsOps2.SyncAll(ctx, rootNode2.GetFolderBranch())
 	require.NoError(t, err)
 
-	onPutStalledCh, putUnstallCh, putCtx :=
-		StallMDOp(ctx, config2, StallableMDPutUnmerged, 1)
+	onPutStalledCh, putUnstallCh, putCtx := StallMDOp(ctx, config2, StallableMDPutUnmerged, 1)
 
 	var wg sync.WaitGroup
 	putCtx, cancel2 := context.WithCancel(putCtx)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		_, _, err = kbfsOps2.CreateFile(
 			putCtx, rootNode2, testPPS("c"), false, NoExcl)
-		require.NoError(t, err)
+		assert.NoError(t, err)
 		err = kbfsOps2.SyncAll(putCtx, rootNode2.GetFolderBranch())
 		// Even though internally folderBranchOps ignores the
 		// cancellation error when putting on an unmerged branch, the
@@ -1940,8 +1930,7 @@ func TestUnmergedPutAfterCanceledUnmergedPut(t *testing.T) {
 		if err != nil {
 			assert.Equal(t, context.Canceled, err)
 		}
-
-	}()
+	})
 	<-onPutStalledCh
 	cancel2()
 	close(putUnstallCh)
@@ -1967,7 +1956,7 @@ func TestUnmergedPutAfterCanceledUnmergedPut(t *testing.T) {
 	}
 	children2, err := kbfsOps2.GetDirChildren(ctx, rootNode2)
 	require.NoError(t, err)
-	assert.Equal(t, len(expectedChildren), len(children2))
+	assert.Len(t, children2, len(expectedChildren))
 	for _, child := range expectedChildren {
 		_, ok := children2[rootNode2.ChildName(child)]
 		assert.True(t, ok)
@@ -1976,7 +1965,7 @@ func TestUnmergedPutAfterCanceledUnmergedPut(t *testing.T) {
 
 func TestForceStuckConflict(t *testing.T) {
 	tempdir, err := ioutil.TempDir(os.TempDir(), "journal_for_stuck_cr")
-	defer os.RemoveAll(tempdir)
+	defer func() { _ = os.RemoveAll(tempdir) }()
 	require.NoError(t, err)
 
 	var u1 kbname.NormalizedUsername = "u1"
@@ -2034,9 +2023,8 @@ func TestForceStuckConflict(t *testing.T) {
 
 // Tests that if clearing a CR conflict can fast-forward if needed.
 func TestBasicCRFailureClearAndFastForward(t *testing.T) {
-	t.Skip()
 	tempdir, err := ioutil.TempDir(os.TempDir(), "journal_for_fail_fix")
-	defer os.RemoveAll(tempdir)
+	defer func() { _ = os.RemoveAll(tempdir) }()
 
 	// simulate two users
 	var userName1, userName2 kbname.NormalizedUsername = "u1", "u2"
@@ -2088,7 +2076,7 @@ func TestBasicCRFailureClearAndFastForward(t *testing.T) {
 	t.Log("User 1 updates mod time on a/b.")
 
 	mtime := time.Now()
-	for i := 0; i < fastForwardRevThresh+2; i++ {
+	for range fastForwardRevThresh + 2 {
 		mtime = mtime.Add(1 * time.Minute)
 		err = kbfsOps1.SetMtime(ctx, fileB1, &mtime)
 		require.NoError(t, err)

@@ -1,34 +1,15 @@
-// For stories, all popups using FloatingMenu will need to have a PropProvider
-// decorator added to the story. This is because FloatingMenus are rendered
-// into a GatewayDest component in a storybook context. GatewayDest is only
-// rendered if a PropProvider decorated is used. This is done so that connected
-// components inside of a popup have access to the mocked out Provider component
-
 import * as React from 'react'
-import Overlay from '../overlay'
-import {Box2} from '@/common-adapters/box'
+import Popup from '../popup'
 import type {MeasureRef} from '@/common-adapters/measure-ref'
-import MenuLayout, {type MenuItems as _MenuItems} from './menu-layout'
-import * as Styles from '@/styles'
-import {
-  BottomSheetModal,
-  BottomSheetBackdrop,
-  type BottomSheetBackdropProps,
-} from '@/common-adapters/bottom-sheet'
-import {useSafeAreaInsets} from '@/common-adapters/safe-area-view'
-import {FloatingModalContext} from './context'
-import {FullWindowOverlay} from 'react-native-screens'
-
-const Kb = {
-  Box2,
-  Overlay,
-  useSafeAreaInsets,
-}
+import MenuLayout from './menu-layout'
+import type {MenuItems as _MenuItems} from './menu-layout/index.shared'
+import type * as Styles from '@/styles'
+import {NavigationContext} from '@react-navigation/core'
 
 export type MenuItems = _MenuItems
 
 export type Props = {
-  attachTo?: React.RefObject<MeasureRef>
+  attachTo?: React.RefObject<MeasureRef | null>
   backgroundColor?: Styles.Color
   closeOnSelect: boolean
   closeText?: string // mobile only; default to "Close",
@@ -36,6 +17,7 @@ export type Props = {
   header?: React.ReactNode
   items: ReadonlyArray<_MenuItems[number]>
   listStyle?: object
+  mode?: 'modal' | 'bottomsheet'
   onHidden: () => void
   position?: Styles.Position
   positionFallbacks?: ReadonlyArray<Styles.Position>
@@ -43,34 +25,40 @@ export type Props = {
   remeasureHint?: number
   textColor?: Styles.Color
   visible: boolean
+  offset?: number
   // mobile only
   safeProviderStyle?: Styles.StylesCrossPlatform
   snapPoints?: Array<string | number>
 }
 
-const Backdrop = React.memo(function Backdrop(props: BottomSheetBackdropProps) {
-  return <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} />
-})
+// useNavigation() throws when called outside a navigator (e.g. inside a gorhom
+// portal rendered at popup-root, which is a sibling to the router). Using the
+// context directly returns undefined instead of throwing.
+const useSafeNavigation = isMobile
+  ? () => React.useContext(NavigationContext) ?? null
+  : () => null
 
-const FullWindow = ({children}: {children?: React.ReactNode}) => {
-  return Styles.isIOS ? <FullWindowOverlay>{children}</FullWindowOverlay> : children
-}
+function FloatingMenu(props: Props) {
+  const {items, visible, onHidden, mode} = props
 
-const FloatingMenu = React.memo(function FloatingMenu(props: Props) {
-  const {snapPoints, items, visible} = props
-  const isModal = React.useContext(FloatingModalContext)
-  const bottomSheetModalRef = React.useRef<BottomSheetModal>(null)
+  const navigation = useSafeNavigation()
+
   React.useEffect(() => {
-    bottomSheetModalRef.current?.present()
-  }, [])
+    const unsub = navigation?.addListener('state', () => {
+      onHidden()
+    })
+    return unsub
+  }, [navigation, onHidden])
 
-  if (!visible && isModal === false) {
+  // modal mode callers control mounting themselves; sheets present on mount so
+  // they must unmount when not visible
+  if (!visible && mode !== 'modal') {
     return null
   }
 
   const contents = (
     <MenuLayout
-      isModal={isModal}
+      isModal={mode ?? false}
       header={props.header}
       onHidden={props.onHidden}
       items={items}
@@ -83,59 +71,26 @@ const FloatingMenu = React.memo(function FloatingMenu(props: Props) {
     />
   )
 
-  if (isModal === true) {
+  if (mode === 'modal') {
     return contents
   }
 
-  if (Styles.isMobile && isModal === 'bottomsheet') {
-    return (
-      <BottomSheetModal
-        containerComponent={FullWindow}
-        snapPoints={snapPoints}
-        enableDynamicSizing={true}
-        ref={bottomSheetModalRef}
-        handleStyle={styles.handleStyle}
-        handleIndicatorStyle={styles.handleIndicatorStyle}
-        style={styles.modalStyle}
-        backdropComponent={Backdrop}
-        onDismiss={props.onHidden}
-      >
-        {contents}
-      </BottomSheetModal>
-    )
-  }
-
   return (
-    <Kb.Overlay
+    <Popup
+      attachTo={props.attachTo}
+      onHidden={onHidden}
+      visible={props.visible}
       position={props.position}
       positionFallbacks={props.positionFallbacks}
-      onHidden={props.onHidden}
-      visible={props.visible}
-      attachTo={props.attachTo}
-      remeasureHint={props.remeasureHint}
-      style={props.containerStyle}
       propagateOutsideClicks={props.propagateOutsideClicks}
+      remeasureHint={props.remeasureHint}
+      offset={props.offset}
+      style={props.containerStyle}
+      snapPoints={props.snapPoints}
     >
       {contents}
-    </Kb.Overlay>
+    </Popup>
   )
-})
-
-const styles = Styles.styleSheetCreate(
-  () =>
-    ({
-      handleIndicatorStyle: {backgroundColor: Styles.globalColors.black_40},
-      handleStyle: {backgroundColor: Styles.globalColors.black_05OrBlack},
-      modalStyle: Styles.platformStyles({
-        isAndroid: {
-          elevation: 17,
-          shadowColor: Styles.globalColors.black_50OrBlack_40,
-          shadowOffset: {height: 5, width: 0},
-          shadowOpacity: 1,
-          shadowRadius: 10,
-        },
-      }),
-    }) as const
-)
+}
 
 export default FloatingMenu

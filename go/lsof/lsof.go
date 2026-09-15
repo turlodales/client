@@ -131,11 +131,10 @@ func parseProcessLines(lines []string) (Process, error) {
 				return p, err
 			}
 			break
-		} else {
-			err := p.fillField(line)
-			if err != nil {
-				return p, err
-			}
+		}
+		err := p.fillField(line)
+		if err != nil {
+			return p, err
 		}
 	}
 	return p, nil
@@ -187,7 +186,7 @@ func run(args []string) ([]Process, error) {
 	// on the other hand, puts it in /usr/local/sbin. So do not specify absolute path.
 	command := "lsof"
 	args = append([]string{"-w"}, args...)
-	output, err := exec.Command(command, args...).Output()
+	output, err := exec.Command(command, args...).Output() //nolint:gosec // G702: binary is hardcoded "lsof"; args are passed directly (no shell)
 	if err != nil {
 		return nil, ExecError{command: command, args: args, output: string(output), err: err}
 	}

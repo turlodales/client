@@ -5,11 +5,11 @@
 package libgit
 
 import (
+	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/storer"
+	"github.com/go-git/go-git/v5/storage"
 	lru "github.com/hashicorp/golang-lru"
 	"github.com/pkg/errors"
-	"gopkg.in/src-d/go-git.v4/plumbing"
-	"gopkg.in/src-d/go-git.v4/plumbing/storer"
-	"gopkg.in/src-d/go-git.v4/storage"
 )
 
 // OnDemandStorer is a wrapper around a storage.Storer that reads
@@ -20,8 +20,10 @@ type OnDemandStorer struct {
 	recentCache *lru.Cache
 }
 
-var _ storage.Storer = (*OnDemandStorer)(nil)
-var _ storer.DeltaObjectStorer = (*OnDemandStorer)(nil)
+var (
+	_ storage.Storer           = (*OnDemandStorer)(nil)
+	_ storer.DeltaObjectStorer = (*OnDemandStorer)(nil)
+)
 
 // NewOnDemandStorer constructs an on-demand storage layer on top of
 // an existing `Storer`.
@@ -56,7 +58,8 @@ func NewOnDemandStorer(s storage.Storer) (*OnDemandStorer, error) {
 // EncodedObject implements the storage.Storer interface for OnDemandStorer.
 func (ods *OnDemandStorer) EncodedObject(
 	ot plumbing.ObjectType, hash plumbing.Hash) (
-	plumbing.EncodedObject, error) {
+	plumbing.EncodedObject, error,
+) {
 	o := &onDemandObject{
 		s:           ods.Storer,
 		hash:        hash,
@@ -69,7 +72,7 @@ func (ods *OnDemandStorer) EncodedObject(
 	// `Storer.EncodedObject()` or `o.cache()`.  Instead use a
 	// KBFS-specific `HasEncodedObject()` method that just tells us
 	// whether or not the object exists.
-	err := ods.Storer.HasEncodedObject(hash)
+	err := ods.HasEncodedObject(hash)
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +84,8 @@ func (ods *OnDemandStorer) EncodedObject(
 // OnDemandStorer.
 func (ods *OnDemandStorer) DeltaObject(
 	ot plumbing.ObjectType, hash plumbing.Hash) (
-	plumbing.EncodedObject, error) {
+	plumbing.EncodedObject, error,
+) {
 	edos, ok := ods.Storer.(storer.DeltaObjectStorer)
 	if !ok {
 		return nil, errors.New("Not a delta storer")

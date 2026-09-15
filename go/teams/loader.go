@@ -1,14 +1,14 @@
 package teams
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"sort"
 	"sync"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/keybase/client/go/gregor"
 	"github.com/keybase/client/go/libkb"
@@ -216,7 +216,6 @@ func (n nameLookupBurstCacheKey) String() string {
 // Resolve a team name to a team ID.
 // Will always hit the server for subteams. The server can lie in this return value.
 func (l *TeamLoader) ResolveNameToIDUntrusted(ctx context.Context, teamName keybase1.TeamName, public bool, allowCache bool) (id keybase1.TeamID, err error) {
-
 	defer l.G().CVTrace(ctx, libkb.VLog0, fmt.Sprintf("resolveNameToUIDUntrusted(%s,%v,%v)", teamName.String(), public, allowCache), &err)()
 
 	// For root team names, just hash.
@@ -228,7 +227,7 @@ func (l *TeamLoader) ResolveNameToIDUntrusted(ctx context.Context, teamName keyb
 		return resolveNameToIDUntrustedAPICall(ctx, l.G(), teamName, public)
 	}
 
-	var idVoidPointer interface{}
+	var idVoidPointer any
 	key := nameLookupBurstCacheKey{teamName, public}
 	idVoidPointer, err = l.nameLookupBurstCache.Load(ctx, key, l.makeNameLookupBurstCacheLoader(ctx, l.G(), key))
 	if err != nil {
@@ -264,7 +263,7 @@ func resolveNameToIDUntrustedAPICall(ctx context.Context, g *libkb.GlobalContext
 }
 
 func (l *TeamLoader) makeNameLookupBurstCacheLoader(ctx context.Context, g *libkb.GlobalContext, key nameLookupBurstCacheKey) libkb.BurstCacheLoader {
-	return func() (obj interface{}, err error) {
+	return func() (obj any, err error) {
 		id, err := resolveNameToIDUntrustedAPICall(ctx, g, key.teamName, key.public)
 		if err != nil {
 			return nil, err
@@ -301,7 +300,7 @@ func (l *TeamLoader) load1(ctx context.Context, me keybase1.UserVersion, lArg ke
 			mctx.Debug("TeamLoader looking up team by name failed: %v -> %v", *teamName, err)
 			if code, ok := libkb.GetAppStatusCode(err); ok && code == keybase1.StatusCode_SCTeamNotFound {
 				mctx.Debug("replacing error: %v", err)
-				return nil, nil, NewTeamDoesNotExistError(lArg.Public, teamName.String())
+				return nil, nil, NewTeamDoesNotExistError(lArg.Public, "%s", teamName.String())
 			}
 			return nil, nil, err
 		}
@@ -355,7 +354,7 @@ func (l *TeamLoader) load1(ctx context.Context, me keybase1.UserVersion, lArg ke
 		// but it's better to have this understandable error message that's accurate
 		// most of the time than one with an ID that's always accurate.
 		mctx.Debug("replacing error: %v", err)
-		return nil, nil, NewTeamDoesNotExistError(lArg.Public, teamName.String())
+		return nil, nil, NewTeamDoesNotExistError(lArg.Public, "%s", teamName.String())
 	case nil:
 	default:
 		return nil, nil, err
@@ -368,7 +367,7 @@ func (l *TeamLoader) load1(ctx context.Context, me keybase1.UserVersion, lArg ke
 	// public team you're not in. Restricted bot members don't have any secrets
 	// and are also exempt.
 	if !l.hasSyncedSecrets(mctx, ret.teamShim()) &&
-		!(ret.team.Chain.Public || ret.team.Chain.UserRole(me).IsRestrictedBot()) {
+		(!ret.team.Chain.Public && !ret.team.Chain.UserRole(me).IsRestrictedBot()) {
 		// this should not happen
 		return nil, nil, fmt.Errorf("missing secrets for team")
 	}
@@ -487,7 +486,6 @@ func (l *TeamLoader) load2(ctx context.Context, arg load2ArgT) (ret *load2ResT, 
 }
 
 func (l *TeamLoader) load2Inner(ctx context.Context, arg load2ArgT) (*load2ResT, error) {
-
 	// Single-flight lock by team ID.
 	lock := l.locktab.AcquireOnName(ctx, l.G(), arg.teamID.String())
 	defer lock.Release(ctx)
@@ -497,7 +495,7 @@ func (l *TeamLoader) load2Inner(ctx context.Context, arg load2ArgT) (*load2ResT,
 
 func (l *TeamLoader) load2InnerLocked(ctx context.Context, arg load2ArgT) (res *load2ResT, err error) {
 	const nRetries = 3
-	for i := 0; i < nRetries; i++ {
+	for range nRetries {
 		res, err = l.load2InnerLockedRetry(ctx, arg)
 		switch pkgErrors.Cause(err).(type) {
 		case nil:
@@ -759,9 +757,9 @@ func (l *TeamLoader) load2InnerLockedRetry(ctx context.Context, arg load2ArgT) (
 	// Sloppy because this calculation misses out on e.g. a rotate_key signed by an admin.
 	// This value is used for skipping fullVerify on team.leave links, see `verifyLink`.
 	var fullVerifyCutoff keybase1.Seqno
-	for i := len(links) - 1; i >= 0; i-- {
-		if links[i].LinkType().RequiresAtLeastRole().IsAdminOrAbove() {
-			fullVerifyCutoff = links[i].Seqno()
+	for _, link := range slices.Backward(links) {
+		if link.LinkType().RequiresAtLeastRole().IsAdminOrAbove() {
+			fullVerifyCutoff = link.Seqno()
 			break
 		}
 	}
@@ -812,7 +810,6 @@ func (l *TeamLoader) load2InnerLockedRetry(ctx context.Context, arg load2ArgT) (
 
 	// Be sure to update the hidden chain after the main chain, since the latter can "ratchet" the former
 	err = hiddenPackage.Update(mctx, teamUpdate.GetHiddenChain(), hiddenResp.GetUncommittedSeqno())
-
 	if err != nil {
 		return nil, err
 	}
@@ -959,9 +956,9 @@ func (l *TeamLoader) load2InnerLockedRetry(ctx context.Context, arg load2ArgT) (
 		return nil, fmt.Errorf("error recalculating name for %v: %v", ret.Name, err)
 	}
 	if !ret.Name.Eq(newName) {
-		// This deep copy is an absurd price to pay, but these mid-team renames should be quite rare.
-		copy := ret.DeepCopy()
-		ret = &copy
+		// This deep cp is an absurd price to pay, but these mid-team renames should be quite rare.
+		cp := ret.DeepCopy()
+		ret = &cp
 		ret.Name = newName
 	}
 
@@ -1023,11 +1020,12 @@ func (l *TeamLoader) load2InnerLockedRetry(ctx context.Context, arg load2ArgT) (
 		chain := TeamSigChainState{inner: ret.Chain, hidden: hiddenPackage.ChainData()}
 		// Send a notification if we used to have the name cached and it has changed at all.
 		changeSet := keybase1.TeamChangeSet{Renamed: true}
-		go l.G().NotifyRouter.HandleTeamChangedByID(context.Background(), chain.GetID(), chain.GetLatestSeqno(),
+		notifyCtx := context.WithoutCancel(mctx.Ctx())
+		go l.G().NotifyRouter.HandleTeamChangedByID(notifyCtx, chain.GetID(), chain.GetLatestSeqno(),
 			chain.IsImplicit(), changeSet, chain.GetLatestHiddenSeqno(), keybase1.Seqno(0), keybase1.TeamChangedSource_LOCAL_RENAME)
-		go l.G().NotifyRouter.HandleTeamChangedByName(context.Background(), cachedName.String(), chain.GetLatestSeqno(),
+		go l.G().NotifyRouter.HandleTeamChangedByName(notifyCtx, cachedName.String(), chain.GetLatestSeqno(),
 			chain.IsImplicit(), changeSet, chain.GetLatestHiddenSeqno(), keybase1.Seqno(0), keybase1.TeamChangedSource_LOCAL_RENAME)
-		go l.G().NotifyRouter.HandleTeamChangedByName(context.Background(), newName.String(), chain.GetLatestSeqno(),
+		go l.G().NotifyRouter.HandleTeamChangedByName(notifyCtx, newName.String(), chain.GetLatestSeqno(),
 			chain.IsImplicit(), changeSet, chain.GetLatestHiddenSeqno(), keybase1.Seqno(0), keybase1.TeamChangedSource_LOCAL_RENAME)
 	}
 
@@ -1057,7 +1055,8 @@ func (l *TeamLoader) load2InnerLockedRetry(ctx context.Context, arg load2ArgT) (
 
 func (l *TeamLoader) hiddenPackageGetter(mctx libkb.MetaContext, id keybase1.TeamID, team *keybase1.TeamData, me keybase1.UserVersion) func() (encKID keybase1.KID, gen keybase1.PerTeamKeyGeneration, role keybase1.TeamRole, err error) {
 	return func() (encKID keybase1.KID, gen keybase1.PerTeamKeyGeneration,
-		role keybase1.TeamRole, err error) {
+		role keybase1.TeamRole, err error,
+	) {
 		if team == nil {
 			return encKID, gen, keybase1.TeamRole_NONE, nil
 		}
@@ -1100,7 +1099,7 @@ func (l *TeamLoader) isAllowedKeyerOf(mctx libkb.MetaContext, chain *keybase1.Te
 		return false, nil
 	}
 
-	// now check implict adminship
+	// now check implicit adminship
 	yes, err := l.isImplicitAdminOf(mctx.Ctx(), state.GetID(), state.GetParentID(), me, them)
 	if err != nil {
 		return false, err
@@ -1114,7 +1113,6 @@ func (l *TeamLoader) isAllowedKeyerOf(mctx libkb.MetaContext, chain *keybase1.Te
 	mctx.Debug("user is not an allowed keyer of the team")
 
 	return false, nil
-
 }
 
 func (l *TeamLoader) checkNeedRotate(mctx libkb.MetaContext, chain *keybase1.TeamData, me keybase1.UserVersion, hiddenPackage *hidden.LoaderPackage) (ret bool, err error) {
@@ -1127,7 +1125,6 @@ func (l *TeamLoader) checkNeedRotate(mctx libkb.MetaContext, chain *keybase1.Tea
 }
 
 func (l *TeamLoader) checkNeedRotateWithSigner(mctx libkb.MetaContext, chain *keybase1.TeamData, me keybase1.UserVersion, signer keybase1.Signer) (ret bool, err error) {
-
 	defer mctx.Trace(fmt.Sprintf("TeamLoader::checkNeedRotateWithSigner(%+v)", signer), &err)()
 
 	uv := signer.UserVersion()
@@ -1175,7 +1172,6 @@ func (l *TeamLoader) checkNeedRotateWithSigner(mctx libkb.MetaContext, chain *ke
 }
 
 func (l *TeamLoader) doOneLink(mctx libkb.MetaContext, arg load2ArgT, ret *keybase1.TeamData, hiddenPackage *hidden.LoaderPackage, link *ChainLinkUnpacked, i int, suppressLoggingStart int, suppressLoggingUpto int, lastSeqno keybase1.Seqno, parentChildOperations *[](*parentChildOperation), prev libkb.LinkID, fullVerifyCutoff keybase1.Seqno, readSubteamID keybase1.TeamID, proofSet *proofSetT, lkc *loadKeyCache, parentsCache *parentChainCache) (*keybase1.TeamData, libkb.LinkID, error) {
-
 	var nilPrev libkb.LinkID
 
 	ctx := mctx.Ctx()
@@ -1493,8 +1489,8 @@ func (l *TeamLoader) satisfiesNeedAdmin(mctx libkb.MetaContext, me keybase1.User
 
 // Check whether a user is an implicit admin of a team.
 func (l *TeamLoader) isImplicitAdminOf(ctx context.Context, teamID keybase1.TeamID, ancestorID *keybase1.TeamID,
-	me keybase1.UserVersion, uv keybase1.UserVersion) (bool, error) {
-
+	me keybase1.UserVersion, uv keybase1.UserVersion,
+) (bool, error) {
 	// IDs of ancestors that were not freshly polled.
 	// Check them again with forceRepoll if the affirmative is not found cached.
 	checkAgain := make(map[keybase1.TeamID]bool)
@@ -1569,7 +1565,8 @@ func (l *TeamLoader) isImplicitAdminOf(ctx context.Context, teamID keybase1.Team
 }
 
 func (l *TeamLoader) satisfiesNeedsKBFSKeyGeneration(mctx libkb.MetaContext,
-	kbfs keybase1.TeamKBFSKeyRefresher, state Teamer) error {
+	kbfs keybase1.TeamKBFSKeyRefresher, state Teamer,
+) error {
 	if kbfs.Generation == 0 {
 		return nil
 	}
@@ -1612,7 +1609,8 @@ func (l *TeamLoader) satisfiesNeedKeyGeneration(mctx libkb.MetaContext, needKeyG
 // Whether the snapshot has loaded the reader key masks and key generations we
 // need.
 func (l *TeamLoader) satisfiesNeedApplicationsAtGenerations(mctx libkb.MetaContext,
-	needApplicationsAtGenerations map[keybase1.PerTeamKeyGeneration][]keybase1.TeamApplication, team Teamer) error {
+	needApplicationsAtGenerations map[keybase1.PerTeamKeyGeneration][]keybase1.TeamApplication, team Teamer,
+) error {
 	if len(needApplicationsAtGenerations) == 0 {
 		return nil
 	}
@@ -1631,7 +1629,8 @@ func (l *TeamLoader) satisfiesNeedApplicationsAtGenerations(mctx libkb.MetaConte
 
 func (l *TeamLoader) satisfiesNeedApplicationsAtGenerationsWithKBFS(mctx libkb.MetaContext,
 	needApplicationsAtGenerations map[keybase1.PerTeamKeyGeneration][]keybase1.TeamApplication,
-	state Teamer) error {
+	state Teamer,
+) error {
 	if len(needApplicationsAtGenerations) == 0 {
 		return nil
 	}
@@ -1650,8 +1649,8 @@ func (l *TeamLoader) satisfiesNeedApplicationsAtGenerationsWithKBFS(mctx libkb.M
 
 // Whether the snapshot has each of `wantMembers` as a member.
 func (l *TeamLoader) satisfiesWantMembers(mctx libkb.MetaContext,
-	wantMembers []keybase1.UserVersion, wantMembersRole keybase1.TeamRole, state Teamer) error {
-
+	wantMembers []keybase1.UserVersion, wantMembersRole keybase1.TeamRole, state Teamer,
+) error {
 	if wantMembersRole == keybase1.TeamRole_NONE {
 		// Default to writer.
 		wantMembersRole = keybase1.TeamRole_WRITER

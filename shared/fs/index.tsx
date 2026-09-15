@@ -1,31 +1,22 @@
-import * as C from '@/constants'
-import * as React from 'react'
-import * as Constants from '@/constants/fs'
 import * as T from '@/constants/types'
 import Browser from './browser'
 import {NormalPreview} from './filepreview'
 import * as Kbfs from './common'
 import * as SimpleScreens from './simple-screens'
+import * as FS from '@/constants/fs'
+import {MainBanner} from './nav-header'
+import {IosHeaderMenu} from './nav-header/ios-header'
 
 type ChooseComponentProps = {
-  emitBarePreview: () => void
   kbfsDaemonStatus: T.FS.KbfsDaemonStatus
+  lastClosedPublicBannerTlf?: string
   path: T.FS.Path
   pathType: T.FS.PathType
 }
 
 const ChooseComponent = (props: ChooseComponentProps) => {
-  const {emitBarePreview} = props
+  const {fileContext, onUrlError} = Kbfs.useFsFileContext(props.path)
 
-  const fileContext = C.useFSState(s => s.fileContext.get(props.path) || Constants.emptyFileContext)
-  const bare = C.isMobile && fileContext.viewType === T.RPCGen.GUIViewType.image
-  React.useEffect(() => {
-    bare && emitBarePreview()
-  }, [bare, emitBarePreview])
-
-  Kbfs.useFsPathMetadata(props.path)
-  const onUrlError = Kbfs.useFsFileContext(props.path)
-  Kbfs.useFsTlfs()
   Kbfs.useFsOnlineStatus()
   Kbfs.useFsTlf(props.path)
   const softError = Kbfs.useFsSoftError(props.path)
@@ -39,43 +30,57 @@ const ChooseComponent = (props: ChooseComponentProps) => {
   }
   switch (props.pathType) {
     case T.FS.PathType.Folder:
-      return <Browser path={props.path} />
+      return <Browser lastClosedPublicBannerTlf={props.lastClosedPublicBannerTlf} path={props.path} />
     case T.FS.PathType.Unknown:
       return <SimpleScreens.Loading />
     default:
-      if (fileContext === Constants.emptyFileContext) {
-        // We don't have it yet, so don't render.
+      if (fileContext === FS.emptyFileContext) {
         return <SimpleScreens.Loading />
       }
-      return bare ? (
-        // doesn't matter here as we do a navigateAppend for bare views
-        <SimpleScreens.Loading />
-      ) : (
-        <NormalPreview path={props.path} onUrlError={onUrlError} />
-      )
+      return <NormalPreview path={props.path} onUrlError={onUrlError} />
   }
 }
 
-type OwnProps = {path?: T.FS.Path}
+type OwnProps = {
+  initialLastModifiedTimestamp?: number
+  initialPathType?: T.FS.PathType
+  lastClosedPublicBannerTlf?: string
+  path?: T.FS.Path
+}
 
-const Connected = (ownProps?: OwnProps) => {
-  const path = ownProps?.path ?? C.FS.defaultPath
-  const _pathItem = C.useFSState(s => C.FS.getPathItem(s.pathItems, path))
-  const kbfsDaemonStatus = C.useFSState(s => s.kbfsDaemonStatus)
-  const navigateUp = C.useRouterState(s => s.dispatch.navigateUp)
-  const navigateAppend = C.useRouterState(s => s.dispatch.navigateAppend)
-  const emitBarePreview = () => {
-    navigateUp()
-    navigateAppend({props: {path}, selected: 'barePreview'})
-  }
-  const isDefinitelyFolder = T.FS.getPathElements(path).length <= 3 && !Constants.hasSpecialFileElement(path)
+const ConnectedInner = (ownProps: OwnProps) => {
+  const path = ownProps.path ?? FS.defaultPath
+  Kbfs.useFsScreenCoordinator(path)
+  const _pathItem = Kbfs.useFsPathItem(path)
+  const kbfsDaemonStatus = Kbfs.useKbfsDaemonStatus()
+  const isDefinitelyFolder = T.FS.getPathElements(path).length <= 3 && !FS.hasSpecialFileElement(path)
   const props = {
-    emitBarePreview: emitBarePreview,
-    kbfsDaemonStatus: kbfsDaemonStatus,
+    kbfsDaemonStatus,
+    lastClosedPublicBannerTlf: ownProps.lastClosedPublicBannerTlf,
     path,
     pathType: isDefinitelyFolder ? T.FS.PathType.Folder : _pathItem.type,
   }
-  return <ChooseComponent {...props} />
+  // On mobile the native/custom header no longer hosts the banner, so it lives
+  // at the top of the screen body instead.
+  return (
+    <>
+      {isIOS && <IosHeaderMenu path={path} mayUpload={true} />}
+      {isMobile && <MainBanner />}
+      <ChooseComponent {...props} />
+    </>
+  )
 }
+
+const Connected = (ownProps: OwnProps) => (
+  <Kbfs.FsErrorProvider>
+    <Kbfs.FsDataProvider
+      initialLastModifiedTimestamp={ownProps.initialLastModifiedTimestamp}
+      initialPath={ownProps.path}
+      initialPathType={ownProps.initialPathType}
+    >
+      <ConnectedInner {...ownProps} />
+    </Kbfs.FsDataProvider>
+  </Kbfs.FsErrorProvider>
+)
 
 export default Connected

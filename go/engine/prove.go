@@ -4,6 +4,8 @@
 package engine
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -11,7 +13,6 @@ import (
 	"github.com/keybase/client/go/externals"
 	libkb "github.com/keybase/client/go/libkb"
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
-	"golang.org/x/net/context"
 )
 
 // Prove is an engine used for proving ownership of remote accounts,
@@ -332,7 +333,7 @@ func (p *Prove) verifyLoop(m libkb.MetaContext) (err error) {
 	m, cancel := m.WithTimeout(timeout)
 	defer cancel()
 	defer func() {
-		if err != nil && m.Ctx().Err() == context.DeadlineExceeded {
+		if err != nil && errors.Is(m.Ctx().Err(), context.DeadlineExceeded) {
 			m.Debug("Prove.verifyLoop rewriting error after timeout: %v", err)
 			err = fmt.Errorf("Timed out after looking for proof for %v", timeout)
 		}

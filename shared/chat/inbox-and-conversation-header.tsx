@@ -1,82 +1,133 @@
 import * as C from '@/constants'
-import * as React from 'react'
+import * as Chat from '@/constants/chat'
+import * as Config from '@/constants/config'
 import * as Kb from '@/common-adapters'
-import SearchRow from './inbox/search-row'
-import NewChatButton from './inbox/new-chat-button'
+import * as T from '@/constants/types'
+import type {StyleOverride} from '@/common-adapters/markdown'
+import NewChatButton from '@/chat/inbox/new-chat-button'
+import {setInboxHeaderPortalNode, useInboxHeaderPortalContent} from '@/chat/inbox/header-portal-state'
+import {useChatTeam} from '@/chat/conversation/team-hooks'
 import {useRoute} from '@react-navigation/native'
-import type {RootRouteProps} from '@/router-v2/route-params'
+import {useInboxMetadataState} from '@/chat/inbox/metadata'
+import {useInboxRowBig, useInboxRowSmall} from '@/chat/inbox/rows-state'
+import {useUsersState} from '@/stores/users'
+import {useCurrentUserState} from '@/stores/current-user'
+import {navToPath} from '@/constants/fs'
+import {showConversationInfoPanel, toggleConversationThreadSearch} from '@/chat/conversation/thread-context'
+import {muteConversation} from '@/chat/conversation/status-actions'
+import AccountSwitchHeaderAvatar from '@/router-v2/account-switch-header-avatar'
+
+const emptyMeta = Chat.makeConversationMeta()
+const emptyParticipantInfo = Chat.uiParticipantsToParticipantInfo([])
+const emptyParticipants: ReadonlyArray<string> = []
 
 const Header = () => {
-  const {params} = useRoute<RootRouteProps<'chatRoot'>>()
-  return (
-    <C.ChatProvider canBeNull={true} id={params?.conversationIDKey ?? C.Chat.noConversationIDKey}>
-      <Header2 />
-    </C.ChatProvider>
+  const styles = useStyles()
+  const theme = Kb.Styles.useTheme()
+  const {params} = useRoute('chatRoot')
+  const username = useCurrentUserState(s => s.username)
+  // chatRoot params are a union of the split-view and phone inbox variants; only the
+  // split-view variant (where this header renders) carries infoPanel
+  const infoPanelShowing = 'infoPanel' in params && !!params.infoPanel
+  const conversationIDKey = params.conversationIDKey ?? Chat.noConversationIDKey
+  const {meta, participantInfo} = useInboxMetadataState(
+    C.useShallow(s => ({
+      meta: s.metas.get(conversationIDKey) ?? emptyMeta,
+      participantInfo: s.participants.get(conversationIDKey) ?? emptyParticipantInfo,
+    }))
   )
-}
+  const bigRow = useInboxRowBig(conversationIDKey)
+  const smallRow = useInboxRowSmall(conversationIDKey)
+  const inboxRow = {
+    rowChannelname: bigRow.channelname,
+    rowParticipants: smallRow.participants.length ? smallRow.participants : emptyParticipants,
+    rowTeamname: bigRow.teamname || smallRow.teamDisplayName,
+  }
+  const {
+    channelname: metaChannelname,
+    descriptionDecorated,
+    isMuted: muted,
+    teamID,
+    teamType: metaTeamType,
+    teamname: metaTeamname,
+    tlfname,
+  } = meta
+  const channelname = metaChannelname || inboxRow.rowChannelname
+  const teamname = metaTeamname || inboxRow.rowTeamname
+  const teamType =
+    metaTeamType !== 'adhoc' ? metaTeamType : inboxRow.rowChannelname ? 'big' : teamname ? 'small' : 'adhoc'
+  const channel = teamType === 'big' ? `${teamname}#${channelname}` : teamType === 'small' ? teamname : null
+  const isTeam = teamType !== 'adhoc'
+  const rowParticipantsWithSelf = username
+    ? [...new Set([...inboxRow.rowParticipants, username])]
+    : emptyParticipants
+  const participants =
+    teamType === 'adhoc'
+      ? participantInfo.name.length
+        ? participantInfo.name
+        : rowParticipantsWithSelf
+      : null
+  const otherParticipants = participantInfo.name.length
+    ? Chat.getRowParticipants(participantInfo, username)
+    : inboxRow.rowParticipants
+  const first = teamType === 'adhoc' && otherParticipants.length === 1 ? otherParticipants[0]! : ''
 
-const Header2 = () => {
-  const conversationIDKey = C.useChatContext(s => s.id)
-  const username = C.useCurrentUserState(s => s.username)
-  const infoPanelShowing = C.useChatState(s => s.infoPanelShowing)
-  const participantInfo = C.useChatContext(s => s.participants)
-  const {channelname, descriptionDecorated, isMuted, teamType, teamname} = C.useChatContext(
-    C.useShallow(s => {
-      const {channelname, descriptionDecorated, isMuted, teamType, teamname} = s.meta
-      return {channelname, descriptionDecorated, isMuted, teamType, teamname}
-    })
-  )
-  // TODO not reactive
-  const canEditDesc = C.Teams.getCanPerform(C.useTeamsState.getState(), teamname).editChannelDescription
-  const otherParticipants = C.Chat.getRowParticipants(participantInfo, username)
-  const first: string = teamType === 'adhoc' && otherParticipants.length === 1 ? otherParticipants[0]! : ''
-  const otherInfo = C.useUsersState(s => s.infoMap.get(first))
+  // length ===1 means just you so show yourself
+  const withoutSelf =
+    participants && participants.length > 1 ? participants.filter(part => part !== username) : participants
+
+  const {yourOperations} = useChatTeam(teamID, teamname)
+  const canEditDesc = yourOperations.editChannelDescription
+  const otherInfo = useUsersState(s => s.infoMap.get(first))
   // If it's a one-on-one chat, use the user's fullname as the description
   const desc = otherInfo?.bio?.replace(/(\r\n|\n|\r)/gm, ' ') || descriptionDecorated
   const fullName = otherInfo?.fullname
+  const headerPortalContent = useInboxHeaderPortalContent()
 
-  const onOpenFolder = C.useChatContext(s => s.dispatch.openFolder)
-  const toggleThreadSearch = C.useChatContext(s => s.dispatch.toggleThreadSearch)
-  const onToggleThreadSearch = React.useCallback(() => {
-    toggleThreadSearch()
-  }, [toggleThreadSearch])
-  const mute = C.useChatContext(s => s.dispatch.mute)
-  const unMuteConversation = React.useCallback(() => {
-    mute(false)
-  }, [mute])
+  const onToggleThreadSearch = () => {
+    toggleConversationThreadSearch(conversationIDKey)
+  }
+  const unMuteConversation = () => {
+    muteConversation(conversationIDKey, false)
+  }
+  const privateFolderPath = tlfname
+    ? `${Config.defaultKBFSPath}${Config.defaultPrivatePrefix}${tlfname}`
+    : participants?.length
+      ? Config.privateFolderWithUsers(participants)
+      : ''
+  const folderPath = isTeam ? (teamname ? Config.teamFolder(teamname) : '') : privateFolderPath
+  const onOpenFolder = () => {
+    if (!folderPath) {
+      return
+    }
+    const path = T.FS.stringToPath(folderPath)
+    navToPath(path)
+  }
 
-  const showInfoPanel = C.useChatContext(s => s.dispatch.showInfoPanel)
-  const onToggleInfoPanel = React.useCallback(() => {
-    showInfoPanel(!infoPanelShowing, undefined)
-  }, [showInfoPanel, infoPanelShowing])
+  const onToggleInfoPanel = () => {
+    showConversationInfoPanel(conversationIDKey, !infoPanelShowing, undefined)
+  }
 
-  const channel = teamType === 'big' ? `${teamname}#${channelname}` : teamType === 'small' ? teamname : null
-  const isTeam = ['small', 'big'].includes(teamType)
-  const muted = isMuted
-  const participants = teamType === 'adhoc' ? participantInfo.name : null
-  const showActions = C.Chat.isValidConversationIDKey(conversationIDKey)
+  const showActions = Chat.isValidConversationIDKey(conversationIDKey)
 
-  const descStyleOverride = React.useMemo(
-    () => ({
-      del: styles.markdownOverride,
-      em: styles.markdownOverride,
-      fence: styles.markdownOverride,
-      inlineCode: styles.markdownOverride,
-      kbfsPath: styles.markdownOverride,
-      link: styles.markdownOverride,
-      mailto: styles.markdownOverride,
-      paragraph: styles.markdownOverride,
-      preview: styles.markdownOverride,
-      strong: styles.markdownOverride,
-    }),
-    []
-  )
+  const descStyleOverride = {
+    del: styles.markdownOverride,
+    em: styles.markdownOverride,
+    fence: styles.markdownOverride,
+    inlineCode: styles.markdownOverride,
+    kbfsPath: styles.markdownOverride,
+    link: styles.markdownOverride,
+    mailto: styles.markdownOverride,
+    paragraph: styles.markdownOverride,
+    preview: styles.markdownOverride,
+    strong: styles.markdownOverride,
+  } as StyleOverride
 
   let description = !!desc && (
     <Kb.Markdown
       smallStandaloneEmoji={true}
       style={styles.desc}
-      styleOverride={descStyleOverride as any}
+      styleOverride={descStyleOverride}
       lineClamp={1}
       selectable={true}
     >
@@ -101,20 +152,17 @@ const Header2 = () => {
       </Kb.WithTooltip>
     )
   }
-  // length ===1 means just you so show yourself
-  const withoutSelf =
-    participants && participants.length > 1 ? participants.filter(part => part !== username) : participants
 
   // if there is no description (and is not a 1-on-1), don't render the description box
-  const renderDescription = description || (fullName && withoutSelf && withoutSelf.length === 1)
+  const renderDescription = description || (fullName && withoutSelf?.length === 1)
 
   // trim() call makes sure that string is not just whitespace
-  if (withoutSelf && withoutSelf.length === 1 && desc.trim()) {
+  if (withoutSelf?.length === 1 && desc.trim()) {
     description = (
       <Kb.Markdown
         smallStandaloneEmoji={true}
         style={{...styles.desc, flex: 1}}
-        styleOverride={descStyleOverride as any}
+        styleOverride={descStyleOverride}
         lineClamp={1}
         selectable={true}
       >
@@ -123,139 +171,182 @@ const Header2 = () => {
     )
   }
 
-  return (
-    <Kb.Box2 direction="horizontal" style={styles.container}>
-      <Kb.Box2 direction="horizontal" style={styles.left}>
-        {Kb.Styles.isMobile ? null : <SearchRow headerContext="chat-header" />}
-        <NewChatButton />
+  const leftSide = (
+    <Kb.Box2 direction="horizontal" style={styles.left}>
+      {C.isTablet ? (
+        <>
+          <AccountSwitchHeaderAvatar />
+          <Kb.BoxGrow2>{headerPortalContent}</Kb.BoxGrow2>
+        </>
+      ) : !isMobile ? (
+        <Kb.BoxGrow2>
+          <div
+            style={Kb.Styles.castStyleDesktop(styles.searchPortal)}
+            ref={node => setInboxHeaderPortalNode(node)}
+          />
+        </Kb.BoxGrow2>
+      ) : null}
+      {!isElectron && !C.isTablet && <NewChatButton />}
+    </Kb.Box2>
+  )
+
+  const topRow = (
+    <Kb.Box2 direction="horizontal" fullWidth={true}>
+      {showActions && channel ? (
+        <Kb.Text selectable={true} type="Header" lineClamp={1}>
+          {channel}
+        </Kb.Text>
+      ) : showActions && fullName ? (
+        <Kb.Text type="Header" lineClamp={1}>
+          {fullName}
+        </Kb.Text>
+      ) : showActions && withoutSelf ? (
+        <Kb.Box2 direction="horizontal" flex={1}>
+          <Kb.Text type="Header" lineClamp={1}>
+            {withoutSelf.map((part, i) => (
+              <Kb.Text type="Header" key={part}>
+                <Kb.ConnectedUsernames
+                  colorFollowing={true}
+                  underline={true}
+                  inline={true}
+                  commaColor={theme.black_50}
+                  type="Header"
+                  usernames={part}
+                  onUsernameClicked="profile"
+                />
+                {i !== withoutSelf.length - 1 && <Kb.Text type="Header">, </Kb.Text>}
+              </Kb.Text>
+            ))}
+          </Kb.Text>
+        </Kb.Box2>
+      ) : null}
+      {!!muted && (
+        <Kb.Icon
+          type="iconfont-shh"
+          style={styles.shhIconStyle}
+          color={theme.black_20}
+          fontSize={20}
+          onClick={unMuteConversation}
+        />
+      )}
+    </Kb.Box2>
+  )
+
+  const rightIcons = showActions && (
+    <Kb.Box2
+      direction="horizontal"
+      gap="small"
+      alignItems="flex-end"
+      alignSelf="flex-end"
+      style={styles.actionIcons}
+    >
+      <Kb.Box2
+        className="tooltip-left"
+        direction="vertical"
+        tooltip={`Search in this chat (${C.shortcutSymbol}F)`}
+      >
+        <Kb.Icon style={styles.clickable} type="iconfont-search" onClick={onToggleThreadSearch} />
       </Kb.Box2>
+      <Kb.Box2
+        className="tooltip-left"
+        direction="vertical"
+        tooltip={folderPath ? 'Open folder' : 'Folder unavailable'}
+      >
+        <Kb.Icon
+          color={folderPath ? undefined : theme.black_20}
+          style={folderPath ? styles.clickable : undefined}
+          type="iconfont-folder-private"
+          onClick={folderPath ? onOpenFolder : undefined}
+        />
+      </Kb.Box2>
+      <Kb.Box2 className="tooltip-left" direction="vertical" tooltip="Chat info & settings">
+        <Kb.Icon
+          color={infoPanelShowing ? theme.blue : undefined}
+          style={styles.clickable}
+          type="iconfont-info"
+          onClick={onToggleInfoPanel}
+        />
+      </Kb.Box2>
+    </Kb.Box2>
+  )
+
+  const bottomRow = renderDescription ? (
+    <Kb.Box2 direction="vertical" overflow="hidden" style={styles.descriptionContainer} fullWidth={true}>
+      {!!fullName && !!withoutSelf && withoutSelf.length === 1 ? (
+        <Kb.BoxGrow>
+          <Kb.Box2 direction="horizontal" fullWidth={true} style={styles.descriptionTextContainer}>
+            <Kb.ConnectedUsernames
+              colorFollowing={true}
+              underline={true}
+              inline={true}
+              commaColor={theme.black_50}
+              type="BodySmallBold"
+              usernames={withoutSelf[0] ?? ''}
+              onUsernameClicked="profile"
+            />
+            {description ? (
+              <>
+                <Kb.Text type="BodySmall" style={styles.descDot}>
+                  &nbsp;•&nbsp;
+                </Kb.Text>
+                {description}
+              </>
+            ) : null}
+          </Kb.Box2>
+        </Kb.BoxGrow>
+      ) : (
+        description
+      )}
+    </Kb.Box2>
+  ) : null
+
+  return (
+    <Kb.Box2 direction="horizontal" flex={1} style={styles.container}>
+      {leftSide}
       <Kb.Box2
         direction="horizontal"
         style={styles.right}
-        fullHeight={!renderDescription}
+        fullHeight={true}
         gap="small"
         alignItems="flex-end"
         alignSelf="flex-end"
       >
-        <Kb.Box2 direction="vertical" style={styles.headerTitle}>
-          <Kb.Box2 direction="horizontal" fullWidth={true}>
-            {channel ? (
-              <Kb.Text selectable={true} type="Header" lineClamp={1}>
-                {channel}
-              </Kb.Text>
-            ) : fullName ? (
-              <Kb.Text type="Header" lineClamp={1}>
-                {fullName}
-              </Kb.Text>
-            ) : withoutSelf ? (
-              <Kb.Box2 direction="horizontal" style={Kb.Styles.globalStyles.flexOne}>
-                <Kb.Text type="Header" lineClamp={1}>
-                  {withoutSelf.map((part, i) => (
-                    <Kb.Text type="Header" key={part}>
-                      <Kb.ConnectedUsernames
-                        colorFollowing={true}
-                        underline={true}
-                        inline={true}
-                        commaColor={Kb.Styles.globalColors.black_50}
-                        type="Header"
-                        usernames={part}
-                        onUsernameClicked="profile"
-                      />
-                      {i !== withoutSelf.length - 1 && <Kb.Text type="Header">, </Kb.Text>}
-                    </Kb.Text>
-                  ))}
-                </Kb.Text>
-              </Kb.Box2>
-            ) : null}
-            {!!muted && (
-              <Kb.Icon
-                type="iconfont-shh"
-                style={styles.shhIconStyle}
-                color={Kb.Styles.globalColors.black_20}
-                fontSize={20}
-                onClick={unMuteConversation}
-              />
-            )}
+        <Kb.BoxGrow2 style={{height: '100%'}}>
+          <Kb.Box2 direction="vertical" style={styles.headerTitle}>
+            {topRow}
+            {bottomRow}
           </Kb.Box2>
-          {!!renderDescription && (
-            <Kb.Box2 direction="vertical" style={styles.descriptionContainer} fullWidth={true}>
-              {!!fullName && !!withoutSelf && withoutSelf.length === 1 ? (
-                <Kb.Box2 direction="horizontal" fullWidth={true} style={styles.descriptionTextContainer}>
-                  <Kb.ConnectedUsernames
-                    colorFollowing={true}
-                    underline={true}
-                    inline={true}
-                    commaColor={Kb.Styles.globalColors.black_50}
-                    type="BodySmallBold"
-                    usernames={withoutSelf[0] ?? ''}
-                    onUsernameClicked="profile"
-                  />
-                  {!!description && (
-                    <>
-                      <Kb.Text type="BodySmall" style={styles.desc}>
-                        &nbsp;•&nbsp;
-                      </Kb.Text>
-                      {description}
-                    </>
-                  )}
-                </Kb.Box2>
-              ) : (
-                description
-              )}
-            </Kb.Box2>
-          )}
-        </Kb.Box2>
-        {showActions && (
-          <Kb.Box2
-            direction="horizontal"
-            gap="small"
-            alignItems="flex-end"
-            alignSelf="flex-end"
-            style={styles.actionIcons}
-          >
-            <Kb.Box2
-              className="tooltip-left"
-              direction="vertical"
-              tooltip={`Search in this chat (${C.shortcutSymbol}F)`}
-            >
-              <Kb.Icon style={styles.clickable} type="iconfont-search" onClick={onToggleThreadSearch} />
-            </Kb.Box2>
-            <Kb.Box2 className="tooltip-left" direction="vertical" tooltip="Open folder">
-              <Kb.Icon style={styles.clickable} type="iconfont-folder-private" onClick={onOpenFolder} />
-            </Kb.Box2>
-            <Kb.Box2 className="tooltip-left" direction="vertical" tooltip="Chat info & settings">
-              <Kb.Icon
-                color={infoPanelShowing ? Kb.Styles.globalColors.blue : undefined}
-                style={styles.clickable}
-                type="iconfont-info"
-                onClick={onToggleInfoPanel}
-              />
-            </Kb.Box2>
-          </Kb.Box2>
-        )}
+        </Kb.BoxGrow2>
+        {rightIcons}
       </Kb.Box2>
     </Kb.Box2>
   )
 }
 
-const styles = Kb.Styles.styleSheetCreate(
-  () =>
+const useStyles = Kb.Styles.createStyleHook(
+  theme =>
     ({
       actionIcons: {paddingBottom: Kb.Styles.globalMargins.tiny},
       clickable: Kb.Styles.platformStyles({isElectron: Kb.Styles.desktopStyles.windowDraggingClickable}),
       container: {
-        flexGrow: 1,
         flexShrink: 0,
         height: 40 - 1,
         width: '100%',
       },
       desc: {
-        ...Kb.Styles.platformStyles({isElectron: Kb.Styles.desktopStyles.windowDraggingClickable}),
-        color: Kb.Styles.globalColors.black_50,
+        ...Kb.Styles.platformStyles({
+          isElectron: {...Kb.Styles.desktopStyles.windowDraggingClickable, width: '100%'},
+        }),
+        color: theme.black_50,
+      },
+      descDot: {
+        ...Kb.Styles.platformStyles({
+          isElectron: {...Kb.Styles.desktopStyles.windowDraggingClickable},
+        }),
+        color: theme.black_50,
       },
       descriptionContainer: {
         height: 17,
-        overflow: 'hidden',
       },
       descriptionTextContainer: Kb.Styles.platformStyles({
         isElectron: {alignItems: 'baseline'},
@@ -264,14 +355,15 @@ const styles = Kb.Styles.styleSheetCreate(
       descriptionTooltip: {alignItems: 'flex-start'},
       headerTitle: Kb.Styles.platformStyles({
         common: {
-          flexGrow: 1,
           paddingBottom: Kb.Styles.globalMargins.xtiny,
+          width: '100%',
         },
         isElectron: Kb.Styles.desktopStyles.windowDraggingClickable,
         isTablet: {flex: 1},
       }),
       left: Kb.Styles.platformStyles({
         common: {
+          flexShrink: 0,
           height: Kb.Styles.isTablet ? 36 : 32,
           width: Kb.Styles.globalStyles.mediumSubNavWidth,
         },
@@ -283,25 +375,29 @@ const styles = Kb.Styles.styleSheetCreate(
           lineHeight: 17,
         },
         isElectron: {
-          display: 'flex',
+          display: 'inline',
           fontSize: 13,
           lineHeight: 17,
+          whiteSpace: 'nowrap',
           wordBreak: 'break-all',
         },
         isMobile: {
-          color: Kb.Styles.globalColors.black_50,
+          color: theme.black_50,
           fontSize: 15,
           lineHeight: 19,
         },
-      } as any),
+      }),
       right: Kb.Styles.platformStyles({
         common: {
           flex: 1,
-          paddingLeft: Kb.Styles.globalMargins.xsmall,
-          paddingRight: Kb.Styles.globalMargins.xsmall,
+          ...Kb.Styles.paddingH(Kb.Styles.globalMargins.xsmall),
         },
         isMobile: {paddingLeft: Kb.Styles.globalMargins.tiny},
       }),
+      searchPortal: {
+        height: '100%',
+        width: '100%',
+      },
       shhIconStyle: {marginLeft: Kb.Styles.globalMargins.xtiny},
     }) as const
 )

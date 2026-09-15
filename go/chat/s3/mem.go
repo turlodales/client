@@ -2,7 +2,8 @@ package s3
 
 import (
 	"bytes"
-	"crypto/md5"
+	"context"
+	"crypto/md5" //nolint:gosec // G501: MD5 required for S3 ETag computation (AWS API requirement, not cryptographic use)
 	"encoding/hex"
 	"fmt"
 	"io"
@@ -10,8 +11,6 @@ import (
 	"sync"
 
 	"github.com/keybase/client/go/libkb"
-
-	"golang.org/x/net/context"
 )
 
 type Mem struct {
@@ -240,7 +239,7 @@ func newPart(index int, buf bytes.Buffer) *part {
 		index: index,
 		data:  buf.Bytes(),
 	}
-	h := md5.Sum(p.data)
+	h := md5.Sum(p.data) //nolint:gosec // G401: MD5 required for S3 ETag (AWS API requirement)
 	p.hash = hex.EncodeToString(h[:])
 	return p
 }

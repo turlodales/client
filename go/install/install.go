@@ -21,10 +21,10 @@ import (
 
 // Log is the logging interface for this package
 type Log interface {
-	Debug(s string, args ...interface{})
-	Info(s string, args ...interface{})
-	Warning(s string, args ...interface{})
-	Errorf(s string, args ...interface{})
+	Debug(s string, args ...any)
+	Info(s string, args ...any)
+	Warning(s string, args ...any)
+	Errorf(s string, args ...any)
 }
 
 // Context is the environment for this package
@@ -49,8 +49,6 @@ const (
 	ComponentNameService ComponentName = "service"
 	// ComponentNameKBFS is the KBFS component
 	ComponentNameKBFS ComponentName = "kbfs"
-	// ComponentNameKBNM is the Keybase NativeMessaging client component
-	ComponentNameKBNM ComponentName = "kbnm"
 	// ComponentNameUpdater is the updater component
 	ComponentNameUpdater ComponentName = "updater"
 	// ComponentNameApp is the UI app
@@ -70,7 +68,7 @@ const (
 )
 
 // ComponentNames are all the valid component names
-var ComponentNames = []ComponentName{ComponentNameCLI, ComponentNameService, ComponentNameKBFS, ComponentNameUpdater, ComponentNameFuse, ComponentNameHelper, ComponentNameApp, ComponentNameKBNM, ComponentNameRedirector, ComponentNameCLIPaths}
+var ComponentNames = []ComponentName{ComponentNameCLI, ComponentNameService, ComponentNameKBFS, ComponentNameUpdater, ComponentNameFuse, ComponentNameHelper, ComponentNameApp, ComponentNameRedirector, ComponentNameCLIPaths}
 
 // String returns string for ComponentName
 func (c ComponentName) String() string {
@@ -94,8 +92,6 @@ func (c ComponentName) Description() string {
 		return "Fuse"
 	case ComponentNameHelper:
 		return "Privileged Helper Tool"
-	case ComponentNameKBNM:
-		return "Browser Native Messaging"
 	case ComponentNameCLIPaths:
 		return "Command Line (privileged)"
 	case ComponentNameRedirector:
@@ -113,8 +109,6 @@ func ComponentNameFromString(s string) ComponentName {
 		return ComponentNameService
 	case string(ComponentNameKBFS):
 		return ComponentNameKBFS
-	case string(ComponentNameKBNM):
-		return ComponentNameKBNM
 	case string(ComponentNameUpdater):
 		return ComponentNameUpdater
 	case string(ComponentNameApp):
@@ -253,7 +247,9 @@ func UpdaterBinPath() (string, error) {
 	if err != nil {
 		return "", err
 	}
+	//nolint:staticcheck // SA4023: err always/never nil depending on GOOS
 	name, err := updaterBinName()
+	//nolint:staticcheck // SA4023: err always/never nil depending on GOOS
 	if err != nil {
 		return "", err
 	}
@@ -335,5 +331,4 @@ func LastModifiedMatchingFile(filePattern string, fileContentMatch string) (file
 		}
 	}
 	return nil, nil
-
 }

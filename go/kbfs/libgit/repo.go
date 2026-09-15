@@ -17,6 +17,14 @@ import (
 	"strings"
 	"time"
 
+	billy "github.com/go-git/go-billy/v5"
+	gogit "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/cache"
+	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/go-git/go-git/v5/plumbing/storer"
+	"github.com/go-git/go-git/v5/storage"
+	"github.com/go-git/go-git/v5/storage/filesystem"
 	"github.com/keybase/client/go/kbfs/data"
 	"github.com/keybase/client/go/kbfs/idutil"
 	"github.com/keybase/client/go/kbfs/libfs"
@@ -26,13 +34,6 @@ import (
 	"github.com/keybase/client/go/logger"
 	"github.com/keybase/client/go/protocol/keybase1"
 	"github.com/pkg/errors"
-	billy "gopkg.in/src-d/go-billy.v4"
-	gogit "gopkg.in/src-d/go-git.v4"
-	"gopkg.in/src-d/go-git.v4/plumbing"
-	"gopkg.in/src-d/go-git.v4/plumbing/object"
-	"gopkg.in/src-d/go-git.v4/plumbing/storer"
-	"gopkg.in/src-d/go-git.v4/storage"
-	"gopkg.in/src-d/go-git.v4/storage/filesystem"
 )
 
 const (
@@ -76,7 +77,7 @@ type RefDataByName map[plumbing.ReferenceName]*RefData
 
 func checkValidRepoName(repoName string, config libkbfs.Config) bool {
 	return len(repoName) >= 1 &&
-		uint32(len(repoName)) <= config.MaxNameBytes() &&
+		uint32(len(repoName)) <= config.MaxNameBytes() && //nolint:gosec // G115: String lengths are non-negative and bounded by MaxNameBytes
 		(os.Getenv("KBFS_GIT_REPONAME_SKIP_CHECK") != "" ||
 			repoNameRE.MatchString(repoName))
 }
@@ -98,7 +99,8 @@ func castNoSuchNameError(err error, repoName string) error {
 // caller is responsible for syncing any data to disk, if desired.
 func CleanOldDeletedRepos(
 	ctx context.Context, config libkbfs.Config,
-	tlfHandle *tlfhandle.Handle) (err error) {
+	tlfHandle *tlfhandle.Handle,
+) (err error) {
 	fs, err := libfs.NewFS(
 		ctx, config, tlfHandle, data.MasterBranch,
 		path.Join(kbfsRepoDir, kbfsDeletedReposDir),
@@ -167,15 +169,17 @@ func CleanOldDeletedRepos(
 // limit (without returning an error).
 func CleanOldDeletedReposTimeLimited(
 	ctx context.Context, config libkbfs.Config,
-	tlfHandle *tlfhandle.Handle) error {
+	tlfHandle *tlfhandle.Handle,
+) error {
 	ctx, cancel := context.WithTimeout(ctx, cleaningTimeLimit)
 	defer cancel()
 	err := CleanOldDeletedRepos(ctx, config, tlfHandle)
-	switch errors.Cause(err) {
-	case context.DeadlineExceeded, context.Canceled:
+	switch {
+	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, context.Canceled):
 		return nil
 	default:
-		if _, ok := errors.Cause(err).(libkbfs.OfflineUnsyncedError); ok {
+		var offlineErr libkbfs.OfflineUnsyncedError
+		if errors.As(err, &offlineErr) {
 			return nil
 		}
 		return err
@@ -187,7 +191,8 @@ func CleanOldDeletedReposTimeLimited(
 func UpdateRepoMD(ctx context.Context, config libkbfs.Config,
 	tlfHandle *tlfhandle.Handle, fs billy.Filesystem,
 	pushType keybase1.GitPushType,
-	oldRepoName string, refDataByName RefDataByName) error {
+	oldRepoName string, refDataByName RefDataByName,
+) error {
 	folder := tlfHandle.ToFavorite().ToKBFolderHandle(false)
 
 	// Get the user-formatted repo name.
@@ -195,7 +200,7 @@ func UpdateRepoMD(ctx context.Context, config libkbfs.Config,
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	buf, err := io.ReadAll(f)
 	if err != nil {
 		return err
@@ -257,7 +262,8 @@ func NormalizeRepoName(repoName string) string {
 
 func takeConfigLock(
 	fs *libfs.FS, tlfHandle *tlfhandle.Handle, repoName string) (
-	closer io.Closer, err error) {
+	closer io.Closer, err error,
+) {
 	// Double-check that the namespace of the FS matches the
 	// normalized repo name, so that we're locking only the config
 	// file within the actual repo we care about.  This is appended to
@@ -285,7 +291,7 @@ func takeConfigLock(
 	}
 	defer func() {
 		if err != nil {
-			f.Close()
+			_ = f.Close()
 		}
 	}()
 
@@ -299,14 +305,15 @@ func takeConfigLock(
 
 func makeExistingRepoError(
 	ctx context.Context, config libkbfs.Config, repoFS billy.Filesystem,
-	repoName string) error {
+	repoName string,
+) error {
 	config.MakeLogger("").CDebugf(
 		ctx, "Config file for repo %s already exists", repoName)
 	f, err := repoFS.Open(kbfsConfigName)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	buf, err := io.ReadAll(f)
 	if err != nil {
 		return err
@@ -324,7 +331,8 @@ func makeExistingRepoError(
 
 func createNewRepoAndID(
 	ctx context.Context, config libkbfs.Config, tlfHandle *tlfhandle.Handle,
-	repoName string, fs *libfs.FS) (repoID ID, err error) {
+	repoName string, fs *libfs.FS,
+) (repoID ID, err error) {
 	// TODO: take a global repo lock here to make sure only one
 	// client generates the repo ID.
 	repoID, err = makeRandomID()
@@ -359,7 +367,7 @@ func createNewRepoAndID(
 	if err != nil {
 		return NullID, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	session, err := config.KBPKI().GetCurrentSession(ctx)
 	if err != nil {
@@ -390,7 +398,8 @@ func createNewRepoAndID(
 }
 
 func lookupOrCreateDir(ctx context.Context, config libkbfs.Config,
-	n libkbfs.Node, name string) (libkbfs.Node, error) {
+	n libkbfs.Node, name string,
+) (libkbfs.Node, error) {
 	newNode, _, err := config.KBFSOps().Lookup(ctx, n, n.ChildName(name))
 	switch errors.Cause(err).(type) {
 	case idutil.NoSuchNameError:
@@ -416,7 +425,8 @@ const (
 func getOrCreateRepoAndID(
 	ctx context.Context, config libkbfs.Config, tlfHandle *tlfhandle.Handle,
 	repoName string, uniqID string, op repoOpType) (
-	fs *libfs.FS, id ID, err error) {
+	fs *libfs.FS, id ID, err error,
+) {
 	if !checkValidRepoName(repoName, config) {
 		return nil, NullID,
 			errors.WithStack(libkb.InvalidRepoNameError{Name: repoName})
@@ -433,7 +443,8 @@ func getOrCreateRepoAndID(
 	// exist, give them a nice error message.
 	repoExists := false
 	defer func() {
-		_, isWriteAccessErr := errors.Cause(err).(tlfhandle.WriteAccessError)
+		var writeAccessErr tlfhandle.WriteAccessError
+		isWriteAccessErr := errors.As(err, &writeAccessErr)
 		if !repoExists && isWriteAccessErr {
 			err = libkb.RepoDoesntExistError{Name: repoName}
 		}
@@ -503,7 +514,7 @@ func getOrCreateRepoAndID(
 		fs.SetLockNamespace(repoID.Bytes())
 		return fs, repoID, nil
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	buf, err := io.ReadAll(f)
 	if err != nil {
@@ -536,7 +547,8 @@ func getOrCreateRepoAndID(
 // if desired.
 func GetOrCreateRepoAndID(
 	ctx context.Context, config libkbfs.Config, tlfHandle *tlfhandle.Handle,
-	repoName string, uniqID string) (*libfs.FS, ID, error) {
+	repoName string, uniqID string,
+) (*libfs.FS, ID, error) {
 	return getOrCreateRepoAndID(
 		ctx, config, tlfHandle, repoName, uniqID, getOrCreate)
 }
@@ -546,7 +558,8 @@ func GetOrCreateRepoAndID(
 // exists.
 func GetRepoAndID(
 	ctx context.Context, config libkbfs.Config, tlfHandle *tlfhandle.Handle,
-	repoName string, uniqID string) (*libfs.FS, ID, error) {
+	repoName string, uniqID string,
+) (*libfs.FS, ID, error) {
 	return getOrCreateRepoAndID(
 		ctx, config, tlfHandle, repoName, uniqID, getOnly)
 }
@@ -571,7 +584,8 @@ func makeUniqueID(ctx context.Context, config libkbfs.Config) (string, error) {
 // lifetime of this call.
 func CreateRepoAndID(
 	ctx context.Context, config libkbfs.Config, tlfHandle *tlfhandle.Handle,
-	repoName string) (ID, error) {
+	repoName string,
+) (ID, error) {
 	uniqID, err := makeUniqueID(ctx, config)
 	if err != nil {
 		return NullID, err
@@ -597,7 +611,8 @@ func CreateRepoAndID(
 // the `config` object to be unique during the lifetime of this call.
 func DeleteRepo(
 	ctx context.Context, config libkbfs.Config, tlfHandle *tlfhandle.Handle,
-	repoName string) error {
+	repoName string,
+) error {
 	// Create a unique ID using the verifying key and the `config`
 	// object, which should be unique to each call in practice.
 	session, err := config.KBPKI().GetCurrentSession(ctx)
@@ -644,14 +659,15 @@ func DeleteRepo(
 }
 
 func renameRepoInConfigFile(
-	ctx context.Context, repoFS billy.Filesystem, newRepoName string) error {
+	ctx context.Context, repoFS billy.Filesystem, newRepoName string,
+) error {
 	// Assume lock file is already taken for both the old repo and the
 	// new one.
-	f, err := repoFS.OpenFile(kbfsConfigName, os.O_RDWR, 0600)
+	f, err := repoFS.OpenFile(kbfsConfigName, os.O_RDWR, 0o600)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	buf, err := io.ReadAll(f)
 	if err != nil {
 		return err
@@ -686,7 +702,8 @@ func renameRepoInConfigFile(
 // journal, if desired.
 func RenameRepo(
 	ctx context.Context, config libkbfs.Config, tlfHandle *tlfhandle.Handle,
-	oldRepoName, newRepoName string) (err error) {
+	oldRepoName, newRepoName string,
+) (err error) {
 	if !checkValidRepoName(newRepoName, config) {
 		return errors.WithStack(libkb.InvalidRepoNameError{Name: newRepoName})
 	}
@@ -786,7 +803,7 @@ func RenameRepo(
 
 	// Make the new repo subdir just so we can take the lock inside
 	// the new repo.  (We'll delete the new dir before the rename.)
-	err = fs.MkdirAll(normalizedNewRepoName, 0777)
+	err = fs.MkdirAll(normalizedNewRepoName, 0o755)
 	if err != nil {
 		return err
 	}
@@ -862,7 +879,8 @@ type GCOptions struct {
 // options to see what kinds of GC are needed on the repo.
 func NeedsGC(storage storage.Storer, options GCOptions) (
 	doPackRefs bool, numLooseRefs int, doPruneLoose, doObjectRepack bool,
-	numObjectPacks int, err error) {
+	numObjectPacks int, err error,
+) {
 	numLooseRefs, err = storage.CountLooseRefs()
 	if err != nil {
 		return false, 0, false, false, 0, err
@@ -917,7 +935,8 @@ func NeedsGC(storage storage.Storer, options GCOptions) (
 
 func markSuccessfulGC(
 	ctx context.Context, config libkbfs.Config, fs billy.Filesystem) (
-	err error) {
+	err error,
+) {
 	changer, ok := fs.(billy.Change)
 	if !ok {
 		return errors.New("FS does not handle changing mtimes")
@@ -937,7 +956,8 @@ func markSuccessfulGC(
 
 func canDoGC(
 	ctx context.Context, config libkbfs.Config, fs *libfs.FS,
-	log logger.Logger) (bool, error) {
+	log logger.Logger,
+) (bool, error) {
 	log.CDebugf(ctx, "Locking for GC")
 	f, err := fs.Create(repoGCLockFileName)
 	if err != nil {
@@ -963,7 +983,8 @@ func canDoGC(
 // any of the thresholds provided in `options`.
 func GCRepo(
 	ctx context.Context, config libkbfs.Config, tlfHandle *tlfhandle.Handle,
-	repoName string, options GCOptions) (err error) {
+	repoName string, options GCOptions,
+) (err error) {
 	log := config.MakeLogger("")
 	log.CDebugf(ctx, "Checking whether GC is needed for %s/%s",
 		tlfHandle.GetCanonicalName(), repoName)
@@ -984,10 +1005,7 @@ func GCRepo(
 		}
 	}()
 
-	fsStorer, err := filesystem.NewStorage(fs)
-	if err != nil {
-		return err
-	}
+	fsStorer := filesystem.NewStorage(fs, cache.NewObjectLRUDefault())
 	var fsStorage storage.Storer = fsStorer
 
 	// Wrap it in an on-demand storer, so we don't try to read all the
@@ -1091,7 +1109,8 @@ func GCRepo(
 // LastGCTime returns the last time the repo was successfully
 // garbage-collected.
 func LastGCTime(ctx context.Context, fs billy.Filesystem) (
-	time.Time, error) {
+	time.Time, error,
+) {
 	fi, err := fs.Stat(repoGCLockFileName)
 	if os.IsNotExist(err) {
 		return time.Time{}, nil

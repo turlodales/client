@@ -4,11 +4,8 @@
 package libkb
 
 import (
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -62,6 +59,7 @@ type GenericChainLink struct {
 func (g *GenericChainLink) GetSigID() keybase1.SigID {
 	return g.unpacked.sigID
 }
+
 func (g *GenericChainLink) ToSigChainLocation() keybase1.SigChainLocation {
 	return g.ChainLink.ToSigChainLocation()
 }
@@ -70,9 +68,11 @@ func (g *GenericChainLink) ToDisplayString() string { return "unknown" }
 func (g *GenericChainLink) insertIntoTable(tab *IdentityTable) {
 	tab.insertLink(g)
 }
+
 func (g *GenericChainLink) markRevoked(r TypedChainLink) {
 	g.revoked = true
 }
+
 func (g *GenericChainLink) ToDebugString() string {
 	return fmt.Sprintf("uid=%s, seq=%d, link=%s", g.Parent().uid, g.unpacked.seqno, g.id)
 }
@@ -100,9 +100,11 @@ func (g *GenericChainLink) GetPGPFullHash() string { return "" }
 func (g *GenericChainLink) GetArmoredSig() string {
 	return g.unpacked.sig
 }
+
 func (g *GenericChainLink) GetUsername() string {
 	return g.unpacked.username
 }
+
 func (g *GenericChainLink) GetUID() keybase1.UID {
 	return g.unpacked.uid
 }
@@ -176,74 +178,6 @@ func ParseWotReact(base GenericChainLink) (ret *WotReactChainLink, err error) {
 	}, nil
 }
 
-type sigExpansion struct {
-	Key string      `json:"key"`
-	Obj interface{} `json:"obj"`
-}
-
-// ExtractExpansionObj extracts the `obj` field from a sig expansion and verifies the
-// hash of the content matches the expected id. This is reusable beyond WotVouchChainLink.
-func ExtractExpansionObj(expansionID string, expansionJSON string) (expansionObj []byte, err error) {
-	var expansions map[string]sigExpansion
-	err = json.Unmarshal([]byte(expansionJSON), &expansions)
-	if err != nil {
-		return nil, err
-	}
-	expansion, ok := expansions[expansionID]
-	if !ok {
-		return nil, fmt.Errorf("expansion %s does not exist", expansionID)
-	}
-
-	// verify the hash of the expansion object payload matches the expension id
-	objBytes, err := json.Marshal(expansion.Obj)
-	if err != nil {
-		return nil, err
-	}
-	hmacKey, err := hex.DecodeString(expansion.Key)
-	if err != nil {
-		return nil, err
-	}
-	mac := hmac.New(sha256.New, hmacKey)
-	if _, err := mac.Write(objBytes); err != nil {
-		return nil, err
-	}
-	sum := mac.Sum(nil)
-	expectedID := hex.EncodeToString(sum)
-	if expectedID != expansionID {
-		return nil, fmt.Errorf("expansion id doesn't match expected value %s != %s", expansionID, expectedID)
-	}
-	return objBytes, nil
-}
-
-func EmbedExpansionObj(statement *jsonw.Wrapper) (expansion *jsonw.Wrapper, sum []byte, err error) {
-	outer := jsonw.NewDictionary()
-	inner := jsonw.NewDictionary()
-	if err := inner.SetKey("obj", statement); err != nil {
-		return nil, nil, err
-	}
-	randKey, err := RandBytes(16)
-	if err != nil {
-		return nil, nil, err
-	}
-	hexKey := hex.EncodeToString(randKey)
-	if err := inner.SetKey("key", jsonw.NewString(hexKey)); err != nil {
-		return nil, nil, err
-	}
-	marshaled, err := statement.Marshal()
-	if err != nil {
-		return nil, nil, err
-	}
-	mac := hmac.New(sha256.New, randKey)
-	if _, err := mac.Write(marshaled); err != nil {
-		return nil, nil, err
-	}
-	sum = mac.Sum(nil)
-	if err := outer.SetKey(hex.EncodeToString(sum), inner); err != nil {
-		return nil, nil, err
-	}
-	return outer, sum, nil
-}
-
 // =========================================================================
 // Remote, Web and Social
 type RemoteProofChainLink interface {
@@ -312,6 +246,7 @@ func (w *WebProofChainLink) Type() string { return "proof" }
 func (w *WebProofChainLink) insertIntoTable(tab *IdentityTable) {
 	remoteProofInsertIntoTable(w, tab)
 }
+
 func (w *WebProofChainLink) ToDisplayString() string {
 	return w.protocol + "://" + w.hostname
 }
@@ -339,7 +274,6 @@ func (w *WebProofChainLink) ToKeyValuePair() (string, string) {
 }
 
 func (w *WebProofChainLink) ComputeTrackDiff(tl *TrackLookup) (res TrackDiff) {
-
 	find := func(list []string) bool {
 		for _, e := range list {
 			if Cicmp(e, w.hostname) {
@@ -366,6 +300,7 @@ func (s *SocialProofChainLink) Type() string     { return "proof" }
 func (s *SocialProofChainLink) insertIntoTable(tab *IdentityTable) {
 	remoteProofInsertIntoTable(s, tab)
 }
+
 func (s *SocialProofChainLink) ToDisplayString() string {
 	return s.username + "@" + s.service
 }
@@ -392,9 +327,8 @@ func (s *SocialProofChainLink) ComputeTrackDiff(tl *TrackLookup) TrackDiff {
 		return TrackDiffNew{}
 	} else if expected := list[len(list)-1]; !Cicmp(expected, v) {
 		return TrackDiffClash{observed: v, expected: expected}
-	} else {
-		return TrackDiffNone{}
 	}
+	return TrackDiffNone{}
 }
 
 func (s *SocialProofChainLink) DisplayCheck(m MetaContext, ui IdentifyUI, lcr LinkCheckResult) error {
@@ -415,8 +349,10 @@ func (s *SocialProofChainLink) GetProofType() keybase1.ProofType {
 	return RemoteServiceTypes[s.service]
 }
 
-var _ RemoteProofChainLink = (*SocialProofChainLink)(nil)
-var _ RemoteProofChainLink = (*WebProofChainLink)(nil)
+var (
+	_ RemoteProofChainLink = (*SocialProofChainLink)(nil)
+	_ RemoteProofChainLink = (*WebProofChainLink)(nil)
+)
 
 func NewWebProofChainLink(b GenericChainLink, p, h, proofText string) *WebProofChainLink {
 	return &WebProofChainLink{b, p, h, proofText}
@@ -622,7 +558,7 @@ func (l *TrackChainLink) GetTrackedKeys() ([]TrackedKey, error) {
 		if err != nil {
 			return nil, err
 		}
-		for i := 0; i < n; i++ {
+		for i := range n {
 			keyJSON := pgpKeysJSON.AtIndex(i)
 			tracked, err := trackedKeyFromJSON(keyJSON)
 			if err != nil {
@@ -675,7 +611,7 @@ func (l *TrackChainLink) ToServiceBlocks() (ret []*ServiceBlock) {
 	if err != nil {
 		return nil
 	}
-	for index := 0; index < ln; index++ {
+	for index := range ln {
 		proof := w.AtIndex(index).AtKey("remote_key_proof")
 		sb := convertTrackedProofToServiceBlock(l.G(), proof, index)
 		if sb != nil {
@@ -1015,12 +951,12 @@ type DeviceChainLink struct {
 }
 
 func ParseDeviceChainLink(b GenericChainLink) (ret *DeviceChainLink, err error) {
-	var dobj *Device
-	if dobj, err = ParseDevice(b.UnmarshalPayloadJSON().AtPath("body.device"), b.GetCTime()); err != nil {
-	} else {
-		ret = &DeviceChainLink{b, dobj}
+	dobj, err := ParseDevice(b.UnmarshalPayloadJSON().AtPath("body.device"), b.GetCTime())
+	if err != nil {
+		return nil, err
 	}
-	return
+	ret = &DeviceChainLink{b, dobj}
+	return ret, nil
 }
 
 func (s *DeviceChainLink) GetDevice() *Device { return s.device }
@@ -1043,7 +979,7 @@ type WalletStellarChainLink struct {
 
 func ParseWalletStellarChainLink(b GenericChainLink) (ret *WalletStellarChainLink, err error) {
 	ret = &WalletStellarChainLink{GenericChainLink: b}
-	mkErr := func(format string, args ...interface{}) error {
+	mkErr := func(format string, args ...any) error {
 		return ChainLinkError{fmt.Sprintf(format, args...) + fmt.Sprintf(" @%s", b.ToDebugString())}
 	}
 	bodyW := b.UnmarshalPayloadJSON()
@@ -1092,6 +1028,7 @@ func (s *WalletStellarChainLink) Type() string { return string(LinkTypeWalletSte
 func (s *WalletStellarChainLink) ToDisplayString() string {
 	return fmt.Sprintf("%v %v %v %v", s.network, s.name, s.address, s.addressKID.String())
 }
+
 func (s *WalletStellarChainLink) insertIntoTable(tab *IdentityTable) {
 	tab.insertLink(s)
 	if tab.stellar == nil || tab.stellar.GetSeqno() <= s.GetSeqno() {
@@ -1204,8 +1141,8 @@ func (c CryptocurrencyChainLink) GetAddress() string {
 }
 
 func ParseCryptocurrencyChainLink(b GenericChainLink) (
-	cl *CryptocurrencyChainLink, err error) {
-
+	cl *CryptocurrencyChainLink, err error,
+) {
 	jw := b.UnmarshalPayloadJSON().AtPath("body.cryptocurrency")
 	var styp, addr string
 	var pkhash []byte
@@ -1523,7 +1460,6 @@ func isProofTypeDefunct(g *GlobalContext, typ keybase1.ProofType) bool {
 }
 
 func (idt *IdentityTable) insertRemoteProof(link RemoteProofChainLink) {
-
 	if isProofTypeDefunct(idt.G(), link.GetProofType()) {
 		idt.G().Log.Debug("Ignoring now-defunct proof: %s", link.ToDebugString())
 		return
@@ -1553,8 +1489,7 @@ func (idt *IdentityTable) VerifySelfSig(nun NormalizedUsername, uid keybase1.UID
 
 func (idt *IdentityTable) GetTrackList() (ret []*TrackChainLink) {
 	for _, v := range idt.tracks {
-		for i := len(v) - 1; i >= 0; i-- {
-			link := v[i]
+		for _, link := range slices.Backward(v) {
 			if !link.IsRevoked() {
 				ret = append(ret, link)
 				break
@@ -1569,8 +1504,8 @@ func (idt *IdentityTable) TrackChainLinkFor(username NormalizedUsername, uid key
 	if !found {
 		return nil, nil
 	}
-	for i := len(list) - 1; i >= 0; i-- {
-		link := list[i]
+	for _, link := range slices.Backward(list) {
+
 		if link.IsRevoked() {
 			// noop; continue on!
 			continue
@@ -1589,8 +1524,7 @@ func (idt *IdentityTable) TrackChainLinkFor(username NormalizedUsername, uid key
 
 func (idt *IdentityTable) ActiveCryptocurrency(family CryptocurrencyFamily) *CryptocurrencyChainLink {
 	tab := idt.cryptocurrency
-	for i := len(tab) - 1; i >= 0; i-- {
-		link := tab[i]
+	for _, link := range slices.Backward(tab) {
 		if link.typ.ToCryptocurrencyFamily() == family {
 			if link.IsRevoked() {
 				return nil
@@ -1661,11 +1595,13 @@ const (
 	IdentifyTableModeActive  IdentifyTableMode = iota
 )
 
-func (idt *IdentityTable) Identify(m MetaContext, is IdentifyState, forceRemoteCheck bool, ui IdentifyUI, ccl CheckCompletedListener, itm IdentifyTableMode) error {
+// requestedAt is when the identify this table walk belongs to was asked for. It
+// bounds which newly cached remote proof results a forced check may reuse.
+func (idt *IdentityTable) Identify(m MetaContext, is IdentifyState, forceRemoteCheck bool, requestedAt time.Time, ui IdentifyUI, ccl CheckCompletedListener, itm IdentifyTableMode) error {
 	errs := make(chan error, len(is.res.ProofChecks))
 	for _, lcr := range is.res.ProofChecks {
 		go func(l *LinkCheckResult) {
-			errs <- idt.identifyActiveProof(m, l, is, forceRemoteCheck, ui, ccl, itm)
+			errs <- idt.identifyActiveProof(m, l, is, forceRemoteCheck, requestedAt, ui, ccl, itm)
 		}(lcr)
 	}
 
@@ -1694,8 +1630,8 @@ func (idt *IdentityTable) Identify(m MetaContext, is IdentifyState, forceRemoteC
 
 // =========================================================================
 
-func (idt *IdentityTable) identifyActiveProof(m MetaContext, lcr *LinkCheckResult, is IdentifyState, forceRemoteCheck bool, ui IdentifyUI, ccl CheckCompletedListener, itm IdentifyTableMode) error {
-	idt.proofRemoteCheck(m, is.HasPreviousTrack(), forceRemoteCheck, lcr, itm)
+func (idt *IdentityTable) identifyActiveProof(m MetaContext, lcr *LinkCheckResult, is IdentifyState, forceRemoteCheck bool, requestedAt time.Time, ui IdentifyUI, ccl CheckCompletedListener, itm IdentifyTableMode) error {
+	idt.proofRemoteCheck(m, is.HasPreviousTrack(), forceRemoteCheck, requestedAt, lcr, itm)
 	if ccl != nil {
 		ccl.CCLCheckCompleted(lcr)
 	}
@@ -1719,6 +1655,7 @@ type LinkCheckResult struct {
 	tmpTrackExpireTime   time.Time
 	position             int
 	torWarning           bool
+	proofCacheRequestKey *proofCacheRequestKey
 }
 
 func (l LinkCheckResult) GetDiff() TrackDiff        { return l.diff }
@@ -1756,16 +1693,16 @@ func (idt *IdentityTable) ComputeRemoteDiff(tracked, trackedTmp, observed keybas
 	return ret
 }
 
-func (idt *IdentityTable) proofRemoteCheck(m MetaContext, hasPreviousTrack, forceRemoteCheck bool, res *LinkCheckResult, itm IdentifyTableMode) {
+func (idt *IdentityTable) proofRemoteCheck(m MetaContext, hasPreviousTrack, forceRemoteCheck bool, requestedAt time.Time, res *LinkCheckResult, itm IdentifyTableMode) {
 	p := res.link
 
 	m.Debug("+ RemoteCheckProof %s", p.ToDebugString())
 	doCache := false
+	checkCompleted := false
 	pvlHashUsed := keybase1.MerkleStoreKitHash("")
 	sid := p.GetSigID()
 
 	defer func() {
-
 		if hasPreviousTrack {
 			observedProofState := ProofErrorToState(res.err)
 			res.remoteDiff = idt.ComputeRemoteDiff(res.trackedProofState, res.tmpTrackedProofState, observedProofState)
@@ -1779,6 +1716,11 @@ func (idt *IdentityTable) proofRemoteCheck(m MetaContext, hasPreviousTrack, forc
 		}
 
 		if doCache {
+			// Only make a result eligible for request coalescing when the check
+			// returned normally and its caller's context is still live.
+			if !checkCompleted || m.Ctx().Err() != nil {
+				res.proofCacheRequestKey = nil
+			}
 			m.Debug("| Caching results under key=%s pvlHash=%s", sid, pvlHashUsed)
 			if cacheErr := idt.G().ProofCache.Put(sid, res, pvlHashUsed); cacheErr != nil {
 				m.Warning("proof cache put error: %s", cacheErr)
@@ -1822,21 +1764,6 @@ func (idt *IdentityTable) proofRemoteCheck(m MetaContext, hasPreviousTrack, forc
 		}
 	}
 
-	if !forceRemoteCheck {
-		res.cached = m.G().ProofCache.Get(sid, pvlU.Hash)
-		m.Debug("| Proof cache lookup for %s: %+v", sid, res.cached)
-		if res.cached != nil && res.cached.Freshness() == keybase1.CheckResultFreshness_FRESH {
-			res.err = res.cached.Status
-			res.verifiedHint = res.cached.VerifiedHint
-			m.Debug("| Early exit after proofCache hit for %s", sid)
-			return
-		}
-	}
-
-	// From this point on in the function, we'll be putting our results into
-	// cache (in the defer above).
-	doCache = true
-
 	// ProofCheckerModeActive or Passive mainly decides whether we need to reach out to
 	// self-hosted services. We want to avoid so doing when the user is acting passively
 	// (such as when receiving a message).
@@ -1848,7 +1775,40 @@ func (idt *IdentityTable) proofRemoteCheck(m MetaContext, hasPreviousTrack, forc
 	if res.hint != nil {
 		hint = *res.hint
 	}
+	requestKey := proofCacheRequestKey{
+		mode:      pcm,
+		apiURL:    hint.GetAPIURL(),
+		checkText: hint.GetCheckText(),
+	}
+
+	var cached *CheckResult
+	if forceRemoteCheck {
+		cached = m.G().ProofCache.getForRequest(sid, pvlU.Hash, requestedAt, requestKey)
+		m.Debug("| Proof request cache lookup for %s: %+v", sid, cached)
+	} else {
+		cached = m.G().ProofCache.Get(sid, pvlU.Hash)
+		m.Debug("| Proof cache lookup for %s: %+v", sid, cached)
+		// Preserve the cached result for the soft-error fallback below even when
+		// it is too old for the normal early return.
+		res.cached = cached
+	}
+	if cached != nil && (forceRemoteCheck || cached.Freshness() == keybase1.CheckResultFreshness_FRESH) {
+		res.err = cached.Status
+		res.verifiedHint = cached.VerifiedHint
+		if forceRemoteCheck {
+			m.Debug("| Early exit after proofCache hit produced during this request for %s", sid)
+		} else {
+			m.Debug("| Early exit after proofCache hit for %s", sid)
+		}
+		return
+	}
+
+	// From this point on in the function, we'll be putting our results into
+	// cache (in the defer above).
+	doCache = true
+	res.proofCacheRequestKey = &requestKey
 	res.verifiedHint, res.err = pc.CheckStatus(m, hint, pcm, pvlU)
+	checkCompleted = true
 
 	// If no error than all good
 	if res.err == nil {

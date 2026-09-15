@@ -24,6 +24,7 @@ import (
 	"github.com/keybase/client/go/kbfs/tlf"
 	kbname "github.com/keybase/client/go/kbun"
 	"github.com/keybase/client/go/protocol/keybase1"
+	"github.com/stretchr/testify/require"
 )
 
 type m map[string]string
@@ -74,9 +75,9 @@ var testMetadataVers = []kbfsmd.MetadataVer{
 // runTestOverMetadataVers runs the given test function over all
 // metadata versions to test.
 func runTestOverMetadataVers(
-	t *testing.T, f func(t *testing.T, ver kbfsmd.MetadataVer)) {
+	t *testing.T, f func(t *testing.T, ver kbfsmd.MetadataVer),
+) {
 	for _, ver := range testMetadataVers {
-		ver := ver // capture range variable.
 		t.Run(ver.String(), func(t *testing.T) {
 			// Don't do t.Parallel() for now, as FUSE DSL
 			// tests might not like it.
@@ -88,9 +89,9 @@ func runTestOverMetadataVers(
 // runBenchmarkOverMetadataVers runs the given benchmark function over
 // all metadata versions to test.
 func runBenchmarkOverMetadataVers(
-	b *testing.B, f func(b *testing.B, ver kbfsmd.MetadataVer)) {
+	b *testing.B, f func(b *testing.B, ver kbfsmd.MetadataVer),
+) {
 	for _, ver := range testMetadataVers {
-		ver := ver // capture range variable.
 		b.Run(ver.String(), func(b *testing.B) {
 			f(b, ver)
 		})
@@ -98,7 +99,8 @@ func runBenchmarkOverMetadataVers(
 }
 
 func runOneTestOrBenchmark(
-	tb testing.TB, ver kbfsmd.MetadataVer, actions ...optionOp) {
+	tb testing.TB, ver kbfsmd.MetadataVer, actions ...optionOp,
+) {
 	o := &opt{
 		ver:    ver,
 		tb:     tb,
@@ -185,7 +187,8 @@ func (o *opt) runInitOnce() {
 }
 
 func (o *opt) makeStallers() (
-	stallers map[kbname.NormalizedUsername]*libkbfs.NaïveStaller) {
+	stallers map[kbname.NormalizedUsername]*libkbfs.NaïveStaller,
+) {
 	stallers = make(map[kbname.NormalizedUsername]*libkbfs.NaïveStaller)
 	for username, user := range o.users {
 		stallers[username] = o.engine.MakeNaïveStaller(user)
@@ -195,7 +198,7 @@ func (o *opt) makeStallers() (
 
 func ntimesString(n int, s string) string {
 	var bs bytes.Buffer
-	for i := 0; i < n; i++ {
+	for range n {
 		bs.WriteString(s)
 	}
 	return bs.String()
@@ -263,7 +266,8 @@ func users(ns ...username) optionOp {
 }
 
 func team(teamName kbname.NormalizedUsername, writers string,
-	readers string) optionOp {
+	readers string,
+) optionOp {
 	return func(o *opt) {
 		if o.ver < kbfsmd.SegregatedKeyBundlesVer {
 			o.tb.Skip("mdv2 doesn't support teams")
@@ -272,11 +276,11 @@ func team(teamName kbname.NormalizedUsername, writers string,
 			o.teams = make(teamMap)
 		}
 		var writerNames, readerNames []kbname.NormalizedUsername
-		for _, w := range strings.Split(writers, ",") {
+		for w := range strings.SplitSeq(writers, ",") {
 			writerNames = append(writerNames, kbname.NormalizedUsername(w))
 		}
 		if readers != "" {
-			for _, r := range strings.Split(readers, ",") {
+			for r := range strings.SplitSeq(readers, ",") {
 				readerNames = append(readerNames, kbname.NormalizedUsername(r))
 			}
 		}
@@ -294,12 +298,12 @@ func implicitTeam(writers string, readers string) optionOp {
 		}
 
 		var writerNames, readerNames []kbname.NormalizedUsername
-		for _, w := range strings.Split(writers, ",") {
+		for w := range strings.SplitSeq(writers, ",") {
 			writerNames = append(writerNames, kbname.NormalizedUsername(w))
 		}
 		isPublic := false
 		if readers != "" {
-			for _, r := range strings.Split(readers, ",") {
+			for r := range strings.SplitSeq(readers, ",") {
 				readerNames = append(readerNames, kbname.NormalizedUsername(r))
 			}
 			isPublic = len(readerNames) == 1 && readers == "public"
@@ -312,8 +316,7 @@ func implicitTeam(writers string, readers string) optionOp {
 			teamName = tlf.MakeCanonicalName(
 				writerNames, nil, readerNames, nil, nil)
 		}
-		o.implicitTeams[kbname.NormalizedUsername(teamName)] =
-			teamMembers{writerNames, readerNames}
+		o.implicitTeams[kbname.NormalizedUsername(teamName)] = teamMembers{writerNames, readerNames}
 	}
 }
 
@@ -408,8 +411,7 @@ func addNewAssertion(oldAssertion, newAssertion string) optionOp {
 
 func changeTeamName(oldName, newName string) optionOp {
 	return func(o *opt) {
-		o.teams[kbname.NormalizedUsername(newName)] =
-			o.teams[kbname.NormalizedUsername(oldName)]
+		o.teams[kbname.NormalizedUsername(newName)] = o.teams[kbname.NormalizedUsername(oldName)]
 		delete(o.teams, kbname.NormalizedUsername(oldName))
 		o.tb.Logf("changeTeamName: %q -> %q", oldName, newName)
 		for _, u := range o.users {
@@ -553,7 +555,7 @@ func (o *opt) expectSuccess(reason string, err error) {
 			// to mark the test as failed without an implicit FailNow.
 			o.tb.Errorf("Error %s: %v", reason, err)
 		} else {
-			o.tb.Fatalf("Error %s: %v", reason, err)
+			require.FailNow(o.tb, fmt.Sprintf("Error %s: %v", reason, err))
 		}
 	}
 }
@@ -683,6 +685,7 @@ func truncate(name string, size uint64) fileOp {
 func read(name string, contents string) fileOp {
 	return preadBS(name, []byte(contents), 0)
 }
+
 func preadBS(name string, contents []byte, at int64) fileOp {
 	return fileOp{func(c *ctx) error {
 		file, _, err := c.getNode(name, noCreate, resolveAllSyms)
@@ -709,6 +712,7 @@ func exists(filename string) fileOp {
 		return err
 	}, Defaults, fmt.Sprintf("exists(%s)", filename)}
 }
+
 func notExists(filename string) fileOp {
 	return fileOp{func(c *ctx) error {
 		_, _, err := c.getNode(filename, noCreate, resolveAllSyms)
@@ -1062,7 +1066,8 @@ type expectedEdit struct {
 }
 
 func checkUserEditHistoryWithSort(
-	expectedEdits []expectedEdit, doSort bool) fileOp {
+	expectedEdits []expectedEdit, doSort bool,
+) fileOp {
 	return fileOp{func(c *ctx) error {
 		history, err := c.engine.UserEditHistory(c.user)
 		if err != nil {
@@ -1251,7 +1256,8 @@ const (
 )
 
 func (c *ctx) getNode(filepath string, create createType, sym symBehavior) (
-	Node, bool, error) {
+	Node, bool, error,
+) {
 	if filepath == "" || filepath == "/" {
 		return c.rootNode, false, nil
 	}
@@ -1351,5 +1357,5 @@ func crnameEsc(path string, user username) string {
 
 type silentBenchmark struct{ *testing.B }
 
-func (silentBenchmark) Log(args ...interface{})                 {}
-func (silentBenchmark) Logf(format string, args ...interface{}) {}
+func (silentBenchmark) Log(args ...any)                 {}
+func (silentBenchmark) Logf(format string, args ...any) {}

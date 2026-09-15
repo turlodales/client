@@ -4,12 +4,12 @@
 package client
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"time"
 
 	"github.com/keybase/client/go/libkb"
-	context "golang.org/x/net/context"
 )
 
 func PrintAccountResetWarning(g *libkb.GlobalContext) {
@@ -87,7 +87,7 @@ func PrintOutOfDateWarnings(g *libkb.GlobalContext) {
 	}
 }
 
-type ClientSpecificCustomMessage struct {
+type ClientSpecificCustomMessage struct { //nolint
 	CliMessage string `json:"cli_message"`
 	// Ignore other fields.
 }

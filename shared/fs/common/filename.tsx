@@ -20,13 +20,14 @@ const splitFileNameAndExtension = (fileName: string) => {
 }
 
 const Filename = (props: Props) => {
+  const styles = useStyles()
   // also does this to subteams...
   const [fileNameWithoutExtension, fileExtension] = splitFileNameAndExtension(
     props.path ? T.FS.getPathName(props.path) : props.filename || ''
   )
   return (
     <Kb.Box2 direction="horizontal" style={props.style}>
-      <Kb.Text2
+      <Kb.Text
         className="hover-underline-child"
         type={props.type}
         style={styles.breakAll}
@@ -34,16 +35,16 @@ const Filename = (props: Props) => {
         selectable={props.selectable}
       >
         {fileNameWithoutExtension}
-      </Kb.Text2>
+      </Kb.Text>
       {fileExtension ? (
-        <Kb.Text2
+        <Kb.Text
           className="hover-underline-child"
           type={props.type}
           style={styles.noShrink}
           selectable={props.selectable}
         >
           {fileExtension}
-        </Kb.Text2>
+        </Kb.Text>
       ) : null}
     </Kb.Box2>
   )
@@ -51,7 +52,7 @@ const Filename = (props: Props) => {
 
 export default Filename
 
-const styles = Kb.Styles.styleSheetCreate(
+const useStyles = Kb.Styles.createStyleHook(
   () =>
     ({
       breakAll: Kb.Styles.platformStyles({

@@ -1,11 +1,10 @@
 import * as Styles from '@/styles'
-import * as React from 'react'
+import type * as React from 'react'
 import * as SM from '@khanacademy/simple-markdown'
+import {BareErrorBoundary} from '@/common-adapters/error-boundary'
 import Text from '@/common-adapters/text'
 import logger from '@/logger'
-import type {Props as MarkdownProps} from '.'
-import Emoji, {type Props as EmojiProps} from '../emoji'
-import {emojiIndexByName, emojiIndexByChar, emojiRegex, commonTlds} from './emoji-gen'
+import {emojiIndexByChar, emojiIndexByName, emojiRegex, emojiUnicodeRegex, commonTlds} from './emoji-gen'
 import {
   reactOutput,
   previewOutput,
@@ -15,37 +14,13 @@ import {
   serviceOnlyNoWrapOutput,
 } from './react'
 import type * as T from '@/constants/types'
-import type {StylesTextCrossPlatform, LineClampType} from '@/common-adapters/text'
-import isArray from 'lodash/isArray'
-import {ErrorBoundary} from 'react-error-boundary'
+import type {StylesTextCrossPlatform, LineClampType} from '@/common-adapters/text.shared'
 
 const SimpleMarkdown = SM.default
 
-type MarkdownComponentType =
-  | 'inline-code'
-  | 'code-block'
-  | 'link'
-  | 'text'
-  | 'bold'
-  | 'italic'
-  | 'strike'
-  | 'emoji'
-  | 'native-emoji'
-  | 'quote-block'
-
-export type MarkdownCreateComponent = (
-  type: MarkdownComponentType,
-  key: string,
-  children: Array<React.ReactNode>,
-  options: {
-    href?: string
-    convID?: string
-    bigEmoji?: boolean
-  }
-) => React.ReactNode
-
-export type MarkdownMeta = {
-  message: T.Chat.MessageText | T.Chat.MessageAttachment
+type State = SM.State & {
+  blockQuoteRecursionLevel?: number
+  isMobile?: boolean
 }
 
 export type StyleOverride = {
@@ -68,7 +43,7 @@ export type Props = {
   context?: string // metadata used for bookkeeping
   children?: string
   lineClamp?: LineClampType
-  selectable?: boolean // desktop - applies to outer container only
+  selectable?: boolean
   smallStandaloneEmoji?: boolean // don't increase font size for a standalone emoji
   paragraphTextClassName?: string
   preview?: boolean // if true render a simplified version
@@ -96,6 +71,19 @@ export type Props = {
   virtualText?: boolean // desktop only, see text.desktop
 }
 
+export type ParseMarkdownOptions = {
+  isMobile?: boolean
+  messageType?: T.Chat.MessageType
+  shouldUseMarkdownParser?: boolean
+}
+
+export type MarkdownOutputKind =
+  | 'serviceOnlyNoWrap'
+  | 'serviceOnly'
+  | 'preview'
+  | 'bigEmoji'
+  | 'default'
+
 const serviceBeginDecorationTag = /\$>kb\$/
 const serviceEndDecorationTag = /\$<kb\$/
 const serviceDecorationRegex = new RegExp(
@@ -109,19 +97,34 @@ const makeTextRegexp = () => {
   // (?= // Positive look ahead. It should have these chars ahead
   // This is kinda weird, but for the regex to terminate it should have these cases be true ahead of its termination
 
-  // [^0-9A-Za-z\s] not a character in this set. So don't terminate if there is still more normal chars to eat
-  const notNormal = /[^0-9A-Za-z\s]/
-  // [\u00c0-\uffff] OR any unicode char. If there is a weird unicode ahead, we terminate
-  const anyUnicode = /[\u00c0-\uffff]/
+  // OR a character that some other rule could start with, so that rule gets a chance at this
+  // position. Everything else -- ordinary punctuation -- stays inside the text run; stopping on all
+  // of it (the original was [^0-9A-Za-z\s\u00c0-\uffff]) emits a node, and a react element, per
+  // character of '....' or 'e.g.'. Non-latin letters are ordinary too: stopping on those meant one
+  // node per character of any japanese or cyrillic message. Emoji have their own alternative below.
+  // Keep this in sync with the rules: \ escape, ` fence/inlineCode, * strong, _ em, ~ del,
+  // : emoji, ! spoiler, $ serviceDecoration, > blockQuote/quotedFence.
+  const notNormal = /[\\`*_~:!$>]/
+  // OR there is an emoji ahead, so the emoji rule gets a chance at it.
+  // This used to be [\u00c0-\uffff], i.e. any non-latin char at all, which stopped the text run
+  // before every single character of a non-english message: one node, and one react element, per
+  // character. Matching actual emoji instead keeps a japanese or cyrillic sentence in one node.
+  const anyUnicode = emojiUnicodeRegex
   // [\w-_.]+@ // OR something that looks like it starts an email. If there is an email looking thing ahead stop here.
-  const emaily = /[\w-_.]+@/
+  // The repetitions below are bounded (a dns label is at most 63 chars): unbounded they rescan the
+  // rest of the message at every position the lazy [\s\S]+? stops at, which is quadratic.
+  const emaily = /[\w-_.]{1,64}@/
   // (\w+\.)+(${commonTlds.join('|')}) // OR there is a url with a common tld ahead. Stop if there's a common url ahead
-  const tldsPrefix = /(\w+\.)+/
-  const tldsPosfix = new RegExp(`(${commonTlds.join('|')})`)
+  // The lookbehind matters: without it the url is "ahead" from every position inside the word that
+  // starts it, so the text rule stops after a single character over and over and emits one node --
+  // and one react element -- per character. 'https://keybase.io/docs' used to parse to 17 of them.
+  // \b so a tld only counts at a word end: x.comx is not a url, x.com/y is.
+  const tldsPrefix = /(?<![0-9A-Za-z])(\w{1,63}\.)+/
+  const tldsPosfix = new RegExp(`(${commonTlds.join('|')})\\b`)
   const tlds = new RegExp([tldsPrefix.source, tldsPosfix.source].join(''))
   const newline = /\n/
-  // | \w+:\S // OR there's letters before a : so stop here.
-  const lettersColon = /\w+:\S/
+  // | \w+:\S // OR there's letters before a : so stop here. Same word-start anchor as the tlds.
+  const lettersColon = /(?<![0-9A-Za-z])\w{1,64}:\S/
   const end = /$/ //   | $ // OR we reach the end of the line
   return new RegExp(
     `${anyCharOne.source}(?=${[
@@ -138,7 +141,7 @@ const makeTextRegexp = () => {
 // Only allow a small set of characters before a url
 const textMatch = SimpleMarkdown.anyScopeRegex(makeTextRegexp())
 
-const wrapInParagraph = (parse: SM.Parser, content: string, state: SM.State): Array<SM.SingleASTNode> => {
+const wrapInParagraph = (parse: SM.Parser, content: string, state: State): Array<SM.SingleASTNode> => {
   const oldInParagraph = state['inParagraph'] as boolean
   state['inParagraph'] = true
   const ret = [{content: SimpleMarkdown.parseInline(parse, content, state), type: 'paragraph'}]
@@ -146,16 +149,31 @@ const wrapInParagraph = (parse: SM.Parser, content: string, state: SM.State): Ar
   return ret
 }
 
+const isMarkdownMobile = (state: State) => state.isMobile ?? isMobile
+
 const wordBoundaryLookBehind = /\B$/
 // Wraps the match to also check that the behind is not a text, but a boundary (like a space)
 // i.e. "foo" fails but "foo " passes.
 const wordBoundryLookBehindMatch =
-  (matchFn: SM.MatchFunction) => (source: string, state: SM.State, prevCapture: string) => {
+  (matchFn: SM.MatchFunction) => (source: string, state: State, prevCapture: string) => {
     if (wordBoundaryLookBehind.test(prevCapture)) {
       return matchFn(source, state, prevCapture)
     }
     return null
   }
+
+// A single line of a block quote, e.g. '> foo\n'
+// sticky so the scan below never has to slice the source
+const quotedLineRegex = / *>[^\n]*(?:\n|$)/y
+// Strips the quote marker (and a single following space, so code indentation survives)
+const quoteMarkerRegex = /^ *> ?/gm
+const isFullyQuoted = (block: string) =>
+  block.split('\n').every(line => line.trim() === '' || /^ *>/.test(line))
+const countFences = (line: string) => (line.match(/```/g) ?? []).length
+const emojiMatcher = SimpleMarkdown.inlineRegex(emojiRegex)
+const quotedFenceRegex = SimpleMarkdown.anyScopeRegex(
+  /^(?: *> *((?:[^\n](?!```))*)) ```\n?((?:\\[\s\S]|[^\\])+?)```\n?/
+)
 
 // Rules are defined here, the react components for these types are defined in markdown-react.js
 const rules: {[type: string]: SM.ParserRule} = {
@@ -164,26 +182,39 @@ const rules: {[type: string]: SM.ParserRule} = {
     // match: blockRegex(/^( *>[^\n]+(\n[^\n]+)*\n*)+\n{2,}/),
     // Original: A quote block only needs to start with > and everything in the same paragraph will be a quote
     // e.g. https://regex101.com/r/ZiDBsO/2
-    // ours: Everything in the quote has to be preceded by >
-    // unless it has the start of a fence
-    // e.g. https://regex101.com/r/ZiDBsO/8
-    match: (source: string, state: SM.State, prevCapture: string): SM.Capture | null => {
-      if (state['blockQuoteRecursionLevel'] > 6) {
+    // ours: Everything in the quote has to be preceded by >. Fences that open and close inside the
+    // quote are kept (the marker is stripped before the nested parse, so the fence rule sees them),
+    // but we stop before a fence that never closes inside the quote so quotedFence can handle it.
+    match: (source: string, state: State, prevCapture: string): SM.Capture | null => {
+      if ((state['blockQuoteRecursionLevel'] ?? 0) > 6) {
         return null
       }
-      const regex = /^( *>(?:[^\n](?!```))+\n?)+/
       // make sure the look behind is empty
       const emptyLookbehind = /^$|\n *$/
-
-      const match = regex.exec(source)
-      if (match && emptyLookbehind.test(prevCapture)) {
-        return match
+      if (!emptyLookbehind.test(prevCapture)) {
+        return null
       }
-      return null
+
+      let insideFence = false
+      let balancedEnd = 0
+      quotedLineRegex.lastIndex = 0
+      while (quotedLineRegex.lastIndex < source.length) {
+        const line = quotedLineRegex.exec(source)?.[0]
+        if (!line) break
+        insideFence = (countFences(line) + (insideFence ? 1 : 0)) % 2 === 1
+        if (!insideFence) {
+          balancedEnd = quotedLineRegex.lastIndex
+        }
+      }
+      if (!balancedEnd) {
+        return null
+      }
+      const matched = source.slice(0, balancedEnd)
+      return [matched]
     },
-    parse: (capture: SM.Capture, nestedParse: SM.Parser, state: SM.State) => {
-      const content = capture[0]?.replace(/^ *> */gm, '') ?? ''
-      const oldBlockQuoteRecursionLevel: number = state['blockQuoteRecursionLevel'] || 0
+    parse: (capture: SM.Capture, nestedParse: SM.Parser, state: State) => {
+      const content = capture[0]?.replace(quoteMarkerRegex, '') ?? ''
+      const oldBlockQuoteRecursionLevel = state['blockQuoteRecursionLevel'] || 0
       state['blockQuoteRecursionLevel'] = oldBlockQuoteRecursionLevel + 1
       const ret = {content: nestedParse(content, state)}
       state['blockQuoteRecursionLevel'] = oldBlockQuoteRecursionLevel
@@ -204,9 +235,23 @@ const rules: {[type: string]: SM.ParserRule} = {
     match: wordBoundryLookBehindMatch(SimpleMarkdown.inlineRegex(/^_((?:\\[\s\S]|[^\\\n])+?)_(?!_)/)),
   },
   emoji: {
-    match: SimpleMarkdown.inlineRegex(emojiRegex),
+    // emojiRegex matches the *shape* of a short name rather than an alternation of every known one,
+    // so confirm the name actually exists. A `:name::skin-tone-N:` whose combination we don't know
+    // falls back to the bare `:name:`, which is what the old alternation of literals did.
+    match: (source: string, state: State, prevCapture: string): SM.Capture | null => {
+      const capture = emojiMatcher(source, state, prevCapture)
+      const matched = capture?.[0]
+      if (!matched) {
+        return null
+      }
+      if (!matched.startsWith(':') || emojiIndexByName[matched]) {
+        return capture
+      }
+      const base = matched.slice(0, matched.indexOf(':', 1) + 1)
+      return emojiIndexByName[base] ? [base, base] : null
+    },
     order: SimpleMarkdown.defaultRules.text.order - 0.5,
-    parse: (capture: SM.Capture, _nestedParse: SM.Parser, _state: SM.State) => {
+    parse: (capture: SM.Capture, _nestedParse: SM.Parser, _state: State) => {
       // If it's a unicode emoji, let's get it's shortname
       const shortName = emojiIndexByChar[capture[0] ?? '']
       return {content: shortName || capture[0]}
@@ -222,10 +267,10 @@ const rules: {[type: string]: SM.ParserRule} = {
   // a paragraph and tries to match again. Won't fallback on itself. If it's already in a paragraph,
   // it won't match.
   fallbackParagraph: {
-    match: (source: string, state: SM.State, _prevCapture: string) =>
-      Styles.isMobile && !state['inParagraph'] ? [source] : null,
+    match: (source: string, state: State, _prevCapture: string) =>
+      isMarkdownMobile(state) && !state['inParagraph'] ? [source] : null,
     order: 10000,
-    parse: (capture: SM.Capture, nestedParse: SM.Parser, state: SM.State) =>
+    parse: (capture: SM.Capture, nestedParse: SM.Parser, state: State) =>
       wrapInParagraph(nestedParse, capture[0] ?? '', state),
   },
   fence: {
@@ -236,7 +281,7 @@ const rules: {[type: string]: SM.ParserRule} = {
     // match: SimpleMarkdown.blockRegex(/^ *(`{3,}|~{3,}) *(\S+)? *\n([\s\S]+?)\s*\1 *(?:\n *)+\n/),
     // ours: three ticks (anywhere) and remove any newlines in front and one in back
     order: 0,
-    parse: function (capture: SM.Capture, _nestedParse: SM.Parser, _state: SM.State) {
+    parse: function (capture: SM.Capture, _nestedParse: SM.Parser, _state: State) {
       return {
         content: capture[1],
         lang: undefined,
@@ -248,8 +293,36 @@ const rules: {[type: string]: SM.ParserRule} = {
     ...SimpleMarkdown.defaultRules.inlineCode,
     // original:
     // match: inlineRegex(/^(`+)\s*([\s\S]*?[^`])\s*\1(?!`)/),
-    // ours: only allow a single backtick
-    match: SimpleMarkdown.inlineRegex(/^(`)(?!`)\s*(?!`)([\s\S]*?[^`\n])\s*\1(?!`)/),
+    // ours: only allow a single backtick.
+    // This used to be a regex, but trimming the padding with \s* around a lazy [\s\S]*? content group
+    // is ambiguous and backtracked cubically: a 2k message of `<spaces>x hung the parser for seconds.
+    // The scan below is the same grammar in one linear pass.
+    match: (source: string, _state: State, _prevCapture: string): SM.Capture | null => {
+      if (!source.startsWith('`') || source[1] === '`') {
+        return null
+      }
+      for (let i = 1; i < source.length; ++i) {
+        // the closing backtick can't be part of a run of them
+        if (source[i] !== '`' || source[i + 1] === '`') {
+          continue
+        }
+        const raw = source.slice(1, i)
+        let content = raw.trim()
+        if (!content) {
+          // all padding: keep a single trailing space, but never a bare newline
+          const last = raw.slice(-1)
+          if (last !== ' ' && last !== '\t') {
+            continue
+          }
+          content = last
+        }
+        if (content.endsWith('`')) {
+          continue
+        }
+        return [source.slice(0, i + 1), '`', content]
+      }
+      return null
+    },
   },
   newline: {
     // handle newlines, keep this to handle \n w/ other matchers
@@ -265,9 +338,9 @@ const rules: {[type: string]: SM.ParserRule} = {
     // match: SimpleMarkdown.blockRegex(/^((?:[^\n]|\n(?! *\n))+)(?:\n *)+\n/),
     // ours: allow simple empty blocks, stop before a block quote or a code block (aka fence)
     match: SimpleMarkdown.blockRegex(/^((?:[^\n`]|(?:`(?!``))|\n(?!(?: *\n| *>)))+)\n?/),
-    parse: (capture: SM.Capture, nestedParse: SM.Parser, state: SM.State) => {
+    parse: (capture: SM.Capture, nestedParse: SM.Parser, state: State) => {
       // Remove a trailing newline because sometimes it sneaks in from when we add the newline to create the initial block
-      const content = Styles.isMobile ? capture[1]?.replace(/\n$/, '') ?? '' : capture[1] ?? ''
+      const content = isMarkdownMobile(state) ? (capture[1]?.replace(/\n$/, '') ?? '') : (capture[1] ?? '')
       const oldInParagraph = state['inParagraph'] as boolean
       state['inParagraph'] = true
       const ret = {content: SimpleMarkdown.parseInline(nestedParse, content, state)}
@@ -283,12 +356,20 @@ const rules: {[type: string]: SM.ParserRule} = {
     // ```
     // It's much easier and cleaner to make this a separate rule
     ...SimpleMarkdown.defaultRules.fence,
-    match: SimpleMarkdown.anyScopeRegex(/^(?: *> *((?:[^\n](?!```))*)) ```\n?((?:\\[\s\S]|[^\\])+?)```\n?/),
+    match: (source: string, state: State, prevCapture: string): SM.Capture | null => {
+      const capture = quotedFenceRegex(source, state, prevCapture)
+      // When every line of the fence body is quoted too, this is a normal block quote that happens
+      // to contain a fence. blockQuote handles that (and strips the markers), so decline here.
+      if (!capture || isFullyQuoted(capture[2] ?? '')) {
+        return null
+      }
+      return capture
+    },
     // Example: https://regex101.com/r/ZiDBsO/6
     order: SimpleMarkdown.defaultRules.blockQuote.order - 0.5,
-    parse: (capture: SM.Capture, nestedParse: SM.Parser, state: SM.State) => {
+    parse: (capture: SM.Capture, nestedParse: SM.Parser, state: State) => {
       const preContent: Array<SM.SingleASTNode> =
-        Styles.isMobile && !!capture[1]
+        isMarkdownMobile(state) && !!capture[1]
           ? wrapInParagraph(nestedParse, capture[1], state)
           : (SimpleMarkdown.parseInline(nestedParse, capture[1] ?? '', state) as Array<SM.SingleASTNode>)
       return {
@@ -298,11 +379,11 @@ const rules: {[type: string]: SM.ParserRule} = {
     },
   },
   serviceDecoration: {
-    match: (source: string, state: SM.State, prevCapture: string) => {
+    match: (source: string, state: State, prevCapture: string) => {
       return serviceDecorationMatcher(source, state, prevCapture)
     },
     order: 1,
-    parse: (capture: SM.Capture, _nestedParse: SM.Parser, _state: SM.State) => ({
+    parse: (capture: SM.Capture, _nestedParse: SM.Parser, _state: State) => ({
       content: capture[1],
       type: 'serviceDecoration',
     }),
@@ -310,7 +391,7 @@ const rules: {[type: string]: SM.ParserRule} = {
   spoiler: {
     match: SimpleMarkdown.inlineRegex(/^!>(.*?)<!/),
     order: 2,
-    parse: (capture: SM.Capture, nestedParse: SM.Parser, state: SM.State) => ({
+    parse: (capture: SM.Capture, nestedParse: SM.Parser, state: State) => ({
       content: nestedParse(capture[1] || '', state),
       raw: capture[1],
       type: 'spoiler',
@@ -329,8 +410,8 @@ const rules: {[type: string]: SM.ParserRule} = {
     // /^[\s\S]+?(?=[^0-9A-Za-z\s\u00c0-\uffff]|\n\n| {2,}\n|\w+:\S|$)/
     // ours: stop on single new lines and common tlds. We want to stop at common tlds so this regex doesn't
     // consume the common case of saying: Checkout google.com, they got all the cool gizmos.
-    match: (source: string, state: SM.State, prevCapture: string) =>
-      Styles.isMobile && !state['inParagraph'] ? null : textMatch(source, state, prevCapture),
+    match: (source: string, state: State, prevCapture: string) =>
+      isMarkdownMobile(state) && !state['inParagraph'] ? null : textMatch(source, state, prevCapture),
   },
 }
 
@@ -343,10 +424,10 @@ const noRules: {[type: string]: SM.ParserRule} = {
   // a paragraph and tries to match again. Won't fallback on itself. If it's already in a paragraph,
   // it won't match.
   fallbackParagraph: {
-    match: (source: string, state: SM.State, _prevCapture: string) =>
-      Styles.isMobile && !state['inParagraph'] ? [source] : null,
+    match: (source: string, state: State, _prevCapture: string) =>
+      isMarkdownMobile(state) && !state['inParagraph'] ? [source] : null,
     order: 10000,
-    parse: (capture: SM.Capture, nestedParse: SM.Parser, state: SM.State) =>
+    parse: (capture: SM.Capture, nestedParse: SM.Parser, state: State) =>
       wrapInParagraph(nestedParse, capture[0] ?? '', state),
   },
   paragraph: {
@@ -355,9 +436,9 @@ const noRules: {[type: string]: SM.ParserRule} = {
     // match: SimpleMarkdown.blockRegex(/^((?:[^\n]|\n(?! *\n))+)(?:\n *)+\n/),
     // ours: allow simple empty blocks, stop before a block quote or a code block (aka fence)
     match: SimpleMarkdown.blockRegex(/^((?:[^\n`]|(?:`(?!``))|\n(?!(?: *\n| *>)))+)\n?/),
-    parse: (capture: SM.Capture, nestedParse: SM.Parser, state: SM.State) => {
+    parse: (capture: SM.Capture, nestedParse: SM.Parser, state: State) => {
       // Remove a trailing newline because sometimes it sneaks in from when we add the newline to create the initial block
-      const content = (Styles.isMobile ? capture[1]?.replace(/\n$/, '') : capture[1]) ?? ''
+      const content = (isMarkdownMobile(state) ? capture[1]?.replace(/\n$/, '') : capture[1]) ?? ''
       const oldInParagraph = state['inParagraph'] as boolean
       state['inParagraph'] = true
       const ret = {content: SimpleMarkdown.parseInline(nestedParse, content, state)}
@@ -371,20 +452,20 @@ const noRules: {[type: string]: SM.ParserRule} = {
     // /^[\s\S]+?(?=[^0-9A-Za-z\s\u00c0-\uffff]|\n\n| {2,}\n|\w+:\S|$)/
     // ours: stop on single new lines and common tlds. We want to stop at common tlds so this regex doesn't
     // consume the common case of saying: Checkout google.com, they got all the cool gizmos.
-    match: (source: string, state: SM.State, _prevCapture: string) =>
-      Styles.isMobile && !state['inParagraph'] ? null : [source],
+    match: (source: string, state: State, _prevCapture: string) =>
+      isMarkdownMobile(state) && !state['inParagraph'] ? null : [source],
   },
 }
 const noMarkdownParser = SimpleMarkdown.parserFor(noRules)
 
-const isAllEmoji = (ast: Array<SM.SingleASTNode>) => {
+export const isAllEmoji = (ast: Array<SM.SingleASTNode>) => {
   let emojiLine = 0
   for (const node of ast) {
     if (node.type === 'newline') {
       continue // ignore newline
     }
     const c = node['content'] as Array<{type: string}> | string
-    if (!isArray(c) || c.some(n => n.type !== 'emoji' && n.type !== 'newline')) {
+    if (!Array.isArray(c) || c.some(n => n.type !== 'emoji' && n.type !== 'newline')) {
       return false // non-emoji, done
     }
 
@@ -400,12 +481,46 @@ const isAllEmoji = (ast: Array<SM.SingleASTNode>) => {
 const tooLong = 10000
 const fastMDReg = /[*_`@#]/
 
-const shouldUseParser = (s: string) => {
+export const shouldUseParser = (s: string) => {
   if (s.length < tooLong) return true
   return s.search(fastMDReg) !== -1
 }
 
+export const parseMarkdown = (
+  input = '',
+  options?: ParseMarkdownOptions
+): Array<SM.SingleASTNode> => {
+  const shouldUseMarkdownParser = options?.shouldUseMarkdownParser ?? shouldUseParser(input)
+  const parser = shouldUseMarkdownParser ? simpleMarkdownParser : noMarkdownParser
+  const source = shouldUseMarkdownParser ? input.trim() : input
+  return parser(source + '\n', {
+    disableAutoBlockNewlines: true,
+    inline: false,
+    isMobile: options?.isMobile ?? isMobile,
+    messageType: options?.messageType,
+  })
+}
+
+export const getMarkdownOutputKind = (
+  parseTree: Array<SM.SingleASTNode>,
+  options?: Pick<Props, 'preview' | 'serviceOnly' | 'serviceOnlyNoWrap' | 'smallStandaloneEmoji'>
+): MarkdownOutputKind => {
+  switch (true) {
+    case !!options?.serviceOnlyNoWrap:
+      return 'serviceOnlyNoWrap'
+    case !!options?.serviceOnly:
+      return 'serviceOnly'
+    case !!options?.preview:
+      return 'preview'
+    case !options?.smallStandaloneEmoji && isAllEmoji(parseTree):
+      return 'bigEmoji'
+    default:
+      return 'default'
+  }
+}
+
 const ErrorComponent = (p: {children: React.ReactNode}) => {
+  const styles = useStyles()
   const {children} = p
   return (
     <Text type="Body" style={Styles.collapseStyles([styles.rootWrapper, markdownStyles.wrapStyle] as const)}>
@@ -414,61 +529,84 @@ const ErrorComponent = (p: {children: React.ReactNode}) => {
   )
 }
 
-const SimpleMarkdownComponent = React.memo(function SimpleMarkdownComponent(p: MarkdownProps) {
-  const {allowFontScaling, styleOverride = {}, paragraphTextClassName, messageType, children} = p
-  const {serviceOnly, preview, smallStandaloneEmoji, virtualText, lineClamp, style, selectable} = p
-  const {serviceOnlyNoWrap, disallowAnimation, context} = p
-  let parseTree: Array<SM.SingleASTNode>
-  let output: React.ReactNode
+// Kept outside the component: the react compiler can't yet compile value blocks
+// inside try/catch, so an inline try/catch would bail out the whole component and
+// re-parse the markdown on every render.
+const renderMarkdown = (
+  children: string | undefined,
+  messageType: Props['messageType'],
+  state: State,
+  kindOptions: Pick<Props, 'preview' | 'serviceOnly' | 'serviceOnlyNoWrap' | 'smallStandaloneEmoji'>
+): {parseFailed: boolean; output: React.ReactNode} => {
   try {
-    const options = {
-      // This flag adds 2 new lines at the end of our input. One is necessary to parse the text as a paragraph, but the other isn't
-      // So we add our own new line
-      disableAutoBlockNewlines: true,
-      inline: false,
-      messageType,
+    const parseTree = parseMarkdown(children ?? '', {isMobile: isMobile, messageType})
+    const outputKind = getMarkdownOutputKind(parseTree, kindOptions)
+    switch (outputKind) {
+      case 'serviceOnlyNoWrap':
+        return {output: serviceOnlyNoWrapOutput(parseTree, state), parseFailed: false}
+      case 'serviceOnly':
+        return {output: serviceOnlyOutput(parseTree, state), parseFailed: false}
+      case 'preview':
+        return {output: previewOutput(parseTree, state), parseFailed: false}
+      case 'bigEmoji':
+        return {output: bigEmojiOutput(parseTree, state), parseFailed: false}
+      default:
+        return {output: reactOutput(parseTree, state), parseFailed: false}
     }
-
-    parseTree = (() => {
-      switch (true) {
-        case shouldUseParser(children ?? ''):
-          return simpleMarkdownParser((children || '').trim() + '\n', options)
-        default:
-          return noMarkdownParser(children + '\n', options)
-      }
-    })()
-
-    const state = {
-      allowFontScaling,
-      context,
-      disallowAnimation,
-      messageType,
-      paragraphTextClassName,
-      styleOverride,
-      virtualText,
-    }
-
-    output = (() => {
-      switch (true) {
-        case serviceOnlyNoWrap:
-          return serviceOnlyNoWrapOutput(parseTree, state)
-        case serviceOnly:
-          return serviceOnlyOutput(parseTree, state)
-        case preview:
-          return previewOutput(parseTree, state)
-        case !smallStandaloneEmoji && isAllEmoji(parseTree):
-          return bigEmojiOutput(parseTree, state)
-        default:
-          return reactOutput(parseTree, state)
-      }
-    })()
   } catch (e) {
     logger.error('Error parsing markdown')
     logger.debug('Error parsing markdown', e)
+    return {output: null, parseFailed: true}
+  }
+}
+
+const emptyStyleOverride: StyleOverride = {}
+
+function SimpleMarkdownComponent(p: Props) {
+  const styles = useStyles()
+  // One destructure: split across statements the compiler keeps `p` itself as a memo dependency, so
+  // every new props object re-parses the markdown even when nothing it reads actually changed.
+  const {
+    allowFontScaling,
+    styleOverride = emptyStyleOverride,
+    paragraphTextClassName,
+    messageType,
+    children,
+    serviceOnly,
+    preview,
+    smallStandaloneEmoji,
+    virtualText,
+    lineClamp,
+    style,
+    selectable,
+    serviceOnlyNoWrap,
+    disallowAnimation,
+    context,
+  } = p
+
+  const state = {
+    allowFontScaling,
+    context,
+    disallowAnimation,
+    messageType,
+    paragraphTextClassName,
+    selectable,
+    styleOverride,
+    virtualText,
+  }
+
+  const {output, parseFailed} = renderMarkdown(children, messageType, state, {
+    preview,
+    serviceOnly,
+    serviceOnlyNoWrap,
+    smallStandaloneEmoji,
+  })
+
+  if (parseFailed) {
     return <ErrorComponent>{children}</ErrorComponent>
   }
 
-  const inner = (() => {
+  const inner = ((): React.ReactNode => {
     switch (true) {
       case serviceOnlyNoWrap:
         return output
@@ -482,7 +620,7 @@ const SimpleMarkdownComponent = React.memo(function SimpleMarkdownComponent(p: M
         return (
           <Text
             className={paragraphTextClassName}
-            type={Styles.isMobile ? 'Body' : 'BodySmall'}
+            type={isMobile ? 'Body' : 'BodySmall'}
             style={Styles.collapseStyles([markdownStyles.neutralPreviewStyle, style, styleOverride.preview])}
             lineClamp={1 as const}
           >
@@ -496,8 +634,8 @@ const SimpleMarkdownComponent = React.memo(function SimpleMarkdownComponent(p: M
 
   // Mobile doesn't use a wrapper
   return (
-    <ErrorBoundary fallback={<ErrorComponent>{children}</ErrorComponent>}>
-      {Styles.isMobile ? (
+    <BareErrorBoundary fallback={<ErrorComponent>{children}</ErrorComponent>}>
+      {isMobile ? (
         inner
       ) : (
         <Text
@@ -510,39 +648,14 @@ const SimpleMarkdownComponent = React.memo(function SimpleMarkdownComponent(p: M
           {inner}
         </Text>
       )}
-    </ErrorBoundary>
+    </BareErrorBoundary>
   )
-})
+}
 
-const styles = Styles.styleSheetCreate(() => ({
+const useStyles = Styles.createStyleHook(() => ({
   rootWrapper: Styles.platformStyles({
     isElectron: {whiteSpace: 'pre'},
   }),
 }))
-
-// TODO kill this when we remove the old markdown parser. This check is done at the parsing level.
-export const EmojiIfExists = React.memo(function EmojiIfExists(
-  props: EmojiProps & {
-    paragraphTextClassName?: string
-    style?: Styles.StylesCrossPlatform
-    allowFontScaling?: boolean
-    lineClamp?: LineClampType
-  }
-) {
-  const emojiNameLower = props.emojiName.toLowerCase()
-  const exists = !!emojiIndexByName[emojiNameLower]
-  return exists ? (
-    <Emoji emojiName={emojiNameLower} size={props.size} allowFontScaling={props.allowFontScaling} />
-  ) : (
-    <SimpleMarkdownComponent
-      paragraphTextClassName={props.paragraphTextClassName}
-      style={props.style}
-      lineClamp={props.lineClamp}
-      allowFontScaling={props.allowFontScaling}
-    >
-      {props.emojiName}
-    </SimpleMarkdownComponent>
-  )
-})
 
 export default SimpleMarkdownComponent

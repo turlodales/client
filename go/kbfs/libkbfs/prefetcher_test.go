@@ -6,8 +6,10 @@ package libkbfs
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"runtime"
+	"sync"
 	"testing"
 	"time"
 
@@ -19,6 +21,7 @@ import (
 	libkeytest "github.com/keybase/client/go/kbfs/libkey/test"
 	"github.com/keybase/client/go/kbfs/tlf"
 	"github.com/keybase/client/go/protocol/keybase1"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,7 +33,8 @@ func makeRandomBlockInfo(t *testing.T) data.BlockInfo {
 }
 
 func makeRandomDirEntry(
-	t *testing.T, typ data.EntryType, size uint64, path string) data.DirEntry {
+	t *testing.T, typ data.EntryType, size uint64, path string,
+) data.DirEntry {
 	return data.DirEntry{
 		BlockInfo: makeRandomBlockInfo(t),
 		EntryInfo: data.EntryInfo{
@@ -44,8 +48,10 @@ func makeRandomDirEntry(
 		},
 	}
 }
+
 func makeFakeIndirectFilePtr(
-	t *testing.T, off data.Int64Offset) data.IndirectFilePtr {
+	t *testing.T, off data.Int64Offset,
+) data.IndirectFilePtr {
 	return data.IndirectFilePtr{
 		BlockInfo: makeRandomBlockInfo(t),
 		Off:       off,
@@ -54,7 +60,8 @@ func makeFakeIndirectFilePtr(
 }
 
 func makeFakeIndirectDirPtr(
-	t *testing.T, off data.StringOffset) data.IndirectDirPtr {
+	t *testing.T, off data.StringOffset,
+) data.IndirectDirPtr {
 	return data.IndirectDirPtr{
 		BlockInfo: makeRandomBlockInfo(t),
 		Off:       off,
@@ -86,7 +93,8 @@ func makeFakeDirBlockWithIPtrs(iptrs []data.IndirectDirPtr) *data.DirBlock {
 }
 
 func initPrefetcherTestWithDiskCache(t *testing.T, dbc DiskBlockCache) (
-	*blockRetrievalQueue, *fakeBlockGetter, *testBlockRetrievalConfig) {
+	*blockRetrievalQueue, *fakeBlockGetter, *testBlockRetrievalConfig,
+) {
 	t.Helper()
 	// We don't want the block getter to respect cancelation, because we need
 	// <-q.Prefetcher().Shutdown() to represent whether the retrieval requests
@@ -100,7 +108,8 @@ func initPrefetcherTestWithDiskCache(t *testing.T, dbc DiskBlockCache) (
 }
 
 func initPrefetcherTest(t *testing.T) (*blockRetrievalQueue,
-	*fakeBlockGetter, *testBlockRetrievalConfig) {
+	*fakeBlockGetter, *testBlockRetrievalConfig,
+) {
 	return initPrefetcherTestWithDiskCache(t, nil)
 }
 
@@ -122,7 +131,8 @@ func shutdownPrefetcherTest(t *testing.T, q *blockRetrievalQueue, syncCh chan st
 func testPrefetcherCheckGet(
 	t *testing.T, bcache data.BlockCache, ptr data.BlockPointer, expectedBlock data.Block,
 	expectedPrefetchStatus PrefetchStatus, tlfID tlf.ID,
-	dcache DiskBlockCache) {
+	dcache DiskBlockCache,
+) {
 	block, err := bcache.Get(ptr)
 	require.NoError(t, err)
 	if dcache == nil {
@@ -156,7 +166,8 @@ func getStack() string {
 }
 
 func waitForPrefetchOrBust(
-	ctx context.Context, t *testing.T, pre Prefetcher, ptr data.BlockPointer) {
+	ctx context.Context, t *testing.T, pre Prefetcher, ptr data.BlockPointer,
+) {
 	t.Helper()
 	ch, err := pre.WaitChannelForBlockPrefetch(ctx, ptr)
 	require.NoError(t, err)
@@ -164,7 +175,7 @@ func waitForPrefetchOrBust(
 	select {
 	case <-ch:
 	case <-time.After(time.Second):
-		t.Fatal("Failed to wait for prefetch. Stack:\n" + getStack())
+		require.FailNow(t, fmt.Sprint("Failed to wait for prefetch. Stack:\n"+getStack()))
 	}
 }
 
@@ -180,7 +191,7 @@ func notifySyncCh(t *testing.T, ch chan<- struct{}) {
 	case ch <- struct{}{}:
 		t.Log("Notified sync channel.")
 	case <-time.After(time.Second):
-		t.Fatal("Error notifying sync channel. Stack:\n" + getStack())
+		assert.Fail(t, fmt.Sprint("Error notifying sync channel. Stack:\n"+getStack()))
 	}
 }
 
@@ -201,10 +212,8 @@ func TestPrefetcherIndirectFileBlock(t *testing.T) {
 	indBlock2 := makeFakeFileBlock(t, true)
 
 	_, continueChRootBlock := bg.setBlockToReturn(rootPtr, rootBlock)
-	_, continueChIndBlock1 :=
-		bg.setBlockToReturn(ptrs[0].BlockPointer, indBlock1)
-	_, continueChIndBlock2 :=
-		bg.setBlockToReturn(ptrs[1].BlockPointer, indBlock2)
+	_, continueChIndBlock1 := bg.setBlockToReturn(ptrs[0].BlockPointer, indBlock1)
+	_, continueChIndBlock2 := bg.setBlockToReturn(ptrs[1].BlockPointer, indBlock2)
 
 	var block data.Block = &data.FileBlock{}
 	ctx, cancel := context.WithTimeout(
@@ -253,10 +262,8 @@ func TestPrefetcherIndirectDirBlock(t *testing.T) {
 	indBlock2 := makeFakeDirBlock(t, "b")
 
 	_, continueChRootBlock := bg.setBlockToReturn(rootPtr, rootBlock)
-	_, continueChIndBlock1 :=
-		bg.setBlockToReturn(ptrs[0].BlockPointer, indBlock1)
-	_, continueChIndBlock2 :=
-		bg.setBlockToReturn(ptrs[1].BlockPointer, indBlock2)
+	_, continueChIndBlock1 := bg.setBlockToReturn(ptrs[0].BlockPointer, indBlock1)
+	_, continueChIndBlock2 := bg.setBlockToReturn(ptrs[1].BlockPointer, indBlock2)
 
 	block := data.NewDirBlock()
 	ctx, cancel := context.WithTimeout(
@@ -291,7 +298,8 @@ func TestPrefetcherIndirectDirBlock(t *testing.T) {
 
 func testPrefetcherIndirectDirBlockTail(
 	t *testing.T, q *blockRetrievalQueue, bg *fakeBlockGetter,
-	config *testBlockRetrievalConfig, withSync bool) {
+	config *testBlockRetrievalConfig, withSync bool,
+) {
 	t.Log("Initialize an indirect dir block pointing to 2 dir data blocks.")
 	ptrs := []data.IndirectDirPtr{
 		makeFakeIndirectDirPtr(t, "a"),
@@ -304,10 +312,8 @@ func testPrefetcherIndirectDirBlockTail(
 	indBlock2 := makeFakeDirBlock(t, "b")
 
 	_, continueChRootBlock := bg.setBlockToReturn(rootPtr, rootBlock)
-	_, continueChIndBlock1 :=
-		bg.setBlockToReturn(ptrs[0].BlockPointer, indBlock1)
-	_, continueChIndBlock2 :=
-		bg.setBlockToReturn(ptrs[1].BlockPointer, indBlock2)
+	_, continueChIndBlock1 := bg.setBlockToReturn(ptrs[0].BlockPointer, indBlock1)
+	_, continueChIndBlock2 := bg.setBlockToReturn(ptrs[1].BlockPointer, indBlock2)
 
 	block := data.NewDirBlock()
 	action := BlockRequestPrefetchTail
@@ -348,7 +354,6 @@ func testPrefetcherIndirectDirBlockTail(
 	}
 	testPrefetcherCheckGet(t, config.BlockCache(), rootPtr, rootBlock,
 		rootStatus, kmd.TlfID(), config.DiskBlockCache())
-
 }
 
 func TestPrefetcherIndirectDirBlockTail(t *testing.T) {
@@ -387,12 +392,9 @@ func TestPrefetcherDirectDirBlock(t *testing.T) {
 	dirBfileD := makeFakeFileBlock(t, true)
 
 	_, continueChRootDir := bg.setBlockToReturn(rootPtr, rootDir)
-	_, continueChFileA :=
-		bg.setBlockToReturn(rootDir.Children["a"].BlockPointer, fileA)
-	_, continueChDirB :=
-		bg.setBlockToReturn(rootDir.Children["b"].BlockPointer, dirB)
-	_, continueChFileC :=
-		bg.setBlockToReturn(rootDir.Children["c"].BlockPointer, fileC)
+	_, continueChFileA := bg.setBlockToReturn(rootDir.Children["a"].BlockPointer, fileA)
+	_, continueChDirB := bg.setBlockToReturn(rootDir.Children["b"].BlockPointer, dirB)
+	_, continueChFileC := bg.setBlockToReturn(rootDir.Children["c"].BlockPointer, fileC)
 	_, _ = bg.setBlockToReturn(dirB.Children["d"].BlockPointer, dirBfileD)
 
 	var block data.Block = &data.DirBlock{}
@@ -458,10 +460,8 @@ func TestPrefetcherAlreadyCached(t *testing.T) {
 	})
 
 	_, continueChRootDir := bg.setBlockToReturn(rootPtr, rootDir)
-	_, continueChDirA :=
-		bg.setBlockToReturn(rootDir.Children["a"].BlockPointer, dirA)
-	_, continueChFileB :=
-		bg.setBlockToReturn(dirA.Children["b"].BlockPointer, fileB)
+	_, continueChDirA := bg.setBlockToReturn(rootDir.Children["a"].BlockPointer, dirA)
+	_, continueChFileB := bg.setBlockToReturn(dirA.Children["b"].BlockPointer, fileB)
 
 	t.Log("Request the root block.")
 	kmd := makeKMD()
@@ -517,7 +517,7 @@ func TestPrefetcherAlreadyCached(t *testing.T) {
 		FinishedPrefetch, kmd.TlfID(), config.DiskBlockCache())
 
 	t.Log("Remove the prefetched file block from the cache.")
-	err = cache.DeleteTransient(dirA.Children["b"].BlockPointer.ID, kmd.TlfID())
+	err = cache.DeleteTransient(dirA.Children["b"].ID, kmd.TlfID())
 	require.NoError(t, err)
 	_, err = cache.Get(dirA.Children["b"].BlockPointer)
 	require.EqualError(t, err,
@@ -642,7 +642,8 @@ func TestPrefetcherEmptyDirectDirBlock(t *testing.T) {
 func testPrefetcherForSyncedTLF(
 	t *testing.T, q *blockRetrievalQueue, bg *fakeBlockGetter,
 	config *testBlockRetrievalConfig, prefetchSyncCh chan struct{},
-	kmd libkey.KeyMetadata, explicitSync bool) {
+	kmd libkey.KeyMetadata, explicitSync bool,
+) {
 	t.Log("Initialize a direct dir block with entries pointing to 2 files " +
 		"and 1 directory. The directory has an entry pointing to another " +
 		"file, which has 2 indirect blocks.")
@@ -666,19 +667,13 @@ func testPrefetcherForSyncedTLF(
 	dirBfileDblock2 := makeFakeFileBlock(t, true)
 
 	_, continueChRootDir := bg.setBlockToReturn(rootPtr, rootDir)
-	_, continueChFileA :=
-		bg.setBlockToReturn(rootDir.Children["a"].BlockPointer, fileA)
-	_, continueChDirB :=
-		bg.setBlockToReturn(rootDir.Children["b"].BlockPointer, dirB)
-	_, continueChFileC :=
-		bg.setBlockToReturn(rootDir.Children["c"].BlockPointer, fileC)
-	_, continueChDirBfileD :=
-		bg.setBlockToReturn(dirB.Children["d"].BlockPointer, dirBfileD)
+	_, continueChFileA := bg.setBlockToReturn(rootDir.Children["a"].BlockPointer, fileA)
+	_, continueChDirB := bg.setBlockToReturn(rootDir.Children["b"].BlockPointer, dirB)
+	_, continueChFileC := bg.setBlockToReturn(rootDir.Children["c"].BlockPointer, fileC)
+	_, continueChDirBfileD := bg.setBlockToReturn(dirB.Children["d"].BlockPointer, dirBfileD)
 
-	_, continueChDirBfileDblock1 :=
-		bg.setBlockToReturn(dirBfileDptrs[0].BlockPointer, dirBfileDblock1)
-	_, continueChDirBfileDblock2 :=
-		bg.setBlockToReturn(dirBfileDptrs[1].BlockPointer, dirBfileDblock2)
+	_, continueChDirBfileDblock1 := bg.setBlockToReturn(dirBfileDptrs[0].BlockPointer, dirBfileDblock1)
+	_, continueChDirBfileDblock2 := bg.setBlockToReturn(dirBfileDptrs[1].BlockPointer, dirBfileDblock2)
 
 	var block data.Block = &data.DirBlock{}
 	action := BlockRequestWithPrefetch
@@ -730,7 +725,7 @@ func testPrefetcherForSyncedTLF(
 	case waitCh = <-waitChCh:
 		require.NotNil(t, waitCh)
 	case <-ctx.Done():
-		t.Fatal(ctx.Err())
+		require.FailNow(t, fmt.Sprint(ctx.Err()))
 	}
 	// Release after getting waitCh.
 	notifySyncCh(t, prefetchSyncCh)
@@ -742,7 +737,7 @@ func testPrefetcherForSyncedTLF(
 		require.Equal(t, uint64(0), status.SubtreeBytesFetched)
 		require.Equal(t, config.Clock().Now(), status.Start)
 	case <-ctx.Done():
-		t.Fatal(ctx.Err())
+		require.FailNow(t, fmt.Sprint(ctx.Err()))
 	}
 	select {
 	case overallStatus := <-statusCh:
@@ -754,7 +749,7 @@ func testPrefetcherForSyncedTLF(
 			t, uint64(1*testFakeBlockSize), overallStatus.SubtreeBytesFetched)
 		require.Equal(t, config.Clock().Now(), overallStatus.Start)
 	case <-ctx.Done():
-		t.Fatal(ctx.Err())
+		require.FailNow(t, fmt.Sprint(ctx.Err()))
 	}
 	// Release after prefetching fileC
 	notifySyncCh(t, prefetchSyncCh)
@@ -773,7 +768,7 @@ func testPrefetcherForSyncedTLF(
 	select {
 	case <-waitCh:
 	case <-ctx.Done():
-		t.Fatal(ctx.Err())
+		require.FailNow(t, fmt.Sprint(ctx.Err()))
 	}
 
 	t.Log("Ensure that the prefetched blocks are all in the cache.")
@@ -888,18 +883,12 @@ func TestPrefetcherMultiLevelIndirectFile(t *testing.T) {
 	indBlock22 := makeFakeFileBlock(t, true)
 
 	_, continueChRootBlock := bg.setBlockToReturn(rootPtr, rootBlock)
-	_, continueChIndBlock1 :=
-		bg.setBlockToReturn(ptrs[0].BlockPointer, indBlock1)
-	_, continueChIndBlock2 :=
-		bg.setBlockToReturn(ptrs[1].BlockPointer, indBlock2)
-	_, continueChIndBlock11 :=
-		bg.setBlockToReturn(indBlock1.IPtrs[0].BlockPointer, indBlock11)
-	_, continueChIndBlock12 :=
-		bg.setBlockToReturn(indBlock1.IPtrs[1].BlockPointer, indBlock12)
-	_, continueChIndBlock21 :=
-		bg.setBlockToReturn(indBlock2.IPtrs[0].BlockPointer, indBlock21)
-	_, continueChIndBlock22 :=
-		bg.setBlockToReturn(indBlock2.IPtrs[1].BlockPointer, indBlock22)
+	_, continueChIndBlock1 := bg.setBlockToReturn(ptrs[0].BlockPointer, indBlock1)
+	_, continueChIndBlock2 := bg.setBlockToReturn(ptrs[1].BlockPointer, indBlock2)
+	_, continueChIndBlock11 := bg.setBlockToReturn(indBlock1.IPtrs[0].BlockPointer, indBlock11)
+	_, continueChIndBlock12 := bg.setBlockToReturn(indBlock1.IPtrs[1].BlockPointer, indBlock12)
+	_, continueChIndBlock21 := bg.setBlockToReturn(indBlock2.IPtrs[0].BlockPointer, indBlock21)
+	_, continueChIndBlock22 := bg.setBlockToReturn(indBlock2.IPtrs[1].BlockPointer, indBlock22)
 
 	var block data.Block = &data.FileBlock{}
 	kmd := makeKMD()
@@ -1294,7 +1283,8 @@ func TestPrefetcherUnsyncedThenSyncedPrefetch(t *testing.T) {
 }
 
 func setLimiterLimits(
-	limiter *backpressureDiskLimiter, syncLimit, workingLimit int64) {
+	limiter *backpressureDiskLimiter, syncLimit, workingLimit int64,
+) {
 	limiter.lock.Lock()
 	defer limiter.lock.Unlock()
 	limiter.syncCacheByteTracker.limit = syncLimit
@@ -1304,9 +1294,10 @@ func setLimiterLimits(
 }
 
 func testGetDiskCacheBytes(syncCache, workingCache *DiskBlockCacheLocal) (
-	syncBytes, workingBytes int64) {
-	syncBytes = int64(syncCache.getCurrBytes())
-	workingBytes = int64(workingCache.getCurrBytes())
+	syncBytes, workingBytes int64,
+) {
+	syncBytes = int64(syncCache.getCurrBytes())       //nolint:gosec // G115: Test data
+	workingBytes = int64(workingCache.getCurrBytes()) //nolint:gosec // G115: Test data
 	return syncBytes, workingBytes
 }
 
@@ -1343,8 +1334,7 @@ func TestSyncBlockCacheWithPrefetcher(t *testing.T) {
 	bPtr := root.Children["b"].BlockPointer
 	b := makeFakeFileBlock(t, true)
 
-	encRoot, serverHalfRoot :=
-		setupRealBlockForDiskCache(t, rootPtr, root, dbcConfig)
+	encRoot, serverHalfRoot := setupRealBlockForDiskCache(t, rootPtr, root, dbcConfig)
 	encA, serverHalfA := setupRealBlockForDiskCache(t, aPtr, a, dbcConfig)
 	encB, serverHalfB := setupRealBlockForDiskCache(t, bPtr, b, dbcConfig)
 
@@ -1550,8 +1540,7 @@ func TestPrefetcherUnsyncedPrefetchEvicted(t *testing.T) {
 	aPtr := root.Children["a"].BlockPointer
 	a := makeFakeFileBlock(t, true)
 
-	encRoot, serverHalfRoot :=
-		setupRealBlockForDiskCache(t, rootPtr, root, dbcConfig)
+	encRoot, serverHalfRoot := setupRealBlockForDiskCache(t, rootPtr, root, dbcConfig)
 	encA, serverHalfA := setupRealBlockForDiskCache(t, aPtr, a, dbcConfig)
 
 	_, _ = bg.setBlockToReturn(rootPtr, root)
@@ -1648,8 +1637,7 @@ func TestPrefetcherUnsyncedPrefetchChildCanceled(t *testing.T) {
 	a := makeFakeFileBlock(t, true)
 	b := makeFakeFileBlock(t, true)
 
-	encRoot, serverHalfRoot :=
-		setupRealBlockForDiskCache(t, rootPtr, root, dbcConfig)
+	encRoot, serverHalfRoot := setupRealBlockForDiskCache(t, rootPtr, root, dbcConfig)
 	encA, serverHalfA := setupRealBlockForDiskCache(t, aPtr, a, dbcConfig)
 	encB, serverHalfB := setupRealBlockForDiskCache(t, bPtr, b, dbcConfig)
 
@@ -1766,8 +1754,7 @@ func TestPrefetcherUnsyncedPrefetchParentCanceled(t *testing.T) {
 	a := makeFakeFileBlock(t, true)
 	b := makeFakeFileBlock(t, true)
 
-	encRoot, serverHalfRoot :=
-		setupRealBlockForDiskCache(t, rootPtr, root, dbcConfig)
+	encRoot, serverHalfRoot := setupRealBlockForDiskCache(t, rootPtr, root, dbcConfig)
 	encA, serverHalfA := setupRealBlockForDiskCache(t, aPtr, a, dbcConfig)
 	encB, serverHalfB := setupRealBlockForDiskCache(t, bPtr, b, dbcConfig)
 
@@ -1860,7 +1847,7 @@ func waitDoneCh(ctx context.Context, t *testing.T, doneCh <-chan struct{}) {
 	select {
 	case <-doneCh:
 	case <-ctx.Done():
-		t.Fatal(ctx.Err())
+		require.FailNow(t, fmt.Sprint(ctx.Err()))
 	}
 }
 
@@ -1907,8 +1894,7 @@ func TestPrefetcherReschedules(t *testing.T) {
 	bPtr := root.Children["b"].BlockPointer
 	b := makeFakeFileBlock(t, true)
 
-	encRoot, serverHalfRoot :=
-		setupRealBlockForDiskCache(t, rootPtr, root, dbcConfig)
+	encRoot, serverHalfRoot := setupRealBlockForDiskCache(t, rootPtr, root, dbcConfig)
 	encA, serverHalfA := setupRealBlockForDiskCache(t, aPtr, a, dbcConfig)
 	encB, serverHalfB := setupRealBlockForDiskCache(t, bPtr, b, dbcConfig)
 	encAA, serverHalfAA := setupRealBlockForDiskCache(t, aaPtr, aa, dbcConfig)
@@ -2026,7 +2012,7 @@ func TestPrefetcherReschedules(t *testing.T) {
 	// channel when the test is over. (The defered close is at the top
 	// of this function.)
 	go func() {
-		for range prefetchDoneCh {
+		for range prefetchDoneCh { //nolint:revive // empty-block: intentionally draining channel
 		}
 	}()
 
@@ -2075,8 +2061,7 @@ func TestPrefetcherWithDedupBlocks(t *testing.T) {
 
 	aBlock := makeFakeFileBlock(t, true)
 
-	encRoot, serverHalfRoot :=
-		setupRealBlockForDiskCache(t, rootPtr, root, dbcConfig)
+	encRoot, serverHalfRoot := setupRealBlockForDiskCache(t, rootPtr, root, dbcConfig)
 	encA, serverHalfA := setupRealBlockForDiskCache(t, aPtr, aBlock, dbcConfig)
 
 	err = cache.Put(
@@ -2140,8 +2125,7 @@ func TestPrefetcherWithCanceledDedupBlocks(t *testing.T) {
 	bPtr := aBlock.Children["b"].BlockPointer
 	bBlock := makeFakeFileBlock(t, true)
 
-	encRoot, serverHalfRoot :=
-		setupRealBlockForDiskCache(t, rootPtr, root, dbcConfig)
+	encRoot, serverHalfRoot := setupRealBlockForDiskCache(t, rootPtr, root, dbcConfig)
 	encA, serverHalfA := setupRealBlockForDiskCache(t, aPtr, aBlock, dbcConfig)
 	encB, serverHalfB := setupRealBlockForDiskCache(t, bPtr, bBlock, dbcConfig)
 
@@ -2191,8 +2175,7 @@ func TestPrefetcherWithCanceledDedupBlocks(t *testing.T) {
 	_, _ = bg.setBlockToReturn(a2Ptr, a2Block)
 	_, _ = bg.setBlockToReturn(b2Ptr, bBlock)
 
-	encRoot2, serverHalfRoot2 :=
-		setupRealBlockForDiskCache(t, root2Ptr, root2, dbcConfig)
+	encRoot2, serverHalfRoot2 := setupRealBlockForDiskCache(t, root2Ptr, root2, dbcConfig)
 	encA2, serverHalfA2 := setupRealBlockForDiskCache(
 		t, a2Ptr, a2Block, dbcConfig)
 
@@ -2226,7 +2209,7 @@ func TestPrefetcherWithCanceledDedupBlocks(t *testing.T) {
 	select {
 	case <-waitCh:
 	case <-ctx.Done():
-		t.Fatal(ctx.Err())
+		require.FailNow(t, fmt.Sprint(ctx.Err()))
 	}
 
 	t.Log("Ensure that the prefetched blocks are in the cache, " +
@@ -2261,8 +2244,7 @@ func TestPrefetcherCancelTlfPrefetches(t *testing.T) {
 	root1 := makeFakeDirBlockWithChildren(map[string]data.DirEntry{
 		"a": makeRandomDirEntry(t, data.Dir, 10, "a"),
 	})
-	encRoot1, serverHalfRoot1 :=
-		setupRealBlockForDiskCache(t, rootPtr1, root1, dbcConfig)
+	encRoot1, serverHalfRoot1 := setupRealBlockForDiskCache(t, rootPtr1, root1, dbcConfig)
 	err := cache.Put(
 		ctx, kmd1.TlfID(), rootPtr1.ID, encRoot1, serverHalfRoot1,
 		DiskBlockAnyCache)
@@ -2273,8 +2255,7 @@ func TestPrefetcherCancelTlfPrefetches(t *testing.T) {
 	root2 := makeFakeDirBlockWithChildren(map[string]data.DirEntry{
 		"a": makeRandomDirEntry(t, data.Dir, 10, "a"),
 	})
-	encRoot2, serverHalfRoot2 :=
-		setupRealBlockForDiskCache(t, rootPtr2, root2, dbcConfig)
+	encRoot2, serverHalfRoot2 := setupRealBlockForDiskCache(t, rootPtr2, root2, dbcConfig)
 	err = cache.Put(
 		ctx, kmd2.TlfID(), rootPtr2.ID, encRoot2, serverHalfRoot2,
 		DiskBlockAnyCache)
@@ -2292,8 +2273,7 @@ func TestPrefetcherCancelTlfPrefetches(t *testing.T) {
 
 	aPtr2 := root2.Children["a"].BlockPointer
 	aBlock2 := makeFakeDirBlockWithChildren(map[string]data.DirEntry{})
-	encA2, serverHalfA2 :=
-		setupRealBlockForDiskCache(t, aPtr2, aBlock2, dbcConfig)
+	encA2, serverHalfA2 := setupRealBlockForDiskCache(t, aPtr2, aBlock2, dbcConfig)
 	err = cache.Put(
 		ctx, kmd2.TlfID(), aPtr2.ID, encA2, serverHalfA2,
 		DiskBlockAnyCache)
@@ -2321,7 +2301,7 @@ func TestPrefetcherCancelTlfPrefetches(t *testing.T) {
 	select {
 	case <-getA1:
 	case <-ctx.Done():
-		t.Fatal(ctx.Err())
+		require.FailNow(t, fmt.Sprint(ctx.Err()))
 	}
 
 	t.Log("Cancel the first TLF's prefetches")
@@ -2345,34 +2325,86 @@ func TestPrefetcherCancelTlfPrefetches(t *testing.T) {
 }
 
 type testAppStateUpdater struct {
-	c      <-chan keybase1.MobileNetworkState
-	calls  chan<- keybase1.MobileNetworkState
-	nCalls int
+	lock     sync.Mutex
+	netState keybase1.MobileNetworkState
+	changed  chan struct{}
+	calls    chan<- keybase1.MobileNetworkState
+	nCalls   int
+}
+
+func newTestAppStateUpdater(
+	calls chan<- keybase1.MobileNetworkState, nCalls int,
+) *testAppStateUpdater {
+	return &testAppStateUpdater{
+		netState: keybase1.MobileNetworkState_NONE,
+		changed:  make(chan struct{}),
+		calls:    calls,
+		nCalls:   nCalls,
+	}
 }
 
 func (tasu *testAppStateUpdater) NextAppStateUpdate(
-	_ *keybase1.MobileAppState) <-chan keybase1.MobileAppState {
+	_ keybase1.MobileAppState,
+) <-chan struct{} {
 	// Receiving on a nil channel blocks forever.
 	return nil
 }
 
 func (tasu *testAppStateUpdater) NextNetworkStateUpdate(
-	lastState *keybase1.MobileNetworkState) <-chan keybase1.MobileNetworkState {
-	if tasu.nCalls > 0 {
-		tasu.calls <- *lastState
+	lastState keybase1.MobileNetworkState,
+) <-chan struct{} {
+	// Snapshot state and decrement nCalls under the lock, but do the blocking
+	// send on tasu.calls outside the lock so a stalled receiver can't deadlock
+	// concurrent setNetworkState / NetworkState calls.
+	tasu.lock.Lock()
+	shouldRecord := tasu.nCalls > 0
+	if shouldRecord {
 		tasu.nCalls--
 	}
-	return tasu.c
+	stale := lastState != tasu.netState
+	ch := tasu.changed
+	tasu.lock.Unlock()
+
+	if shouldRecord {
+		tasu.calls <- lastState
+	}
+	if stale {
+		closedCh := make(chan struct{})
+		close(closedCh)
+		return closedCh
+	}
+	return ch
+}
+
+func (tasu *testAppStateUpdater) AppState() keybase1.MobileAppState {
+	return keybase1.MobileAppState_FOREGROUND
+}
+
+func (tasu *testAppStateUpdater) NetworkState() keybase1.MobileNetworkState {
+	tasu.lock.Lock()
+	defer tasu.lock.Unlock()
+	return tasu.netState
+}
+
+func (tasu *testAppStateUpdater) setNetworkState(
+	state keybase1.MobileNetworkState,
+) {
+	tasu.lock.Lock()
+	defer tasu.lock.Unlock()
+	if tasu.netState != state {
+		tasu.netState = state
+		close(tasu.changed)
+		tasu.changed = make(chan struct{})
+	}
 }
 
 func TestPrefetcherCellularPause(t *testing.T) {
 	t.Log("Test that a cell mobile network pauses prefetching.")
 	bg := newFakeBlockGetter(false)
 	config := newTestBlockRetrievalConfig(t, bg, nil)
-	stateCh := make(chan keybase1.MobileNetworkState)
 	callCh := make(chan keybase1.MobileNetworkState)
-	q := newBlockRetrievalQueue(
-		1, 1, 0, config, &testAppStateUpdater{stateCh, callCh, 4})
+	updater := newTestAppStateUpdater(callCh, 4)
+	q := newBlockRetrievalQueue(1, 1, 0, config, updater)
 	require.NotNil(t, q)
 	<-callCh // Initial prefetcher, before sync ch is set.
 
@@ -2385,7 +2417,7 @@ func TestPrefetcherCellularPause(t *testing.T) {
 	require.Equal(t, keybase1.MobileNetworkState_NONE, last)
 
 	t.Log("Switch to cell and make sure it pauses")
-	stateCh <- keybase1.MobileNetworkState_CELLULAR
+	updater.setNetworkState(keybase1.MobileNetworkState_CELLULAR)
 	// Should be called again without a call to syncCh.
 	last = <-callCh
 	require.Equal(t, keybase1.MobileNetworkState_CELLULAR, last)
@@ -2399,7 +2431,7 @@ func TestPrefetcherCellularPause(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Log("Unpause it to make it notify again")
-	stateCh <- keybase1.MobileNetworkState_NONE
+	updater.setNetworkState(keybase1.MobileNetworkState_NONE)
 	notifySyncCh(t, prefetchSyncCh)
 	last = <-callCh
 	require.Equal(t, keybase1.MobileNetworkState_NONE, last)

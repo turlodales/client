@@ -6,6 +6,7 @@ package kbfsmd
 
 import (
 	"fmt"
+	"maps"
 
 	"github.com/keybase/client/go/kbfs/kbfscrypto"
 	"github.com/keybase/client/go/protocol/keybase1"
@@ -85,12 +86,11 @@ type UserDeviceKeyServerHalves map[keybase1.UID]DeviceKeyServerHalves
 // the users in serverHalves and other, which must be disjoint. This
 // isn't a deep copy.
 func (serverHalves UserDeviceKeyServerHalves) MergeUsers(
-	other UserDeviceKeyServerHalves) (UserDeviceKeyServerHalves, error) {
+	other UserDeviceKeyServerHalves,
+) (UserDeviceKeyServerHalves, error) {
 	merged := make(UserDeviceKeyServerHalves,
 		len(serverHalves)+len(other))
-	for uid, deviceServerHalves := range serverHalves {
-		merged[uid] = deviceServerHalves
-	}
+	maps.Copy(merged, serverHalves)
 	for uid, deviceServerHalves := range other {
 		if _, ok := merged[uid]; ok {
 			return nil, fmt.Errorf(
@@ -109,7 +109,8 @@ func splitTLFCryptKey(uid keybase1.UID,
 	tlfCryptKey kbfscrypto.TLFCryptKey,
 	ePrivKey kbfscrypto.TLFEphemeralPrivateKey, ePubIndex int,
 	pubKey kbfscrypto.CryptPublicKey) (
-	TLFCryptKeyInfo, kbfscrypto.TLFCryptKeyServerHalf, error) {
+	TLFCryptKeyInfo, kbfscrypto.TLFCryptKeyServerHalf, error,
+) {
 	//    * create a new random server half
 	//    * mask it with the key to get the client half
 	//    * encrypt the client half
@@ -122,15 +123,13 @@ func splitTLFCryptKey(uid keybase1.UID,
 	clientHalf := kbfscrypto.MaskTLFCryptKey(serverHalf, tlfCryptKey)
 
 	var encryptedClientHalf kbfscrypto.EncryptedTLFCryptKeyClientHalf
-	encryptedClientHalf, err =
-		kbfscrypto.EncryptTLFCryptKeyClientHalf(ePrivKey, pubKey, clientHalf)
+	encryptedClientHalf, err = kbfscrypto.EncryptTLFCryptKeyClientHalf(ePrivKey, pubKey, clientHalf)
 	if err != nil {
 		return TLFCryptKeyInfo{}, kbfscrypto.TLFCryptKeyServerHalf{}, err
 	}
 
 	var serverHalfID kbfscrypto.TLFCryptKeyServerHalfID
-	serverHalfID, err =
-		kbfscrypto.MakeTLFCryptKeyServerHalfID(uid, pubKey, serverHalf)
+	serverHalfID, err = kbfscrypto.MakeTLFCryptKeyServerHalfID(uid, pubKey, serverHalf)
 	if err != nil {
 		return TLFCryptKeyInfo{}, kbfscrypto.TLFCryptKeyServerHalf{}, err
 	}
@@ -161,7 +160,8 @@ type UserServerHalfRemovalInfo struct {
 // device) into ri. genInfo must have the same UserRemoved value and
 // keys as ri.
 func (ri UserServerHalfRemovalInfo) addGeneration(
-	uid keybase1.UID, genInfo UserServerHalfRemovalInfo) error {
+	uid keybase1.UID, genInfo UserServerHalfRemovalInfo,
+) error {
 	if ri.UserRemoved != genInfo.UserRemoved {
 		return fmt.Errorf(
 			"UserRemoved=%t != generation UserRemoved=%t for user %s",
@@ -212,7 +212,8 @@ type ServerHalfRemovalInfo map[keybase1.UID]UserServerHalfRemovalInfo
 // AddGeneration merges the keys in genInfo (which must be one per
 // device) into info. genInfo must have the same users as info.
 func (info ServerHalfRemovalInfo) AddGeneration(
-	genInfo ServerHalfRemovalInfo) error {
+	genInfo ServerHalfRemovalInfo,
+) error {
 	if len(info) != len(genInfo) {
 		return fmt.Errorf(
 			"user count=%d != generation user count=%d",
@@ -235,11 +236,10 @@ func (info ServerHalfRemovalInfo) AddGeneration(
 // users in info and other, which must be disjoint. This isn't a deep
 // copy.
 func (info ServerHalfRemovalInfo) MergeUsers(
-	other ServerHalfRemovalInfo) (ServerHalfRemovalInfo, error) {
+	other ServerHalfRemovalInfo,
+) (ServerHalfRemovalInfo, error) {
 	merged := make(ServerHalfRemovalInfo, len(info)+len(other))
-	for uid, removalInfo := range info {
-		merged[uid] = removalInfo
-	}
+	maps.Copy(merged, info)
 	for uid, removalInfo := range other {
 		if _, ok := merged[uid]; ok {
 			return nil, fmt.Errorf(

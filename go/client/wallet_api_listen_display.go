@@ -1,11 +1,11 @@
 package client
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/protocol/stellar1"
-	"golang.org/x/net/context"
 )
 
 const (
@@ -19,9 +19,9 @@ type walletNotification struct {
 	// wallet
 	Type string `json:"type"`
 	// payment, request, etc
-	Source       string      `json:"source"`
-	Notification interface{} `json:"notification,omitempty"`
-	Error        *string     `json:"error,omitempty"`
+	Source       string  `json:"source"`
+	Notification any     `json:"notification,omitempty"`
+	Error        *string `json:"error,omitempty"`
 }
 
 func newWalletNotification(source string) *walletNotification {
@@ -55,7 +55,8 @@ func deduperKey(details stellar1.PaymentDetailsLocal) string {
 }
 
 func (d *walletNotificationDisplay) displayPaymentDetails(ctx context.Context, source string,
-	accountID stellar1.AccountID, paymentID stellar1.PaymentID) error {
+	accountID stellar1.AccountID, paymentID stellar1.PaymentID,
+) error {
 	notif := newWalletNotification(source)
 	details, err := d.cli.GetPaymentDetailsLocal(ctx, stellar1.GetPaymentDetailsLocalArg{
 		AccountID: accountID,

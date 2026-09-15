@@ -5,11 +5,10 @@
 package teams
 
 import (
+	"context"
 	"encoding/hex"
 	"errors"
 	"fmt"
-
-	"golang.org/x/net/context"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/keybase/client/go/libkb"
@@ -99,10 +98,10 @@ func NewSubteamSig(mctx libkb.MetaContext, me libkb.UserForSignatures, key libkb
 	}
 
 	teamSection := SCTeamSection{
-		ID: (SCTeamID)(parentTeam.GetID()),
+		ID: SCTeamID(parentTeam.GetID()),
 		Subteam: &SCSubteam{
-			ID:   (SCTeamID)(subteamID),
-			Name: (SCTeamName)(subteamName.String()),
+			ID:   SCTeamID(subteamID),
+			Name: SCTeamName(subteamName.String()),
 		},
 		Admin:    admin,
 		Entropy:  entropy,
@@ -243,7 +242,8 @@ func NewInviteID() SCTeamInviteID {
 }
 
 func ChangeSig(g *libkb.GlobalContext, me libkb.UserForSignatures, prev libkb.LinkID, seqno keybase1.Seqno, key libkb.GenericKey, teamSection SCTeamSection,
-	linkType libkb.LinkType, merkleRoot *libkb.MerkleRoot) (*jsonw.Wrapper, error) {
+	linkType libkb.LinkType, merkleRoot *libkb.MerkleRoot,
+) (*jsonw.Wrapper, error) {
 	if teamSection.PerTeamKey != nil {
 		if teamSection.PerTeamKey.ReverseSig != "" {
 			return nil, errors.New("ChangeMembershipSig called with PerTeamKey.ReverseSig already set")
@@ -296,14 +296,15 @@ func seqTypeForTeamPublicness(public bool) keybase1.SeqType {
 
 func precheckLinkToPost(ctx context.Context, g *libkb.GlobalContext,
 	sigMultiItem libkb.SigMultiItem, state *TeamSigChainState,
-	me keybase1.UserVersion) (err error) {
+	me keybase1.UserVersion,
+) (err error) {
 	return precheckLinksToPost(ctx, g, []libkb.SigMultiItem{sigMultiItem}, state, me)
 }
 
 func appendChainLinkSig3(ctx context.Context, g *libkb.GlobalContext,
 	sig libkb.Sig3, state *TeamSigChainState,
-	me keybase1.UserVersion) (err error) {
-
+	me keybase1.UserVersion,
+) (err error) {
 	mctx := libkb.NewMetaContext(ctx, g)
 
 	if len(sig.Outer) == 0 || len(sig.Sig) == 0 {
@@ -326,15 +327,16 @@ func appendChainLinkSig3(ctx context.Context, g *libkb.GlobalContext,
 
 func precheckLinksToPost(ctx context.Context, g *libkb.GlobalContext,
 	sigMultiItems []libkb.SigMultiItem, state *TeamSigChainState,
-	me keybase1.UserVersion) (err error) {
+	me keybase1.UserVersion,
+) (err error) {
 	_, err = precheckLinksToState(ctx, g, sigMultiItems, state, me)
 	return err
 }
 
 func precheckLinksToState(ctx context.Context, g *libkb.GlobalContext,
 	sigMultiItems []libkb.SigMultiItem, state *TeamSigChainState,
-	me keybase1.UserVersion) (newState *TeamSigChainState, err error) {
-
+	me keybase1.UserVersion,
+) (newState *TeamSigChainState, err error) {
 	defer g.CTrace(ctx, "precheckLinksToState", &err)()
 
 	isAdmin := true

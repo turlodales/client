@@ -4,6 +4,7 @@
 package libkbfs
 
 import (
+	"context"
 	"errors"
 	"sync"
 	"testing"
@@ -15,7 +16,6 @@ import (
 	"github.com/keybase/client/go/kbfs/kbfscrypto"
 	"github.com/keybase/client/go/kbfs/libkey"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/context"
 )
 
 // blockReturner contains a block value to copy into requested blocks, and a
@@ -47,7 +47,8 @@ func newFakeBlockGetter(respectCancel bool) *fakeBlockGetter {
 // BlockPointer. Returns a writeable channel that getBlock will wait on, to
 // allow synchronization of tests.
 func (bg *fakeBlockGetter) setBlockToReturn(blockPtr data.BlockPointer,
-	block data.Block) (startCh <-chan struct{}, continueCh chan<- error) {
+	block data.Block,
+) (startCh <-chan struct{}, continueCh chan<- error) {
 	bg.mtx.Lock()
 	defer bg.mtx.Unlock()
 	sCh, cCh := make(chan struct{}), make(chan error)
@@ -62,7 +63,8 @@ func (bg *fakeBlockGetter) setBlockToReturn(blockPtr data.BlockPointer,
 // getBlock implements the interface for realBlockGetter.
 func (bg *fakeBlockGetter) getBlock(
 	ctx context.Context, kmd libkey.KeyMetadata, blockPtr data.BlockPointer,
-	block data.Block, _ DiskBlockCacheType) error {
+	block data.Block, _ DiskBlockCacheType,
+) error {
 	bg.mtx.RLock()
 	defer bg.mtx.RUnlock()
 	source, ok := bg.blockMap[blockPtr]
@@ -94,7 +96,8 @@ func (bg *fakeBlockGetter) getBlock(
 
 func (bg *fakeBlockGetter) assembleBlock(ctx context.Context,
 	kmd libkey.KeyMetadata, ptr data.BlockPointer, block data.Block, buf []byte,
-	serverHalf kbfscrypto.BlockCryptKeyServerHalf) error {
+	serverHalf kbfscrypto.BlockCryptKeyServerHalf,
+) error {
 	bg.mtx.RLock()
 	defer bg.mtx.RUnlock()
 	source, ok := bg.blockMap[ptr]
@@ -107,7 +110,8 @@ func (bg *fakeBlockGetter) assembleBlock(ctx context.Context,
 
 func (bg *fakeBlockGetter) assembleBlockLocal(ctx context.Context,
 	kmd libkey.KeyMetadata, ptr data.BlockPointer, block data.Block, buf []byte,
-	serverHalf kbfscrypto.BlockCryptKeyServerHalf) error {
+	serverHalf kbfscrypto.BlockCryptKeyServerHalf,
+) error {
 	return bg.assembleBlock(ctx, kmd, ptr, block, buf, serverHalf)
 }
 
@@ -315,17 +319,15 @@ func TestBlockRetrievalWorkerShutdown(t *testing.T) {
 
 	w.Shutdown()
 	block := &data.FileBlock{}
-	ctx, cancel := context.WithCancel(context.Background())
-	// Ensure the context loop is stopped so the test doesn't leak goroutines
-	defer cancel()
+	ctx := t.Context()
 	ch := q.Request(
 		ctx, 1, makeKMD(), ptr1, block, data.NoCacheEntry, BlockRequestSolo)
 	shutdown := false
 	select {
 	case <-ch:
-		t.Fatal("Expected not to retrieve a result from the Request.")
+		require.FailNow(t, "Expected not to retrieve a result from the Request.")
 	case continueCh <- nil:
-		t.Fatal("Expected the block getter not to be receiving.")
+		require.FailNow(t, "Expected the block getter not to be receiving.")
 	default:
 		shutdown = true
 	}
@@ -340,7 +342,7 @@ func TestBlockRetrievalWorkerShutdown(t *testing.T) {
 	}()
 	select {
 	case <-timer.C:
-		t.Fatal("Expected another Shutdown not to block.")
+		require.FailNow(t, "Expected another Shutdown not to block.")
 	case <-doneCh:
 	}
 }
@@ -429,7 +431,7 @@ func TestBlockRetrievalWorkerStopIfFull(t *testing.T) {
 		BlockRequestPrefetchUntilFull)
 	select {
 	case err := <-req:
-		require.IsType(t, DiskCacheTooFullForBlockError{}, err)
+		require.ErrorAs(t, err, new(DiskCacheTooFullForBlockError))
 	case <-ctx.Done():
 		require.FailNow(t, ctx.Err().Error())
 	}

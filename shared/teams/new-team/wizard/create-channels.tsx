@@ -1,12 +1,14 @@
-import * as C from '@/constants'
-import * as React from 'react'
+import type * as React from 'react'
 import * as Kb from '@/common-adapters'
-import * as T from '@/constants/types'
-import * as Container from '@/util/container'
+import type * as T from '@/constants/types'
 import {pluralize} from '@/util/string'
-import {ModalTitle} from '@/teams/common'
+import * as C from '@/constants'
+import {type NewTeamWizard} from './state'
+import {AddRowButton, useStringList, WizardBanner, wizardInputStyle} from './common'
+import {useNavigation} from '@react-navigation/native'
 
 type Props = {
+  initialChannels?: ReadonlyArray<string>
   onSubmitChannels?: (channels: Array<string>) => void
   teamID?: T.Teams.TeamID
   waiting?: boolean
@@ -15,38 +17,27 @@ type Props = {
 
 const cleanChannelname = (name: string) => name.replace(/[^0-9a-zA-Z_-]/, '')
 
-const CreateChannel = (props: Props) => {
+export const CreateChannelsModal = (props: Props) => {
+  const styles = useStyles()
   const {onSubmitChannels, waiting} = props
-  const nav = Container.useSafeNavigation()
-  const teamID = props.teamID || T.Teams.newTeamWizardTeamID
-  const initialChannels = C.useTeamsState(s => s.newTeamWizard.channels) ?? ['hellos', 'random', '']
+  const initialChannels = props.initialChannels ?? ['hellos', 'random', '']
 
-  const [channels, setChannels] = React.useState<Array<string>>([...initialChannels])
-  const setChannel = (i: number) => (value: string) => {
-    channels[i] = value
-    setChannels([...channels])
-  }
-  const onClear = (i: number) => {
-    channels.splice(i, 1)
-    setChannels([...channels])
-  }
-  const onAdd = () => {
-    channels.push('')
-    setChannels([...channels])
-  }
+  const {
+    items: channels,
+    setItem: setChannel,
+    clearItem: onClear,
+    addItem: onAdd,
+  } = useStringList(initialChannels)
 
   const filteredChannels = channels.filter(c => c.trim())
-  const setTeamWizardChannels = C.useTeamsState(s => s.dispatch.setTeamWizardChannels)
-  const onContinue = () =>
-    onSubmitChannels ? onSubmitChannels(filteredChannels) : setTeamWizardChannels(filteredChannels)
-  const onBack = () => nav.safeNavigateUp()
+  const onContinue = () => onSubmitChannels?.(filteredChannels)
   const numChannels = filteredChannels.length
   // numChannels does not include the #general channel, so take it into account for tha label.
   const continueLabel = onSubmitChannels
     ? `Create ${numChannels + 1} ${pluralize('channel', numChannels + 1)}`
     : numChannels
-    ? `Continue with ${numChannels + 1} ${pluralize('channel', numChannels + 1)}`
-    : 'Continue without channels'
+      ? `Continue with ${numChannels + 1} ${pluralize('channel', numChannels + 1)}`
+      : 'Continue without channels'
   const submitButton = (
     <Kb.Button
       fullWidth={true}
@@ -58,32 +49,27 @@ const CreateChannel = (props: Props) => {
   )
 
   return (
-    <Kb.Modal
-      banners={props.banners}
-      backgroundStyle={styles.background}
-      header={{
-        leftButton: <Kb.Icon type="iconfont-arrow-left" onClick={onBack} />,
-        title: <ModalTitle teamID={teamID} title="Create channels" />,
-      }}
-      mode="DefaultFullHeight"
-      footer={{content: submitButton}}
-      allowOverflow={true}
-    >
-      <Kb.Box2 direction="horizontal" fullWidth={true} style={styles.banner} centerChildren={true}>
-        <Kb.Icon type="icon-illustration-teams-channels-460-96" />
-      </Kb.Box2>
+    <>
+      {props.banners}
+      <WizardBanner icon="icon-illustration-teams-channels-460-96" />
       <Kb.Box2
         direction="vertical"
         fullWidth={true}
+        flex={1}
         style={styles.body}
-        gap={Kb.Styles.isMobile ? 'xsmall' : 'tiny'}
+        gap={isMobile ? 'xsmall' : 'tiny'}
       >
         <Kb.Text type="BodySmall">Channels can be joined by anyone in the team, unlike subteams.</Kb.Text>
         <ChannelInput isGeneral={true} />
         {channels.map((value, idx) => (
-          <ChannelInput key={idx} onChange={setChannel(idx)} value={value} onClear={() => onClear(idx)} />
+          <ChannelInput
+            key={idx}
+            onChange={value => setChannel(idx, value)}
+            value={value}
+            onClear={() => onClear(idx)}
+          />
         ))}
-        <Kb.Button mode="Secondary" icon="iconfont-new" onClick={onAdd} style={styles.addButton} />
+        <AddRowButton onAdd={onAdd} />
         {numChannels === 0 && !props.onSubmitChannels && (
           <Kb.Text type="BodySmall" style={styles.noChannelsText}>
             Your team will be a simple conversation. You can always make it a big team later by adding
@@ -91,7 +77,27 @@ const CreateChannel = (props: Props) => {
           </Kb.Text>
         )}
       </Kb.Box2>
-    </Kb.Modal>
+      <Kb.ModalFooter>{submitButton}</Kb.ModalFooter>
+    </>
+  )
+}
+
+type WizardProps = {
+  wizard: NewTeamWizard
+}
+
+const WizardCreateChannels = ({wizard: initialWizard}: WizardProps) => {
+  const navigation = useNavigation('teamWizard5Channels')
+  const navigateAppend = C.Router2.navigateAppend
+  return (
+    <CreateChannelsModal
+      initialChannels={initialWizard.channels ?? ['hellos', 'random', '']}
+      onSubmitChannels={channels => {
+        const wizard = {...initialWizard, channels}
+        navigation.setParams({wizard})
+        navigateAppend({name: 'teamWizard6Subteams', params: {wizard}})
+      }}
+    />
   )
 }
 
@@ -105,14 +111,17 @@ type ChannelInputProps =
     }
 
 const ChannelInput = (props: ChannelInputProps) => {
+  const styles = useStyles()
   if (props.isGeneral) {
-    return <Kb.NewInput value="#general" disabled={true} containerStyle={styles.inputGeneral} />
+    return <Kb.Input3 textType="BodySemibold" value="#general" disabled={true} containerStyle={styles.inputGeneral} />
   }
+  const {value, onChange, onClear} = props
   return (
-    <Kb.NewInput
-      value={props.value}
-      onChangeText={text => props.onChange(cleanChannelname(text))}
-      decoration={<Kb.Icon type="iconfont-remove" onClick={props.onClear} />}
+    <Kb.Input3
+      textType="BodySemibold"
+      value={value}
+      onChangeText={(text: string) => onChange(cleanChannelname(text))}
+      decoration={<Kb.Icon type="iconfont-remove" onClick={onClear} />}
       placeholder="channel"
       prefix="#"
       containerStyle={styles.input}
@@ -121,24 +130,16 @@ const ChannelInput = (props: ChannelInputProps) => {
   )
 }
 
-const styles = Kb.Styles.styleSheetCreate(() => ({
-  addButton: Kb.Styles.platformStyles({
-    isElectron: {width: 42},
-    isMobile: {width: 47},
-    isTablet: {alignSelf: 'flex-start'},
-  }),
-  background: {backgroundColor: Kb.Styles.globalColors.blueGrey},
-  banner: Kb.Styles.platformStyles({
-    common: {backgroundColor: Kb.Styles.globalColors.blue, height: 96},
-    isElectron: {overflowX: 'hidden'},
-  }),
-  body: {
-    ...Kb.Styles.padding(Kb.Styles.globalMargins.small),
-    flex: 1,
-  },
-  input: {...Kb.Styles.padding(Kb.Styles.globalMargins.xsmall)},
-  inputGeneral: {...Kb.Styles.padding(Kb.Styles.globalMargins.xsmall), opacity: 0.4},
-  noChannelsText: {paddingTop: Kb.Styles.globalMargins.tiny, width: '100%'},
-}))
+const useStyles = Kb.Styles.createStyleHook(
+  () =>
+    ({
+      body: {
+        ...Kb.Styles.padding(Kb.Styles.globalMargins.small),
+      },
+      input: wizardInputStyle,
+      inputGeneral: {...wizardInputStyle, opacity: 0.4},
+      noChannelsText: {paddingTop: Kb.Styles.globalMargins.tiny, width: '100%'},
+    }) as const
+)
 
-export default CreateChannel
+export default WizardCreateChannels

@@ -2,9 +2,11 @@ package chat
 
 import (
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"sort"
 	"strings"
 	"sync"
@@ -32,7 +34,7 @@ type UIInboxLoader struct {
 	eg      errgroup.Group
 
 	clock                 clockwork.Clock
-	transmitCh            chan interface{}
+	transmitCh            chan any
 	layoutCh              chan chat1.InboxLayoutReselectMode
 	bigTeamUnboxCh        chan []chat1.ConversationID
 	convTransmitBatch     map[chat1.ConvIDStr]chat1.ConversationLocal
@@ -45,6 +47,10 @@ type UIInboxLoader struct {
 	// layout tracking
 	lastLayoutMu sync.Mutex
 	lastLayout   *chat1.UIInboxLayout
+
+	// share donation: skip fetch/donate when sorted convIDs unchanged
+	lastShareDonationMu   sync.Mutex
+	lastShareDonationHash uint64
 
 	// testing
 	testingLayoutForceMode bool
@@ -73,7 +79,7 @@ func (h *UIInboxLoader) Start(ctx context.Context, uid gregor1.UID) {
 	if h.started {
 		return
 	}
-	h.transmitCh = make(chan interface{}, 1000)
+	h.transmitCh = make(chan any, 1000)
 	h.layoutCh = make(chan chat1.InboxLayoutReselectMode, 1000)
 	h.bigTeamUnboxCh = make(chan []chat1.ConversationID, 1000)
 	h.stopCh = make(chan struct{})
@@ -121,7 +127,8 @@ func (h *UIInboxLoader) getChatUI(ctx context.Context) (libkb.ChatUI, error) {
 }
 
 func (h *UIInboxLoader) presentUnverifiedInbox(ctx context.Context, convs []types.RemoteConversation,
-	offline bool) (res chat1.UnverifiedInboxUIItems, err error) {
+	offline bool,
+) (res chat1.UnverifiedInboxUIItems, err error) {
 	for _, rawConv := range convs {
 		if len(rawConv.Conv.MaxMsgSummaries) == 0 {
 			h.Debug(ctx, "presentUnverifiedInbox: invalid convo, no max msg summaries, skipping: %s",
@@ -249,7 +256,7 @@ func (h *UIInboxLoader) flushFailed(r failedResponse) {
 	}
 }
 
-func (h *UIInboxLoader) transmitOnce(imsg interface{}) {
+func (h *UIInboxLoader) transmitOnce(imsg any) {
 	switch msg := imsg.(type) {
 	case unverifiedResponse:
 		_ = h.flushConvBatch()
@@ -280,7 +287,8 @@ func (h *UIInboxLoader) transmitLoop(shutdownCh chan struct{}) error {
 }
 
 func (h *UIInboxLoader) LoadNonblock(ctx context.Context, query *chat1.GetInboxLocalQuery,
-	maxUnbox *int, skipUnverified bool) (err error) {
+	maxUnbox *int, skipUnverified bool,
+) (err error) {
 	defer h.Trace(ctx, &err, "LoadNonblock")()
 	uid := h.uid
 	// Retry helpers
@@ -441,7 +449,8 @@ func (c *bigTeamCollector) finalize(ctx context.Context) (res []chat1.UIInboxBig
 }
 
 func (h *UIInboxLoader) buildLayout(ctx context.Context, inbox types.Inbox,
-	reselectMode chat1.InboxLayoutReselectMode) (res chat1.UIInboxLayout) {
+	reselectMode chat1.InboxLayoutReselectMode,
+) (res chat1.UIInboxLayout) {
 	var widgetList []chat1.UIInboxSmallTeamRow
 	var btunboxes []chat1.ConversationID
 	btcollector := newBigTeamCollector()
@@ -482,7 +491,7 @@ func (h *UIInboxLoader) buildLayout(ctx context.Context, inbox types.Inbox,
 	res.TotalSmallTeams = len(res.SmallTeams)
 	if res.TotalSmallTeams > h.smallTeamBound {
 		res.SmallTeams = res.SmallTeams[:h.smallTeamBound]
-		// clear extra snippets to keep the payload size managable
+		// clear extra snippets to keep the payload size manageable
 		for i := 50; i < len(res.SmallTeams); i++ {
 			res.SmallTeams[i].Snippet = nil
 			res.SmallTeams[i].SnippetDecoration = chat1.SnippetDecoration_NONE
@@ -498,24 +507,31 @@ func (h *UIInboxLoader) buildLayout(ctx context.Context, inbox types.Inbox,
 		h.Debug(ctx, "buildLayout: adding reselect info: %s", reselect)
 		res.ReselectInfo = &reselect
 	}
-	if !h.G().IsMobileAppType() {
-		badgeState := h.G().Badger.State()
-		sort.Slice(widgetList, func(i, j int) bool {
-			ibadged := badgeState.ConversationBadgeStr(ctx, widgetList[i].ConvID) > 0
-			jbadged := badgeState.ConversationBadgeStr(ctx, widgetList[j].ConvID) > 0
-			if ibadged && !jbadged {
-				return true
-			} else if !ibadged && jbadged {
-				return false
-			} else {
+	if len(widgetList) > 0 {
+		if !h.G().IsMobileAppType() {
+			// Sort widgetList by badge then time
+			badgeState := h.G().Badger.State()
+			sort.Slice(widgetList, func(i, j int) bool {
+				ibadged := badgeState.ConversationBadgeStr(ctx, widgetList[i].ConvID) > 0
+				jbadged := badgeState.ConversationBadgeStr(ctx, widgetList[j].ConvID) > 0
+				if ibadged && !jbadged {
+					return true
+				} else if !ibadged && jbadged {
+					return false
+				}
 				return widgetList[i].Time.After(widgetList[j].Time)
+			})
+			// only set widget entries on desktop to the top overall convs
+			if len(widgetList) > 5 {
+				widgetList = widgetList[:5]
 			}
-		})
-		// only set widget entries on desktop to the top 3 overall convs
-		if len(widgetList) > 5 {
-			res.WidgetList = widgetList[:5]
-		} else {
 			res.WidgetList = widgetList
+		} else if h.G().ShareIntentDonator != nil {
+			// Sort by LastSendTime
+			sort.Slice(widgetList, func(i, j int) bool {
+				return widgetList[i].LastSendTime.After(widgetList[j].LastSendTime)
+			})
+			go h.prepareShareConversations(ctx, widgetList)
 		}
 	}
 	if len(btunboxes) > 0 {
@@ -523,6 +539,129 @@ func (h *UIInboxLoader) buildLayout(ctx context.Context, inbox types.Inbox,
 		h.queueBigTeamUnbox(btunboxes)
 	}
 	return res
+}
+
+// hashSortedConvs returns a rolling hash of the sorted conversation IDs.
+// Used to skip avatar fetch and donation when the suggested set is unchanged.
+func hashSortedConvs(convs []types.ShareConversation) uint64 {
+	if len(convs) == 0 {
+		return 0
+	}
+	sorted := make([]types.ShareConversation, len(convs))
+	copy(sorted, convs)
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].ConvID < sorted[j].ConvID
+	})
+	h := fnv.New64a()
+	for _, conv := range sorted {
+		h.Write([]byte(conv.ConvID))
+		buf := make([]byte, 8)
+		lastSend := max(conv.LastSendTime, 0)
+		// lastSend is in [0, maxint64] here; conversion to uint64 is safe (G115)
+		binary.BigEndian.PutUint64(buf, uint64(lastSend)) //nolint:gosec // G115: clamped above
+		h.Write(buf)
+	}
+	return h.Sum64()
+}
+
+func (h *UIInboxLoader) prepareShareConversations(ctx context.Context, widgetList []chat1.UIInboxSmallTeamRow) {
+	defer h.Trace(ctx, nil, "prepareShareConversations(%d)", len(widgetList))()
+	if h.G().ShareIntentDonator == nil {
+		h.Debug(ctx, "nil ShareIntentDonator, aborting")
+		return
+	}
+
+	type teamAvatarReq struct {
+		rowIdx   int
+		teamName string
+	}
+	type userAvatarReq struct {
+		rowIdx int
+		users  []string
+	}
+	var teamReqs []teamAvatarReq
+	var userReqs []userAvatarReq
+	var allTeamNames []string
+	var allUserNames []string
+	var conversations []types.ShareConversation
+	for _, row := range widgetList {
+		// clip to 2 suggested convs
+		if len(conversations) >= 2 {
+			break
+		}
+
+		conversations = append(conversations, types.ShareConversation{ConvID: string(row.ConvID), Name: row.Name, LastSendTime: row.LastSendTime})
+		idx := len(conversations) - 1
+		if row.IsTeam {
+			teamName := utils.ParseTeamNameFromDisplayName(row.Name)
+			teamReqs = append(teamReqs, teamAvatarReq{rowIdx: idx, teamName: teamName})
+			allTeamNames = append(allTeamNames, teamName)
+		} else {
+			users := utils.ParseParticipantNamesFromDisplayName(row.Name, 2)
+			if len(users) > 0 {
+				userReqs = append(userReqs, userAvatarReq{rowIdx: idx, users: users})
+				allUserNames = append(allUserNames, users...)
+			}
+		}
+	}
+
+	hash := hashSortedConvs(conversations)
+
+	h.lastShareDonationMu.Lock()
+	lastHash := h.lastShareDonationHash
+	h.lastShareDonationMu.Unlock()
+	if hash == lastHash && lastHash != 0 {
+		h.Debug(ctx, "prepareShareConversations: same conv set (hash %x), skipping donate", hash)
+		return
+	}
+
+	// Best-effort avatar fetch; donate without avatar on failure
+	mctx := h.G().MetaContext(ctx)
+	format := keybase1.AvatarFormat("square_192")
+	formats := []keybase1.AvatarFormat{format}
+
+	if res, err := h.G().GetAvatarLoader().LoadTeams(mctx, allTeamNames, formats); err == nil && res.Picmap != nil {
+		for _, req := range teamReqs {
+			if pm := res.Picmap[req.teamName]; pm != nil && string(pm[format]) != "" {
+				conversations[req.rowIdx].AvatarURL = string(pm[format])
+			}
+		}
+	}
+
+	if res, err := h.G().GetAvatarLoader().LoadUsers(mctx, allUserNames, formats); err == nil && res.Picmap != nil {
+		for _, req := range userReqs {
+			var url1, url2 string
+			for j, u := range req.users {
+				if pm := res.Picmap[u]; pm != nil && string(pm[format]) != "" {
+					if j == 0 {
+						url1 = string(pm[format])
+					} else {
+						url2 = string(pm[format])
+					}
+				}
+			}
+			if url1 != "" {
+				conversations[req.rowIdx].AvatarURL = url1
+				if url2 != "" {
+					conversations[req.rowIdx].AvatarURL2 = url2
+				}
+			}
+		}
+	}
+
+	h.G().ShareIntentDonator.DonateShareConversations(conversations)
+
+	h.lastShareDonationMu.Lock()
+	h.lastShareDonationHash = hash
+	h.lastShareDonationMu.Unlock()
+}
+
+// OnLogout clears donated share intents on logout so the next user does not see the previous user's suggestions.
+func (h *UIInboxLoader) OnLogout(mctx libkb.MetaContext) error {
+	if h.G().ShareIntentDonator != nil {
+		h.G().ShareIntentDonator.DeleteAllDonations()
+	}
+	return nil
 }
 
 func (h *UIInboxLoader) getInboxFromQuery(ctx context.Context) (inbox types.Inbox, err error) {
@@ -654,7 +793,8 @@ func (h *UIInboxLoader) setLastLayout(l *chat1.UIInboxLayout) {
 }
 
 func (h *UIInboxLoader) UpdateLayout(ctx context.Context, reselectMode chat1.InboxLayoutReselectMode,
-	reason string) {
+	reason string,
+) {
 	defer h.Trace(ctx, nil, "UpdateLayout: %s", reason)()
 	select {
 	case h.layoutCh <- reselectMode:

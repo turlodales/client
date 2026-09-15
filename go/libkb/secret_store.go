@@ -89,8 +89,8 @@ func (s *SecretStoreImp) GetOptions(mctx MetaContext) *SecretStoreOptions {
 		return s.store.GetOptions(mctx)
 	}
 	return nil
-
 }
+
 func (s *SecretStoreImp) SetOptions(mctx MetaContext, options *SecretStoreOptions) {
 	if s.store != nil {
 		s.store.SetOptions(mctx, options)
@@ -112,26 +112,31 @@ func NewSecretStore(m MetaContext, username NormalizedUsername) SecretStore {
 	return nil
 }
 
-func GetConfiguredAccountsFromProvisionedUsernames(m MetaContext, s SecretStoreAll, currentUsername NormalizedUsername, allUsernames []NormalizedUsername) ([]keybase1.ConfiguredAccount, error) {
+func GetConfiguredAccountsFromProvisionedUsernames(m MetaContext, s SecretStoreAll, currentUsername NormalizedUsername, allUsernames []NormalizedUsername) (_ []keybase1.ConfiguredAccount, err error) {
+	defer m.Trace("GetConfiguredAccountsFromProvisionedUsernames", &err)()
 	if !currentUsername.IsNil() {
 		allUsernames = append(allUsernames, currentUsername)
 	}
 
-	accounts := make(map[NormalizedUsername]keybase1.ConfiguredAccount)
-	for _, username := range allUsernames {
-		accounts[username] = keybase1.ConfiguredAccount{
-			Username:  username.String(),
-			IsCurrent: username.Eq(currentUsername),
-		}
-	}
-
-	// Get the full names
+	// Build UIDs first so we can attach them to each account
 	uids := make([]keybase1.UID, len(allUsernames))
 	for idx, username := range allUsernames {
 		uids[idx] = GetUIDByNormalizedUsername(m.G(), username)
 	}
-	usernamePackages, err := m.G().UIDMapper.MapUIDsToUsernamePackages(m.Ctx(), m.G(),
-		uids, time.Hour*24, time.Second*10, false)
+
+	accounts := make(map[NormalizedUsername]keybase1.ConfiguredAccount)
+	for idx, username := range allUsernames {
+		accounts[username] = keybase1.ConfiguredAccount{
+			Username:  username.String(),
+			IsCurrent: username.Eq(currentUsername),
+			Uid:       uids[idx],
+		}
+	}
+
+	// Full names are cache-only so the account switcher does not wait on the
+	// network the way logged-in startup already avoids gating on this list.
+	usernamePackages, err := m.G().UIDMapper.MapUIDsToUsernamePackagesOffline(m.Ctx(), m.G(),
+		uids, time.Hour*24)
 	if err != nil {
 		if usernamePackages != nil {
 			// If data is returned, interpret the error as a warning
@@ -300,7 +305,6 @@ func (s *SecretStoreLocked) StoreSecret(m MetaContext, username NormalizedUserna
 }
 
 func (s *SecretStoreLocked) ClearSecret(m MetaContext, username NormalizedUsername) error {
-
 	if username.IsNil() {
 		m.Debug("NOOPing SecretStoreLocked#ClearSecret for empty username")
 		return nil
@@ -322,7 +326,8 @@ func (s *SecretStoreLocked) ClearSecret(m MetaContext, username NormalizedUserna
 	return s.disk.ClearSecret(m, username)
 }
 
-func (s *SecretStoreLocked) GetUsersWithStoredSecrets(m MetaContext) ([]string, error) {
+func (s *SecretStoreLocked) GetUsersWithStoredSecrets(m MetaContext) (_ []string, err error) {
+	defer m.Trace("SecretStoreLocked.GetUsersWithStoredSecrets", &err)()
 	if s == nil || s.isNil() {
 		return nil, nil
 	}
@@ -386,6 +391,7 @@ func (s *SecretStoreLocked) GetOptions(mctx MetaContext) *SecretStoreOptions {
 	}
 	return nil
 }
+
 func (s *SecretStoreLocked) SetOptions(mctx MetaContext, options *SecretStoreOptions) {
 	if s.disk != nil {
 		s.disk.SetOptions(mctx, options)

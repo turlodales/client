@@ -1,6 +1,7 @@
 package uidmap
 
 import (
+	"context"
 	"errors"
 	"reflect"
 	"testing"
@@ -11,7 +12,6 @@ import (
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 	"github.com/keybase/clockwork"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/context"
 )
 
 type timeoutAPIMock struct {
@@ -24,8 +24,10 @@ func (n *timeoutAPIMock) PostDecodeCtx(context.Context, libkb.APIArg, libkb.APIR
 	return libkb.APINetError{Err: errors.New("timeoutAPIMock")}
 }
 
-const tTracy = keybase1.UID("eb72f49f2dde6429e5d78003dae0c919")
-const tAlice = keybase1.UID("295a7eea607af32040647123732bc819")
+const (
+	tTracy = keybase1.UID("eb72f49f2dde6429e5d78003dae0c919")
+	tAlice = keybase1.UID("295a7eea607af32040647123732bc819")
+)
 
 func TestServiceMapLookupKnown(t *testing.T) {
 	tc := libkb.SetupTest(t, "TestLookup", 1)
@@ -47,7 +49,7 @@ func TestServiceMapLookupKnown(t *testing.T) {
 	require.Contains(t, pkgs, tAlice)
 	require.Contains(t, pkgs, tTracy)
 	for _, v := range pkgs {
-		require.True(t, v.CachedAt >= now)
+		require.GreaterOrEqual(t, v.CachedAt, now)
 		require.NotNil(t, v.ServiceMap)
 	}
 
@@ -81,7 +83,7 @@ func TestServiceMapLookupKnown(t *testing.T) {
 
 		pkgs2 := serviceMapper.MapUIDsToServiceSummaries(context.TODO(), tc.G, uids,
 			12*time.Hour /* freshness */, networkBudget)
-		require.Len(t, pkgs2, 0)
+		require.Empty(t, pkgs2)
 		require.Equal(t, 1, timeoutAPI.callCount)
 	}
 
@@ -89,7 +91,7 @@ func TestServiceMapLookupKnown(t *testing.T) {
 		// Similar, but with DisallowNetworkBudget which should skip request completely.
 		pkgs2 := serviceMapper.MapUIDsToServiceSummaries(context.TODO(), tc.G, uids,
 			12*time.Hour /* freshness */, DisallowNetworkBudget /* networkBudget */)
-		require.Len(t, pkgs2, 0)
+		require.Empty(t, pkgs2)
 		require.Equal(t, 1, timeoutAPI.callCount) // same count as after previous call
 	}
 }
@@ -112,7 +114,7 @@ func TestServiceMapLookupEmpty(t *testing.T) {
 	require.Len(t, pkgs, 1)
 	require.Contains(t, pkgs, tFrank)
 	require.Nil(t, pkgs[tFrank].ServiceMap)
-	require.True(t, pkgs[tFrank].CachedAt >= now)
+	require.GreaterOrEqual(t, pkgs[tFrank].CachedAt, now)
 
 	timeoutAPI := &timeoutAPIMock{}
 	tc.G.API = timeoutAPI
@@ -171,7 +173,7 @@ func TestServiceMapBecomesEmpty(t *testing.T) {
 
 	require.Len(t, pkgs, 1)
 	require.Contains(t, pkgs, tTracy)
-	require.True(t, pkgs[tTracy].CachedAt >= now)
+	require.GreaterOrEqual(t, pkgs[tTracy].CachedAt, now)
 	require.Equal(t, sumsum, pkgs[tTracy].ServiceMap)
 
 	// Now the service returns empty service map because someone has revoked
@@ -191,7 +193,7 @@ func TestServiceMapBecomesEmpty(t *testing.T) {
 
 	require.Len(t, pkgs, 1)
 	require.Contains(t, pkgs, tTracy)
-	require.True(t, pkgs[tTracy].CachedAt >= now)
+	require.GreaterOrEqual(t, pkgs[tTracy].CachedAt, now)
 	require.Equal(t, nilMap, pkgs[tTracy].ServiceMap)
 
 	fakeClock.Advance(1 * time.Hour)
@@ -202,6 +204,6 @@ func TestServiceMapBecomesEmpty(t *testing.T) {
 
 	require.Len(t, pkgs, 1)
 	require.Contains(t, pkgs, tTracy)
-	require.True(t, pkgs[tTracy].CachedAt >= now)
+	require.GreaterOrEqual(t, pkgs[tTracy].CachedAt, now)
 	require.Equal(t, nilMap, pkgs[tTracy].ServiceMap)
 }

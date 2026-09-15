@@ -4,10 +4,11 @@
 package engine
 
 import (
+	"testing"
+
 	"github.com/keybase/client/go/libkb"
 	keybase1 "github.com/keybase/client/go/protocol/keybase1"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestScanKeys(t *testing.T) {
@@ -18,13 +19,9 @@ func TestScanKeys(t *testing.T) {
 	m := NewMetaContextForTest(tc).WithSecretUI(fu.NewSecretUI())
 
 	sk, err := NewScanKeys(m)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
-	if sk.Count() != 0 {
-		t.Errorf("scankey count: %d, expected 0", sk.Count())
-	}
+	require.Equal(t, 0, sk.Count(), "scankey count: %d, expected 0", sk.Count())
 }
 
 // TestScanKeysSync checks a user with a synced PGP key
@@ -53,7 +50,5 @@ func TestScanKeysSync(t *testing.T) {
 	sk, err := NewScanKeys(m)
 	require.NoError(t, err, "scanning keys worked")
 
-	if sk.Count() != 1 {
-		t.Errorf("scankey count: %d, expected 1", sk.Count())
-	}
+	require.Equal(t, 1, sk.Count(), "scankey count: %d, expected 1", sk.Count())
 }

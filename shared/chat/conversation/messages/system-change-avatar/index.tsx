@@ -1,24 +1,25 @@
-import * as C from '@/constants'
 import * as Kb from '@/common-adapters'
 import type * as T from '@/constants/types'
 import UserNotice from '../user-notice'
+import {useCurrentUserState} from '@/stores/current-user'
 
 type Props = {
   message: T.Chat.MessageSystemChangeAvatar
 }
 const SystemChangeAvatar = (props: Props) => {
-  const you = C.useCurrentUserState(s => s.username)
+  const styles = useStyles()
+  const you = useCurrentUserState(s => s.username)
   return (
     <UserNotice>
       <Kb.Text type="BodySmall" style={styles.text}>
-        {props.message.user === you ? 'You ' : ''}changed the team's avatar.
+        {props.message.user === you ? "You changed the team's avatar." : "The team's avatar was changed."}
       </Kb.Text>
       <Kb.Avatar teamname={props.message.team} size={128} />
     </UserNotice>
   )
 }
 
-const styles = Kb.Styles.styleSheetCreate(() => ({
+const useStyles = Kb.Styles.createStyleHook(() => ({
   text: {
     marginBottom: Kb.Styles.globalMargins.tiny,
   },

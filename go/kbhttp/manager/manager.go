@@ -1,7 +1,9 @@
 package manager
 
 import (
+	"context"
 	"crypto/hmac"
+	"errors"
 	"fmt"
 	"net/http"
 	"runtime"
@@ -10,7 +12,6 @@ import (
 	"github.com/keybase/client/go/kbhttp"
 	"github.com/keybase/client/go/libkb"
 	"github.com/keybase/client/go/protocol/keybase1"
-	context "golang.org/x/net/context"
 )
 
 type SrvTokenMode int
@@ -49,7 +50,7 @@ func NewSrv(g *libkb.GlobalContext) *Srv {
 	return h
 }
 
-func (r *Srv) debug(ctx context.Context, msg string, args ...interface{}) {
+func (r *Srv) debug(ctx context.Context, msg string, args ...any) {
 	r.G().Log.CDebugf(ctx, "Srv: %s", fmt.Sprintf(msg, args...))
 }
 
@@ -65,9 +66,9 @@ func (r *Srv) startHTTPSrv() {
 	token, _ := libkb.RandHexString("", 32)
 	maxTries := 2
 	success := false
-	for i := 0; i < maxTries; i++ {
+	for range maxTries {
 		if err := r.httpSrv.Start(); err != nil {
-			if err == kbhttp.ErrPinnedPortInUse {
+			if errors.Is(err, kbhttp.ErrPinnedPortInUse) {
 				// If we hit this, just try again and get a different port.
 				// The advantage is that backing in and out of the thread will restore attachments,
 				// whereas if we do nothing you need to bkg/foreground.
@@ -95,7 +96,11 @@ func (r *Srv) startHTTPSrv() {
 		r.debug(ctx, "startHTTPSrv: start success: addr: %s", addr)
 	}
 	r.token = token
-	r.debug(ctx, "startHTTPSrv: addr: %s token: %s", addr, r.token)
+	tokenPrefix := r.token
+	if len(tokenPrefix) > 8 {
+		tokenPrefix = tokenPrefix[:8] + "..."
+	}
+	r.debug(ctx, "startHTTPSrv: addr: %s token: %s", addr, tokenPrefix)
 	r.G().NotifyRouter.HandleHTTPSrvInfoUpdate(ctx, keybase1.HttpSrvInfo{
 		Address: addr,
 		Token:   r.token,
@@ -111,7 +116,8 @@ func (r *Srv) monitorAppState() {
 		return
 	}
 	for {
-		state = <-r.G().MobileAppState.NextUpdate(&state)
+		<-r.G().MobileAppState.NextUpdate(state)
+		state = r.G().MobileAppState.State()
 		switch state {
 		case keybase1.MobileAppState_FOREGROUND, keybase1.MobileAppState_BACKGROUNDACTIVE:
 			r.startHTTPSrv()
@@ -122,7 +128,8 @@ func (r *Srv) monitorAppState() {
 }
 
 func (r *Srv) HandleFunc(endpoint string, tokenMode SrvTokenMode,
-	serve func(w http.ResponseWriter, req *http.Request)) {
+	serve func(w http.ResponseWriter, req *http.Request),
+) {
 	r.httpSrv.HandleFunc("/"+endpoint, func(w http.ResponseWriter, req *http.Request) {
 		switch tokenMode {
 		case SrvTokenModeDefault:

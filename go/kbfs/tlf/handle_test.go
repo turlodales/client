@@ -197,38 +197,36 @@ func TestHandleAccessorsPrivate(t *testing.T) {
 	}
 
 	for i := 6; i < 10; i++ {
-		u := keybase1.MakeTestUID(uint32(i)).AsUserOrTeam()
+		u := keybase1.MakeTestUID(uint32(i)).AsUserOrTeam() //nolint:gosec // G115: Test data with small values
 		require.False(t, h.IsWriter(u))
 		require.False(t, h.IsReader(u))
 	}
 
-	require.Equal(t, h.ResolvedUsers(),
-		[]keybase1.UserOrTeamID{
-			keybase1.MakeTestUID(3).AsUserOrTeam(),
-			keybase1.MakeTestUID(4).AsUserOrTeam(),
-			keybase1.MakeTestUID(1).AsUserOrTeam(),
-			keybase1.MakeTestUID(5).AsUserOrTeam(),
-		})
+	require.Equal(t, []keybase1.UserOrTeamID{
+		keybase1.MakeTestUID(3).AsUserOrTeam(),
+		keybase1.MakeTestUID(4).AsUserOrTeam(),
+		keybase1.MakeTestUID(1).AsUserOrTeam(),
+		keybase1.MakeTestUID(5).AsUserOrTeam(),
+	}, h.ResolvedUsers())
 	require.True(t, h.HasUnresolvedUsers())
-	require.Equal(t, h.UnresolvedUsers(),
-		[]keybase1.SocialAssertion{
-			{
-				User:    "user1",
-				Service: "service1",
-			},
-			{
-				User:    "user2",
-				Service: "service3",
-			},
-			{
-				User:    "user1",
-				Service: "service2",
-			},
-			{
-				User:    "user5",
-				Service: "service3",
-			},
-		})
+	require.Equal(t, []keybase1.SocialAssertion{
+		{
+			User:    "user1",
+			Service: "service1",
+		},
+		{
+			User:    "user2",
+			Service: "service3",
+		},
+		{
+			User:    "user1",
+			Service: "service2",
+		},
+		{
+			User:    "user5",
+			Service: "service3",
+		},
+	}, h.UnresolvedUsers())
 }
 
 func TestHandleAccessorsPublic(t *testing.T) {
@@ -261,28 +259,26 @@ func TestHandleAccessorsPublic(t *testing.T) {
 	}
 
 	for i := 6; i < 10; i++ {
-		u := keybase1.MakeTestUID(uint32(i)).AsUserOrTeam()
+		u := keybase1.MakeTestUID(uint32(i)).AsUserOrTeam() //nolint:gosec // G115: Test data with small values
 		require.False(t, h.IsWriter(u))
 		require.True(t, h.IsReader(u))
 	}
 
-	require.Equal(t, h.ResolvedUsers(),
-		[]keybase1.UserOrTeamID{
-			keybase1.MakeTestUID(3).AsUserOrTeam(),
-			keybase1.MakeTestUID(4).AsUserOrTeam(),
-		})
+	require.Equal(t, []keybase1.UserOrTeamID{
+		keybase1.MakeTestUID(3).AsUserOrTeam(),
+		keybase1.MakeTestUID(4).AsUserOrTeam(),
+	}, h.ResolvedUsers())
 	require.True(t, h.HasUnresolvedUsers())
-	require.Equal(t, h.UnresolvedUsers(),
-		[]keybase1.SocialAssertion{
-			{
-				User:    "user1",
-				Service: "service1",
-			},
-			{
-				User:    "user2",
-				Service: "service3",
-			},
-		})
+	require.Equal(t, []keybase1.SocialAssertion{
+		{
+			User:    "user1",
+			Service: "service1",
+		},
+		{
+			User:    "user2",
+			Service: "service3",
+		},
+	}, h.UnresolvedUsers())
 }
 
 func TestHandleAccessorsSingleTeam(t *testing.T) {

@@ -1,5 +1,4 @@
 //go:build !windows
-// +build !windows
 
 package main
 
@@ -28,7 +27,7 @@ func (f *LockPIDFile) Lock() (err error) {
 	// make the parent directory
 	_, err = os.Stat(filepath.Dir(f.name))
 	if os.IsNotExist(err) {
-		err = os.MkdirAll(filepath.Dir(f.name), 0700)
+		err = os.MkdirAll(filepath.Dir(f.name), 0o700)
 		if err != nil {
 			return err
 		}
@@ -36,7 +35,7 @@ func (f *LockPIDFile) Lock() (err error) {
 		return err
 	}
 
-	if f.file, err = os.OpenFile(f.name, os.O_CREATE|os.O_RDWR, 0600); err != nil {
+	if f.file, err = os.OpenFile(f.name, os.O_CREATE|os.O_RDWR, 0o600); err != nil {
 		return err
 	}
 

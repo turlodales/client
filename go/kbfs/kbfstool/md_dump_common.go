@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -11,7 +12,6 @@ import (
 	"github.com/keybase/client/go/kbfs/kbfsmd"
 	"github.com/keybase/client/go/kbfs/libkbfs"
 	"github.com/keybase/client/go/protocol/keybase1"
-	"golang.org/x/net/context"
 )
 
 // replacementMap is a map from a string to its replacement, intended
@@ -22,7 +22,8 @@ import (
 type replacementMap map[string]string
 
 func mdDumpGetDeviceStringForCryptPublicKey(k kbfscrypto.CryptPublicKey, ui idutil.UserInfo) (
-	string, bool) {
+	string, bool,
+) {
 	deviceName, ok := ui.KIDNames[k.KID()]
 	if !ok {
 		return "", false
@@ -37,7 +38,8 @@ func mdDumpGetDeviceStringForCryptPublicKey(k kbfscrypto.CryptPublicKey, ui idut
 }
 
 func mdDumpGetDeviceStringForVerifyingKey(k kbfscrypto.VerifyingKey, ui idutil.UserInfo) (
-	string, bool) {
+	string, bool,
+) {
 	deviceName, ok := ui.KIDNames[k.KID()]
 	if !ok {
 		return "", false
@@ -54,7 +56,8 @@ func mdDumpGetDeviceStringForVerifyingKey(k kbfscrypto.VerifyingKey, ui idutil.U
 func mdDumpFillReplacements(ctx context.Context, codec kbfscodec.Codec,
 	service libkbfs.KeybaseService, osg idutil.OfflineStatusGetter,
 	prefix string, rmd kbfsmd.RootMetadata, extra kbfsmd.ExtraMetadata,
-	replacements replacementMap) error {
+	replacements replacementMap,
+) error {
 	writers, readers, err := rmd.GetUserDevicePublicKeys(extra)
 	if err != nil {
 		return err
@@ -143,7 +146,8 @@ func mdDumpReplaceAll(s string, replacements replacementMap) string {
 
 func mdDumpReadOnlyRMDWithReplacements(
 	ctx context.Context, codec kbfscodec.Codec,
-	replacements replacementMap, rmd libkbfs.ReadOnlyRootMetadata) error {
+	replacements replacementMap, rmd libkbfs.ReadOnlyRootMetadata,
+) error {
 	c := spew.NewDefaultConfig()
 	c.Indent = "  "
 	c.DisablePointerAddresses = true
@@ -183,7 +187,8 @@ func mdDumpReadOnlyRMDWithReplacements(
 
 func mdDumpReadOnlyRMD(ctx context.Context, config libkbfs.Config,
 	prefix string, replacements replacementMap,
-	rmd libkbfs.ReadOnlyRootMetadata) error {
+	rmd libkbfs.ReadOnlyRootMetadata,
+) error {
 	err := mdDumpFillReplacements(
 		ctx, config.Codec(), config.KeybaseService(), config,
 		prefix, rmd.GetBareRootMetadata(), rmd.Extra(), replacements)

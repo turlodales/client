@@ -127,7 +127,7 @@ func TestTranscriptLimit(t *testing.T) {
 				Body: "hello chat",
 			}))
 
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			mustPostLocalForTest(t, ctc, users[0], ncres.Conv.Info,
 				chat1.NewMessageBodyWithText(chat1.MessageText{
 					Body: fmt.Sprintf("hello message %d", i),
@@ -149,6 +149,6 @@ func TestTranscriptLimit(t *testing.T) {
 		res, err := PullTranscript(mctx, tc1.Context().ConvSource,
 			ncres.Conv.GetConvID().ConvIDStr(), usernames, config)
 		require.NoError(t, err)
-		require.Len(t, res.Messages, 0)
+		require.Empty(t, res.Messages)
 	})
 }

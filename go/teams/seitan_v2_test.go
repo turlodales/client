@@ -1,13 +1,11 @@
 package teams
 
 import (
+	"context"
+	"encoding/base64"
 	"errors"
 	"testing"
 	"time"
-
-	"encoding/base64"
-
-	"golang.org/x/net/context"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/keybase/client/go/kbtest"
@@ -49,7 +47,7 @@ func TestSeitanV2Encryption(t *testing.T) {
 	inviteID, err := sikey.GenerateTeamInviteID()
 	require.NoError(t, err)
 	t.Logf("Invite id is: %s\n", inviteID)
-	require.Equal(t, len(string(inviteID)), 32)
+	require.Len(t, string(inviteID), 32)
 
 	var expectedLabelSms keybase1.SeitanKeyLabelSms
 	expectedLabelSms.F = "edwin powell hubble"
@@ -59,8 +57,8 @@ func TestSeitanV2Encryption(t *testing.T) {
 
 	pkey, encoded, err := sikey.GeneratePackedEncryptedKey(context.TODO(), team, expectedLabel)
 	require.NoError(t, err)
-	require.EqualValues(t, pkey.Version, 2)
-	require.EqualValues(t, pkey.TeamKeyGeneration, 1)
+	require.EqualValues(t, 2, pkey.Version)
+	require.EqualValues(t, 1, pkey.TeamKeyGeneration)
 	require.NotZero(tc.T, pkey.RandomNonce)
 
 	t.Logf("Encrypted ikey with gen: %d\n", pkey.TeamKeyGeneration)
@@ -79,7 +77,7 @@ func TestSeitanV2Encryption(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, keybase1.SeitanKeyAndLabelVersion_V2, keyAndLabelType)
 	keyAndLabelV2 := keyAndLabel.V2()
-	require.EqualValues(t, pubKey, keyAndLabelV2.K)
+	require.Equal(t, pubKey, keyAndLabelV2.K)
 
 	label := keyAndLabelV2.L
 	labelType, err := label.T()
@@ -168,7 +166,6 @@ func TestSeitanBadSignatures(t *testing.T) {
 		require.NoError(t, bad.err)
 		require.Error(t, VerifySeitanSignatureMessage(SeitanPubKey(keyPair1.Public), bad.msg, sig))
 	}
-
 }
 
 // TestSeitanV2KnownSamples runs offline seitan crypto chain using known
@@ -200,11 +197,11 @@ func TestSeitanV2KnownSamples(t *testing.T) {
 	ikey := SeitanIKeyV2("4uywza+b3cga7rd6yc")
 	sikey, err := ikey.GenerateSIKey()
 	require.NoError(t, err)
-	require.Equal(t, sikey, expectedSIKey)
+	require.Equal(t, expectedSIKey, sikey)
 
 	inviteID, err := sikey.GenerateTeamInviteID()
 	require.NoError(t, err)
-	require.Equal(t, inviteID, expectedInviteID)
+	require.Equal(t, expectedInviteID, inviteID)
 
 	keyPair, err := sikey.generateKeyPair()
 	require.NoError(t, err)
@@ -247,7 +244,6 @@ func TestSeitanV2KnownSamples(t *testing.T) {
 // letters of the Seitan alphabet are hit by generating a sufficient number of
 // tokens. It would be bad, for instance, if we only hit 10% of the characters.
 func TestIsSeitanyAndAlphabetCoverage(t *testing.T) {
-
 	ikeyV1Gen := func() (s string, err error) {
 		ikey, err := GenerateIKey()
 		return ikey.String(), err
@@ -260,7 +256,7 @@ func TestIsSeitanyAndAlphabetCoverage(t *testing.T) {
 
 	verifyCoverage := func(ikeyGen func() (s string, err error)) {
 		coverage := make(map[byte]bool)
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			s, err := ikeyGen()
 			require.NoError(t, err)
 			require.True(t, IsSeitany(s))
@@ -382,7 +378,7 @@ func TestTeamHandleMultipleSeitans(t *testing.T) {
 	records := API.GetFilteredRecordsAndReset(func(rec *libkb.APIRecord) bool {
 		return rec.Arg.Endpoint == "team/reject_invite_acceptance"
 	})
-	require.Len(t, records, 0, "no invite link acceptances were rejected")
+	require.Empty(t, records, "no invite link acceptances were rejected")
 
 	teamObj, err = Load(context.TODO(), tc.G, keybase1.LoadTeamArg{
 		Name:      teamName.String(),
@@ -500,13 +496,13 @@ func TestTeamInviteSeitanV2Failures(t *testing.T) {
 	records := API.GetFilteredRecordsAndReset(func(rec *libkb.APIRecord) bool {
 		return rec.Arg.Endpoint == "team/reject_invite_acceptance"
 	})
-	require.Len(t, records, 0, "no invite link acceptances were rejected")
+	require.Empty(t, records, "no invite link acceptances were rejected")
 
 	t.Logf("invite should still be there")
 	t0, err := GetTeamByNameForTest(context.Background(), tc.G, teamName.String(), false /* public */, true /* needAdmin */)
 	require.NoError(t, err)
 	require.Equal(t, 1, t0.NumActiveInvites(), "invite should still be active")
-	require.EqualValues(t, t0.CurrentSeqno(), 2)
+	require.EqualValues(t, 2, t0.CurrentSeqno())
 
 	t.Logf("user should not be in team")
 	role, err := t0.MemberRole(context.Background(), user2.GetUserVersion())
@@ -556,7 +552,7 @@ func TestSeitanPukless(t *testing.T) {
 	// Can't post this acceptance when we don't have a PUK.
 	err = postSeitanV2(tc.MetaContext(), seitanRet)
 	require.Error(t, err)
-	require.IsType(t, libkb.AppStatusError{}, err)
+	require.ErrorAs(t, err, new(libkb.AppStatusError))
 	require.EqualValues(t, keybase1.StatusCode_SCTeamSeitanInviteNeedPUK, err.(libkb.AppStatusError).Code)
 
 	// But server could still send it to us, e.g. due to a bug.

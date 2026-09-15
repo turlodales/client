@@ -125,7 +125,8 @@ func HandleOpenTeamSweepRequest(ctx context.Context, g *libkb.GlobalContext, msg
 }
 
 func sweepOpenTeamResetAndDeletedMembers(ctx context.Context, g *libkb.GlobalContext,
-	team *Team, resetUsersUntrusted []keybase1.TeamCLKRResetUser, rotate bool) (postedLink bool, err error) {
+	team *Team, resetUsersUntrusted []keybase1.TeamCLKRResetUser, rotate bool,
+) (postedLink bool, err error) {
 	// When CLKR is invoked because of account reset and it's an open team,
 	// we go ahead and boot reset readers and writers out of the team. Key
 	// is also rotated in the process (in the same ChangeMembership link).
@@ -598,7 +599,7 @@ func HandleTeamSeitan(ctx context.Context, g *libkb.GlobalContext, msg keybase1.
 
 		err := verifySeitanSingle(ctx, g, team, invite, seitan)
 		if err != nil {
-			if _, ok := err.(InviteLinkAcceptanceError); ok {
+			if _, ok := errors.AsType[InviteLinkAcceptanceError](err); ok {
 				mctx.Debug("Provided AKey failed to verify with error: %v; ignoring and scheduling for rejection", err)
 				invitesToReject = append(invitesToReject, seitan)
 			} else {
@@ -616,7 +617,7 @@ func HandleTeamSeitan(ctx context.Context, g *libkb.GlobalContext, msg keybase1.
 
 		err = tx.CanConsumeInvite(ctx, invite.Id)
 		if err != nil {
-			if _, ok := err.(InviteLinkAcceptanceError); ok {
+			if _, ok := errors.AsType[InviteLinkAcceptanceError](err); ok {
 				mctx.Debug("Can't use invite: %s; ignoring and scheduling for rejection", err)
 				invitesToReject = append(invitesToReject, seitan)
 			} else {

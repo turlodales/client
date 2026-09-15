@@ -7,6 +7,7 @@ package libfs
 import (
 	"context"
 	"errors"
+	"math"
 	"os"
 	"time"
 
@@ -38,8 +39,11 @@ func (fi *FileInfo) Name() string {
 
 // Size implements the os.FileInfo interface for FileInfo.
 func (fi *FileInfo) Size() int64 {
-	// TODO: deal with overflow?
-	return int64(fi.ei.Size)
+	if fi.ei.Size > math.MaxInt64 {
+		// Unrealistically large file size (>9 exabytes), clamp to MaxInt64
+		return math.MaxInt64
+	}
+	return int64(fi.ei.Size) //nolint:gosec // G115: Validated above to be <= MaxInt64
 }
 
 // Mode implements the os.FileInfo interface for FileInfo.
@@ -53,14 +57,14 @@ func (fi *FileInfo) Mode() os.FileMode {
 		mode = os.FileMode(0)
 	}
 
-	mode |= 0400
+	mode |= 0o400
 	switch fi.ei.Type {
 	case data.Dir:
-		mode |= os.ModeDir | 0100
+		mode |= os.ModeDir | 0o100
 	case data.Sym:
 		mode |= os.ModeSymlink
 	case data.Exec:
-		mode |= 0100
+		mode |= 0o100
 	}
 	return mode
 }
@@ -102,7 +106,8 @@ type fileInfoSys struct {
 var _ KBFSMetadataForSimpleFSGetter = fileInfoSys{}
 
 func (fis fileInfoSys) KBFSMetadataForSimpleFS() (
-	KBFSMetadataForSimpleFS, error) {
+	KBFSMetadataForSimpleFS, error,
+) {
 	if fis.fi.node == nil {
 		// This won't return any last writer for symlinks themselves.
 		// TODO: if we want symlink last writers, we'll need to add a
@@ -158,7 +163,7 @@ func (fis fileInfoSys) EntryInfo() data.EntryInfo {
 }
 
 // Sys implements the os.FileInfo interface for FileInfo.
-func (fi *FileInfo) Sys() interface{} {
+func (fi *FileInfo) Sys() any {
 	return fileInfoSys{fi}
 }
 
@@ -177,20 +182,23 @@ func (fif *FileInfoFast) Name() string {
 
 // Size implements the os.FileInfo interface.
 func (fif *FileInfoFast) Size() int64 {
-	// TODO: deal with overflow?
-	return int64(fif.ei.Size)
+	if fif.ei.Size > math.MaxInt64 {
+		// Unrealistically large file size (>9 exabytes), clamp to MaxInt64
+		return math.MaxInt64
+	}
+	return int64(fif.ei.Size) //nolint:gosec // G115: Validated above to be <= MaxInt64
 }
 
 // Mode implements the os.FileInfo interface.
 func (fif *FileInfoFast) Mode() os.FileMode {
-	mode := os.FileMode(0400)
+	mode := os.FileMode(0o400)
 	switch fif.ei.Type {
 	case data.Dir:
-		mode |= os.ModeDir | 0100
+		mode |= os.ModeDir | 0o100
 	case data.Sym:
 		mode |= os.ModeSymlink
 	case data.Exec:
-		mode |= 0100
+		mode |= 0o100
 	}
 	return mode
 }
@@ -206,7 +214,7 @@ func (fif *FileInfoFast) IsDir() bool {
 }
 
 // Sys implements the os.FileInfo interface.
-func (fif *FileInfoFast) Sys() interface{} {
+func (fif *FileInfoFast) Sys() any {
 	return fif
 }
 

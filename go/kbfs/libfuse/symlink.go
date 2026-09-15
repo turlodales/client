@@ -3,21 +3,21 @@
 // license that can be found in the LICENSE file.
 //
 //go:build !windows
-// +build !windows
 
 package libfuse
 
 import (
+	"context"
 	"os"
 	"syscall"
 
 	"bazil.org/fuse"
 	"bazil.org/fuse/fs"
+
 	"github.com/keybase/client/go/kbfs/data"
 	"github.com/keybase/client/go/kbfs/idutil"
 	"github.com/keybase/client/go/kbfs/libkbfs"
 	"github.com/keybase/client/go/libkb"
-	"golang.org/x/net/context"
 )
 
 // Symlink represents KBFS symlinks.
@@ -54,7 +54,7 @@ func (s *Symlink) Attr(ctx context.Context, a *fuse.Attr) (err error) {
 	if err != nil {
 		return err
 	}
-	a.Mode = os.ModeSymlink | a.Mode | 0500
+	a.Mode = os.ModeSymlink | a.Mode | 0o500
 	a.Inode = s.inode
 	return nil
 }
